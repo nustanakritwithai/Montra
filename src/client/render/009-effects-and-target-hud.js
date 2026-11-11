@@ -95,27 +95,17 @@
   function sparks(color, x, y, z, n = 8, o = {}) {
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2, sp = (o.speed ?? 6) * (.5 + Math.random() * .7);
-      spawnFx("glow", color, x, y, z, { life: (o.life ?? 520) * (.7 + Math.random() * .6), s0: o.size ?? .9, s1: (o.size ?? .9) * .3, a0: 1, a1: 0, delay: (o.delay || 0) + Math.random() * (o.spread || 60),
-        vel: [Math.cos(a) * sp, (o.up ?? 4) * (.6 + Math.random() * .8), Math.sin(a) * sp], grav: o.grav ?? 9, follow: o.follow });
+      if (!spawnFx("glow", color, x, y, z, { life: (o.life ?? 520) * (.7 + Math.random() * .6), s0: o.size ?? .9, s1: (o.size ?? .9) * .3, a0: 1, a1: 0, delay: (o.delay || 0) + Math.random() * (o.spread || 60),
+        vel: [Math.cos(a) * sp, (o.up ?? 4) * (.6 + Math.random() * .8), Math.sin(a) * sp], grav: o.grav ?? 9, follow: o.follow })) break;
     }
   }
-  // Hit flash: starburst plus a ground shock ring; ours are gold, hits on us red, others cyan.
-  function hitBurst(x, z, tone = "gold", heavy = false, y = 0, isCrit = false) {
-    const sc = (heavy || isCrit) ? 1.6 : 1;
-    spawnFx("star", tone, x, y + 1.6, z, { life: 280, s0: 1.6 * sc, s1: 6 * sc, a0: 1, a1: 0 });
-    spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 3 * sc, s1: 1.4 * sc, a0: .9, a1: 0, delay: 30 });
-    spawnFx("ring", tone === "red" ? "red" : (isCrit ? "orange" : "gold"), x, y + .15, z, { orient: "ground", life: 420, s0: 1, s1: 6.5 * sc, a0: .95, a1: 0 });
-    if (isCrit) {
-      spawnFx("cross", tone === "red" ? "red" : "orange", x, y + 1.5, z, { life: 280, s0: 2, s1: 7, a0: 1, a1: 0, roll: (Math.random() - .5) * .6 });
-      spawnFx("star", "white", x, y + 1.5, z, { life: 160, s0: 2.8, s1: .8, a0: 1, a1: 0 });
-      sparks(tone, x, y + 1.4, z, 14, { speed: 10, up: 6, size: .9, life: 500 });
-      sparks("white", x, y + 1.4, z, 8, { speed: 8, up: 5, size: .6, life: 360 });
-    } else if (heavy) {
-      spawnFx("slash", tone, x, y + 1.5, z, { life: 240, s0: 1.5, s1: 5.5, a0: 1, a1: 0, roll: (Math.random() - .5) * .8 });
-      sparks(tone, x, y + 1.4, z, 10, { speed: 8, up: 5, size: .8, life: 420 });
-      sparks("white", x, y + 1.4, z, 4, { speed: 6, up: 4, size: .5, life: 300 });
-    } else if (tone !== "cyan") {
-      sparks(tone, x, y + 1.4, z, 6, { speed: 7, up: 4, size: .7, life: 380 });
+  // Regular hits use a single flash. Scripted boss events can add an impact cue.
+  function hitBurst(x, z, tone = "gold", y = 0, bossImpact = false) {
+    const sc = bossImpact ? 1.6 : 1;
+    spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 1.25 * sc, s1: 3.6 * sc, a0: .85, a1: 0 });
+    if (bossImpact) {
+      spawnFx("cross", tone === "red" ? "red" : "orange", x, y + 1.5, z, { life: 220, s0: 1.4, s1: 4.8, a0: .85, a1: 0 });
+      spawnFx("ring", tone, x, y + .15, z, { orient: "ground", life: 280, s0: 1, s1: 5, a0: .7, a1: 0 });
     }
   }
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
@@ -194,66 +184,35 @@
     let bossBadges = "";
     if (g?.phase2) bossBadges += '<span class="target-overhead-phase2-badge">🔥 ขั้น 2</span>';
     if (g?.staggeredUntil && g.staggeredUntil > now) bossBadges += '<span class="target-overhead-stagger-badge">😵 มึนงง!</span>';
-    if (pct <= 20 && hp > 0) {
-      triggerVoiceGuidance("execute");
-      targetOverheadHud.classList.add("execute-active");
-      targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>' + bossBadges;
-    } else {
-      targetOverheadHud.classList.remove("execute-active");
-      if (bossBadges) {
-        targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + bossBadges;
-      } else {
-        targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
-      }
-    }
+    const label = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    if (bossBadges) targetOverheadTag.innerHTML = label + bossBadges;
+    else targetOverheadTag.textContent = label;
     targetOverheadHud.hidden = false;
   }
 
   let comboStreak = 0, lastComboHitAt = 0;
-  let comboHudEl = null, comboHitsEl = null, comboLabelEl = null, comboGradeEl = null;
+  let comboHudEl = null, comboHitsEl = null;
 
   function ensureComboHud() {
     if (comboHudEl) return;
     comboHudEl = document.createElement("div");
     comboHudEl.className = "combo-streak-hud";
-    comboHudEl.hidden = true;
     comboHitsEl = document.createElement("div");
     comboHitsEl.className = "combo-streak-hits";
-    comboLabelEl = document.createElement("div");
-    comboLabelEl.className = "combo-streak-label";
-    comboGradeEl = document.createElement("div");
-    comboGradeEl.className = "combo-streak-grade grade-c";
-    comboHudEl.append(comboHitsEl, comboLabelEl, comboGradeEl);
+    comboHudEl.append(comboHitsEl);
     document.getElementById("game")?.append(comboHudEl);
   }
 
   function registerComboHit() {
     const now = performance.now();
     if (now - lastComboHitAt > 3500) comboStreak = 0;
-    comboStreak++;
     lastComboHitAt = now;
+    comboStreak++;
+    if (comboStreak < 3) return;
     ensureComboHud();
-    if (comboStreak >= 3) {
-      triggerVoiceGuidance("combo");
-      comboHudEl.hidden = false;
-      comboHitsEl.textContent = String(comboStreak);
-      let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
-      if (comboStreak >= 25) {
-        grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s";
-        triggerCombatCallout("combo_rank_s");
-      }
-      else if (comboStreak >= 15) { grade = "A"; label = "ยอดฝีมือเพลงยุทธ์!"; cls = "grade-a"; }
-      else if (comboStreak >= 7) { grade = "B"; label = "ชำนาญการต่อสู้"; cls = "grade-b"; }
-      comboLabelEl.textContent = label;
-      comboGradeEl.textContent = grade;
-      comboGradeEl.className = "combo-streak-grade " + cls;
-      // Web Animations restart: re-triggering the CSS animation needed a forced page layout every hit.
-      comboHitsEl.animate([{ transform: "scale(1.4) rotate(4deg)" }, { transform: "scale(1) rotate(0deg)" }], { duration: 180, easing: "ease-out" });
-      if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
-        SFX("coin", { intensity: 0.8 });
-        floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });
-      }
-    }
+    if (comboStreak === 3) triggerVoiceGuidance("combo");
+    comboHudEl.hidden = false;
+    comboHitsEl.textContent = String(comboStreak);
   }
 
   function updateComboHud(now) {

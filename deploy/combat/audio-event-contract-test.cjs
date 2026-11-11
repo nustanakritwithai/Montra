@@ -14,14 +14,14 @@ const groups={
   mender_core_used:['mender_core_heal','mender_core_circle','mender_core_ward','mender_core_cleanse']
 };
 function fixture(event,{remote=false,map='ritual_village',stale=false,speaking=false}={}){
-  const sfx=[],speech=[];let handler;
+  const sfx=[],speech=[];let handler, now=1000;
   const id=remote?'other':'me',caster={x:0,y:0,z:0,mapId:map};
   const joined={state:{players:new Map([[id,caster]]),monsters:new Map()},onMessage(name,f){assert.equal(name,event);handler=f}};
   const noop=()=>{};
   const ctx={joined,room:stale?{}:joined,localId:'me',activeMapId:'ritual_village',
     avatars:new Map([[id,caster]]),getLocalAvatar:()=>caster,recordPracticeCast:noop,
     SFX:(...args)=>sfx.push(args),window:{MontraAudio:{speak:(...args)=>speech.push(args),isSpeaking:()=>speaking}},
-    performance:{now:()=>1000},monsterForSpell:()=>null,skillVfxTarget:()=>null,spellTargetId:'',playAction:noop,triggerSkillVfx:noop,ownServerCharacter:()=>caster,
+    performance:{now:()=>now},monsterForSpell:()=>null,skillVfxTarget:()=>null,spellTargetId:'',playAction:noop,triggerSkillVfx:noop,ownServerCharacter:()=>caster,
     syncSentinelUI:noop,syncOccultUI:noop,syncBladeUI:noop,syncMuayHotbar:noop,syncSwordStatus:noop,
     swordSkillAction:()=> 'cast',faceAvatarToward:noop,floatAtPlayer:noop,toast:noop,swordData:()=>null,
     bladeBookState:null,occultBookState:null,priestAreaEffects:new Map(),renderMagicBolt:noop,eventFx:noop,
@@ -29,7 +29,7 @@ function fixture(event,{remote=false,map='ritual_village',stale=false,speaking=f
   };
   const a=source.indexOf(`joined.onMessage("${event}"`),b=source.indexOf('joined.onMessage(',a+30);
   assert(a>=0 && b>a,event);vm.createContext(ctx);vm.runInContext(helper+source.slice(a,b),ctx);
-  return{emit:skillId=>handler({playerId:id,skillId,active:true,durationMs:1000}),sfx,speech};
+  return{emit:skillId=>handler({playerId:id,skillId,active:true,durationMs:1000}),sfx,speech,advance:ms=>{now+=ms;}};
 }
 test('all 24 core skills route one effect and one fixed local shout after authoritative acceptance',()=>{
  let n=0;for(const[event,skills]of Object.entries(groups))for(const id of skills){
@@ -47,6 +47,18 @@ test('skill and occult effects from another map or departed room are silent',()=
 });
 test('skill shouts never interrupt guidance, NPC answers or a preview',()=>{
  for(const[event,skills]of Object.entries(groups)){const f=fixture(event,{speaking:true});f.emit(skills[0]);assert.equal(f.sfx.length,1);assert.equal(f.speech.length,0,event);}
+});
+test('successive skills keep their effects and share a spoken-shout cooldown', () => {
+ const f=fixture('sword_skill_used');
+ f.emit('phuttha_core');
+ f.advance(7999);
+ f.emit('sritra_core');
+ assert.equal(f.sfx.length,2);
+ assert.equal(f.speech.length,1);
+ f.advance(1);
+ f.emit('atamat_core');
+ assert.equal(f.sfx.length,3);
+ assert.equal(f.speech.length,2);
 });
 test('hotbar click and target selection never announce an unaccepted or rejected cast',()=>{
  const ui=fs.readFileSync('src/client/ui/048-class-books-and-hotbars.js','utf8');

@@ -233,7 +233,7 @@
     shakeCamera(0.68, 450);
     SFX("bell", { intensity: 1.4 });
     const y = (g.ty ?? 0) + 0.1;
-    hitBurst(mesh.position.x, mesh.position.z, "orange", true, y, true);
+    hitBurst(mesh.position.x, mesh.position.z, "orange", y, true);
     sparks("gold", mesh.position.x, mesh.position.y + 1, mesh.position.z, 22, { speed: 4.2, up: 3.2, life: 600 });
     triggerCombatCallout("shield_break");
   }
@@ -981,7 +981,7 @@
   function showMeteorImpact(event) {
     if(mode!=="live" || event?.mapId!==activeMapId || ![event.x,event.y,event.z].every(Number.isFinite))return;
     if(event.ownerId===localId)meteorPendingUntil=0;
-    sparks("gold",event.x,event.y+.1,event.z,36,{speed:5,up:2,life:550});
+    sparks("gold",event.x,event.y+.1,event.z,8,{speed:4,up:2,life:320});
   }
   function showCombatFeatureError(reason) {
     const labels={

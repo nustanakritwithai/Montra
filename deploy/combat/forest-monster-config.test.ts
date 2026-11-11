@@ -19,6 +19,93 @@ const himmapan = [
   ["himmapan_karavek", "hex_ridge", "นกการเวก", 45],
 ] as const;
 
+for(const [id,mapId,name,level] of [
+  ["himmapan_karin_paksa","hex_ridge","กรินทรปักษา",45],
+  ["himmapan_tinna_siha","bamboo_frontier","ติณสีหะ",31],
+  ["himmapan_hera","naga_cavern","เหรา",52],
+  ["himmapan_thanthi_ma","moon_cemetery","นกทัณฑิมา",32],
+] as const){
+  test(`${name} replaces one duplicate and uses its reference attack`,()=>{
+    const map=getWorldMap(mapId)!;
+    const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
+    forest.initialize();
+    const attacker=new Player({...map.spawn,mapId});
+    const observer=new Player({...map.spawn,mapId});
+    state.players.set("attacker",attacker);
+    state.players.set("observer",observer);
+    const hits:string[]=[];
+    const tick=(now:number,dt=0)=>forest.update(now,dt,state.players,new Set(),
+      (pid,monster)=>{if(monster.id===id)hits.push(pid);},()=>{});
+    tick(0);
+    const monster=state.monsters.get(id)!;
+    assert.ok(monster?.alive && isSafeWorldPoint(map,monster));
+    assert.deepEqual([monster.displayName,monster.level],[name,level]);
+    const replaced=HIMMAPAN_REPLACEMENTS.get(id)!;
+    assert.ok(!state.monsters.has(replaced));
+    const objectiveId=replaced.slice(0,replaced.lastIndexOf("_"));
+    assert.equal(advanceForestObjective({id:objectiveId,progress:0},id,mapId).active?.progress,1);
+    const home={x:monster.x,z:monster.z};
+    const place=(player:Player,dx:number,dz:number)=>{
+      const x=home.x+dx,z=home.z+dz;
+      Object.assign(player,{x,y:groundAt(mapId,x,z),z});
+      assert.ok(isSafeWorldPoint(map,player));
+    };
+    if(id==="himmapan_tinna_siha"){
+      place(attacker,0,-2);
+      place(observer,0,2);
+      tick(100);tick(2000);
+      assert.equal(monster.aiState,"grazing");
+      assert.deepEqual(hits,[]);
+      assert.equal(forest.taunt(id,"attacker",2000,1500,0),"immune");
+      forest.provoke(id,"attacker");
+      tick(2100);
+      assert.equal(monster.aiState,"windup");
+      assert.equal(monster.specialHalfAngle,Math.PI/3);
+      tick(2979);assert.deepEqual(hits,[]);
+      tick(2980);assert.deepEqual(hits,["attacker"]);
+      for(let now=3400;now<=5000;now+=200)tick(now,.2);
+      assert.ok(monster.z>home.z+2,"retreat carries the lion away from its attacker");
+      assert.equal(monster.aiState,"grazing");
+      assert.equal(monster.targetId,"");
+      assert.deepEqual(hits,["attacker"]);
+      return;
+    }
+    const forward=id==="himmapan_hera" || id==="himmapan_karin_paksa"?1:-1;
+    place(attacker,0,3*forward);
+    tick(100);
+    assert.equal(monster.aiState,"windup");
+    assert.deepEqual(hits,[]);
+    if(id==="himmapan_karin_paksa"){
+      const landing={x:monster.specialOriginX,z:monster.specialOriginZ};
+      assert.deepEqual(landing,{x:attacker.x,z:attacker.z});
+      assert.deepEqual({x:monster.x,z:monster.z},home);
+      place(attacker,3.5,3);
+      place(observer,0,3);
+      tick(1749);assert.deepEqual(hits,[]);
+      tick(1750);
+      assert.deepEqual(hits,["observer"]);
+      assert.deepEqual({x:monster.x,z:monster.z},landing);
+    }else if(id==="himmapan_hera"){
+      assert.equal(monster.specialStage,1);
+      tick(560);assert.deepEqual(hits,[]);
+      assert.equal(monster.specialStage,2);
+      assert.equal(monster.specialHalfWidth,.95);
+      place(observer,2,3);
+      tick(1429);assert.deepEqual(hits,[]);
+      tick(1430);assert.deepEqual(hits,["attacker"]);
+    }else{
+      assert.equal(monster.specialHalfAngle,Math.PI/2);
+      place(observer,2,-1);
+      const behind=new Player({...map.spawn,mapId});
+      place(behind,0,1.8);
+      state.players.set("behind",behind);
+      tick(1349);assert.deepEqual(hits,[]);
+      tick(1350);assert.deepEqual(hits,["attacker","observer"]);
+    }
+    assert.equal(monster.aiState,"special_recovery");
+  });
+}
+
 for (const [id,mapId,name,level,tier,phases,recovery] of [
   ["himmapan_phayak_nathi","drowned_marsh","พยัคฆนที",22,"normal",[[650,0],[750,1.25]],650],
   ["himmapan_hatsadiling","twin_neck_pass","นกหัสดีลิงค์",57,"normal",[[1250,1.25]],1700],

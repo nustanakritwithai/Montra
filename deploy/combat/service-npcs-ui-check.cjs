@@ -6,12 +6,13 @@ assert.ok(configStart>=0 && configEnd>configStart && fnStart>=0 && fnEnd>fnStart
 const serviceNpcUi=vm.runInNewContext(`(()=>{${source.slice(configStart,configEnd)};return serviceNpcUi;})()`);
 const calls=[],elements={},children=[];
 const element=()=>({textContent:'',className:'',onclick:null,type:''});
-const context={serviceNpcUi,document:{createElement:()=>element()},ui:{drawerBody:{append:e=>children.push(e)}},
+const context={serviceNpcUi,room:null,citySiteNames:{moon_pass:'ด่านจันทร์'},document:{createElement:()=>element()},ui:{drawerBody:{append:e=>children.push(e)}},
   $:id=>elements[id],openDrawer:()=>{elements.serviceNpcSpeech=element();elements.serviceNpcAction=element();children.length=0;},
-  ownServerCharacter:()=>({pathId:context.path}),room:null,citySiteNames:{},activeMapId:'moon_pass',territoryState:{local:{site:'moon_pass'}},toast:message=>calls.push(message)};
-for(const name of ['openBag','openSmith','openEconomy','openGuild','openParty','openMap','openStrategicMap','openHelp','openWarPanel','openMuayBook','openSwordTree','openBladeBook','openSentinelBook','openOccultBook','openRebirth','openNpcGuide'])context[name]=()=>calls.push(name);
+  ownServerCharacter:()=>({pathId:context.path}),activeMapId:'moon_pass',territoryState:{local:{site:'moon_pass'}},toast:message=>calls.push(message)};
+for(const name of ['openBag','openSmith','openEconomy','openCityMarket','openCityPurchase','openCityMission','openCityGovernance','openGuild','openParty','openMap','openStrategicMap','openHelp','openWarPanel','openMuayBook','openSwordTree','openBladeBook','openSentinelBook','openOccultBook','openRebirth','openNpcGuide'])context[name]=()=>calls.push(name);
+context.openCityProduction=tab=>calls.push('openCityProduction:'+tab);
 const open=vm.runInNewContext(`(${source.slice(fnStart,fnEnd)})`,context);
-for(const [role,expected] of Object.entries({smith:'openSmith',market:'openEconomy',guild:'openGuild',party:'openParty',travel:'openMap',strategy:'openStrategicMap',guide:'openHelp'})){
+for(const [role,expected] of Object.entries({smith:'openSmith',market:'openEconomy',guild:'openGuild',party:'openParty',travel:'openMap',strategy:'openStrategicMap',guide:'openHelp',war:'openWarPanel',cityWarehouse:'openCityProduction:warehouse',cityFactory:'openCityProduction:factory',cityMissions:'openCityMission',cityHall:'openCityGovernance'})){
   calls.length=0;open({role,name:'ผู้ให้บริการ'});assert.ok(elements.serviceNpcSpeech.textContent);assert.ok(elements.serviceNpcAction.textContent);
   elements.serviceNpcAction.onclick();assert.equal(calls[0],expected,`${role} opens its service`);
   if(role==='strategy'){const war=children.find(e=>e.textContent==='สงครามและการปกครองด่าน');assert.ok(war);war.onclick();assert.equal(calls.at(-1),'openWarPanel');}
@@ -21,4 +22,17 @@ for(const [path,expected] of Object.entries({muay_boran:'openMuayBook',phutthais
   context.path=path;calls.length=0;open({role:'mentor',name:'ครูวิชา'});elements.serviceNpcAction.onclick();assert.equal(calls[0],expected,`${path} opens its class book`);
   const rebirth=children.find(e=>e.textContent==='เกิดใหม่และความชำนาญ');assert.ok(rebirth);rebirth.onclick();assert.equal(calls.at(-1),'openRebirth');
 }
-console.log('PASS: NPC dialogue buttons open the matching system and all six class books');
+// City-market availability is authoritative; legacy/no-session UI keeps its normal market.
+const cityMarketAction=()=>elements.serviceNpcAction.textContent==='เปิดตลาดประจำเมือง';
+for(const room of [null,{state:{}},{state:{cityMarketSupported:false}}]){
+  context.room=room;calls.length=0;open({role:'market',name:'พ่อค้า'});
+  assert.equal(cityMarketAction(),false,'unsupported room does not expose city market');
+  elements.serviceNpcAction.onclick();assert.equal(calls.at(-1),'openEconomy');
+}
+context.room={state:{cityMarketSupported:true,cityPurchaseSupported:true}};calls.length=0;open({role:'market',name:'พ่อค้า'});
+assert.ok(cityMarketAction(),'supported city market is the primary action');
+elements.serviceNpcAction.onclick();assert.equal(calls.at(-1),'openCityMarket');
+children.find(e=>e.textContent==='เปิดตลาดโลก').onclick();assert.equal(calls.at(-1),'openEconomy');
+children.find(e=>e.textContent==='เปิดใบสั่งซื้อกิลด์').onclick();assert.equal(calls.at(-1),'openCityPurchase');
+context.activeMapId='unknown_city';open({role:'market',name:'พ่อค้า'});assert.equal(cityMarketAction(),false,'unknown city does not expose city market');
+console.log('PASS: NPC dialogue buttons open the matching system and all six class books; city market respects room and city capabilities');

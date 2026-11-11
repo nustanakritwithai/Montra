@@ -12,7 +12,8 @@ import { gearSchools, usesStaff, OUTFIT_LEVELS, type CatalystId, type SalveId, t
  * The optional equippedWeaponSlot is a one-time upgrade marker. No client
  * supplies stats, weapon IDs, grants, damage, or inventory mutations.
  */
-export const INVENTORY_SLOT_COUNT = 12;
+const LEGACY_INVENTORY_SLOT_COUNT = 12;
+export const INVENTORY_SLOT_COUNT = 108;
 export const INVENTORY_STACK_LIMIT = 99;
 export const POTION_ID = "health_potion" as const;
 export const POTION_HEAL = 30;
@@ -108,7 +109,7 @@ export function makeStarterInventory(): InventorySnapshot {
 /** Exact-key, whitelist-only validation; malformed data fails closed. */
 export function validateInventory(value: unknown): InventorySnapshot {
   if (!record(value) || !Array.isArray(value.slots) ||
-      value.version !== 1 || value.slots.length !== INVENTORY_SLOT_COUNT) {
+      value.version !== 1 || (value.slots.length !== LEGACY_INVENTORY_SLOT_COUNT && value.slots.length !== INVENTORY_SLOT_COUNT)) {
     throw new Error("inventory_record_invalid");
   }
   const keys = Object.keys(value);
@@ -121,7 +122,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
       (Object.hasOwn(value,"firstChestClaimed") && value.firstChestClaimed!==true)) {
     throw new Error("inventory_record_invalid");
   }
-  const slots = value.slots.map((entry: unknown): InventoryStack | null => {
+  const slots = Array.from(value.slots, (entry: unknown): InventoryStack | null => {
     if (entry === null) return null;
     if (!record(entry) || Object.keys(entry).some(key => !["itemId","quantity","forge","bound","socket"].includes(key)) ||
         !Number.isSafeInteger(entry.quantity)) {
@@ -144,6 +145,7 @@ export function validateInventory(value: unknown): InventorySnapshot {
     return {itemId,quantity:1,...(entry.bound===true ? {bound:true as const} : {}), ...(Object.hasOwn(entry,"forge") ? {forge:readForged(entry.forge)} : {}),
       ...(socket!==undefined ? {socket:socket as CardId|null} : {})};
   });
+  while (slots.length < INVENTORY_SLOT_COUNT) slots.push(null);
   if (!upgraded) return { version: 1, slots };
   const selected = value.equippedWeaponSlot;
   if (selected !== null &&

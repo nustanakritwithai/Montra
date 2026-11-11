@@ -140,7 +140,7 @@ try {
       room.send("get_inventory", {});
       await until(() => Array.isArray(inventoryUpdates.at(-1)?.slots),
         3500, "inventory loaded after Node restart in slot " + item.slot);
-      assert.equal(inventoryUpdates.at(-1).slots.length, 12);
+      assert.equal(inventoryUpdates.at(-1).slots.length, 108);
       assert.deepEqual(inventoryUpdates.at(-1).slots.slice(1,4).map(s=>s?.itemId),
         ["ritual_dagger","arcane_sword","spirit_staff"]);
       assert.equal(inventoryUpdates.at(-1).equippedWeaponSlot,

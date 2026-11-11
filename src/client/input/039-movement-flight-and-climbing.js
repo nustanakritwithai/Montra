@@ -118,25 +118,16 @@
     const changing = mode === "live"
       ? ["ascending", "descending"].includes(data?.combatState)
       : Boolean(demoFlightTarget);
-    const label = button.querySelector("span:last-child");
     const definition=worldDefinitions?.[activeMapId];
     const forbidden=!active && mode==="live" && (definition?.region?.noFlight===true || definition?.strategic?.kind==="territory");
     const canFly=mode==="live" && room?.state?.flightAvailable===true && (data?.pathId==="seer" || data?.pathId==="mender");
-    button.hidden=mode!=="live" || !(active || canFly);
-    button.disabled=forbidden;
-    if (label) label.textContent = forbidden ? "เขตห้ามบิน" : changing ? "กำลังบิน" : active ? "ลง" : "บิน";
+    button.hidden = mode !== "demo" && !(active || canFly);
+    button.disabled = changing || forbidden || (mode === "live" && data?.alive !== true);
+    const label = forbidden ? "เขตห้ามบิน" : changing ? "กำลังเปลี่ยนระดับความสูง" : active ? "ลงจอด" : "ขึ้นบิน";
     button.classList.toggle("fly-active", Boolean(active));
+    button.setAttribute("aria-label", label);
     button.setAttribute("aria-pressed", String(Boolean(active)));
-    button.title = forbidden ? "เดินหรือพุ่งผ่านเส้นทางภาคพื้นในเขตนี้" : active ? "ลดระดับความสูงและลงจอด" : "ขึ้นบินเหนือกำแพง แล้วแตะพื้นเพื่อเคลื่อนที่";
-    const wingButton = $("flightButton");
-    if (wingButton) {
-      wingButton.hidden = mode === "live" && !(active || canFly);
-      wingButton.disabled = changing || forbidden || (mode === "live" && data?.alive !== true);
-      wingButton.setAttribute("aria-pressed", String(Boolean(active)));
-      const wingLabel = wingButton.querySelector("i");
-      if (wingLabel) wingLabel.textContent = changing ? "กำลังบิน" : active ? "ลงจอด" : mode === "demo" ? "บิน · DEMO" : "ทะยานฟ้า";
-      wingButton.title = button.title + " [F]";
-    }
+    button.title = label + " [F]";
   }
 
   function toggleFlight() {

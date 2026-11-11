@@ -114,3 +114,27 @@ const naming = index.match(/<div class="skill-modal-naming"[\s\S]*?<\/div>/)?.[0
 assert(!orb.includes('id="skillModalBadge"'), 'status must not overlap the artwork orb');
 assert(naming.includes('id="skillModalBadge"'), 'status remains visible beside the skill name');
 console.log('PASS: 24 distinct core artworks match across all 96 surface mappings; status is outside the artwork');
+
+// Read the current authoritative catalogs, rather than checking a handpicked
+// subset. Every advanced (and passive book) ID needs a concrete SVG mapping.
+const catalogs = require('./class-skills-advanced-fixture.cjs').catalogs;
+const advancedIds = new Set();
+for (const [path, catalog] of Object.entries(catalogs)) {
+  for (const [id, node] of Object.entries(catalog.nodes || catalog.skills || catalog.lessons)) {
+    if (node.path && node.path !== path) continue;
+    advancedIds.add(id);
+    const artwork = ['skill-book-icon', 'glyph', 'skill-modal-glyph', 'kg-glyph'].map(surface => {
+      const selector = `.${surface}[data-skill-glyph="${id}"]`;
+      const rule = rules.find(([, selectors, body]) => selectors.split(',').some(s => s.trim() === selector) && /background-image:/.test(body));
+      assert(rule, `${path}/${id}: ${selector} needs a concrete artwork mapping`);
+      const image = rule[2].match(/background-image:\s*url\("(data:image\/svg\+xml,[^"]+)"\)/)?.[1];
+      assert(image, `${selector} needs embedded SVG artwork`);
+      assert.match(decodeURIComponent(image.slice(image.indexOf(',') + 1)), /^<svg\s/);
+      return image;
+    });
+    assert(artwork.every(image => image === artwork[0]), `${path}/${id}: all four surfaces must share artwork`);
+  }
+}
+assert(advancedIds.size > 100, 'audit the complete advanced catalog, not a few examples');
+assert.match(styles, /:where\(\.glyph\[data-skill-glyph\][\s\S]*?background-image:\s*url\("data:image\/svg\+xml,/, 'future unknown IDs have a visible, low-specificity image fallback');
+console.log(`PASS: all ${advancedIds.size} advanced/passive IDs have concrete SVG mappings on all four surfaces`);

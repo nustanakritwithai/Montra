@@ -136,9 +136,13 @@
     closeForgePicker(false);
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearSyncPoll();
-    ghostPotState = null;
-    if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+    resetGhostPot();
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
+  }
+  function resetGhostPot() {
+    ghostPotState = null;
+    const button = $("ghostPotButton");
+    if (button) button.hidden = true;
   }
 
   const REPLACEMENT_SKILLS = Object.freeze({
@@ -362,6 +366,7 @@
         const old = room;
         room = null;
         clearSyncPoll();
+        resetGhostPot();
         showDemo();
         try { await old.leave(); } catch (error) { console.warn("MONTRA old room leave", error); }
         await new Promise(resolve => setTimeout(resolve, 350));
@@ -369,7 +374,7 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1,inventoryVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -441,16 +446,18 @@
           joined.send("ghost_pot", {action: "read"});
         }
       };
-      ghostPotState = null;
-      if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+      resetGhostPot();
       joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
       joined.onMessage("ghost_pot_state", payload => {
         if (room !== joined || !payload || typeof payload.active !== "boolean") return;
-        const label = $("menuGhostPotLabel"), button = $("menuGhostPot");
-        if (!label || !button) return;
+        const button = $("ghostPotButton");
+        if (!button) return;
         ghostPotState = payload;
+        const label = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.setAttribute("aria-pressed", String(payload.active));
         button.hidden = false;
-        label.textContent = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
         const notice = {captured:"จับ" + (payload.ghost?.name || "ผี") + "ใส่หม้อแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
           summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", unavailable:"หม้ออาคมยังใช้ไม่ได้",
           target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่"};
@@ -829,66 +836,28 @@
         activeTrade=null; tradeUnread=false; updateTradeBadge(); toast(notice); renderEconomy();
       });
       joined.onMessage("combat_hit", hit => {
-        if (room !== joined) return;
-        const forestTarget=joined.state?.monsters?.get?.(hit?.targetId);
-        const struckState = hit?.targetId === MONSTER_ID ? joined.state?.monster : forestTarget;
+        if (room !== joined || typeof hit?.attackerId !== "string") return;
+        const forestTarget = joined.state?.monsters?.get?.(hit.targetId);
+        const struckState = hit.targetId === MONSTER_ID ? joined.state?.monster : forestTarget;
         if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;
-        const struck=(forestMonsters.get(hit?.targetId)||(hit?.targetId===MONSTER_ID?villageGhost:null))?.metadata?.ghost;
-        if(struck){
-          struck.hurtAt=performance.now();
-          if (hit.attackerId === localId) {
-            const mMesh = forestMonsters.get(hit.targetId) || enemy;
-            ghostVoice(struck, mMesh, "hurt", 0.95);
-          }
+        const mesh = forestMonsters.get(hit.targetId) || (hit.targetId === MONSTER_ID ? villageGhost : null);
+        const struck = mesh?.metadata?.ghost;
+        if (struck) struck.hurtAt = performance.now();
+        const at = forestTarget || enemy.position;
+        playAttack(hit.attackerId, hit.source === "ranged", Number(at.x), Number(at.z));
+
+        const dmg = Math.round(Number(hit.damage) || 0);
+        if (hit.attackerId === localId) {
+          const skill = SKILL_SOURCES.has(hit.source), isCrit = dmg >= 40 || (skill && dmg >= 25);
+          impactAt(hit.attackerId, Number(at.x), Number(at.z), hit.source, undefined, Number(at.y) || 0);
+          if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), isCrit ? "crit" : skill ? "skill" : "dealt", { big: isCrit });
+          registerComboHit();
+          hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
+          if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
         }
-        if (typeof hit?.attackerId === "string") {
-          const at = forestTarget || (hit.targetId === MONSTER_ID ? enemy.position : null);
-          const mine = hit.attackerId === localId, dmg = Math.round(Number(hit.damage) || 0);
-          const isCrit = dmg >= 40 || (mine && SKILL_SOURCES.has(hit.source) && dmg >= 25);
-          playAttack(hit.attackerId, hit.source === "ranged", Number(at?.x), Number(at?.z));
-          impactAt(hit.attackerId, Number(at?.x), Number(at?.z), hit.source, true, struck?.design?.kind, undefined, isCrit);
-          if (hit.attackerId === localId) {
-            registerComboHit();
-            hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
-            if (Number(hit.hp) === 0) {
-              hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
-              shakeCamera(0.68, 420);
-              SFX("bell", { intensity: 1.2 });
-              sparks("gold", Number(at?.x), (Number(at?.y) || 0) + 1.2, Number(at?.z), 18, { speed: 4.5, up: 3.2, life: 550 });
-              floatAtPlayer(localId, "วิชาประหารสิ้นสูญ! (EXECUTE)", "crit", { big: true, drift: 0 });
-              shakeCamera(0.42, 320);
-              triggerCombatCallout("execute_finisher");
-            }
-          }
-          if (dmg > 0) floatAtMonster(hit.targetId, (isCrit ? "💥 " : "") + String(dmg), isCrit ? "crit" : (mine ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"), { big: isCrit || (mine && SKILL_SOURCES.has(hit.source)) });
-          if (struck && struck.shieldActive && struck.shieldHp > 0) {
-            const mMesh = forestMonsters.get(hit.targetId) || enemy;
-            processBossShieldDamage(mMesh, struck, dmg, hit.targetId);
-          }
-          if (mine && Number(hit.hp) === 0) {
-            floatAtMonster(hit.targetId, "ปราบ!", "status", { delay: 180, rise: 70, drift: 0 });
-            if (Number.isFinite(Number(at?.x))) auraFx({ x: Number(at.x), z: Number(at.z), y: Number(at.y) || 0 }, "kill");
-          }
-        }
-        const talisman = hit?.source === "talisman";
-        if (forestTarget) {
-          if (forestTarget.mapId !== activeMapId) return;
-          syncForestMonsters(joined.state);
-          if (talisman) showTalisman(forestMonsters.get(hit.targetId));
-          if (hit.attackerId === localId) toast((talisman ? "แปะยันต์ใส่" : "โจมตี ") + monsterName(forestTarget, hit.targetId) + " -" + hit.damage + " HP");
-          return;
-        }
-        if(activeMapId !== "ritual_village" || hit?.targetId !== MONSTER_ID)return;
-        // Players also visibly turn toward the monster while attacking,
-        // even when standing still. All clients receive the same event.
-        if (typeof hit.attackerId === "string") {
-          faceAvatarToward(hit.attackerId, enemy.position.x, enemy.position.z);
-        }
-        if (talisman) showTalisman(enemy);
-        hitFlashRemaining = .22;
-        toast(hit.attackerId === localId
-          ? (talisman ? "แปะยันต์ใส่ผี -" : "โจมตีผีสำเร็จ -") + String(hit.damage) + " HP"
-          : "ผู้เล่นอื่นโจมตีผี -" + String(hit.damage) + " HP");
+        if (struck?.shieldActive && struck.shieldHp > 0) processBossShieldDamage(mesh, struck, dmg, hit.targetId);
+        if (hit.source === "talisman" && hit.attackerId === localId) showTalisman(forestTarget ? mesh : enemy);
+        if (hit.targetId === MONSTER_ID && hit.attackerId === localId) hitFlashRemaining = .16;
       });
       joined.onMessage("combat_notice", notice => {
         if (room !== joined) return;
@@ -947,10 +916,6 @@
         if(room!==joined)return;
         if((joined.state?.players?.get?.(data?.attackerId)?.mapId || "ritual_village") !== activeMapId)return;
         renderMagicBolt(data);
-        { const thrower=avatars.get(data?.attackerId); if(thrower) SFX("rice",{x:thrower.x,z:thrower.z}); }
-        if(data?.attackerId===localId && data.skill!=="basic_magic") {
-          toast("ข้าวสารปลุกเสกโดนเป้าหมาย -" + data.damage + " HP");
-        }
       });
       joined.onMessage("summon_spawn", notice => {
         if (room !== joined) return;
@@ -1227,7 +1192,6 @@
           const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
           if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
           playMuaySkill(result.playerId,result.skillId,result.targetId);
-          { const name=(muayCatalogSkills[result.skillId] || muayBookData()?.catalog?.skills?.[result.skillId])?.name; if(name) floatAtPlayer(result.playerId,(result.skillId==="grapple"?"จับ!":name+"!"),"shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         }
       });
       joined.onMessage("muay_skill_used", result => { if (room===joined && result?.playerId===localId && !["teep","grapple","parry","evade"].includes(result.skillId)) toast((muayBookData()?.catalog?.skills?.[result.skillId]?.name || "วิชามวย")+" สำเร็จ"); });
@@ -1299,7 +1263,6 @@
           playSkillVoiceShout(result.skillId, result.playerId);
           triggerSkillVfx(result.skillId, caster, target, result.targetId);
         }
-        { const catalog=JSON.parse(joined.state?.swordTreeCatalog||"null"),node=catalog?.core?.[result.skillId] || catalog?.nodes?.[result.skillId]; if(node?.name) floatAtPlayer(result.playerId,node.name+"!","shout",{drift:0,side:0,rise:34,life:1400,lift:30}); }
         const ring=B.MeshBuilder.CreateTorus("sword skill ring",{diameter:1.3,thickness:.045,tessellation:16},scene);
         ring.position.set(caster.x,caster.y+.12,caster.z);ring.rotation.x=Math.PI/2;ring.material=gold;ring.isPickable=false;
         skillEffects.push({mesh:ring,mapId:activeMapId,until:performance.now()+450});
@@ -1315,7 +1278,6 @@
         toast(result.skill + " · มีผล " + result.targets + " คน");
         if (ownServerCharacter()?.pathId === "phutthaisawan") playAction(avatars.get(localId), "dance");
         if (ownServerCharacter()?.pathId === "muay_boran") playAction(avatars.get(localId), "m_wai");
-        if (result?.skill) floatAtPlayer(localId, result.skill + "!", "shout", { drift: 0, side: 0, rise: 34, life: 1600 });
       });
       joined.onMessage("possession_changed", notice => {
         if(room===joined && notice?.active){ const who=avatars.get(notice.playerId); if(who) { SFX("possess",{x:who.x,z:who.z}); auraFx(who,"possess"); } floatAtPlayer(notice.playerId,"เข้าสิง!","status",{big:true,drift:0}); }
@@ -1326,28 +1288,25 @@
       joined.onMessage("summon_hit", hit => {
         if (room !== joined || !hit) return;
         const actor = summonAvatars.get(hit.ownerId);
-        if (actor) { actor.hitUntil = performance.now() + 260; SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .7 }); }
-        { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0 && hit.targetId) floatAtMonster(hit.targetId, String(dmg), hit.ownerId === localId ? "spirit" : "ally"); }
-        if (hit.ownerId === localId) {
-          toast("วิญญาณโจมตีผี -" + String(hit.damage) + " HP");
-        }
+        if (actor) actor.hitUntil = performance.now() + 260;
+        if (hit.ownerId !== localId) return;
+        if (actor && combatImpactReady()) SFX("ghost_hit", { x: actor.x, z: actor.z, intensity: .55 });
+        const dmg = Math.round(Number(hit.damage) || 0);
+        if (dmg > 0 && hit.targetId) floatAtMonster(hit.targetId, String(dmg), "spirit");
       });
       joined.onMessage("pvp_hit", hit => {
         if (room !== joined || !hit || typeof hit.targetId !== "string") return;
         const victim = avatars.get(hit.targetId);
-        const attacker = avatars.get(hit.attackerId);
-        if (victim) { victim.hitFlashUntil = performance.now() + 250; playAction(victim, "hit"); }
-        playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
-        if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, false, undefined, hit.targetId);
-        { const dmg = Math.round(Number(hit.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : hit.attackerId === localId ? (SKILL_SOURCES.has(hit.source) ? "skill" : "dealt") : "ally"); }
-        if (attacker && victim) {
-          faceAvatarToward(hit.attackerId, victim.x, victim.z);
+        if (victim) {
+          victim.hitFlashUntil = performance.now() + 180;
+          playAction(victim, "hit", { motionOnly: true });
         }
-        if (hit.targetId === localId) {
-          shakeCamera(0.38, 260);
-          toast("ถูก " + shortPkName(hit.attackerId) + " โจมตี -" + hit.damage + " HP");
-        } else if (hit.attackerId === localId) {
-          toast("โจมตี " + shortPkName(hit.targetId) + " -" + hit.damage + " HP");
+        playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
+        const taken = hit.targetId === localId, mine = hit.attackerId === localId;
+        if (taken || mine) {
+          if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, hit.targetId, victim.y || 0);
+          const dmg = Math.round(Number(hit.damage) || 0);
+          if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), taken ? "taken" : SKILL_SOURCES.has(hit.source) ? "skill" : "dealt");
         }
         syncPKHud();
       });
@@ -1364,23 +1323,22 @@
         syncPKHud();
       });
       joined.onMessage("monster_hit", hit => {
-        if (room === joined) {
-          playAction(avatars.get(hit?.targetId), "hit");
-          { const v = avatars.get(hit?.targetId); if (v) hitBurst(v.x, v.z, hit.targetId === localId ? "red" : "cyan", false, v.y || 0); }
-          { const dmg = Math.round(Number(hit?.damage) || 0); if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), hit.targetId === localId ? "taken" : "ally"); }
-          if (hit?.targetId === localId) {
-            shakeCamera(0.35, 240);
-            if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
+        if (room !== joined || !hit) return;
+        const victim = avatars.get(hit.targetId);
+        playAction(victim, "hit", { motionOnly: true });
+        if (hit.targetId === localId) {
+          const dmg = Math.round(Number(hit.damage) || 0);
+          if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), "taken");
+          if (victim && combatImpactReady()) {
+            hitBurst(victim.x, victim.z, "red", victim.y || 0);
+            SFX("hurt", { x: victim.x, z: victim.z, intensity: .65 });
           }
-          const gm2 = forestMonsters.get(hit?.attackerId), g = gm2?.metadata?.ghost;
-          // A confirmed boss hit starts at the strike, not a fresh windup after damage.
-          if (g) g.attackAt = performance.now() - (g.design?.boss ? 450 : 0);
-          if (g && !(performance.now() - (g.criedAt || 0) < 1500)) { ghostVoice(g, gm2, "attack"); g.criedAt = performance.now(); }
-          if (hit?.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
+          if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };
         }
-        if (room === joined && hit?.targetId === localId) {
-          toast("ถูกผีโจมตี -" + Number(hit.damage || 0) + " HP");
-        }
+        const ghost = forestMonsters.get(hit.attackerId)?.metadata?.ghost;
+        // A confirmed boss hit starts at the strike, not a fresh windup after damage.
+        if (ghost) ghost.attackAt = performance.now() - (ghost.design?.boss ? 450 : 0);
+        if (hit.attackerId === MONSTER_ID) villageGhost.metadata.ghost.attackAt = performance.now();
       });
       joined.onMessage("player_down", info => {
         { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) { SFX("down",{x:fallen.x,z:fallen.z,important:true}); eventFx("down",fallen); } }
@@ -1517,7 +1475,7 @@
       joined.onMessage("inventory_state", payload => {
         if (room !== joined || payload?.version !== 1 ||
             !Array.isArray(payload.slots) ||
-            payload.slots.length !== INVENTORY_SLOTS) return;
+            (payload.slots.length !== INVENTORY_SLOTS && payload.slots.length !== LEGACY_INVENTORY_SLOTS)) return;
         if(payload.personalItems && typeof payload.personalItems==="object") {
           Object.assign(personalItems,payload.personalItems);catalogRevision++;
         }
@@ -1542,7 +1500,7 @@
         const selected = payload.equippedWeaponSlot;
         const equippedWeaponSlot = selected === null ? null :
           Number.isSafeInteger(selected) && selected >= 0 &&
-            selected < INVENTORY_SLOTS && bagMeta(slots[selected]?.itemId)?.kind==="mainHand"
+            selected < slots.length && bagMeta(slots[selected]?.itemId)?.kind==="mainHand"
             ? selected : undefined;
         const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));

@@ -819,6 +819,13 @@ jobs:
 
       - name: Test guild city production, market settlement, and takeover recovery
         working-directory: combat-verify
+        env:
+          MONTRA_CITY_PRODUCTION: '1'
+          MONTRA_CITY_MINING: '1'
+          MONTRA_CITY_LOCAL_MARKETS: '1'
+          MONTRA_CITY_RETURN_MARKET: '1'
+          MONTRA_CITY_NEUTRAL_MARKET: '1'
+          MONTRA_CITY_NEUTRAL_RETURN_MARKET: '1'
         run: npx tsx --test src/rooms/city-production.test.ts
 
       - name: Learn skills anywhere without weakening progression safeguards

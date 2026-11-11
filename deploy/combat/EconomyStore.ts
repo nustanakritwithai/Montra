@@ -13,9 +13,10 @@ import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js"
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, cityMarketSide, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
+  CITY_PRODUCT, cityMarketSide, type CityContractOrder, type CityDisband, type CityFactoryOrder, type CityHaulOrder,
+  type CityMarketContributionOrder, type CityMarketItem,
   type CityMarketOrder, type CityMember,
-  type CityMissionOrder, type CityOrder,
+  type CityMissionOrder, type CityNeutralMarketOrder, type CityNeutralReturnOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
 } from "./CityProductionRules.js";
@@ -278,7 +279,9 @@ export class EconomyStore {
   syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number,
     site: CitySite = CITY_PRODUCTION_SITE): CityOwnership {
     const ownership = readOwnership(this.city.epoch(site), now);
-    this.transaction(() => this.city.reconcile(ownership, now, site));
+    this.transaction(() => {
+      for (const {buyer,gold} of this.city.reconcile(ownership, now, site)) this.refundNeutralReturnGold(buyer, gold);
+    });
     return ownership;
   }
   viewCity(member: CityMember, ownership: CityOwnership, site: CitySite = CITY_PRODUCTION_SITE) {
@@ -323,9 +326,52 @@ export class EconomyStore {
     return this.city.governanceView(member, ownership);
   }
   hasCityMarketAssets(): boolean {
-    return this.city.hasLocalMarketAssets();
+    return this.city.hasLocalMarketAssets() || this.city.hasNeutralConsignments() || this.city.hasNeutralReturnAssets();
   }
-  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean, returnEnabled = false) {
+  hasOpenTradeContract(): boolean {
+    return this.city.hasOpenTradeContract();
+  }
+  viewTradeContracts(actor: string, member: CityMember | undefined, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, enabled: boolean) {
+    return this.city.tradeContractView(actor, member, cities, atCity, atMarket, enabled);
+  }
+  viewCityTradeRoute(actor: string, member: CityMember | undefined, cities: CityOwnerships, location: {
+    atCity: CitySite | null; atMarket: CitySite | null; contractsEnabled: boolean; now: number;
+  }) {
+    const {atCity,atMarket,contractsEnabled,now} = location;
+    return {contracts:this.viewTradeContracts(actor, member, cities, atCity, atMarket, contractsEnabled),
+      report:this.city.tradeRouteReport(now)};
+  }
+  viewMarketContribution(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.marketContributionView(actor, member, ownership);
+  }
+  marketContributionOrder(actor: string, member: CityMember | undefined, order: CityMarketContributionOrder,
+    ownership: CityOwnership, atCity: CitySite | null, now: number) {
+    const {requestId,epoch,amount} = order;
+    return this.once(actor, requestId, "city_market_contribution", {epoch,amount}, () => {
+      if (atCity !== CITY_MINING_SITE) throw Error("city_contribution_location");
+      if (!member) throw Error("city_not_member");
+      const receipt = this.city.recordMarketContribution(actor, member, order, ownership, now);
+      const account = this.account(actor);
+      if (account.gold < amount) throw Error("insufficient_gold");
+      account.gold -= amount;
+      this.put(actor, account);
+      return receipt;
+    });
+  }
+  tradeContractOrder(actor: string, member: CityMember | undefined, order: CityContractOrder, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_trade_contract", intent, () => {
+      const result = this.city.tradeContractOrder(actor, member, order, cities, atCity, atMarket, now);
+      if (!result.trade) return result;
+      const {payments, ...trade} = result.trade;
+      this.settleLocalTrade(actor, CITY_PRODUCT, trade.amount, trade.total, trade.buying, payments);
+      return {contractId:result.contractId, trade};
+    });
+  }
+  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean, returnEnabled = false,
+    neutralEnabled = false, neutralReturnEnabled = false) {
     const account = this.account(actor);
     const inventoryFor = (item: CityMarketItem) => {
       let itemCount = 0, bagSpace = 0;
@@ -347,7 +393,59 @@ export class EconomyStore {
       history: this.city.localMarketHistory(actor, CITY_PRODUCT),
       returnMarkets, returnInventory: inventoryFor(CITY_MINING_PRODUCT),
       returnHistory: this.city.localMarketHistory(actor, CITY_MINING_PRODUCT),
+      neutralMarket: this.city.neutralMarketView(actor, cities[CITY_PRODUCTION_SITE], enabled && neutralEnabled),
+      neutralReturnMarket: this.city.neutralReturnMarketView(actor, cities[CITY_PRODUCTION_SITE], enabled && neutralReturnEnabled),
     };
+  }
+  neutralMarketOrder(actor: string, order: CityNeutralMarketOrder, ownership: CityOwnership, atMarket: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_neutral_market", intent, () => {
+      if (order.action === "neutral_market_withdraw") {
+        const receipt = this.city.withdrawNeutralStock(actor, order.offerId), account = this.account(actor);
+        account.inventory = add(account.inventory, {itemId:CITY_PRODUCT, quantity:receipt.amount});
+        this.put(actor, account);
+        return receipt;
+      }
+      if (atMarket !== CITY_PRODUCTION_SITE) throw Error("city_market_location");
+      if (order.action === "neutral_market_buy") {
+        const {amount,total,payments} = this.city.buyNeutralStock(actor, order, ownership, now);
+        this.settleLocalTrade(actor, CITY_PRODUCT, amount, total, true, payments);
+        return {amount,total};
+      }
+      const account = this.account(actor);
+      if (account.inventory.slots[order.slot]?.itemId !== CITY_PRODUCT) throw Error("item_unavailable");
+      account.inventory = take(account.inventory, order.slot, order.amount).inventory;
+      const receipt = this.city.listNeutralStock(actor, order, ownership);
+      this.put(actor, account);
+      return receipt;
+    });
+  }
+  neutralReturnOrder(actor: string, order: CityNeutralReturnOrder, ownership: CityOwnership, atMarket: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_neutral_return", intent, () => {
+      if (order.action === "neutral_return_cancel") {
+        const result = this.city.cancelNeutralReturnOrder(actor, order.orderId);
+        this.refundNeutralReturnGold(actor, result.gold);
+        return result;
+      }
+      if (order.action === "neutral_return_claim") {
+        const result = this.city.claimNeutralReturnOrder(actor, order.orderId, order.amount), account = this.account(actor);
+        account.inventory = add(account.inventory, {itemId:CITY_MINING_PRODUCT, quantity:result.amount});
+        this.put(actor, account);
+        return result;
+      }
+      if (atMarket !== CITY_PRODUCTION_SITE) throw Error("city_market_location");
+      if (order.action === "neutral_return_sell") {
+        const result = this.city.sellToNeutralReturnOrders(actor, order, ownership, now);
+        this.settleLocalTrade(actor, CITY_MINING_PRODUCT, result.amount, result.total, false);
+        return result;
+      }
+      const result = this.city.openNeutralReturnOrder(actor, order, ownership, now), account = this.account(actor);
+      if (account.gold < result.held) throw Error("insufficient_gold");
+      account.gold -= result.held;
+      this.put(actor, account);
+      return result;
+    });
   }
   cityMarketOrder(actor: string, member: CityMember | undefined, order: CityMarketOrder, ownership: CityOwnership, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
@@ -356,20 +454,26 @@ export class EconomyStore {
         if (!member) throw Error("city_not_member");
         return this.city.configureLocalMarket(member, order, ownership, now);
       }
-      const account = this.account(actor), trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
+      const trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
       const item = order.item ?? CITY_PRODUCT;
-      if (cityMarketSide(order.site, item) === "sell") {
-        if (account.gold < trade.total) throw Error("insufficient_gold");
-        account.inventory = add(account.inventory, {itemId: item, quantity: trade.amount});
-        account.gold -= trade.total;
-      } else {
-        if (account.gold + trade.total > MAX_GOLD) throw Error("city_wallet_full");
-        consume(account, item, trade.amount, "item_unavailable");
-        account.gold += trade.total;
-      }
-      this.put(actor, account);
+      this.settleLocalTrade(actor, item, trade.amount, trade.total, cityMarketSide(order.site, item) === "sell");
       return trade;
     });
+  }
+  private settleLocalTrade(actor: string, item: CityMarketItem, amount: number, total: number, buying: boolean,
+    payments: ReadonlyArray<{seller: string; gold: number}> = []): void {
+    const account = this.account(actor);
+    if (buying) {
+      if (account.gold < total) throw Error("insufficient_gold");
+      account.inventory = add(account.inventory, {itemId: item, quantity: amount});
+      account.gold -= total;
+    } else {
+      if (account.gold + total > MAX_GOLD) throw Error("city_wallet_full");
+      consume(account, item, amount, "item_unavailable");
+      account.gold += total;
+    }
+    this.put(actor, account);
+    for (const {seller,gold} of payments) this.creditOrHold(seller,gold);
   }
   setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
     return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {
@@ -711,7 +815,8 @@ export class EconomyStore {
     characterId(id);
     return Boolean(this.db.prepare("SELECT 1 FROM listings WHERE seller=? AND state='open' LIMIT 1").get(id) ||
       this.db.prepare("SELECT 1 FROM auctions WHERE (state='open' AND (seller=? OR bidder=?)) OR (state='settled' AND claimant=? AND claimed=0) LIMIT 1").get(id,id,id) ||
-      this.db.prepare("SELECT 1 FROM auction_credits WHERE actor=? AND amount>0 LIMIT 1").get(id));
+      this.db.prepare("SELECT 1 FROM auction_credits WHERE actor=? AND amount>0 LIMIT 1").get(id) ||
+      this.city.hasNeutralConsignments(id) || this.city.hasNeutralReturnAssets(id));
   }
   /** A character cannot be retired while another player can buy its listings. */
   eraseCharacter(id:string):void {
@@ -816,6 +921,16 @@ export class EconomyStore {
   private creditOrHold(id:string,amount:number):void {
     positiveInteger(amount,MAX_GOLD);const account=this.account(id);
     if(account.gold+amount<=MAX_GOLD){account.gold+=amount;this.put(id,account);return;}
+    this.holdGoldCredit(id, amount);
+  }
+  private refundNeutralReturnGold(id: string, amount: number): void {
+    positiveInteger(amount, MAX_GOLD);
+    // A refund only changes gold, including when an inventory reward is waiting to be saved.
+    const credited = this.db.prepare("UPDATE accounts SET gold=gold+? WHERE id=? AND gold<=?")
+      .run(amount, id, MAX_GOLD-amount);
+    if (!credited.changes) this.holdGoldCredit(id, amount);
+  }
+  private holdGoldCredit(id: string, amount: number): void {
     const pending=Number(this.db.prepare("SELECT amount FROM auction_credits WHERE actor=?").get(id)?.amount??0);
     if(!Number.isSafeInteger(pending) || !Number.isSafeInteger(pending+amount))throw Error("auction_credit_overflow");
     this.db.prepare("INSERT INTO auction_credits VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET amount=excluded.amount").run(id,pending+amount);

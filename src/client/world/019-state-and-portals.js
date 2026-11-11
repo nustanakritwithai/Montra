@@ -191,6 +191,7 @@
         if(ghost.design.himmapan){
           const stage=Number(monster.specialStage)||0, nextPhase=monster.aiState==="windup" && stage!==ghost.specialStage;
           const recovery=ghost.ai!==monster.aiState && monster.aiState==="special_recovery";
+          const leaping=ghost.design.leap && stage===(ghost.design.leapStage??2);
           if(recovery)ghost.specialAt=performance.now();
           if(ghost.windup && (nextPhase || recovery) && ghost.strikeArea){
             playHimmapanImpact(ghost.strikeArea);
@@ -201,11 +202,11 @@
             const terrain=worldDefinitions?.[monster.mapId]?.terrain;
             const style=ghost.design.stages?.[stage-1];
             ghost.strikeArea={x,y:terrain?terrainHeight(terrain,x,z):ghost.ty,z,inner:Number(monster.specialInnerRange),
-              range:Number(monster.specialRange),facing:ghost.tf,terrain,tint:style?.impact||ghost.design.impactTint,
+              range:Number(monster.specialRange),facing:ghost.tf+(ghost.design.rear?Math.PI:0),terrain,tint:style?.impact||ghost.design.impactTint,
               effect:style?.effect||ghost.design.effect};
-            if(ghost.design.leap && stage===2)ghost.leapDistance=Math.hypot(x-ghost.tx,z-ghost.tz);
+            if(leaping)ghost.leapDistance=Math.hypot(x-ghost.tx,z-ghost.tz);
           }
-          if(recovery && ghost.windup && ghost.design.leap && stage===2)mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);
+          if(recovery && ghost.windup && leaping)mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);
           ghost.specialStage=stage;
         }
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
@@ -219,7 +220,8 @@
       }
       if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
       if(id===selectedForestTarget&&monster.mapId===activeMapId){
-        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
+        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+
+          (monster.aiState==="grazing"?" · เป็นกลาง":"")+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
@@ -265,6 +267,7 @@
     syncQuestRanger();
     syncWarQuartermaster();
     if(mode==="live" && room?.state?.forestObjectivesAvailable)room.send("get_forest_objective",{});
+    if(currentCityTradePin()?.contractId)refreshCityMarkets();
     renderForestObjectiveHud();
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;

@@ -783,7 +783,8 @@ test("salvage quotes only ordinary ingredients from the recipe and protects star
   }
   const base={requestId:"salvage_unit_0010",slot:2,gear:"wp_wrap_2",stamp:"wp_wrap_2",bound:false,socket:"sealed"};
   assert.deepEqual(parseSalvage(base),base);
-  for(const bad of [{slot:12},{slot:"neck"},{bound:"true"},{socket:"mat_metal_1"},{gear:"wp_wrap_1"},{quantity:99},{stamp:""}])
+  assert.ok(parseSalvage({...base,slot:107}));
+  for(const bad of [{slot:108},{slot:"neck"},{bound:"true"},{socket:"mat_metal_1"},{gear:"wp_wrap_1"},{quantity:99},{stamp:""}])
     assert.equal(parseSalvage({...base,...bad}),null);
 });
 

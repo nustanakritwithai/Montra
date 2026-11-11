@@ -41,6 +41,18 @@
       stages: [{ color: "#ffd365", text: "ตราที่ 1 · ออกจากวง", seal: 1, impact: "gold", effect: "seal" },
         { color: "#dc9eff", text: "ตราที่ 2 · ออกจากวง", seal: 2, impact: "violet", effect: "seal" },
         { color: "#ff6966", text: "ตราที่ 3 · ออกจากวง", seal: 3, impact: "red", effect: "seal" }] }],
+    ["himmapan_karin_paksa", { kind: "karinPaksa", height: 3.28, width: 2.6, depth: 3.7, warningFill: true,
+      leap: true, leapStage: 1, warningColor: "#ff7183", warningBands: [.88], shadow: true,
+      warningText: "เงาจุดลงกระแทก · ออกจากวง", impactTint: "red", effect: "stomp" }],
+    ["himmapan_tinna_siha", { kind: "tinnaSiha", height: 2.49, width: 1.6, depth: 3.15, warningFill: true, rear: true,
+      warningColor: "#ffab71", warningBands: [.59], warningText: "ถีบสวนด้านหลัง · หลบออกด้านข้าง",
+      impactTint: "gold", effect: "sweep" }],
+    ["himmapan_hera", { kind: "hera", height: 3.04, width: 1.65, depth: 4.1, warningFill: true,
+      stages: [{color:"#6fe7ff",text:"ระลอกริมธาร · เตรียมหลบแนวกัด",bands:[.42,.73],fill:false,impact:"cyan"},
+        {color:"#ff794f",text:"งับเป็นแนวตรง · หลบออกด้านข้าง",impact:"gold",effect:"bite"}] }],
+    ["himmapan_thanthi_ma", { kind: "thanthiMa", height: 3.05, width: 2.45, depth: 2.65, warningFill: true,
+      warningColor: "#ff765c", warningBands: [.57,.86], warningText: "กวาดกระบองครึ่งวง · เข้าทางด้านข้าง",
+      impactTint: "orange", effect: "sweep" }],
   ]);
   function monsterName(monster, id) {
     if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
@@ -167,10 +179,24 @@
       }
       return;
     }
+    if (effect === "bite") {
+      for(const [i,reach] of [range*.21,range*.47,range*.74].entries()){
+        const px=x-Math.sin(facing)*reach,pz=z-Math.cos(facing)*reach;
+        const height=terrain?terrainHeight(terrain,px,pz):y;
+        spawnFx("streak",tint,px,height+.20,pz,
+          {orient:"flat",yaw:facing,life:275,delay:i*22,s0:range*.27,s1:range*.42,a0:.95});
+      }
+      spawnFx("star","cyan",x,y+.16,z,{orient:"ground",life:350,s0:.64,s1:1.77,a0:.84});
+      return;
+    }
     spawnFx("ring",tint,x,y+.14,z,{orient:"ground",life:420,s0:2*(inner||.35),s1:2*range,a0:.75,a1:0});
     if (effect === "seal") {
       spawnFx("yantra",tint,x,y+.20,z,{orient:"ground",life:380,s0:range*1.73,s1:range*1.91,a0:.95});
       spawnFx("star",tint,x,y+.50,z,{life:300,s0:range*.64,s1:range*1.55,a0:.9});
+    }
+    if (effect === "stomp") {
+      spawnFx("star","gold",x,y+.37,z,{life:350,s0:range*.75,s1:range*1.84,a0:1});
+      spawnFx("yantra","red",x,y+.20,z,{orient:"ground",life:510,s0:range*1.7,s1:range*2,a0:.85});
     }
     if (effect === "claws") {
       for (const side of [-1,0,1]) {
@@ -217,7 +243,7 @@
     metadata.warningStage = stage;
     const style = design.stages?.[stage - 1];
     const terrain = worldDefinitions?.[monster.mapId]?.terrain;
-    const facing = Number(monster.facing) || 0, sin = Math.sin(facing), cos = Math.cos(facing);
+    const facing = (Number(monster.facing) || 0)+(design.rear?Math.PI:0), sin = Math.sin(facing), cos = Math.cos(facing);
     const centerX = stage ? monster.specialOriginX : monster.x, centerZ = stage ? monster.specialOriginZ : monster.z;
     const groundPoint = (x,z) => {
       return new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z);
@@ -236,6 +262,10 @@
     if (fullCircle) {
       if (inner > 0) lines.push(rows[0]);
       if (style?.seal) lines.push(...himmapanSealLines(point,range,style.seal));
+      if (design.shadow) for(const [s,f] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+        const diamond=(radial,tangent)=>point((s*radial+f*tangent)*range,(f*radial-s*tangent)*range);
+        lines.push([diamond(1,0),diamond(.91,.067),diamond(.82,0),diamond(.91,-.067),diamond(1,0)]);
+      }
       if (style?.claws) for (let i=-1;i<=1;i++) {
         const x=i*range*.23;
         lines.push([point(x-range*.24,-range*.36),point(x,-range*.07),point(x+range*.21,range*.37)]);
@@ -275,6 +305,11 @@
       }
       const fill = metadata.specialWarningFill;
       fill.material.emissiveColor = warning.color;
+      if (design.shadow) {
+        fill.material.diffuseColor = B.Color3.FromHexString("#240919");
+        fill.material.emissiveColor = B.Color3.FromHexString("#260d1a");
+        fill.material.alpha = .54;
+      }
       const positions = rows.flatMap(row => row.flatMap(p => [p.x, p.y - .025, p.z]));
       const indices = [], normals = [];
       for (let row = 0; row < rows.length - 1; row++) {

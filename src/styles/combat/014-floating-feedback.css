@@ -13,8 +13,6 @@
 .ftxt.heal { color: #7dff8a; -webkit-text-stroke-color: #002a08; animation-name: ftRise; }
 .ftxt.exp { color: #8ad8ff; font-size: 16px; -webkit-text-stroke-width: 3px; -webkit-text-stroke-color: #001a2a; animation-name: ftRise; }
 .ftxt.status { color: #f0b8ff; font: 900 18px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a0a3a; paint-order: stroke fill; animation-name: ftRise; }
-.ftxt.combo { color: #ffb84a; font: 900 17px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #3a1400; paint-order: stroke fill; animation-name: ftRise; }
-.ftxt.combo.big { font-size: 24px; }
 .ftxt.weak { color: #9fd4ff; font: 800 14px/1 system-ui, sans-serif; -webkit-text-stroke: 3px #001a2a; paint-order: stroke fill; animation-name: ftRise; }
 .ftxt.levelup { color: #ffe27a; font: 900 34px/1 Georgia, serif; -webkit-text-stroke: 5px #3a2000; paint-order: stroke fill; text-shadow: 0 0 18px #ffb84a, 0 0 36px #ff9a2a88; animation: ftLevel 2.2s ease-out forwards; }
 /* Pop, overshoot, arc sideways and drop while fading (the Ragnarok bounce). */

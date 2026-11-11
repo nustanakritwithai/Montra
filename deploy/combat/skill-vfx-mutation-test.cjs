@@ -11,7 +11,7 @@ const mutants=[
  ['missing Mender dispatch',net,s=>replace(s,'        triggerSkillVfx(data.skillId, caster, target, data.targetId);\n        if(target)eventFx','        if(target)eventFx')],
  ['schema facing ignored',spell,s=>replace(s,'Number.isFinite(caster.heading) ? caster.heading : (caster.facing || 0)','caster.heading || 0')],
  ['local schema identity ignored',spell,s=>replace(s,' || caster === ownServerCharacter()','')],
- ['late combat map guard',net,s=>replace(s,'        if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;','')],
+ ['combat map guard missing',net,s=>replace(s,'        if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;','')],
  ['buffalo map guard missing',net,s=>replace(s,'        if(!caster || (caster.mapId || "ritual_village")!==activeMapId || !skillVfxTarget(data?.targetId))return;','')],
  ['effect owner map ignored',fx,s=>replace(s,'f.mapId !== activeMapId || ','')],
  ['effect owner room ignored',fx,s=>replace(s,'f.room !== room || ','')],

@@ -5,7 +5,22 @@
 .skill-book-icon[data-skill-glyph="mender_core_heal"],
 .skill-modal-glyph[data-skill-glyph="mender_core_heal"],
 .glyph[data-skill-glyph="mender_core_heal"],
-.field-slot[data-skill-id="mender_core_heal"] .glyph {
+.field-slot[data-skill-id="mender_core_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_heal"],
+.skill-book-icon[data-skill-glyph="mender_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_heal"],
+.glyph[data-skill-glyph="mender_heal"],
+.field-slot[data-skill-id="mender_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit_heal"],
+.skill-book-icon[data-skill-glyph="mender_spirit_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit_heal"],
+.glyph[data-skill-glyph="mender_spirit_heal"],
+.field-slot[data-skill-id="mender_spirit_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_deep_heal"],
+.skill-book-icon[data-skill-glyph="mender_deep_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_deep_heal"],
+.glyph[data-skill-glyph="mender_deep_heal"],
+.field-slot[data-skill-id="mender_deep_heal"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='healBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e676'/%3E%3Cstop offset='60%25' stop-color='%2300897b'/%3E%3Cstop offset='100%25' stop-color='%23004d40'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23healBg)' stroke='%23b9f6ca' stroke-width='1.5'/%3E%3Cpath d='M32 12 C32 12, 44 26, 44 34 C44 42, 38 48, 32 48 C26 48, 20 42, 20 34 C20 26, 32 12, 32 12 Z' fill='%23e0f2f1' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='34' r='6' fill='%2300e676'/%3E%3Cpolygon points='32,24 34,29 39,30 35,34 36,39 32,36 28,39 29,34 25,30 30,29' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
 }
 
@@ -14,7 +29,22 @@
 .skill-book-icon[data-skill-glyph="mender_core_circle"],
 .skill-modal-glyph[data-skill-glyph="mender_core_circle"],
 .glyph[data-skill-glyph="mender_core_circle"],
-.field-slot[data-skill-id="mender_core_circle"] .glyph {
+.field-slot[data-skill-id="mender_core_circle"] .glyph,
+.kg-glyph[data-skill-glyph="mender_area"],
+.skill-book-icon[data-skill-glyph="mender_area"],
+.skill-modal-glyph[data-skill-glyph="mender_area"],
+.glyph[data-skill-glyph="mender_area"],
+.field-slot[data-skill-id="mender_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_deep_circle"],
+.skill-book-icon[data-skill-glyph="mender_deep_circle"],
+.skill-modal-glyph[data-skill-glyph="mender_deep_circle"],
+.glyph[data-skill-glyph="mender_deep_circle"],
+.field-slot[data-skill-id="mender_deep_circle"] .glyph,
+.kg-glyph[data-skill-glyph="mender_trance"],
+.skill-book-icon[data-skill-glyph="mender_trance"],
+.skill-modal-glyph[data-skill-glyph="mender_trance"],
+.glyph[data-skill-glyph="mender_trance"],
+.field-slot[data-skill-id="mender_trance"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='cirBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd700'/%3E%3Cstop offset='60%25' stop-color='%23ff8f00'/%3E%3Cstop offset='100%25' stop-color='%23bf360c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23cirBg)' stroke='%23fff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23ffffff' stroke-width='2' stroke-dasharray='4,3'/%3E%3Cpolygon points='32,14 46,24 46,40 32,50 18,40 18,24' fill='none' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 
@@ -23,7 +53,27 @@
 .skill-book-icon[data-skill-glyph="mender_core_ward"],
 .skill-modal-glyph[data-skill-glyph="mender_core_ward"],
 .glyph[data-skill-glyph="mender_core_ward"],
-.field-slot[data-skill-id="mender_core_ward"] .glyph {
+.field-slot[data-skill-id="mender_core_ward"] .glyph,
+.kg-glyph[data-skill-glyph="mender_ward"],
+.skill-book-icon[data-skill-glyph="mender_ward"],
+.skill-modal-glyph[data-skill-glyph="mender_ward"],
+.glyph[data-skill-glyph="mender_ward"],
+.field-slot[data-skill-id="mender_ward"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit"],
+.skill-book-icon[data-skill-glyph="mender_spirit"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit"],
+.glyph[data-skill-glyph="mender_spirit"],
+.field-slot[data-skill-id="mender_spirit"] .glyph,
+.kg-glyph[data-skill-glyph="mender_ward_area"],
+.skill-book-icon[data-skill-glyph="mender_ward_area"],
+.skill-modal-glyph[data-skill-glyph="mender_ward_area"],
+.glyph[data-skill-glyph="mender_ward_area"],
+.field-slot[data-skill-id="mender_ward_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_shelter"],
+.skill-book-icon[data-skill-glyph="mender_shelter"],
+.skill-modal-glyph[data-skill-glyph="mender_shelter"],
+.glyph[data-skill-glyph="mender_shelter"],
+.field-slot[data-skill-id="mender_shelter"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='wrdBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e5ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%2301579b'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23wrdBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Cpolygon points='32,10 52,22 48,46 32,56 16,46 12,22' fill='%23e1f5fe' opacity='0.8' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cpolygon points='32,18 44,26 40,42 32,48 24,42 20,26' fill='%2380d8ff' opacity='0.6' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E") !important;
 }
 
@@ -32,7 +82,27 @@
 .skill-book-icon[data-skill-glyph="mender_core_cleanse"],
 .skill-modal-glyph[data-skill-glyph="mender_core_cleanse"],
 .glyph[data-skill-glyph="mender_core_cleanse"],
-.field-slot[data-skill-id="mender_core_cleanse"] .glyph {
+.field-slot[data-skill-id="mender_core_cleanse"] .glyph,
+.kg-glyph[data-skill-glyph="mender_cleanse"],
+.skill-book-icon[data-skill-glyph="mender_cleanse"],
+.skill-modal-glyph[data-skill-glyph="mender_cleanse"],
+.glyph[data-skill-glyph="mender_cleanse"],
+.field-slot[data-skill-id="mender_cleanse"] .glyph,
+.kg-glyph[data-skill-glyph="mender_cleanse_area"],
+.skill-book-icon[data-skill-glyph="mender_cleanse_area"],
+.skill-modal-glyph[data-skill-glyph="mender_cleanse_area"],
+.glyph[data-skill-glyph="mender_cleanse_area"],
+.field-slot[data-skill-id="mender_cleanse_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_pve_rice"],
+.skill-book-icon[data-skill-glyph="mender_pve_rice"],
+.skill-modal-glyph[data-skill-glyph="mender_pve_rice"],
+.glyph[data-skill-glyph="mender_pve_rice"],
+.field-slot[data-skill-id="mender_pve_rice"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit_rice"],
+.skill-book-icon[data-skill-glyph="mender_spirit_rice"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit_rice"],
+.glyph[data-skill-glyph="mender_spirit_rice"],
+.field-slot[data-skill-id="mender_spirit_rice"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='clnBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23f48fb1'/%3E%3Cstop offset='60%25' stop-color='%23ad1457'/%3E%3Cstop offset='100%25' stop-color='%234a0072'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23clnBg)' stroke='%23ff80ab' stroke-width='1.5'/%3E%3Cpolygon points='32,8 36,24 52,28 38,36 42,52 32,42 22,52 26,36 12,28 28,24' fill='%23ffffff' stroke='%23ffd54f' stroke-width='1.2'/%3E%3Ccircle cx='32' cy='30' r='5' fill='%23ff4081'/%3E%3C/svg%3E") !important;
 }
 

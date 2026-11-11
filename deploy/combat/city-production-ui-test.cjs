@@ -14,13 +14,15 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function node(tag = "div") {
   return {
-    tag, children: [], disabled: false, textContent: "",
+    tag, children: [], disabled: false, textContent: "", dataset:{},
     get valueAsNumber() { return Number(this.value); },
     append(...children) {
       this.children.push(...children);
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
     replaceChildren(...children) { this.children = children; },
+    scrollIntoView() { this.scrolled = true; },
+    querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
     setAttribute() {},
   };
 }
@@ -324,6 +326,35 @@ test("the freight board sends the selected scope, destination tenure and deliver
   assert.equal(f.wire.at(-1).payload.haulId,"freight");
 });
 
+test("the contract board refreshes a stale purchase quote and allows a committed delivery with intake paused", () => {
+  const f=fixture({missionSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMission();
+  const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,missions:[]};
+  const contracts={enabled:true,paused:false,source:river,destination:moon,atCity:moon,atMarket:moon,job:null,
+    manage:{epoch:7,canOpen:true,maxAmount:12,maxGold:100}};
+  f.ctx.cityReceiveMission({...board,tradeContracts:contracts});
+  f.submit("เปิดสัญญาจัดซื้อ",6,96);
+  const opened=f.wire.at(-1).payload;
+  assert.deepEqual(opened,{requestId:opened.requestId,action:"contract_open",epoch:7,amount:6,gold:96});
+  f.ctx.cityReceiveResult(opened);
+  const job={id:"contract",name:"กิลด์จันทรา",amount:6,gold:96,total:90,expires:2_000_000};
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job}});
+  assert.equal(f.button("ซื้อแร่และรับสัญญา").disabled,true);
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job,atCity:river,atMarket:river}});
+  f.button("ซื้อแร่และรับสัญญา").onclick();
+  const accepted=f.wire.at(-1).payload;
+  assert.deepEqual(accepted,{requestId:accepted.requestId,action:"contract_accept",contractId:"contract",total:90});
+  f.ctx.cityReceiveError({requestId:accepted.requestId,reason:"city_market_price_changed"});
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,enabled:false,job:{...job,yours:true,carrying:true}}});
+  assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,false);
+  f.button("ส่งสินค้าตามสัญญา").onclick();
+  const delivered=f.wire.at(-1).payload;
+  assert.deepEqual(delivered,{requestId:delivered.requestId,action:"contract_deliver",contractId:"contract"});
+  f.ctx.cityReceiveResult({...delivered,trade:{amount:6,total:96,buying:false}});
+  assert.match(f.nodes.cityStatus.textContent,/ได้รับ 96 ทอง/);
+});
+
 test("the city hall only permits spending reserved supplies after defense and binds the request to the set", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});
@@ -370,6 +401,120 @@ test("local market submits the selected batch total only at the broker and uses 
   assert.equal(f.wire.at(-1).payload.site,moon);
 });
 
+test("the neutral board uses its own quote, submits the selected bag slot, and permits remote returns", () => {
+  const f=fixture({marketSupported:true,member:false}), river="sam_lan_estuary";
+  f.ctx.inventoryState.slots.push({itemId:metal,quantity:4});
+  f.ctx.openCityMarket();
+  const original={site:river,epoch:null,status:"unowned",prices:[],manage:null};
+  const market={site:river,epoch:0,item:metal,side:"sell",neutral:true,enabled:true,status:"open",prices:[12,14],space:10,
+    maxPrice:100,offers:[]};
+  const state={atMarket:river,markets:[original],neutralMarket:market,serverNow:1_000_000,history:[],
+    wallet:100,walletSpace:100,itemCount:4,bagSpace:20};
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.ctx.cityMarketRows()[0].epoch,0);
+  f.submit("ฝากแร่ขึ้นขาย",3,14);
+  const listed=f.wire.at(-1).payload;
+  assert.deepEqual(listed,{requestId:listed.requestId,action:"neutral_market_list",epoch:0,slot:2,amount:3,unitPrice:14});
+  f.ctx.cityReceiveResult(listed);
+  f.submit("ยืนยันซื้อแร่",2);
+  const bought=f.wire.at(-1).payload;
+  assert.deepEqual(bought,{requestId:bought.requestId,action:"neutral_market_buy",epoch:0,amount:2,total:26});
+  f.ctx.cityReceiveResult(bought);
+  const retired={...market,epoch:null,enabled:false,prices:[],offers:[{id:"offer",state:"retired",remaining:2,unitPrice:14}]};
+  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralMarket:retired});
+  assert.equal(f.button("ฝากแร่ขึ้นขาย"),undefined);
+  f.button("รับแร่คืน").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"neutral_market_withdraw");
+  assert.equal(f.wire.at(-1).payload.offerId,"offer");
+});
+
+test("the atlas compares exact contract quantities and follows the pinned delivery through portals", () => {
+  const f=fixture({marketSupported:true,missionSupported:true}), river="sam_lan_estuary", moon="moon_pass", camp="camp";
+  const atlas=readFileSync(join(__dirname,"../../src/client/ui/047-maps-and-strategy.js"),"utf8");
+  const journey=readFileSync(join(__dirname,"../../src/client/ui/041-character-hud-and-journey.js"),"utf8");
+  const panel=f.nodes.atlasTradeRoute=node(), visited=[];
+  const gate={targetMapId:river,x:1,z:2}, nextGate={targetMapId:moon,x:3,z:4}, broker={role:"market",x:5,z:6};
+  Object.assign(f.ctx,{mode:"live",drawerActive:"strategy",activeMapId:camp,territoryState:null,travelRoutes:null,
+    ownServerCharacter:()=>({characterId:"merchant"}),openStrategicMap:site=>visited.push(site),updateAtlasCityMarket(){},
+    worldDefinitions:{[camp]:{name:"ค่าย",portals:[gate]},[river]:{name:"สามลาน",portals:[nextGate]},
+      [moon]:{name:"จันทรา",portals:[],serviceNpcs:[broker]}},
+    $:id=>[panel,...panel.children.flatMap(function walk(el){return [el,...el.children.flatMap(walk)];})]
+      .find(child=>child.id===id)??f.$(id)});
+  vm.runInNewContext(journey.slice(journey.indexOf("  function travelRoute("),journey.indexOf("  function currentItemHunt("))+
+    atlas.slice(atlas.indexOf("  function currentCityTradePin("),atlas.indexOf("  function openStrategicMap(")),f.ctx);
+  const origin={site:river,item:metal,side:"sell",status:"open",prices:[12,12,14]};
+  const destination={site:moon,item:metal,side:"buy",status:"open",prices:[15,15,14]};
+  const job={id:"contract",amount:3,gold:50,total:38,expires:1_120_000,carrying:false,yours:false};
+  const contracts={source:river,destination:moon,job,manage:null,paused:false,enabled:true};
+  const report={deals:2,units:4,gold:52,delivered:1,lastPurchase:null};
+  const state={serverNow:1_000_000,markets:[origin,destination],history:[],wallet:100,bagSpace:10,
+    tradeRoute:{contracts,report}};
+  f.ctx.cityReceiveMarkets(state);
+  const text=()=>panel.children.map(child=>child.textContent).join("\n");
+  assert.match(text(),/ตามสัญญา 50 ทอง · ส่วนต่าง \+12 ทอง/);
+  assert.match(text(),/ซื้อที่สามลาน 2 ดีล · 4 ชิ้น · ส่งสัญญาสำเร็จ 1 งาน · เฉลี่ย 13 ทอง/);
+  const input=panel.querySelector("input");
+  input.value="2";input.oninput();
+  assert.match(text(),/ซื้อ 2 ชิ้น · 24 ทอง/);
+  assert.match(text(),/สัญญาต้องส่งครบ 3 ชิ้น/);
+  assert.doesNotMatch(text(),/ตามสัญญา 50 ทอง/);
+  panel.children.find(child=>child.textContent==="ปักหมุดไปสามลาน").onclick();
+  assert.deepEqual(visited,[river]);
+  assert.equal(f.ctx.cityTradeHudGuide().to,gate);
+  f.ctx.activeMapId=river;
+  const carrying={...contracts,job:{...job,yours:true,carrying:true,total:null}};
+  f.ctx.cityReceiveMission({serverNow:1_001_000,missions:[],tradeContracts:carrying});
+  assert.equal(f.ctx.currentCityTradePin().site,moon);
+  assert.equal(f.ctx.cityTradeHudGuide().to,nextGate);
+  f.ctx.activeMapId=moon;
+  assert.equal(f.ctx.cityTradeHudGuide().to,broker);
+  f.ctx.territoryState={warTimes:{[moon]:{phase:"battle"}}};
+  assert.equal(f.ctx.cityTradeHudGuide().to,undefined);
+  f.ctx.territoryState=null;
+  f.ctx.cityReceiveMarkets({...state,serverNow:1_002_000,tradeRoute:{contracts:carrying,report}});
+  assert.match(text(),/สัญญาที่คุณรับแล้ว/);
+  f.setNow(125_000);
+  f.ctx.updateAtlasTradeDeadline();
+  assert.match(text(),/สัญญาถึงกำหนดแล้ว/);
+  assert.equal(f.ctx.cityTradeHudGuide(),null);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  const item="mat_metal_2",reverse={site:river,item,side:"buy",epoch:0,neutralReturn:true,status:"open",prices:[45,40]};
+  f.ctx.cityReceiveMarkets({...state,returnMarkets:[reverse,{site:moon,item,side:"sell",status:"open",prices:[37,37]}],
+    neutralReturnMarket:reverse});
+  const quantity=f.ctx.$("atlasReturnAmount");
+  quantity.value="2";quantity.oninput();
+  assert.match(panel.children.find(el=>el.tag==="section").children.find(el=>el.tag==="p" && el.textContent.includes("ส่วนต่าง"))
+    .textContent,/ซื้อ 74 ทอง · ขายประมาณ 85 ทอง · ส่วนต่าง \+11 ทอง/);
+  f.ctx.cityReceiveMarkets({...state,returnMarkets:[reverse,{site:moon,item,side:"sell",status:"open",prices:[37,37]}],
+    neutralReturnMarket:reverse});
+  assert.equal(f.ctx.$("atlasReturnAmount").value,"2");
+});
+
+test("the market requires an on-site member, a valid amount and confirmation before funding the guild", () => {
+  const f=fixture({marketSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMarket();
+  const state={atSite:moon,markets:[],serverNow:1_000_000,history:[],wallet:100};
+  const contribution={epoch:8,available:0,receipts:[],siege:false};
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,atSite:river,contribution});
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,contribution:{...contribution,siege:true}});
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,contribution});
+  f.submit("สมทบทองตลาด",101);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.ctx.window.confirm=()=>false;
+  f.submit("สมทบทองตลาด",96);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.ctx.window.confirm=()=>true;
+  f.submit("สมทบทองตลาด",96);
+  const sent=f.wire.at(-1).payload;
+  assert.deepEqual(sent,{action:"market_contribute",epoch:8,amount:96,requestId:sent.requestId});
+  f.ctx.cityReceiveResult({...sent,available:96});
+  assert.match(f.nodes.cityStatus.textContent,/สมทบทองตลาดกิลด์แล้ว 96 ทอง/);
+});
+
 test("the return quote uses tier-two quantities and the disabled market can release its budget", () => {
   const f=fixture({marketSupported:true});
   const river="sam_lan_estuary", moon="moon_pass", item="mat_metal_2";
@@ -393,6 +538,88 @@ test("the return quote uses tier-two quantities and the disabled market can rele
   f.submit("คืนงบรับซื้อ",40);
   assert.equal(f.wire.at(-1).payload.item,item);
   assert.equal(f.wire.at(-1).payload.amount,-40);
+});
+
+test("neutral return orders show wallet escrow, accept a quoted sale and support off-site partial claims", () => {
+  const f=fixture({marketSupported:true,member:false}), river="sam_lan_estuary", item="mat_metal_2";
+  f.ctx.openCityMarket();
+  const city={site:river,item,side:"buy",status:"unowned",prices:[]};
+  const reverse={...city,epoch:0,neutralReturn:true,status:"open",enabled:true,prices:[45,40],
+    orders:[],maxAmount:12,maxPrice:1_000_000};
+  const state={atMarket:river,markets:[],returnMarkets:[city],neutralReturnMarket:reverse,
+    serverNow:1_000_000,history:[],wallet:100,walletSpace:100,itemCount:0,bagSpace:2,
+    returnInventory:{itemCount:2,bagSpace:1}};
+  f.ctx.cityReceiveMarkets(state);
+  f.submit("เปิดใบสั่งซื้อที่สามลาน",3,40);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.submit("เปิดใบสั่งซื้อที่สามลาน",2,40);
+  const bid=f.wire.at(-1).payload;
+  assert.deepEqual(bid,{requestId:bid.requestId,action:"neutral_return_open",epoch:0,amount:2,unitPrice:40});
+  f.ctx.cityReceiveResult({...bid,held:80});
+  f.submit("ยืนยันขายแร่",2);
+  const sell=f.wire.at(-1).payload;
+  assert.deepEqual(sell,{requestId:sell.requestId,action:"neutral_return_sell",epoch:0,amount:2,total:85});
+  f.ctx.cityReceiveResult({...sell,total:85});
+  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralReturnMarket:{...reverse,epoch:null,enabled:false,prices:[],
+    orders:[{id:"old-order",state:"cancelled",unitPrice:40,pending:2,remaining:1,held:0}]}});
+  assert.equal(f.button("เปิดใบสั่งซื้อที่สามลาน"),undefined);
+  assert.equal(f.button("ยกเลิกใบสั่งซื้อ"),undefined);
+  f.submit("รับแร่จากใบสั่งซื้อ",2);
+  assert.equal(f.wire.at(-1).payload.action,"neutral_return_sell");
+  f.submit("รับแร่จากใบสั่งซื้อ",1);
+  const claim=f.wire.at(-1).payload;
+  assert.deepEqual(claim,{requestId:claim.requestId,action:"neutral_return_claim",orderId:"old-order",amount:1});
+});
+
+test("warehouse and factory NPC entry points focus their own sections when city state arrives", () => {
+  const f=fixture();
+  f.ctx.openCityProduction("warehouse");
+  f.state();
+  assert.equal(f.$("cityWarehouseSection").scrolled,true);
+  assert.equal(f.$("cityFactorySection").scrolled,undefined);
+  f.ctx.openCityProduction("factory");
+  assert.equal(f.$("cityFactorySection").scrolled,true);
+  f.state();
+  assert.equal(f.$("cityFactorySection").scrolled,undefined);
+});
+
+test("service NPCs dispatch to city panels and keep war actions on the war board", () => {
+  const code=readFileSync(join(__dirname,"../../src/client/ui/057-npcs-and-objectives.js"),"utf8");
+  const visual=readFileSync(join(__dirname,"../../src/client/world/015-forest-gates-and-services.js"),"utf8");
+  const calls=[],body=node(),buttons={};
+  const ctx={
+    $:id=>buttons[id] ||= node(),
+    ui:{drawerBody:body},document:{createElement:node},bindSpeechButton(){},
+    openDrawer(){body.replaceChildren();},ownServerCharacter:()=>null,
+    activeMapId:"moon_pass",citySiteNames:{moon_pass:"จันทรา"},
+    room:{state:{cityMarketSupported:true,cityPurchaseSupported:true}},
+    territoryState:{local:{site:"moon_pass"}},
+  };
+  for(const handler of ["openSmith","openEconomy","openGuild","openParty","openMap","openStrategicMap","openHelp",
+    "openWarPanel","openCityProduction","openCityMission","openCityGovernance","openCityMarket","openCityPurchase"]){
+    ctx[handler]=(...args)=>calls.push([handler,...args]);
+  }
+  vm.runInNewContext(visual.slice(visual.indexOf("  const serviceNpcUi="),visual.indexOf("  const serviceNpcLooks="))+
+    code.slice(code.indexOf("  function openServiceNpc("),code.indexOf("  function syncQuestRanger(")),ctx);
+  for(const [role,expected] of [
+    ["war",["openWarPanel"]],["cityWarehouse",["openCityProduction","warehouse"]],
+    ["cityFactory",["openCityProduction","factory"]],["cityMissions",["openCityMission"]],
+    ["cityHall",["openCityGovernance"]],["market",["openCityMarket"]],
+  ]){
+    ctx.openServiceNpc({role,name:role});
+    assert.ok(buttons.serviceNpcAction.textContent);
+    buttons.serviceNpcAction.onclick();
+    assert.deepEqual(calls.at(-1),expected);
+  }
+  body.children.find(button=>button.textContent==="เปิดตลาดโลก").onclick();
+  assert.deepEqual(calls.at(-1),["openEconomy"]);
+  body.children.find(button=>button.textContent==="เปิดใบสั่งซื้อกิลด์").onclick();
+  assert.deepEqual(calls.at(-1),["openCityPurchase"]);
+  ctx.activeMapId="other_map";
+  ctx.openServiceNpc({role:"market",name:"นายหน้าตลาด"});
+  buttons.serviceNpcAction.onclick();
+  assert.deepEqual(calls.at(-1),["openEconomy"]);
+  assert.equal(body.children.length,0);
 });
 
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {

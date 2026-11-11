@@ -8,6 +8,11 @@ function fixture(){
  f.html=f.html.replace('<div id="toast"></div>',read('index.html').match(/<div id="toast"[^>]*><\/div>/)[0]);
  f.script=f.script.replace('toast=message=>notices.push(message), ','');
  f.script+='\nlet toastTimer;\n'+between(read('src/client/ui/003-toast-and-mode.js'),'  function toast(','  function setModeBadge(');
+ // The production rejection handler now checks combat-feature errors first.
+ // Load that real helper and its data, retaining the class-rejection assertions.
+ const combat=read('src/client/combat/008-weapon-party-boss-feedback.js');
+ f.script+='\nlet warBannerPendingUntil=0;\n'+between(combat,'  const METEOR_LEADER_REQUIRED_TEXT=', '  function isGuildPartyLeader(');
+ f.script+=between(combat,'  function showCombatFeatureError(', '  function toggleCelestialFlight(');
  const network=read('src/client/network/044-state-sync-and-connection.js');
  f.script+='\nfunction showCombatFeatureError(){return false;}';
  f.script+='\nconst responses={},joined=room;let questNavigation=null,economyPending=false;room.onMessage=(name,callback)=>responses[name]=callback;\n'+between(network,'      joined.onMessage("command_rejected",','      joined.onMessage("warp_complete",');

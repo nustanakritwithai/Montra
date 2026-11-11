@@ -587,8 +587,8 @@
   "dynamicServerSends": 5,
   "protectedSources": {
     "MyRoomState.ts": "574048026149fa7ce16fae624c09b60d0854c5f58ad79a497a596e648a98b6f2",
-    "CharacterStore.ts": "3453e4a7184325880006075cb5a11a1da7691e418f7991eacaeb8c6191b7b96b",
+    "CharacterStore.ts": "9c1a548ccbc2c9e6cb3bafba928b6d6783ba29672f2b0c24d3def97344562d21",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
-    "EconomyStore.ts": "0b1a8c0b00d1a38308792ef4c89f9c64c1314c54292ea0974d786832af6556ea"
+    "EconomyStore.ts": "24c3ba0c55ac83ec90e4b5a1d9ed8621c03b7fc11f90832ef2f41f0b87a00de4"
   }
 }

@@ -372,7 +372,7 @@
     guardianLeaf(b,[0,y-.09,z-.07],[0,y-.42,z-.045],[1,0,0],.102,[0,0,-.04],p.gold);
   }
 
-  function felinePaws(b,body,hide,lion) {
+  function felinePaws(b,body,hide,lion,ankleFin=lion?null:guardianHide.fin) {
     const p=guardianHide,ivory=himmapanPalette.cream;
     return [-1,1].flatMap(side=>[-1,1].map(end=>{
       const front=end<0,height=lion?1.25:1.15;
@@ -395,8 +395,8 @@
       for(let i=0;i<2;i++)b.cyl(side*.079,-height+.24+i*.064,footZ+.015,.056,.242,.258,i?p.gilt:p.gold,12);
       guardianLeaf(b,[side*.16,-height+.26,footZ],[side*.20,-height+.68,footZ+.11],
         [0,0,1],.102,[side*.03,0,.045],p.gold);
-      if(!lion)guardianLeaf(b,[side*.14,-height+.34,footZ+.02],[side*.30,-height+.70,footZ+.21],
-        [0,0,1],.11,[side*.055,0,.07],p.fin);
+      if(ankleFin)guardianLeaf(b,[side*.14,-height+.34,footZ+.02],[side*.30,-height+.70,footZ+.21],
+        [0,0,1],.11,[side*.055,0,.07],ankleFin);
       b.flush(leg,"feline sculpted leg and claws");
       return leg;
     }));
@@ -740,11 +740,602 @@
     };
   }
 
+  function fieldBladeMaterial(name,base,center,edge,veined=false) {
+    const material=mat(name,"#ffffff");
+    material.diffuseTexture=paintTexture(name+" detail",128,(ctx,size)=>{
+      const shade=ctx.createLinearGradient(0,0,0,size);
+      shade.addColorStop(0,base);shade.addColorStop(.57,center);shade.addColorStop(1,edge);
+      ctx.fillStyle=shade;ctx.fillRect(0,0,size,size);
+      for(const half of [.25,.75]){
+        const x=half*size;
+        ctx.strokeStyle=veined?"rgba(249,224,154,.59)":"rgba(249,224,188,.26)";
+        ctx.lineWidth=veined?1.35:.86;
+        ctx.beginPath();ctx.moveTo(x,0);ctx.quadraticCurveTo(x-2,size*.55,x+1,size);ctx.stroke();
+        ctx.lineWidth=veined?.86:.59;
+        for(let j=0;j<(veined?10:23);j++){
+          const y=(j+1)*size/(veined?11:24);
+          for(const side of [-1,1]){
+            const reach=size*(.14+noise(j,182)*.091);
+            ctx.beginPath();ctx.moveTo(x,y);
+            ctx.quadraticCurveTo(x+side*reach*.69,y+6,x+side*reach,y+(veined?13:9));ctx.stroke();
+          }
+        }
+      }
+    });
+    return material;
+  }
+
+  function fieldBlade(b,start,tip,across,width,curve,material) {
+    const outline=[.18,.76,1,.86,.51,.012];
+    b.sculpt(outline.map((radius,index)=>{
+      const t=index/(outline.length-1),bend=Math.sin(Math.PI*t);
+      const position=start.map((v,axis)=>v+(tip[axis]-v)*t+curve[axis]*bend);
+      return [...position,width*radius,width*radius*.088];
+    }),across,material,8);
+  }
+
+  const mountainHide = {
+    elephant: mat("Karin Paksa textured slate hide","#635767"),
+    quill: fieldBladeMaterial("Karin Paksa charcoal feather","#24212e","#463745","#7c3c40"),
+    crimson: fieldBladeMaterial("Karin Paksa vermilion feather","#4e202b","#9d3538","#c65a47"),
+    rubyQuill: fieldBladeMaterial("Karin Paksa scarlet tips","#59212b","#b23838","#d76b50"),
+    groveCoat: mat("Tinna Siha cream coat","#e7d5b8"),
+    leaf: fieldBladeMaterial("Tinna Siha olive mane","#404b2c","#727f45","#9ba05d",true),
+    leafEdge: fieldBladeMaterial("Tinna Siha young leaf","#596136","#939b55","#b9ad69",true),
+    leafRust: fieldBladeMaterial("Tinna Siha copper leaf","#694039","#9b5d45","#bb8354",true),
+    dragonScale: mat("Hera muted teal scales","#9caaa3"),
+    underScale: mat("Hera ivory belly scutes","#ddc6a0"),
+    membrane: fieldBladeMaterial("Hera river-green membranes","#255556","#639492","#a5bba0",true),
+    ivoryFeather: fieldBladeMaterial("Thanthi Ma ivory feathers","#98846e","#ded3bb","#f5e3c4"),
+    shadeFeather: fieldBladeMaterial("Thanthi Ma ash and cream feathers","#76685a","#b6a48e","#e1cdb0"),
+    rooster: fieldBladeMaterial("Thanthi Ma russet rooster feathers","#4f2932","#884d51","#b58471"),
+    brass: mat("Mountain guardian chased gold","#ba8f51"),
+    brassEdge: mat("Mountain guardian gold ridge","#d8b175"),
+    cloth: mat("Thanthi Ma embroidered maroon cloth","#713b42"),
+  };
+  mountainHide.elephant.diffuseTexture=paintTexture("Karin Paksa leather folds",256,(ctx,size)=>{
+    ctx.fillStyle="#958990";ctx.fillRect(0,0,size,size);
+    for(let i=0;i<480;i++){
+      const x=noise(i,214)*size,y=noise(i,215)*size;
+      ctx.strokeStyle=i%3===0?"rgba(212,190,181,.26)":"rgba(57,49,57,.34)";
+      ctx.lineWidth=.45+noise(i,216)*.64;
+      ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x+2,y+3,x+6+noise(i,217)*5,y+3);ctx.stroke();
+    }
+  });
+  mountainHide.groveCoat.diffuseTexture=paintTexture("Tinna Siha vine markings",256,(ctx,size)=>{
+    ctx.fillStyle="#f3e4c8";ctx.fillRect(0,0,size,size);
+    for(let i=0;i<9;i++){
+      const x=(i%3+.52)*size/3,y=(Math.floor(i/3)+.44)*size/3;
+      ctx.strokeStyle=i%2?"#ad8261":"#a9594d";ctx.lineWidth=2.4;
+      ctx.beginPath();ctx.moveTo(x-39,y+45);
+      ctx.bezierCurveTo(x-40,y+15,x+43,y+23,x+24,y-7);
+      ctx.bezierCurveTo(x+8,y-34,x-21,y-23,x-11,y-9);ctx.stroke();
+      ctx.strokeStyle="#b48c66";ctx.lineWidth=1.2;
+      ctx.beginPath();ctx.moveTo(x-35,y+37);
+      ctx.bezierCurveTo(x-12,y+47,x+15,y+22,x+37,y+24);
+      ctx.bezierCurveTo(x+52,y+26,x+41,y-3,x+30,y+6);ctx.stroke();
+      ctx.fillStyle="#87915c";
+      ctx.beginPath();ctx.moveTo(x-18,y+29);
+      ctx.quadraticCurveTo(x-43,y+9,x-36,y-7);
+      ctx.quadraticCurveTo(x-20,y+2,x-18,y+29);ctx.fill();
+    }
+  });
+  mountainHide.dragonScale.diffuseTexture=paintTexture("Hera fine overlapping river scales",256,(ctx,size)=>{
+    const width=size/15,height=size/19;
+    ctx.fillStyle="#647b7a";ctx.fillRect(0,0,size,size);
+    for(let row=20;row>=-1;row--)for(let col=-1;col<=15;col++){
+      const x=(col+(row%2)*.5)*width,y=row*height+(noise(row*20+col,264)-.5)*1.3;
+      const shade=ctx.createLinearGradient(x,y,x,y+height*1.28);
+      shade.addColorStop(0,"#536e73");
+      shade.addColorStop(.63,(row+col)%3?"#759799":"#90a5a0");
+      shade.addColorStop(1,"#97a58d");
+      ctx.fillStyle=shade;ctx.strokeStyle="#546e6f";ctx.lineWidth=.64;
+      ctx.beginPath();ctx.moveTo(x-width*.53,y);
+      ctx.quadraticCurveTo(x-width*.38,y+height*.84,x,y+height*1.27);
+      ctx.quadraticCurveTo(x+width*.38,y+height*.84,x+width*.53,y);
+      ctx.closePath();ctx.fill();ctx.stroke();
+      ctx.strokeStyle="rgba(219,198,149,.53)";ctx.lineWidth=.76;
+      ctx.beginPath();ctx.moveTo(x-width*.41,y+height*.58);
+      ctx.quadraticCurveTo(x,y+height*1.67,x+width*.41,y+height*.58);ctx.stroke();
+    }
+  });
+  mountainHide.cloth.diffuseTexture=paintTexture("Thanthi Ma gold embroidered panel",128,(ctx,size)=>{
+    ctx.fillStyle="#a66665";ctx.fillRect(0,0,size,size);
+    ctx.strokeStyle="#f0ce8b";ctx.lineWidth=1.55;
+    for(const band of [.25,.75]){
+      const x=size*band;
+      for(let i=0;i<5;i++){
+        const y=12+i*23;
+        ctx.beginPath();ctx.moveTo(x,y-9);ctx.lineTo(x+9,y);ctx.lineTo(x,y+9);
+        ctx.lineTo(x-9,y);ctx.closePath();ctx.stroke();
+        for(const side of [-1,1]){
+          ctx.beginPath();ctx.moveTo(x,y+6);ctx.quadraticCurveTo(x+side*26,y+9,x+side*21,y-6);ctx.stroke();
+        }
+      }
+    }
+  });
+
+  function fieldHarness(b,span,y,z,gem,tassels=false) {
+    const m=mountainHide;
+    for(const side of [-1,1]){
+      const x=side*span;
+      const frame=[[x*1.04,y+.61,z+.44,.018],[x*1.08,y+.44,z+.255,.049],[x*.83,y+.23,z+.057,.054],
+        [x*.46,y+.101,z-.051,.042],[x*.22,y-.021,z-.105,.039],[0,y-.271,z-.078,.004]];
+      b.taper(frame,m.brass,10);
+      b.taper(frame.map(([a,c,d,r])=>[a*.91,c+.021,d-.026,r*.46]),m.brassEdge,8);
+      for(let i=0;i<4;i++){
+        const t=i*.18,a=x*(.27+t),c=y+.02+i*.106,d=z-.119+i*.049;
+        b.taper([[a,c,d,.012],[a+x*.12,c+.095,d-.035,.018],[a+x*.247,c+.132,d+.014,.018],
+          [a+x*.256,c+.075,d+.043,.013],[a+x*.162,c+.064,d+.014,.009],[a+x*.165,c+.102,d-.009,.003]],
+          m.brassEdge,7);
+      }
+      if(tassels){
+        const px=x*.56,pz=z-.025;
+        b.taper([[px,y+.055,pz,.018],[px,y-.045,pz-.023,.016],[px,y-.115,pz-.013,.018]],m.brassEdge,7);
+        b.cyl(px,y-.166,pz-.014,.104,.029,.068,m.brass,10);
+      }
+    }
+    fieldBlade(b,[0,y+.18,z-.10],[0,y-.368,z-.082],[1,0,0],.118,[0,-.013,-.044],m.brass);
+    himmapanJewel(b,0,y-.031,z-.138,.205,gem);
+  }
+
+  function fieldWings(b,body,x,y,z,scale,cover,flight,tip) {
+    const m=mountainHide;
+    return [-1,1].map(side=>{
+      const wing=b.joint("jointed flight wing",body,side*x,y,z);
+      const v=(a,h,d)=>[side*a*scale,h*scale,d*scale];
+      for(let row=0;row<3;row++)for(let i=0;i<13;i++){
+        const t=i/12,a=.08+t*(1.52-row*.14),h=.08+t*.59+row*.073;
+        const endX=a+.18+t*(.72-row*.14),endY=h-.91+row*.265+t*.67;
+        fieldBlade(b,v(a,h,.065-row*.078),v(endX,endY,.51-row*.16),[side*.58,.81,0],
+          scale*(.155-row*.016),v(.085,-.071,-.048),row===2?cover:i>6&&row===0?tip:flight);
+      }
+      b.taper([[0,.11,-.108,.048],[.32,.26,-.147,.047],[.74,.42,-.143,.04],
+        [1.22,.62,-.135,.031],[1.67,.78,-.084,.021],[1.96,.92,.035,.002]]
+        .map(([a,h,d,r])=>[...v(a,h,d),r*scale]),m.brass,9);
+      for(let i=0;i<7;i++){
+        const a=.16+i*.238,h=.20+i*.096;
+        fieldBlade(b,v(a,h,-.135),v(a+.28,h+.21,-.117),[side*.52,.86,0],
+          scale*.047,v(.07,-.018,-.035),m.brassEdge);
+      }
+      b.flush(wing,"three rows of overlapping flight feathers");
+      return wing;
+    });
+  }
+
+  function buildKarinPaksa(root) {
+    const b=ghostBuilder(root,true),p=guardianHide,m=mountainHide;
+    const body=b.joint("karin paksa body",root,0,1.17,0);
+    b.sculpt([[0,.28,1.29,.079,.092],[0,.27,.92,.48,.52],[0,.31,.49,.59,.61],
+      [0,.33,-.17,.58,.64],[0,.39,-.69,.58,.64],[0,.47,-1.03,.31,.42]],
+      [1,0,0],m.elephant,22);
+    for(let row=0;row<5;row++)for(let i=-3;i<=3;i++){
+      const x=i*(.106+row*.014),y=.86-row*.155,z=-1.06+Math.abs(i)*.059-row*.022;
+      fieldBlade(b,[x,y+.09,z],[x*1.13,y-.24,z+.054],[1,0,0],.093,[0,0,-.056],row===4?m.crimson:m.quill);
+    }
+    for(const side of [-1,1]){
+      b.taper([[side*.49,.65,-.70,.04],[side*.65,.46,-.37,.066],[side*.63,.42,.31,.064],
+        [side*.55,.5,.77,.053],[side*.46,.72,.94,.006]],m.brass,9);
+      for(let i=0;i<5;i++)fieldBlade(b,[side*.45,.74-i*.093,.55],[side*.64,.57-i*.112,1.14+i*.072],
+        [0,1,0],.095,[side*.066,.09,0],i===0?m.brassEdge:i%2?m.quill:m.crimson);
+    }
+    fieldHarness(b,.62,.27,-1.17,p.ruby,true);
+    b.flush(body,"karin paksa chest and harness");
+    const head=b.joint("karin paksa elephant head",body,0,.79,-.94);
+    b.sculpt([[0,.08,.24,.052,.075],[0,.10,.09,.36,.39],[0,.14,-.18,.414,.388],
+      [0,.115,-.39,.356,.344],[0,-.015,-.53,.272,.225],[0,-.11,-.66,.169,.128]],
+      [1,0,0],m.elephant,22);
+    for(const side of [-1,1]){
+      b.sculpt([[side*.25,-.14,-.20,.133,.139],[side*.32,-.19,-.38,.185,.177],
+        [side*.28,-.22,-.56,.142,.123],[side*.22,-.21,-.66,.063,.066]],
+        [0,1,0],m.elephant,15);
+      fieldBlade(b,[side*.27,.27,-.002],[side*.88,-.13,.24],[0,1,0],.258,[side*.074,.15,-.051],m.quill);
+      for(let i=0;i<7;i++){
+        fieldBlade(b,[side*(.29+i*.045),.30-i*.047,-.057],[side*(.86+i*.015),.43-i*.104,.26+i*.019],
+          [0,1,0],.083,[side*.055,.055,-.037],i%3?m.crimson:m.rubyQuill);
+      }
+      b.taper([[side*.27,.29,-.052,.041],[side*.47,.42,-.064,.038],[side*.69,.42,.073,.025],
+        [side*.89,.31,.237,.004]],m.brassEdge,9);
+      b.taper([[side*.24,-.224,-.53,.132],[side*.32,-.34,-.75,.117],
+        [side*.46,-.31,-1.01,.09],[side*.56,-.16,-1.19,.056],[side*.58,.067,-1.234,.024],
+        [side*.565,.169,-1.207,.003]],p.fur,12);
+      b.taper([[side*.207,-.188,-.555,.023],[side*.29,-.226,-.644,.035],[side*.375,-.258,-.628,.029],
+        [side*.397,-.229,-.561,.003]],m.brass,8);
+      b.ball(side*.308,.135,-.415,.145,m.quill,10).scaling.set(1,.52,.58);
+      b.ball(side*.327,.131,-.455,.091,gm.eyeAmber,10).scaling.set(1,.51,.54);
+      b.ball(side*.338,.128,-.476,.039,gm.mouth,8).scaling.set(.62,.93,.47);
+      b.taper([[side*.148,.208,-.531,.034],[side*.296,.227,-.452,.043],[side*.391,.236,-.319,.031],
+        [side*.406,.28,-.199,.004]],m.brassEdge,9);
+      for(let i=0;i<4;i++){
+        fieldBlade(b,[side*(.075+i*.072),.42-i*.045,-.415+i*.031],
+          [side*(.16+i*.111),.79-i*.086,-.05+i*.093],[1,0,0],.074,
+          [side*.049,.09,-.026],i%2?m.brass:m.brassEdge);
+      }
+    }
+    fieldBlade(b,[0,.331,-.487],[0,.968,-.036],[1,0,0],.116,[0,.097,-.084],m.brass);
+    himmapanJewel(b,0,.44,-.519,.177,p.ruby);
+    b.flush(head,"karin paksa carved crown, tusks and feather ears");
+    const trunk=b.joint("karin paksa curled trunk",head,0,-.12,-.56);
+    b.sculpt([[0,0,0,.176,.174],[0,-.15,-.15,.167,.163],[0,-.266,-.31,.138,.138],
+      [0,-.232,-.53,.108,.111],[0,-.07,-.74,.087,.082],[0,.196,-.84,.073,.068],
+      [0,.448,-.831,.056,.053],[0,.595,-.719,.052,.047],[0,.578,-.619,.031,.029]],
+      [1,0,0],m.elephant,19);
+    for(let i=0;i<5;i++){
+      const y=-.191+i*.128,z=-.672-i*.039,r=.093-i*.009;
+      b.taper([[-r*.82,y,z,.007],[-r*.49,y+.013,z-.037,.009],[0,y+.02,z-.046,.009],
+        [r*.49,y+.013,z-.037,.009],[r*.82,y,z,.007]],p.furShade,7);
+    }
+    b.taper([[-.054,.565,-.655,.013],[0,.601,-.627,.015],[.052,.559,-.65,.012]],m.brassEdge,7);
+    b.flush(trunk,"karin paksa curled trunk and skin folds");
+    const wings=fieldWings(b,body,.50,.69,-.36,1.28,m.quill,m.crimson,m.rubyQuill);
+    const legs=[-1,1].flatMap(side=>[-1,1].map(end=>{
+      const leg=b.joint("karin paksa elephant leg",body,side*.435,.026,end*.77);
+      b.sculpt([[0,.28,0,.096,.13],[0,.03,0,.263,.3],[0,-.33,.06,.231,.25],
+        [0,-.62,.035,.176,.19],[0,-.99,-.05,.174,.182],[0,-1.16,-.079,.227,.201]],
+        [1,0,0],m.elephant,14);
+      for(let j=-1;j<=1;j++)b.ball(j*.118,-1.108,-.234,.129,p.fur,10).scaling.set(1,.81,.54);
+      b.sculpt([[0,-1.052,-.047,.202,.20],[0,-.974,-.039,.199,.197],[0,-.893,-.031,.186,.193],
+        [0,-.834,-.027,.184,.185]],[1,0,0],m.brass,14);
+      for(let j=-1;j<=1;j++){
+        fieldBlade(b,[j*.092,-.972,-.235],[j*.139+side*.073,-.455+Math.abs(j)*.123,-.122],
+          [1,0,0],.061,[side*.068,.014,-.077],j===0?m.brassEdge:m.brass);
+      }
+      himmapanJewel(b,side*.036,-.828,-.252,.093,p.ruby);
+      b.flush(leg,"karin paksa engraved leg guards");
+      return leg;
+    }));
+    const tail=b.joint("karin paksa long scarlet tail",body,0,.38,1.13);
+    for(let i=-6;i<=6;i++)fieldBlade(b,[i*.033,.012,.012],[i*.131,.69+Math.cos(i*.33)*.43,1.18+Math.abs(i)*.075],
+      [0,0,1],.159,[i*.062,-.33,.30],i%4===0?m.brassEdge:i%2?m.rubyQuill:m.crimson);
+    b.flush(tail,"karin paksa flame feather tail");
+    return k=>{
+      const age=k.now-(k.g.stageAt??k.now), t=k.wind?Math.min(1,Math.max(0,(age-390)/1260)):0;
+      const lift=Math.sin(Math.PI*t),strike=himmapanStrike(k);
+      const flight=t*t*(3-2*t);
+      body.position.y=1.17+Math.sin(k.t*3.2)*.026+lift*1.61-k.wind*(1-lift)*.07-strike*.21;
+      body.position.z=-(k.g.leapDistance||0)*flight;
+      body.rotation.x=lift*.22-strike*.20;
+      trunk.rotation.x=-lift*.34+Math.sin(k.t*3)*.082;
+      tail.rotation.y=Math.sin(k.t*2.5)*.17;
+      poseHimmapanLegs(legs,k,lift*.82);
+      legs[1].rotation.x+=lift*.40;legs[3].rotation.x+=lift*.40;
+      wings.forEach((wing,i)=>{
+        const side=i?1:-1,spread=k.wind*.45+lift*.55;
+        wing.rotation.y=side*(-1.32+spread*1.35);
+        wing.rotation.z=side*(-.65+spread*1.15+lift*Math.sin(k.t*15)*.19);
+      });
+    };
+  }
+
+  function buildTinnaSiha(root) {
+    const b=ghostBuilder(root,true),p=guardianHide,m=mountainHide,hide=m.groveCoat;
+    const body=b.joint("tinna siha body",root,0,1.16,0);
+    b.sculpt([[0,.215,1.12,.047,.057],[0,.235,.83,.34,.372],[0,.193,.55,.353,.38],
+      [0,.171,.21,.321,.30],[0,.186,-.24,.378,.391],[0,.247,-.62,.426,.448],[0,.276,-.86,.293,.327]],
+      [1,0,0],hide,20);
+    fieldHarness(b,.424,.145,-.93,himmapanPalette.jade);
+    for(const side of [-1,1]){
+      b.taper([[side*.12,.59,-.50,.016],[side*.32,.57,-.33,.023],[side*.37,.48,.05,.026],
+        [side*.37,.42,.29,.023],[side*.29,.57,.49,.023],[side*.18,.61,.68,.003]],m.brass,8);
+      for(let i=0;i<3;i++){
+        fieldBlade(b,[side*(.24+i*.067),.55-i*.057,-.48+i*.14],
+          [side*(.43+i*.026),.27-i*.09,-.04+i*.16],[0,1,0],.088,[side*.046,.055,.046],i%2?m.leaf:m.leafEdge);
+      }
+    }
+    b.flush(body,"tinna siha vine-marked torso");
+    const legs=felinePaws(b,body,hide,false,m.leaf);
+    const neck=b.joint("tinna siha grazing neck",body,0,.19,-.64);
+    b.sculpt([[0,-.10,.10,.277,.26],[0,.08,.025,.341,.291],[0,.294,-.118,.29,.249],
+      [0,.469,-.245,.226,.207],[0,.634,-.347,.151,.16]],[1,0,0],hide,17);
+    for(const side of [-1,1])for(let i=0;i<5;i++){
+      const x=side*(.24-i*.025),y=.56-i*.10,z=-.30+i*.073;
+      fieldBlade(b,[x,y,z],[x+side*.14,y-.19,z+.46],[0,1,0],.114,
+        [side*.055,-.025,.038],i%2?m.leaf:m.leafEdge);
+    }
+    b.flush(neck,"tinna siha continuous neck and shoulder leaves");
+    const head=b.joint("tinna siha head",neck,0,.61,-.364);
+    b.sculpt([[0,-.09,.20,.111,.106],[0,.018,.081,.255,.263],[0,.042,-.108,.278,.267],
+      [0,.037,-.291,.208,.202],[0,-.041,-.448,.154,.133],[0,-.083,-.602,.099,.072]],
+      [1,0,0],hide,18);
+    b.ball(0,-.112,-.609,.127,p.bronze,10).scaling.set(1.15,.55,.60);
+    for(const side of [-1,1]){
+      b.ball(side*.098,-.119,-.501,.220,p.fur,10).scaling.set(.87,.55,1.17);
+      b.ball(side*.194,.028,-.373,.103,p.furShade,10).scaling.set(1,.49,.53);
+      b.ball(side*.209,.031,-.404,.079,gm.eyeAmber,10).scaling.set(1,.47,.49);
+      b.ball(side*.217,.032,-.422,.033,gm.mouth,8).scaling.set(.78,.92,.53);
+      b.taper([[side*.085,.096,-.423,.022],[side*.196,.108,-.39,.033],
+        [side*.272,.151,-.284,.026],[side*.32,.223,-.168,.004]],m.brassEdge,8);
+      fieldBlade(b,[side*.186,.166,.011],[side*.36,.34,.11],[0,1,0],.108,
+        [side*.035,.051,-.013],p.furShade);
+      for(let row=0;row<3;row++)for(let i=0;i<7;i++){
+        const a=.15+i*.47,y=.102+Math.cos(a)*(.293+row*.034),x=side*(.115+Math.sin(a)*(.19+row*.046));
+        fieldBlade(b,[x,y,-.157+row*.129],[x+side*.14,y+.25-i*.09,.40+row*.119],
+          [0,1,0],.114-row*.011,[side*.092,.09,.013],i%6===0?m.leafRust:row===0?m.leafEdge:m.leaf);
+      }
+      for(let j=0;j<3;j++)fieldBlade(b,[side*(.061+j*.051),.235-j*.031,-.264],
+        [side*(.19+j*.091),.51-j*.057,.254+j*.066],[1,0,0],.073,[side*.034,.08,-.023],j===0?m.brassEdge:m.leafEdge);
+    }
+    b.flush(head,"tinna siha leaf mane and gentle muzzle");
+    const tail=b.joint("tinna siha leaf tail",body,0,.25,1.01);
+    b.sculpt([[0,0,0,.103,.101],[0,.119,.274,.091,.089],[.034,.46,.525,.071,.072],
+      [.053,.773,.563,.055,.051],[.032,.981,.409,.038,.039]],[1,0,0],hide,11);
+    for(let i=-3;i<=3;i++)fieldBlade(b,[i*.031,.92,.44],[i*.092,1.48-Math.abs(i)*.095,-.12+i*.071],
+      [0,0,1],.112,[i*.039,.041,.119],i===0?m.brassEdge:i%2?m.leafEdge:m.leafRust);
+    b.flush(tail,"tinna siha leaf-shaped tail fan");
+    let graze;
+    return k=>{
+      const grazing=k.g.ai==="grazing",age=k.now-(k.g.stageAt??k.now);
+      const kick=k.wind?Math.sin(Math.PI*Math.min(1,Math.max(0,(age-360)/980))):himmapanStrike(k);
+      const rest=grazing?1:0;
+      graze=graze===undefined?rest:graze+(rest-graze)*.28;
+      body.position.y=1.16+Math.sin(k.t*3)*.027+kick*.20-graze*.11;
+      body.rotation.x=-graze*.15-kick*.22;
+      neck.rotation.x=.13-graze*1.55;
+      head.rotation.x=-.11+graze*(.55+Math.sin(k.t*3.7)*.048)+kick*.11;
+      head.rotation.y=graze*Math.sin(k.t*2.1)*.10;
+      tail.rotation.y=Math.sin(k.t*(2.6+k.move*3))*.21;
+      poseHimmapanLegs(legs,k);
+      legs[0].position.y=.01+graze*.165;legs[2].position.y=.01+graze*.165;
+      legs[0].rotation.x+=graze*.24;legs[2].rotation.x-=graze*.22;
+      legs[1].rotation.x-=kick*1.34;
+      legs[3].rotation.x-=kick*1.22;
+    };
+  }
+
+  function buildHera(root) {
+    const b=ghostBuilder(root,true),p=guardianHide,m=mountainHide,scales=m.dragonScale;
+    const body=b.joint("hera long draconic body",root,0,1.02,0);
+    b.sculpt([[0,.11,1.50,.101,.102],[0,.16,1.13,.237,.254],[0,.28,.81,.318,.306],
+      [0,.42,.38,.328,.332],[0,.42,.01,.328,.33],[0,.31,-.36,.354,.349],
+      [0,.23,-.73,.371,.373],[0,.36,-1.09,.329,.351]],
+      [1,0,0],scales,22);
+    b.sculpt([[0,.21,-.79,.35,.328],[0,.52,-.97,.32,.319],[0,.82,-1.05,.264,.276],
+      [0,1.13,-1.11,.201,.213],[0,1.36,-1.16,.163,.149],[0,1.53,-1.14,.071,.079]],
+      [1,0,0],scales,18);
+    b.sculpt([[0,.062,1.19,.151,.087],[0,.09,.79,.221,.151],[0,.19,.37,.267,.17],
+      [0,.19,-.08,.262,.199],[0,.04,-.65,.271,.215],[0,.23,-1.02,.25,.189],[0,.56,-1.19,.219,.161],
+      [0,.88,-1.25,.167,.136],[0,1.19,-1.26,.109,.107]],
+      [1,0,0],m.underScale,15);
+    for(let i=0;i<9;i++){
+      const y=.26+i*.115,z=-1.181-i*.014,width=.253-i*.015;
+      b.sculpt([[-width,y+.062,z,.019,.017],[-width*.58,y+.029,z-.096,.047,.035],
+        [0,y-.015,z-.139,.058,.041],[width*.58,y+.029,z-.096,.047,.035],[width,y+.062,z,.019,.017]],
+        [0,1,0],i%3?p.fur:m.underScale,11);
+    }
+    fieldHarness(b,.405,.44,-1.23,himmapanPalette.jade);
+    const finBase=[.57,.57,.64,.72,.74,.73,.67,.62,.54,.43,.34];
+    for(let i=0;i<finBase.length;i++){
+      const z=-.84+i*.208,y=finBase[i],tip=.48-i*.014;
+      fieldBlade(b,[0,y,z],[0,y+tip,z+.50],[0,1,0],.133-i*.006,[0,.16,-.036],m.membrane);
+      b.taper([[0,y,z,.024],[0,y+.28,z+.108,.022],[0,y+tip*.89,z+.319,.014],
+        [0,y+tip,z+.50,.002]],m.brassEdge,8);
+      b.taper([[0,y,z,.019],[0,y-.019,z+.156,.021],[0,y+.047,z+.241,.018],
+        [0,y+.173,z+.313,.004]],m.brass,7);
+    }
+    b.flush(body,"hera blue scales ivory scutes and dorsal fins");
+    const legs=[-1,1].flatMap(side=>[-1,1].map(end=>{
+      const front=end<0;
+      const leg=b.joint("hera bent leg",body,side*(front?.316:.291),.014,end*.75);
+      b.sculpt([[0,.20,0,.124,.133],[side*.019,.056,0,.208,.225],[side*.073,-.208,end*.11,.192,.197],
+        [side*.114,-.447,.03+end*.13,.14,.141],[side*.135,-.663,.059,.108,.113],
+        [side*.14,-.901,-.064,.114,.12]],[1,0,0],scales,13);
+      b.sculpt([[side*.14,-.892,.017,.107,.065],[side*.14,-.914,-.112,.151,.072],
+        [side*.14,-.947,-.224,.123,.056]],[1,0,0],m.underScale,12);
+      for(let i=0;i<4;i++){
+        const x=side*.14+(i-1.5)*.063;
+        b.taper([[x,-.924,-.175,.037],[x,-.926,-.255,.026],
+          [x,-.958,-.339+Math.abs(i-1.5)*.021,.003]],p.fur,8);
+      }
+      b.cyl(side*.137,-.773,-.016,.072,.245,.259,m.brass,12);
+      for(const turn of [-1,1]){
+        fieldBlade(b,[side*.14+turn*.055,-.796,-.14],[side*.15+turn*.12,-.389,-.081],
+          [1,0,0],.064,[turn*.058,0,-.057],m.brassEdge);
+      }
+      himmapanJewel(b,side*.139,-.705,-.163,.081);
+      b.flush(leg,"hera carved greaves and four curved talons");
+      return leg;
+    }));
+    const head=b.joint("hera dragon head",body,0,1.35,-1.15);
+    b.sculpt([[0,.036,.217,.082,.077],[0,.081,.093,.263,.223],[0,.081,-.16,.29,.251],
+      [0,.025,-.41,.221,.172],[0,.018,-.627,.183,.127],[0,.052,-.771,.148,.097],
+      [0,.069,-.822,.087,.055]],[1,0,0],scales,20);
+    b.sculpt([[0,-.141,-.16,.14,.055],[0,-.172,-.385,.216,.069],[0,-.139,-.628,.161,.056],
+      [0,-.07,-.771,.103,.036]],[1,0,0],gm.mouth,12);
+    for(const side of [-1,1]){
+      b.ball(side*.109,.106,-.766,.10,p.gold,8).scaling.set(1,.67,1.27);
+      b.ball(side*.128,.11,-.805,.045,gm.mouth,7).scaling.z=.4;
+      b.ball(side*.223,.135,-.411,.122,gm.mouth,10).scaling.set(1,.47,.56);
+      b.ball(side*.25,.135,-.439,.087,gm.eyeAmber,10).scaling.set(1,.49,.48);
+      b.ball(side*.258,.131,-.457,.041,gm.mouth,8).scaling.set(.51,.96,.56);
+      b.taper([[side*.125,.182,-.477,.043],[side*.252,.186,-.408,.058],[side*.312,.238,-.235,.046],
+        [side*.33,.288,-.072,.005]],p.gold,9);
+      b.taper([[side*.144,.247,-.091,.069],[side*.248,.395,.16,.066],[side*.327,.483,.399,.052],
+        [side*.387,.499,.642,.037],[side*.441,.595,.791,.028],[side*.432,.722,.88,.002]],p.gilt,10);
+      b.taper([[side*.300,.463,.351,.044],[side*.425,.545,.493,.031],[side*.512,.628,.643,.003]],p.gold,8);
+      for(let i=0;i<5;i++)fieldBlade(b,[side*.202,.265-i*.119,.068],[side*(.595-i*.048),.47-i*.146,.63+i*.065],
+        [0,1,0],.112,[side*.102,.096,-.061],i===0?m.brassEdge:m.membrane);
+      b.taper([[side*.15,-.023,-.751,.029],[side*.262,-.087,-.661,.033],[side*.438,-.149,-.438,.022],
+        [side*.494,-.28,-.286,.015],[side*.398,-.338,-.232,.002]],p.gold,8);
+      for(let j=0;j<6;j++){
+        const z=-.694+j*.073,x=side*(.121+j*.013);
+        b.taper([[x,-.127,z,.029],[x,-.19-(j===2?.08:0),z-.024,.020],[x*.95,-.222-(j===2?.083:0),z-.02,.002]],p.fur,7);
+      }
+    }
+    fieldBlade(b,[0,.266,-.235],[0,.752,.349],[1,0,0],.109,[0,.10,-.033],m.brassEdge);
+    b.flush(head,"hera horned head and upper teeth");
+    const jaw=b.joint("hera lower jaw",head,0,-.145,-.16);
+    b.sculpt([[0,-.047,.045,.092,.062],[0,-.086,-.123,.17,.076],[0,-.081,-.351,.155,.062],
+      [0,-.043,-.512,.10,.046],[0,-.017,-.602,.036,.021]],[1,0,0],m.underScale,14);
+    for(const side of [-1,1])for(let j=0;j<5;j++){
+      const z=-.479+j*.069,x=side*(.094+j*.01);
+      b.taper([[x,-.049,z,.023],[x,-.009,z-.022,.016],[x*.96,.039,z-.02,.001]],p.fur,7);
+    }
+    b.flush(jaw,"hera articulated bite");
+    const tail=b.joint("hera serpent tail",body,0,.19,1.33);
+    b.sculpt([[0,0,0,.205,.19],[.04,.005,.34,.169,.158],[.16,.095,.66,.126,.117],
+      [.27,.27,.913,.094,.085],[.31,.56,1.09,.071,.061],[.24,.825,1.09,.046,.044],
+      [.14,.972,.962,.03,.028]],[1,0,0],scales,15);
+    for(let i=-3;i<=3;i++)fieldBlade(b,[.14+i*.033,.847,.999],[.14+i*.112,1.46-Math.abs(i)*.12,.48+i*.087],
+      [0,0,1],.119,[i*.052,.13,.054],i===0?m.brassEdge:m.membrane);
+    b.flush(tail,"hera rising finned tail");
+    return k=>{
+      const second=k.g.specialStage===2,age=k.now-(k.g.stageAt??k.now);
+      const strike=himmapanStrike(k);
+      const ambush=k.wind&&!second;
+      const lunge=k.wind&&second?Math.pow(Math.min(1,age/870),2):strike*.45;
+      body.position.y=1.02+Math.sin(k.t*3.3)*.032-ambush*.35-lunge*.14;
+      body.position.z=-lunge*.64;
+      head.rotation.x=ambush*.29-lunge*.20;
+      jaw.rotation.x=k.wind&&second?.24+lunge*.63:strike*.43;
+      tail.rotation.y=Math.sin(k.t*(2.9+k.move*2.1))*.31+ambush*.25;
+      poseHimmapanLegs(legs,k,lunge*.50);
+    };
+  }
+
+  function buildThanthiMa(root) {
+    const b=ghostBuilder(root,true),p=guardianHide,m=mountainHide;
+    const body=b.joint("thanthi ma upright bird",root,0,1.37,0);
+    b.sculpt([[0,-.27,.035,.278,.259],[0,-.118,.013,.312,.274],[0,.105,-.025,.302,.273],
+      [0,.33,-.064,.417,.31],[0,.55,-.115,.388,.279],[0,.72,-.139,.188,.191]],
+      [1,0,0],p.wing,20);
+    for(let row=0;row<6;row++)for(let i=-3;i<=3;i++){
+      const x=(i+(row%2)*.28)*(.111-row*.005),y=.58-row*.129,z=-.381+Math.abs(i)*.035+row*.012;
+      fieldBlade(b,[x,y+.115,z],[x*1.14,y-.153,z+.066],[1,0,0],.077,[0,-.012,-.071],
+        (row+i)%5?m.ivoryFeather:m.shadeFeather);
+    }
+    fieldHarness(b,.365,.24,-.42,himmapanPalette.jade,true);
+    b.taper([[-.34,-.174,-.069,.055],[-.28,-.167,-.312,.054],[0,-.182,-.381,.061],
+      [.28,-.167,-.312,.054],[.34,-.174,-.069,.055]],p.gold,8);
+    fieldBlade(b,[0,-.14,-.359],[0,-.96,-.25],[1,0,0],.184,[0,-.052,-.074],m.cloth);
+    for(const side of [-1,1]){
+      b.taper([[side*.069,-.22,-.388,.016],[side*.169,-.44,-.427,.017],
+        [side*.126,-.70,-.379,.018],[0,-.96,-.25,.003]],m.brassEdge,8);
+    }
+    himmapanJewel(b,0,-.164,-.412,.169);
+    b.flush(body,"thanthi ma layered breast and gold waistcloth");
+    const head=b.joint("thanthi ma hawk head",body,0,.82,-.195);
+    b.sculpt([[0,-.17,.06,.187,.159],[0,.012,.083,.214,.215],[0,.199,-.031,.266,.246],
+      [0,.234,-.221,.238,.208],[0,.197,-.352,.168,.161]],
+      [1,0,0],p.wing,18);
+    b.sculpt([[0,.122,-.25,.159,.12],[0,.125,-.437,.17,.111],[0,.079,-.567,.129,.096],
+      [0,-.004,-.655,.090,.073],[0,-.099,-.663,.043,.042],[0,-.163,-.613,.002,.003]],
+      [1,0,0],p.gold,16);
+    for(const side of [-1,1]){
+      b.ball(side*.178,.196,-.327,.133,gm.mouth,10).scaling.set(1,.49,.57);
+      b.ball(side*.197,.197,-.359,.089,gm.eyeAmber,10).scaling.set(1,.51,.52);
+      b.ball(side*.207,.196,-.381,.041,gm.mouth,8).scaling.set(.61,.89,.41);
+      b.taper([[side*.084,.23,-.392,.035],[side*.191,.259,-.349,.047],[side*.249,.306,-.257,.042],
+        [side*.291,.361,-.176,.004]],p.gilt,9);
+      fieldBlade(b,[side*.186,.234,-.066],[side*.546,.264,.239],[0,1,0],.139,[side*.044,.083,.019],m.shadeFeather);
+      fieldBlade(b,[side*.203,.226,-.087],[side*.51,.251,.192],[0,1,0],.096,[side*.043,.074,.021],p.furShade);
+      b.taper([[side*.092,.013,-.475,.035],[side*.112,-.097,-.518,.026],
+        [side*.121,-.164,-.526,.003]],p.fur,8);
+      for(let i=0;i<5;i++)fieldBlade(b,[side*(.046+i*.044),.342-i*.049,-.186+i*.024],
+        [side*(.14+i*.067),.703-i*.067,.37+i*.052],[1,0,0],.071,[side*.048,.092,-.032],
+        i%2?m.ivoryFeather:m.brassEdge);
+    }
+    fieldBlade(b,[0,.338,-.228],[0,.81,.289],[1,0,0],.112,[0,.094,-.056],m.brass);
+    b.flush(head,"thanthi ma curved beak fangs and bovine ears");
+    const wings=fieldWings(b,body,.33,.43,.116,.91,m.shadeFeather,m.ivoryFeather,m.ivoryFeather);
+    const arms=[-1,1].map(side=>{
+      const shoulder=b.joint("thanthi ma shoulder",body,side*.39,.435,-.071);
+      b.sculpt([[0,.057,0,.092,.103],[side*.05,-.03,0,.14,.144],[side*.093,-.19,.016,.12,.119],
+        [side*.107,-.381,.008,.088,.084]],[1,0,0],p.skin,12);
+      b.cyl(side*.098,-.293,.011,.079,.205,.204,m.brass,10);
+      for(let i=0;i<4;i++)fieldBlade(b,[side*(.014+i*.028),.056-i*.038,-.082],
+        [side*(.18+i*.02),-.177-i*.044,.039],[0,1,0],.079,[side*.023,0,-.041],i%2?m.ivoryFeather:m.shadeFeather);
+      b.flush(shoulder,"thanthi ma upper arm");
+      const wrist=b.joint("thanthi ma forearm",shoulder,side*.107,-.36,.008);
+      b.sculpt([[0,.025,0,.093,.084],[side*.048,-.092,-.015,.115,.103],[side*.067,-.207,-.036,.082,.073],
+        [side*.066,-.331,-.047,.073,.072]],[1,0,0],p.skin,12);
+      b.cyl(side*.066,-.257,-.047,.076,.175,.184,m.brass,11);
+      for(let i=0;i<4;i++){
+        const x=side*.065+(i-1.5)*.037;
+        b.taper([[x,-.333,-.068,.026],[x,-.390,-.109,.023],
+          [x+(side<0?.019:0),-.441+Math.abs(i-1.5)*.013,-.154,.014]],p.skin,7);
+      }
+      b.taper([[side*.02,-.286,-.059,.032],[-side*.037,-.334,-.102,.025],[-side*.021,-.362,-.137,.015]],p.skin,7);
+      b.flush(wrist,side<0?"thanthi ma five-finger grip":"thanthi ma five-finger hand");
+      if(side<0){
+        const grip=[-.075,-.389,-.132],club=b.joint("thanthi ma held club",wrist,...grip);
+        b.sculpt([[0,-.232,0,.064,.063],[0,-.114,0,.052,.052],[0,.06,0,.049,.049],
+          [0,.34,-.008,.057,.058],[0,.529,-.019,.073,.074],[0,.671,-.026,.106,.108],
+          [0,.778,-.038,.148,.147],[0,.94,-.051,.154,.155],[0,1.067,-.062,.105,.104],[0,1.127,-.069,.043,.045]],
+          [1,0,0],p.bronze,16);
+        for(let i=0;i<7;i++){
+          const y=.588+i*.076,z=-.024-i*.006,diameter=[.186,.21,.252,.305,.322,.26,.174][i];
+          b.cyl(0,y,z,.034,diameter,diameter*.97,i%2?m.brassEdge:m.brass,13);
+        }
+        for(let i=0;i<7;i++){
+          const a=i*Math.PI*2/7,x=Math.cos(a),z=Math.sin(a);
+          b.taper([[x*.089,.71,z*.098-.028,.012],[x*.137,.788,z*.137-.034,.015],
+            [x*.147,.886,z*.148-.04,.012],[x*.142,.964,z*.14-.051,.003]],m.brassEdge,7);
+        }
+        b.ball(0,1.106,-.072,.124,m.brass,10).scaling.y=1.17;
+        b.flush(club,"thanthi ma ribbed gold club");
+        club.rotation.z=.58;
+        club.rotation.x=-.34;
+      }
+      return {shoulder,wrist};
+    });
+    const legs=[-1,1].map(side=>{
+      const leg=b.joint("thanthi ma bird leg",body,side*.238,-.187,.08);
+      b.sculpt([[0,.095,0,.14,.162],[0,-.129,.093,.116,.14],[0,-.397,.162,.076,.092],
+        [0,-.651,.104,.05,.065],[0,-.98,-.063,.065,.071],[0,-1.117,-.153,.091,.076]],
+        [1,0,0],p.gold,12);
+      for(let j=-1;j<=1;j++)b.taper([[j*.06,-1.10,-.148,.046],[j*.118,-1.14,-.282,.037],
+        [j*.147,-1.144,-.383,.024],[j*.149,-1.175,-.423,.002]],himmapanPalette.claw,8);
+      for(let i=0;i<5;i++){
+        fieldBlade(b,[(i-2)*.049,.073-Math.abs(i-2)*.025,.029],
+          [(i-2)*.076,-.371+Math.abs(i-2)*.039,-.093],[1,0,0],.073,[side*.035,-.022,-.069],
+          i%2?m.shadeFeather:m.ivoryFeather);
+      }
+      for(let i=0;i<7;i++){
+        const y=-.59-i*.065,z=.136-i*.025;
+        b.taper([[-.051,y,z-.033,.006],[0,y-.014,z-.072,.009],[.051,y,z-.033,.006]],m.brassEdge,6);
+      }
+      fieldBlade(b,[0,-.604,.092],[side*.096,-.278,.174],[1,0,0],.078,[0,0,.042],m.brass);
+      b.flush(leg,"thanthi ma scaled talons");
+      return leg;
+    });
+    const tail=b.joint("thanthi ma rooster tail",body,0,-.15,.31);
+    for(let i=-5;i<=5;i++){
+      const spread=Math.abs(i);
+      fieldBlade(b,[i*.037,.038,.036],[i*.124,-.32-spread*.023,1.51-spread*.071],
+        [0,1,0],.144,[i*.048,.64,.252],i%3===0?m.ivoryFeather:m.rooster);
+    }
+    b.flush(tail,"thanthi ma curled rooster tail");
+    return k=>{
+      const age=k.now-(k.g.stageAt??k.now);
+      const raise=k.wind?Math.min(1,age/440):0;
+      const swing=k.wind?Math.min(1,Math.max(0,(age-890)/360)):himmapanStrike(k)*.68;
+      body.position.y=1.37+Math.sin(k.t*3.6)*.031-raise*.12-swing*.16;
+      body.rotation.y=raise*.57-swing*1.21;
+      body.rotation.x=swing*.21;
+      head.rotation.y=-raise*.34+swing*.55;
+      tail.rotation.y=Math.sin(k.t*3)*.13-swing*.53;
+      arms[0].shoulder.rotation.set(raise*2.04-swing*.90,0,-.39-raise*.70+swing*1.69);
+      arms[0].wrist.rotation.x=-.24-raise*.38+swing*.64;
+      arms[1].shoulder.rotation.z=.26+raise*.39+swing*.19;
+      arms[1].wrist.rotation.x=-.38+raise*.31;
+      legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(k.walk+i*Math.PI)*k.move*.51-swing*.11;});
+      wings.forEach((wing,i)=>{
+        const side=i?1:-1;
+        wing.rotation.y=side*(-1.27+raise*.83);
+        wing.rotation.z=side*(-.74+raise*.81-swing*.23);
+      });
+    };
+  }
+
   const GHOST_KINDS = {
     phayakNathi: root => buildHimmapanCat(root, false),
     kraisorn: root => buildHimmapanCat(root, true),
     hatsadiling: buildHatsadiling,
     kilen: buildKilen,
+    karinPaksa: buildKarinPaksa,
+    tinnaSiha: buildTinnaSiha,
+    hera: buildHera,
+    thanthiMa: buildThanthiMa,
     matchaNaga(root) {
       const b = ghostBuilder(root), jade = gm.sash3[2];
       const body = b.joint("naga body", root, 0, .88, 0);

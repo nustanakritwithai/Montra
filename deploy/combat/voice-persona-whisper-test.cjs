@@ -23,11 +23,11 @@ assert(mainSrc.includes('name: "วิญญาณผู้พิทักษ์
 // 3. Verify Shamanic Whisper Engine & Methods
 assert(mainSrc.includes('function triggerWhisper(text, options = {})'), 'main.js defines triggerWhisper');
 assert(mainSrc.includes('SFX("whisper"'), 'triggerWhisper triggers SFX whisper');
-assert(mainSrc.includes('voiceGuidanceHud.classList.add("spirit-whisper")'), 'triggerWhisper applies spirit-whisper style');
 
-// 4. Verify CSS Styles for Spirit Whisper & Persona Row
-assert(cssSrc.includes('.voice-guidance-hud.spirit-whisper'), 'styles.css defines .spirit-whisper');
-assert(cssSrc.includes('@keyframes pulseAvatarSpirit'), 'styles.css defines @keyframes pulseAvatarSpirit');
+assert(mainSrc.includes('{ persona: personaId, whisper: true }'), 'whispers retain their selected voice');
+assert(!cssSrc.includes('.voice-guidance-hud'), 'whispers have no floating panel');
+
+// 4. Verify settings persona row
 assert(cssSrc.includes('.voice-persona-row'), 'styles.css defines .voice-persona-row');
 
 // 5. Verify Sound Settings UI & Persona Selector

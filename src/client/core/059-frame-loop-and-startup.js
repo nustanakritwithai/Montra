@@ -248,7 +248,7 @@
     if(!fishingState || fishingPending || !room)return;
     fishingPending=true;fishingPendingUntil=performance.now()+8000;room.send("fish_reel",{id:fishingState.id});
   };
-  $("fly").onclick = toggleFlight;
+  $("fly").onclick = toggleFlightCommand;
 
   let elapsed=0, lastMapDraw=0;
   engine.runRenderLoop(() => {
@@ -299,7 +299,7 @@
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
               villageGhost.metadata.ghost.hurtAt = now;
-              impactAt(localId, villageGhost.position.x, villageGhost.position.z, "", true, villageGhost.metadata.ghost.design?.kind);
+              impactAt(localId, enemy.position.x, enemy.position.z, "", undefined, enemy.position.y);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               registerComboHit();
               floatAtMonster(MONSTER_ID, "20", "dealt");
@@ -310,14 +310,8 @@
               }
               if (demoMonsterHp <= 0) {
                 hudKills.ritual_village = (hudKills.ritual_village || 0) + 1;
-                shakeCamera(0.68, 420);
-                SFX("bell", { intensity: 1.2 });
-                sparks("gold", enemy.position.x, enemy.position.y + 1.2, enemy.position.z, 18, { speed: 4.5, up: 3.2, life: 550 });
-                floatAtPlayer(localId, "วิชาประหารสิ้นสูญ! (EXECUTE)", "crit", { big: true, drift: 0 });
                 eventFx("ghost_die", enemy, { y: 0 });
                 releaseSoul(enemy.position.x, enemy.position.y + .4, enemy.position.z);
-                shakeCamera(0.42, 320);
-                triggerCombatCallout("execute_finisher");
                 enemy.setEnabled(false);
                 demoAutoAttack = false;
                 demoRespawnAt = now + 6000;

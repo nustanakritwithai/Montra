@@ -5,7 +5,22 @@
 .skill-book-icon[data-skill-glyph="blade_vanish"],
 .skill-modal-glyph[data-skill-glyph="blade_vanish"],
 .glyph[data-skill-glyph="blade_vanish"],
-.field-slot[data-skill-id="blade_vanish"] .glyph {
+.field-slot[data-skill-id="blade_vanish"] .glyph,
+.kg-glyph[data-skill-glyph="cloak"],
+.skill-book-icon[data-skill-glyph="cloak"],
+.skill-modal-glyph[data-skill-glyph="cloak"],
+.glyph[data-skill-glyph="cloak"],
+.field-slot[data-skill-id="cloak"] .glyph,
+.kg-glyph[data-skill-glyph="quiet_step"],
+.skill-book-icon[data-skill-glyph="quiet_step"],
+.skill-modal-glyph[data-skill-glyph="quiet_step"],
+.glyph[data-skill-glyph="quiet_step"],
+.field-slot[data-skill-id="quiet_step"] .glyph,
+.kg-glyph[data-skill-glyph="veil_guard"],
+.skill-book-icon[data-skill-glyph="veil_guard"],
+.skill-modal-glyph[data-skill-glyph="veil_guard"],
+.glyph[data-skill-glyph="veil_guard"],
+.field-slot[data-skill-id="veil_guard"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='vanBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%236a0dad'/%3E%3Cstop offset='60%25' stop-color='%2338006b'/%3E%3Cstop offset='100%25' stop-color='%23120024'/%3E%3C/radialGradient%3E%3Cfilter id='vanGlow'%3E%3CfeGaussianBlur stdDeviation='2' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23vanBg)' stroke='%23b388ff' stroke-width='1.5'/%3E%3Cpath d='M10 32 C14 20, 26 14, 32 14 C38 14, 50 20, 54 32 C50 44, 38 50, 32 50 C26 50, 14 44, 10 32 Z' fill='%23240046' stroke='%23d1c4e9' stroke-width='1.5' filter='url(%23vanGlow)'/%3E%3Cellipse cx='32' cy='32' rx='10' ry='10' fill='%23651fff'/%3E%3Ccircle cx='32' cy='32' r='4.5' fill='%2300e5ff' filter='url(%23vanGlow)'/%3E%3Ccircle cx='34' cy='30' r='1.5' fill='%23ffffff'/%3E%3Cpath d='M16 22 C22 28, 30 24, 36 18' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3Cpath d='M48 42 C42 36, 34 40, 28 46' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3C/svg%3E") !important;
 }
 
@@ -14,7 +29,42 @@
 .skill-book-icon[data-skill-glyph="blade_heavy"],
 .skill-modal-glyph[data-skill-glyph="blade_heavy"],
 .glyph[data-skill-glyph="blade_heavy"],
-.field-slot[data-skill-id="blade_heavy"] .glyph {
+.field-slot[data-skill-id="blade_heavy"] .glyph,
+.kg-glyph[data-skill-glyph="hidden_edge"],
+.skill-book-icon[data-skill-glyph="hidden_edge"],
+.skill-modal-glyph[data-skill-glyph="hidden_edge"],
+.glyph[data-skill-glyph="hidden_edge"],
+.field-slot[data-skill-id="hidden_edge"] .glyph,
+.kg-glyph[data-skill-glyph="marked_cut"],
+.skill-book-icon[data-skill-glyph="marked_cut"],
+.skill-modal-glyph[data-skill-glyph="marked_cut"],
+.glyph[data-skill-glyph="marked_cut"],
+.field-slot[data-skill-id="marked_cut"] .glyph,
+.kg-glyph[data-skill-glyph="piercing_edge"],
+.skill-book-icon[data-skill-glyph="piercing_edge"],
+.skill-modal-glyph[data-skill-glyph="piercing_edge"],
+.glyph[data-skill-glyph="piercing_edge"],
+.field-slot[data-skill-id="piercing_edge"] .glyph,
+.kg-glyph[data-skill-glyph="sever_mark"],
+.skill-book-icon[data-skill-glyph="sever_mark"],
+.skill-modal-glyph[data-skill-glyph="sever_mark"],
+.glyph[data-skill-glyph="sever_mark"],
+.field-slot[data-skill-id="sever_mark"] .glyph,
+.kg-glyph[data-skill-glyph="shadow_cut"],
+.skill-book-icon[data-skill-glyph="shadow_cut"],
+.skill-modal-glyph[data-skill-glyph="shadow_cut"],
+.glyph[data-skill-glyph="shadow_cut"],
+.field-slot[data-skill-id="shadow_cut"] .glyph,
+.kg-glyph[data-skill-glyph="rune_break"],
+.skill-book-icon[data-skill-glyph="rune_break"],
+.skill-modal-glyph[data-skill-glyph="rune_break"],
+.glyph[data-skill-glyph="rune_break"],
+.field-slot[data-skill-id="rune_break"] .glyph,
+.kg-glyph[data-skill-glyph="sealed_finale"],
+.skill-book-icon[data-skill-glyph="sealed_finale"],
+.skill-modal-glyph[data-skill-glyph="sealed_finale"],
+.glyph[data-skill-glyph="sealed_finale"],
+.field-slot[data-skill-id="sealed_finale"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='hvyBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23d50000'/%3E%3Cstop offset='70%25' stop-color='%235c0000'/%3E%3Cstop offset='100%25' stop-color='%231a0000'/%3E%3C/radialGradient%3E%3ClinearGradient id='hvyBlade' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='30%25' stop-color='%23ff8a80'/%3E%3Cstop offset='80%25' stop-color='%23d50000'/%3E%3C/linearGradient%3E%3Cfilter id='hvyGlow'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23hvyBg)' stroke='%23ff5252' stroke-width='1.5'/%3E%3Cpath d='M12 52 C24 40, 44 20, 52 12 C44 28, 28 44, 12 52 Z' fill='url(%23hvyBlade)' filter='url(%23hvyGlow)'/%3E%3Cpolygon points='34,22 42,16 48,22 40,28' fill='%23ffd54f' stroke='%23fff' stroke-width='1'/%3E%3Cpolygon points='30,30 32,36 38,36 33,40 35,46 30,42 25,46 27,40 22,36 28,36' fill='%23ffffff' filter='url(%23hvyGlow)'/%3E%3Ccircle cx='44' cy='18' r='2' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 
@@ -23,7 +73,17 @@
 .skill-book-icon[data-skill-glyph="blade_withdraw"],
 .skill-modal-glyph[data-skill-glyph="blade_withdraw"],
 .glyph[data-skill-glyph="blade_withdraw"],
-.field-slot[data-skill-id="blade_withdraw"] .glyph {
+.field-slot[data-skill-id="blade_withdraw"] .glyph,
+.kg-glyph[data-skill-glyph="shadow_step"],
+.skill-book-icon[data-skill-glyph="shadow_step"],
+.skill-modal-glyph[data-skill-glyph="shadow_step"],
+.glyph[data-skill-glyph="shadow_step"],
+.field-slot[data-skill-id="shadow_step"] .glyph,
+.kg-glyph[data-skill-glyph="retreat"],
+.skill-book-icon[data-skill-glyph="retreat"],
+.skill-modal-glyph[data-skill-glyph="retreat"],
+.glyph[data-skill-glyph="retreat"],
+.field-slot[data-skill-id="retreat"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='witBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%23004385'/%3E%3Cstop offset='100%25' stop-color='%23001737'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23witBg)' stroke='%2340c4ff' stroke-width='1.5'/%3E%3Cpath d='M44 14 C30 18, 20 30, 20 44 C28 40, 36 34, 40 26 Z' fill='%23ffffff' opacity='0.9'/%3E%3Cpath d='M50 20 C38 24, 28 34, 28 48 C34 44, 42 40, 46 32 Z' fill='%2380d8ff' opacity='0.6'/%3E%3Cpolygon points='16,36 24,30 24,42' fill='%2300e5ff'/%3E%3Cline x1='24' y1='36' x2='38' y2='36' stroke='%2300e5ff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") !important;
 }
 
@@ -32,7 +92,17 @@
 .skill-book-icon[data-skill-glyph="blade_fury"],
 .skill-modal-glyph[data-skill-glyph="blade_fury"],
 .glyph[data-skill-glyph="blade_fury"],
-.field-slot[data-skill-id="blade_fury"] .glyph {
+.field-slot[data-skill-id="blade_fury"] .glyph,
+.kg-glyph[data-skill-glyph="rhythm"],
+.skill-book-icon[data-skill-glyph="rhythm"],
+.skill-modal-glyph[data-skill-glyph="rhythm"],
+.glyph[data-skill-glyph="rhythm"],
+.field-slot[data-skill-id="rhythm"] .glyph,
+.kg-glyph[data-skill-glyph="killer_focus"],
+.skill-book-icon[data-skill-glyph="killer_focus"],
+.skill-modal-glyph[data-skill-glyph="killer_focus"],
+.glyph[data-skill-glyph="killer_focus"],
+.field-slot[data-skill-id="killer_focus"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='furBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff6d00'/%3E%3Cstop offset='60%25' stop-color='%23c43e00'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23furBg)' stroke='%23ffab40' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='14' y1='50' x2='50' y2='14'/%3E%3Cline x1='14' y1='14' x2='50' y2='50'/%3E%3Cline x1='10' y1='32' x2='54' y2='32'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='8' fill='%23ffd600' stroke='%23fff' stroke-width='1.5'/%3E%3Cpolygon points='32,20 35,28 43,32 35,36 32,44 29,36 21,32 29,28' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 

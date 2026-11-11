@@ -23,6 +23,6 @@ assert(audioSrc.includes('["leaves"'), 'AMBIENCE table includes leaves');
 
 // 4. main.js monster voice integration
 assert(mainSrc.includes('ghostVoice(g, mesh, "aggro"'), 'main.js calls ghostVoice with aggro');
-assert(mainSrc.includes('ghostVoice(struck, mMesh, "hurt"'), 'main.js calls ghostVoice with hurt on hit');
+assert(mainSrc.includes('ghostVoice(g, mesh, "attack")'), 'monster windup keeps its audible warning');
 
 console.log('PASS Phase 4 Adaptive Audio & Monster Vocals verified successfully!');

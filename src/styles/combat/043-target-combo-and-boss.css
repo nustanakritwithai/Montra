@@ -40,53 +40,6 @@
 .combo-streak-hits::after {
   content: " HITS"; font-size: 18px; color: #ffd84a; -webkit-text-stroke: 3px #260f00;
 }
-.combo-streak-label {
-  font: 900 13px/1 "Noto Sans Thai", system-ui, sans-serif;
-  color: #ffd84a; -webkit-text-stroke: 2px #3a1500; text-transform: uppercase;
-  letter-spacing: 0.8px; margin-top: 2px; text-shadow: 0 2px 4px #000;
-}
-.combo-streak-grade {
-  font: 900 22px/1 "Arial Black", Impact, sans-serif;
-  padding: 2px 10px; border-radius: 6px; margin-top: 4px;
-  background: rgba(18, 12, 10, 0.8); border: 2px solid #ffcc00; box-shadow: 0 0 14px #ffaa0088;
-}
-.combo-streak-grade.grade-c { color: #8ad8ff; border-color: #8ad8ff; box-shadow: 0 0 12px #8ad8ff66; }
-.combo-streak-grade.grade-b { color: #7dff8a; border-color: #7dff8a; box-shadow: 0 0 12px #7dff8a66; }
-.combo-streak-grade.grade-a { color: #ffd84a; border-color: #ffd84a; box-shadow: 0 0 14px #ffd84a88; }
-.combo-streak-grade.grade-s { color: #ff3a2a; border-color: #ff3a2a; box-shadow: 0 0 18px #ff3a2aaa; animation: pulseGrade 0.6s infinite alternate; }
-@keyframes comboPop {
-  0% { transform: scale(1.4) rotate(4deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-@keyframes pulseGrade {
-  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff3300); }
-  100% { transform: scale(1.12); filter: drop-shadow(0 0 12px #ff7700); }
-}
-
-/* ===== Phase 6: Epic Boss & Execute Encounter ===== */
-.target-overhead-execute {
-  display: inline-block;
-  color: #ff3344;
-  font: 900 11px/1 "Noto Sans Thai", system-ui, sans-serif;
-  letter-spacing: 0.5px;
-  background: rgba(180, 20, 20, 0.45);
-  border: 1px solid #ff3344;
-  border-radius: 6px;
-  padding: 2px 6px;
-  margin-left: 6px;
-  text-shadow: 0 0 6px #ff0000;
-  box-shadow: 0 0 10px rgba(255, 51, 68, 0.6);
-  animation: pulseExecute 0.45s infinite alternate;
-}
-@keyframes pulseExecute {
-  0% { transform: scale(1); filter: drop-shadow(0 0 2px #ff2200); }
-  100% { transform: scale(1.15); filter: drop-shadow(0 0 8px #ff5500); }
-}
-.target-overhead-hud.execute-active .target-overhead-bar-wrap {
-  border-color: #ff3344;
-  box-shadow: 0 0 10px rgba(255, 30, 30, 0.7);
-}
-
 /* ===== Phase 10: Boss Raid Phase Shift & Occult Shield ===== */
 .target-overhead-phase2-badge {
   display: inline-block;

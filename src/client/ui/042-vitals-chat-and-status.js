@@ -42,7 +42,7 @@
     const bar = document.querySelector(".learned-bar"); if (!bar) return;
     const wide = orbWide.matches; bar.toggleAttribute("data-wide", wide); bar.toggleAttribute("data-arc", !wide);
     const hot = [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
-    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, $("fly"), bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
+    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
     for (const b of all) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
     if (wide) return;
     const cx = ORB_R + ORB / 2, cy = ORB_B + ORB / 2;
@@ -54,8 +54,6 @@
       b.style.right = Math.round(cx - Math.cos(t) * ARC_R - SLOT / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(t) * ARC_R - SLOT / 2) + "px"; });
     // Small horse button in the very bottom-right corner, on the orb's right-hand side.
     if (mount) { mount.style.right = "0px"; mount.style.bottom = "0px"; }
-    // Fly sits right above the horse, against the right edge.
-    const fly = $("fly"); if (fly) { fly.style.right = "0px"; fly.style.bottom = "36px"; }
     const ofx = bar.querySelector(".orb-fx"); if (ofx) { ofx.style.right = ORB_R + "px"; ofx.style.width = ORB + "px"; ofx.style.bottom = "4px"; }
   }
   const syncOrbLayout = () => requestAnimationFrame(layoutOrbArc);
@@ -104,14 +102,150 @@
   // Tabs over the chat box (like a PC MMO): All plus every channel; each tab counts unread lines.
   const CHAT_BOX_TABS = [["all", "ทั้งหมด"], ...Object.entries(CHAT_TAGS)];
   let chatBoxTab = "all"; const chatBoxUnread = Object.fromEntries(CHAT_BOX_TABS.map(([id]) => [id, 0]));
+
+  function createQuickPotionControl() {
+    const el = document.createElement("div");
+    el.className = "chat-potion-control";
+    el.hidden = true;
+    el.innerHTML = `<div class="chat-potion-slot" role="group" aria-label="ช่องยาลัด">
+      <button type="button" class="chat-potion-use" aria-label="ใช้ยา" disabled>
+        <span class="chat-potion-icon bag-slot" aria-hidden="true"><span class="bag-symbol">🧪</span></span>
+        <b class="chat-potion-count" aria-hidden="true">×0</b>
+      </button>
+      <button type="button" class="chat-potion-swap" aria-label="สลับยา" aria-expanded="false" aria-controls="chatPotionPicker">▲</button>
+    </div><div id="chatPotionPicker" class="chat-potion-picker" role="group" aria-label="เลือกยาประจำช่อง" hidden></div>`;
+    const use = el.querySelector(".chat-potion-use");
+    const swap = el.querySelector(".chat-potion-swap");
+    const icon = use.querySelector(".chat-potion-icon");
+    const count = use.querySelector(".chat-potion-count");
+    const list = el.querySelector(".chat-potion-picker");
+    const choices = new Map();
+    let ownerKey = "", selected = "", slots = null, revision = -1;
+
+    function close() {
+      if (list.hidden) return;
+      list.hidden = true;
+      swap.setAttribute("aria-expanded", "false");
+    }
+
+    function potionName(id) {
+      return bagMeta(id)?.name || (id === POTION_ITEM_ID ? "ยาเลือดเล็ก" : "ยา");
+    }
+
+    function paintIcon(host, id) {
+      const art = getItemArtKey(id, bagMeta(id));
+      if (art) host.setAttribute("data-item-art", art);
+      else host.removeAttribute("data-item-art");
+      host.querySelector(".bag-symbol").textContent = id ? itemSymbol(id) : "🧪";
+    }
+
+    function renderList() {
+      const focusedId = list.contains(document.activeElement) ? document.activeElement.dataset.itemId : "";
+      const rows = [];
+      for (const [id, item] of choices) {
+        const row = document.createElement("button");
+        row.type = "button";
+        row.dataset.itemId = id;
+        row.setAttribute("aria-pressed", String(id === selected));
+        row.textContent = potionName(id) + " ×" + item.quantity;
+        row.onclick = () => {
+          render();
+          if (el.hidden || !choices.has(id)) return;
+          selected = id;
+          try { localStorage.setItem(ownerKey, id); } catch {}
+          close();
+          renderSelection();
+          render();
+          swap.focus({preventScroll:true});
+        };
+        rows.push(row);
+      }
+      if (!rows.length) {
+        const empty = document.createElement("p");
+        empty.textContent = "ไม่มียาในกระเป๋า";
+        list.replaceChildren(empty);
+      } else {
+        list.replaceChildren(...rows);
+      }
+      if (focusedId) (rows.find(row => row.dataset.itemId === focusedId) || swap).focus({preventScroll:true});
+    }
+
+    function renderSelection() {
+      const quantity = choices.get(selected)?.quantity ?? 0;
+      const label = selected ? potionName(selected) + " · เหลือ " + quantity + " ขวด" : "ช่องยาว่าง";
+      count.textContent = "×" + quantity;
+      use.title = label;
+      use.setAttribute("aria-label", (quantity ? "ใช้ " : "") + label);
+      paintIcon(icon, selected);
+    }
+
+    function render(player = mode === "live" ? ownServerCharacter() : null) {
+      const key = mode === "live" && room && player?.persistent && player.characterId ? "montra.quickPotion." + player.characterId : "";
+      const current = key ? currentBagSlots() : null;
+      el.hidden = !current;
+      if (key !== ownerKey) {
+        ownerKey = key;
+        slots = null;
+        selected = "";
+        if (key) try { selected = localStorage.getItem(key) || ""; } catch {}
+        close();
+      }
+      if (!current) { slots = null; close(); return; }
+      if (slots !== current || revision !== catalogRevision) {
+        slots = current;
+        revision = catalogRevision;
+        choices.clear();
+        for (const [slot, stack] of slots.entries()) {
+          if (!stack || stack.quantity < 1) continue;
+          const id = stack.itemId, meta = bagMeta(id);
+          if (id !== POTION_ITEM_ID && (meta?.kind !== "consumable" || meta.nutrition || !(meta.healHp > 0 || meta.healMana > 0))) continue;
+          const existing = choices.get(id);
+          if (existing) existing.quantity += stack.quantity;
+          else choices.set(id, {slot, quantity: stack.quantity});
+        }
+        if (!selected) selected = choices.has(POTION_ITEM_ID) ? POTION_ITEM_ID : choices.keys().next().value || "";
+        renderSelection();
+        if (!list.hidden) renderList();
+      }
+      use.disabled = !choices.has(selected) || !player.alive || itemUsePending || economyPending;
+    }
+
+    use.onclick = () => {
+      render();
+      if (el.hidden || use.disabled) return;
+      close();
+      sendBagCommand("use_item", {slot:choices.get(selected).slot});
+      render();
+    };
+    swap.onclick = () => {
+      render();
+      if (el.hidden) return;
+      if (!list.hidden) { close(); return; }
+      list.hidden = false;
+      swap.setAttribute("aria-expanded", "true");
+      renderList();
+      (list.querySelector('[aria-pressed="true"]') || list.querySelector("button"))?.focus({preventScroll:true});
+    };
+    document.addEventListener("pointerdown", event => { if (!el.contains(event.target)) close(); }, true);
+    el.addEventListener("keydown", event => {
+      if (event.key !== "Escape" || list.hidden) return;
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      swap.focus({preventScroll:true});
+    });
+    return {el, render, close};
+  }
+
   const chatBox = (() => {
     const game = $("game"); if (!game) return null;
     const el = document.createElement("section"); el.id = "chatBox"; el.className = "chat-box"; el.setAttribute("aria-label", "กล่องแชท");
     el.innerHTML = `<div class="cb-tabs" role="tablist">${CHAT_BOX_TABS.map(([id, label]) => `<button type="button" role="tab" data-cb-tab="${id}" class="cb-tab tab-${id}" aria-selected="${id === "all"}">${label}<b hidden></b></button>`).join("")}<button type="button" class="cb-open" aria-label="พิมพ์ข้อความ">✎</button></div>
       <div class="cb-log" role="button" tabindex="0" aria-label="แตะเพื่อพิมพ์แชท" aria-live="polite"></div>
       <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="400" aria-label="ข้อความแชท" placeholder="แตะเพื่อพิมพ์" autocomplete="off" enterkeyhint="send"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
+    const potion = createQuickPotionControl();
     const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
-    harvestControls.append($("harvestButton"),$("fishButton")); el.prepend(harvestControls);
+    harvestControls.append(potion.el,$("harvestButton"),$("fishButton")); el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
     const toggle=el.querySelector(".cb-open");
@@ -143,7 +277,7 @@
       clearTimeout(chatTimer); chatTimer = setTimeout(() => { finishChatPending();toast("ยังไม่ได้รับการยืนยันข้อความ"); }, 5000);
     };
     input.addEventListener("keydown", e => { if (e.key === "Escape") { e.preventDefault();closeChatComposer(); } e.stopPropagation(); });
-    return { el, log, input, target, form, toggle };
+    return { el, log, input, target, form, toggle, potion };
   })();
   const chatWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
   const syncChatWide = () => chatBox?.el.classList.toggle("wide", chatWide.matches); chatWide.addEventListener?.("change", syncChatWide); syncChatWide();
@@ -187,7 +321,6 @@
     if (loc && nav) { (name || loc.lastElementChild).after(nav); nav.classList.add("map-shortcuts"); }
     const mount = $("mountButton"), orbEl = document.querySelector(".vital-orb");
     if (mount && orbEl) { orbEl.before(mount); mount.classList.add("orb-mount"); }
-    const fly = $("fly"); if (fly && orbEl) { orbEl.before(fly); fly.classList.add("orb-mount", "orb-fly"); fly.classList.remove("warp-button", "flight-context"); }
     // Harmful-effect boxes in the small gap under the orb.
     if (orbEl) { const fx = document.createElement("div"); fx.className = "fx-row orb-fx"; fx.hidden = true; orbEl.after(fx); }
   }
@@ -239,6 +372,7 @@
   }
   function updateHud(now) {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
+    chatBox?.potion.render(me);
     updateResourceHud(me);
     // Player card.
     const hp = me ? Number(me.hp) : demoHp, maxHp = me ? Number(me.maxHp) || 100 : 100;
