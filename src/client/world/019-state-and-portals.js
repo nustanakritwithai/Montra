@@ -188,7 +188,7 @@
           ghost.specialAt=performance.now();
           const tint=ghost.design.impactTint;
           if(tint)spawnFx("ring",tint,ghost.tx,ghost.ty+.14,ghost.tz,
-            {orient:"ground",life:420,s0:.7,s1:2*monster.specialRange,a0:.75,a1:0});
+            {orient:"ground",life:420,s0:2*(Number(monster.specialInnerRange)||.35),s1:2*monster.specialRange,a0:.75,a1:0});
         }
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
         if(ghost.design.himmapan)updateHimmapanWarning(mesh,monster);

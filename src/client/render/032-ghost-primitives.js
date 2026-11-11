@@ -51,6 +51,28 @@
       box: (x, y, z, w, h, d, m) => at(B.MeshBuilder.CreateBox("ghost part", { width: w, height: h, depth: d }, scene), x, y, z, m),
       cyl: (x, y, z, h, top, bottom, m, n = 8) => at(B.MeshBuilder.CreateCylinder("ghost part", { height: h, diameterTop: top, diameterBottom: bottom, tessellation: n }, scene), x, y, z, m),
       ball: (x, y, z, d, m, seg = 6) => at(B.MeshBuilder.CreateSphere("ghost part", { diameter: d, segments: seg }, scene), x, y, z, m),
+      taper: (points, m, tessellation = 8) => at(B.MeshBuilder.CreateTube("curved part", {
+        path: points.map(([x, y, z]) => new B.Vector3(x, y, z)),
+        radiusFunction: i => points[i][3], tessellation, cap: B.Mesh.CAP_ALL,
+      }, scene), 0, 0, 0, m),
+      plume: (x, y, z, length, width, bend, m) => {
+        const mesh = new B.Mesh("shaped feather", scene);
+        const positions = [0,0,0, -width*.48,0,length*.29, bend*.15-width*.5,0,length*.54,
+          bend*.64-width*.24,0,length*.83, bend,0,length, bend*.66+width*.18,0,length*.78,
+          bend*.17+width*.45,0,length*.49, width*.38,0,length*.22, bend*.18,width*.16,length*.44,
+          bend*.18,-width*.10,length*.44];
+        const indices = [], normals = [], uvs = [];
+        for (let i = 0; i < 8; i++) indices.push(i, 8, (i+1)%8, i, (i+1)%8, 9);
+        for (let i = 0; i < positions.length; i += 3) uvs.push(.5+positions[i]/(width+Math.abs(bend)), positions[i+2]/length);
+        B.VertexData.ComputeNormals(positions, indices, normals);
+        const data = new B.VertexData();
+        data.positions = Float32Array.from(positions);
+        data.indices = Uint16Array.from(indices);
+        data.normals = Float32Array.from(normals);
+        data.uvs = Float32Array.from(uvs);
+        data.applyToMesh(mesh);
+        return at(mesh, x, y, z, m);
+      },
       // Rounded limb along local Y, centred on (x, y, z).
       cap: (x, y, z, h, r, m) => at(B.MeshBuilder.CreateCapsule("ghost part", { height: Math.max(h, r * 2.01), radius: r, tessellation: 8, subdivisions: 1, capSubdivisions: 3 }, scene), x, y, z, m),
       joint: (name, parent, x, y, z) => { const n = new B.TransformNode(name, scene); n.parent = parent || root; n.position.set(x, y, z); return n; },
@@ -75,12 +97,62 @@
     return k.g.ai === "special_recovery" ? Math.sin(Math.PI * Math.min(1, Math.max(0, progress))) : k.atk;
   }
 
+  const himmapanPalette = {
+    ivory: mat("Himmapan ivory hide", "#b9aea0"),
+    cream: mat("Himmapan cream feathers", "#eee2cf"),
+    pearl: mat("Himmapan pearl feathers", "#d7d9ed"),
+    lilac: mat("Himmapan lilac feathers", "#998bc1"),
+    rust: mat("Himmapan copper feathers", "#99513c"),
+    teal: mat("Himmapan teal scales", "#246780"),
+    aqua: mat("Himmapan blue fins", "#65b7c6"),
+    gold: mat("Himmapan chased gold", "#d5a04c", "#30200a"),
+    bronze: mat("Himmapan bronze trim", "#84603a"),
+    jade: mat("Himmapan emerald setting", "#1f955a", "#14543a"),
+    claw: mat("Himmapan dark claw", "#534438"),
+  };
+  himmapanPalette.teal.diffuseTexture = paintTexture("Himmapan scalloped scales", 128, (c, s) => {
+    c.fillStyle = "#829bb0"; c.fillRect(0, 0, s, s);
+    const step = s / 8;
+    for (let row = -1; row < 9; row++) for (let col = -1; col < 9; col++) {
+      const x = (col + (row % 2) * .5) * step, y = row * step;
+      c.fillStyle = ["#798fa6", "#b1c7cb", "#8bacc1"][(row+col+6)%3];
+      c.strokeStyle = "#45526b"; c.lineWidth = 1.25;
+      c.beginPath(); c.moveTo(x-step*.51,y);
+      c.quadraticCurveTo(x,y+step*1.56,x+step*.51,y); c.closePath(); c.fill(); c.stroke();
+    }
+  });
+
+  function himmapanJewel(b, x, y, z, size) {
+    const p = himmapanPalette;
+    b.ball(x, y, z, size*1.35, p.gold, 3).scaling.set(.82, 1.2, .44);
+    b.ball(x, y, z-size*.22, size, p.jade, 3).scaling.set(.72, 1.13, .45);
+  }
+
   function himmapanLegs(b, body, hide, foot, x, z, length, radius) {
     return [-1, 1].flatMap(side => [-1, 1].map(end => {
       const leg = b.joint("animal leg", body, side * x, 0, end * z);
       b.cap(0, -length * .44, 0, length * .89, radius, hide);
       b.ball(0, -length * .91, -.07, radius * 2.2, foot).scaling.set(1, .62, 1.2);
       b.flush(leg, "animal foot");
+      return leg;
+    }));
+  }
+
+  function ornateHimmapanLegs(b, body, hide, x, z, length, radius, talon = false) {
+    const p = himmapanPalette;
+    return [-1, 1].flatMap(side => [-1, 1].map(end => {
+      const leg = b.joint("articulated leg", body, side*x, 0, end*z);
+      b.ball(0,-length*.24,end*length*.05,radius*2.9,hide,8).scaling.set(.83,1.68,1);
+      b.taper([[0,-length*.13,0,radius],[0,-length*.53,end*.06,radius*.85],[0,-length*.86,-.03,radius*.65]],hide);
+      b.cyl(0,-length*.7,-.01,length*.17,radius*1.56,radius*1.53,p.gold,9);
+      b.ball(0,-length*.9,-.08,radius*2,hide,7).scaling.set(1.16,.65,1.65);
+      for (let toe = -1; toe <= 1; toe++) {
+        const offset = toe*radius*.62, reach = (talon ? 1.55 : 1.04)-Math.abs(toe)*.21;
+        b.taper([[offset,-length*.92,-radius*.94,radius*.3],
+          [offset,-length*.93,-radius*(.94+reach*.6),radius*.18],
+          [offset,-length*.99,-radius*(.94+reach),.009]],talon?p.claw:p.cream,6);
+      }
+      b.flush(leg, "armoured clawed paw");
       return leg;
     }));
   }
@@ -93,40 +165,47 @@
   }
 
   function himmapanElephantHead(b, body, hide, ear) {
-    const head = b.joint("elephant head", body, 0, .23, -.84);
-    b.ball(0, .08, -.12, .77, hide).scaling.set(1, .97, 1.08);
-    b.cyl(0, .49, -.2, .28, .03, .24, gold, 5);
+    const p = himmapanPalette;
+    const head = b.joint("elephant head", body, 0, .43, -.83);
+    b.ball(0, .13, -.18, .91, hide, 12).scaling.set(.95,1.03,1.12);
+    b.ball(0,-.22,-.34,.62,hide,8).scaling.set(.92,.73,1.03);
+    b.ball(0,-.16,-.56,.36,gm.mouth,8).scaling.set(1.06,.45,.51);
+    himmapanJewel(b,0,.48,-.52,.14);
+    b.plume(0,.48,-.47,.53,.29,0,p.gold).rotation.x=-1.13;
     for (const side of [-1, 1]) {
-      const fan = b.ball(side * .44, .06, .04, .65, ear);
-      fan.scaling.set(.89, 1.05, .27);
-      fan.rotation.y = side * .34;
-      b.ball(side * .27, .17, -.4, .10, gm.eyeAmber);
-      b.cyl(side * .21, -.21, -.48, .43, 0, .13, gm.pale, 6).rotation.x = -1.85;
+      b.plume(side*.34,.33,.08,1.0,.72,side*.17,p.gold).rotation.set(.84,side*1.18,side*.17);
+      b.plume(side*.35,.33,.045,.96,.65,side*.16,ear).rotation.set(.84,side*1.18,side*.17);
+      b.taper([[side*.347,.38,-.17,.047],[side*.49,.36,-.04,.041],
+        [side*.61,.24,.029,.03],[side*.71,.14,.13,.007]],p.bronze,7);
+      b.ball(side*.285,.219,-.505,.126,p.claw,8).scaling.set(1,.64,.44);
+      b.ball(side*.288,.223,-.552,.072,gm.eyeAmber,8).scaling.z=.62;
+      b.taper([[side*.09,.29,-.56,.048],[side*.24,.316,-.547,.071],
+        [side*.34,.284,-.504,.037],[side*.41,.24,-.43,.008]],hide);
+      b.taper([[side*.22,-.2,-.48,.118],[side*.29,-.26,-.71,.106],[side*.4,-.18,-.96,.082],
+        [side*.47,-.018,-1.13,.051],[side*.49,.21,-1.17,.006]],p.cream,11);
+      b.taper([[side*.08,.40,-.48,.061],[side*.20,.48,-.49,.052],[side*.32,.49,-.32,.039],
+        [side*.35,.59,-.22,.027],[side*.25,.67,-.12,.006]],p.gold,7);
     }
-    b.flush(head, "elephant ears and tusks");
-    const trunk = [];
-    let parent = head;
-    for (const [y, z, radius] of [[-.14, -.42, .145], [-.25, -.07, .113], [-.23, -.06, .083]]) {
-      const joint = b.joint("trunk joint", parent, 0, y, z);
-      b.cap(0, -.115, 0, .30, radius, hide).rotation.x = .24;
-      b.flush(joint, "elephant trunk");
-      trunk.push(joint);
-      parent = joint;
-    }
+    b.flush(head, "elephant crown and curved tusks");
+    const trunk = b.joint("trunk joint", head, 0, -.04, -.54);
+    b.taper([[0,0,0,.17],[0,-.13,-.19,.152],[0,-.18,-.42,.128],[0,-.08,-.64,.105],
+      [0,.16,-.75,.084],[0,.39,-.78,.071],[0,.56,-.69,.061],[0,.63,-.56,.057]],hide,13);
+    for (const side of [-1,1]) b.ball(side*.024,.635,-.52,.033,gm.mouth,5).scaling.z=.53;
+    b.flush(trunk, "raised elephant trunk");
     return { head, trunk };
   }
 
   function himmapanFeatherWings(b, body, primary, trim, span) {
+    const p = himmapanPalette;
     return [-1, 1].map(side => {
-      const wing = b.joint("feathered wing", body, side * .24, .26, -.07);
-      b.ball(side * .50, .04, .13, .56, primary).scaling.set(2.35, .46, 1.18);
-      b.ball(side * .91, .015, .31, .46, primary).scaling.set(2.05, .39, 1.44);
-      for (let i = 0; i < 6; i++) {
-        const feather = b.ball(side * (.3 + i * .16), -.035 - i * .018, .22 + i * .095, .39, i >= 4 ? trim : primary);
-        feather.scaling.set(.76, 2.55 - i * .17, .35);
-        feather.rotation.z = -side * (1.2 - i * .13);
-        feather.rotation.y = side * .24;
+      const wing = b.joint("feathered wing", body, side*.28, .27, -.26);
+      for (let i = 0; i < 9; i++) {
+        const x = .18+i*.136, z = .09+i*.031;
+        b.plume(side*x,-.065+i*.013,z,.82+i*.073,.27,side*.18,i>=6?trim:primary).rotation.y = side*(.09+i*.10);
+        b.plume(side*x,.028+i*.014,z-.1,.60+i*.049,.245,side*.14,primary).rotation.y = side*(.16+i*.09);
       }
+      b.taper([[0,.01,-.06,.11],[side*.51,.045,-.035,.091],[side*.94,.12,.085,.069],[side*1.33,.18,.29,.031]],p.bronze);
+      b.taper([[0,.12,-.048,.032],[side*.51,.14,-.027,.028],[side*.94,.198,.092,.024],[side*1.33,.208,.30,.008]],p.gold,6);
       b.flush(wing, "layered flight feathers");
       wing.scaling.x = span;
       return wing;
@@ -231,34 +310,42 @@
       };
     },
     kochasri(root) {
-      const b = ghostBuilder(root), hide = gm.robe;
-      const body = b.joint("kochasri body", root, 0, 1.04, 0);
-      b.ball(0, .13, 0, 1.25, hide).scaling.set(.86, .8, 1.64);
-      b.ball(0, .22, -.53, 1.08, hide);
+      const b = ghostBuilder(root), p = himmapanPalette, hide = p.ivory;
+      const body = b.joint("kochasri body", root, 0, 1.24, 0);
+      b.ball(0,.11,.09,1.46,hide,12).scaling.set(.86,.83,1.65);
+      b.ball(0,.23,-.55,1.25,hide,11).scaling.set(1.03,1.02,1.02);
+      for (const side of [-1,1]) {
+        b.ball(side*.42,.035,.69,.84,hide,10).scaling.set(.81,1.17,1.06);
+        b.plume(side*.59,.31,.22,.74,.35,side*.12,p.bronze).rotation.z=side*1.04;
+        b.plume(side*.65,.31,.28,.61,.26,side*.12,p.gold).rotation.z=side*1.04;
+      }
+      b.taper([[-.51,.38,-.82,.047],[-.31,.03,-1.08,.054],[0,-.19,-1.17,.064],[.31,.03,-1.08,.054],[.51,.38,-.82,.047]],p.gold);
+      himmapanJewel(b,0,-.17,-1.21,.24);
       b.flush(body, "kochasri lion body");
-      const mane = b.joint("kochasri mane joint", body, 0, .33, -.67);
-      b.ball(0, 0, 0, 1.21, gm.sash3[1]).scaling.set(.9, 1.05, .57);
-      for (let i = 0; i < 8; i++) {
-        const angle = i * Math.PI / 4;
-        const tuft = b.ball(Math.cos(angle) * .49, Math.sin(angle) * .52, .08, .37, i % 2 ? gm.robe : gm.sash3[1]);
-        tuft.scaling.set(.8, 1.07, 1.65);
-        tuft.rotation.z = angle;
+      const mane = b.joint("kochasri mane joint", body, 0, .35, -.7);
+      b.ball(0,0,0,1.42,p.ivory,11).scaling.set(1.02,1.14,.77);
+      for (let row = 0; row < 3; row++) for (let i = 0; i < 12; i++) {
+        const angle = (i + row*.32)*Math.PI/6, spread = .48+row*.095;
+        const x = Math.sin(angle)*spread, y = Math.cos(angle)*(spread+.08);
+        const tuft = b.plume(x,y,-.44+row*.27,.66+row*.08,.37,Math.sin(angle)*.26,row===1?p.ivory:p.cream);
+        tuft.rotation.set(-.35-Math.cos(angle)*.55,Math.sin(angle)*.52,-angle*.55);
       }
       b.flush(mane, "kochasri mane");
-      const { head, trunk } = himmapanElephantHead(b, body, hide, gm.sash3[0]);
-      const legs = himmapanLegs(b, body, hide, gm.beam, .39, .62, 1.04, .17);
-      const tail = b.joint("kochasri lion tail", body, 0, .19, .87);
-      b.cap(0, .05, .32, .74, .077, hide).rotation.x = 1.2;
-      b.ball(0, .25, .64, .28, gm.sash3[1]);
+      const { head, trunk } = himmapanElephantHead(b, body, hide, p.ivory);
+      const legs = ornateHimmapanLegs(b, body, hide, .43, .74, 1.24, .23);
+      const tail = b.joint("kochasri lion tail", body, 0, .21, 1.02);
+      b.taper([[0,0,0,.097],[0,-.23,.32,.077],[.06,-.29,.67,.061],[.09,-.17,.91,.048],[.06,.08,1.05,.039]],hide);
+      for (let i = -2; i <= 2; i++) b.plume(.06+i*.055,.02,1.025,.54-Math.abs(i)*.05,.22,i*.10,i%2?p.cream:p.gold).rotation.x=-1.07;
       b.flush(tail, "kochasri tail tuft");
       return k => {
         const strike = himmapanStrike(k);
-        body.position.z = k.wind * .19 - strike * .83;
-        body.position.y = 1.04 + Math.sin(k.walk * 2) * k.move * .055;
-        head.rotation.x = k.wind * .35 - strike * .43;
+        body.position.z = k.wind*.34-strike*1.02;
+        body.position.y = 1.24-k.wind*.20+strike*.16+Math.sin(k.walk*2)*k.move*.05;
+        head.rotation.x = k.wind*.34-strike*.36;
+        trunk.rotation.x = -.12-k.wind*.18+strike*.45;
+        mane.rotation.x = strike*.09;
         tail.rotation.y = Math.sin(k.t * 2) * .48;
-        trunk.forEach((joint, i) => { joint.rotation.x = k.wind * .22 - strike * .26 + Math.sin(k.t * 3 - i) * .11; });
-        poseHimmapanLegs(legs, k, strike * .33);
+        poseHimmapanLegs(legs, k, strike*.69);
       };
     },
     hemaraj(root) {
@@ -291,100 +378,125 @@
       };
     },
     durongPaksin(root) {
-      const b = ghostBuilder(root), hide = gm.pale;
-      const body = b.joint("durong body", root, 0, 1.24, 0);
-      b.ball(0, .08, 0, 1.08, hide).scaling.set(.77, .88, 1.85);
-      b.ball(0, .12, -.54, .83, hide).scaling.set(.94, 1.18, .9);
+      const b = ghostBuilder(root), p = himmapanPalette, hide = p.ivory;
+      const body = b.joint("durong body", root, 0, 1.32, 0);
+      b.ball(0,.11,.11,1.19,hide,11).scaling.set(.81,.88,1.92);
+      b.ball(0,.18,-.55,1.03,p.cream,10).scaling.set(.87,1.2,1);
+      for (const side of [-1,1]) {
+        b.ball(side*.33,-.012,.67,.75,hide,8).scaling.set(.73,1.14,1);
+        b.plume(side*.47,.37,.19,.73,.30,side*.18,p.gold).rotation.z=side*1.04;
+        b.taper([[side*.49,.49,-.59,.035],[side*.34,.22,-.92,.042],[0,.09,-1,.052]],p.gold);
+        for(let i=0;i<4;i++) b.plume(side*(.12+i*.09),.42-i*.1,-.92,.52,.23,side*.10,p.cream).rotation.set(1.07,side*.27,0);
+      }
+      himmapanJewel(b,0,.09,-1.02,.21);
       b.flush(body, "durong horse body");
       const head = b.joint("durong neck", body, 0, .05, -.68);
-      b.cap(0, .36, -.09, 1.03, .19, hide).rotation.x = -.36;
-      b.ball(0, .7, -.35, .54, hide).scaling.set(.78, .9, 1.47);
-      b.ball(0, .54, -.58, .33, gm.stone).scaling.set(.9, .87, 1.13);
-      b.cap(0, .37, .08, .76, .11, gm.sash3[0]).rotation.x = -.45;
+      b.taper([[0,.06,.1,.31],[0,.36,.005,.244],[0,.65,-.21,.18],[0,.8,-.35,.162]],p.cream,12);
+      b.ball(0,.83,-.37,.53,p.cream,11).scaling.set(.86,.96,1.26);
+      b.taper([[0,.83,-.57,.121],[0,.79,-.71,.109],[0,.73,-.82,.072],[0,.64,-.85,.01]],p.gold,9);
       for (const side of [-1, 1]) {
-        b.cyl(side * .13, .98, -.23, .28, .015, .115, hide, 5).rotation.z = -side * .26;
-        b.ball(side * .17, .77, -.46, .085, gm.eyeAmber);
+        b.ball(side*.187,.859,-.49,.092,p.claw,8);
+        b.ball(side*.217,.861,-.51,.056,gm.eyeAmber,8);
+        for(let i=0;i<4;i++) b.plume(side*(.055+i*.054),.97-i*.055,-.43,.66-i*.045,.17,side*.13,i%2?p.gold:p.cream).rotation.set(-.66,side*.24,0);
       }
-      b.flush(head, "durong horse head");
-      const legs = himmapanLegs(b, body, hide, gm.beam, .29, .67, 1.24, .115);
-      const wings = himmapanFeatherWings(b, body, gm.sash3[0], gold, 1.35);
-      const tail = b.joint("durong horse tail", body, 0, .22, .89);
-      b.cap(0, -.34, .27, .98, .11, gm.sash3[0]).rotation.x = -.56;
+      b.flush(head, "durong eagle head and hooked beak");
+      const legs = ornateHimmapanLegs(b, body, hide, .32, .72, 1.32, .155, true);
+      const wings = himmapanFeatherWings(b, body, p.cream, p.rust, 1.35);
+      const tail = b.joint("durong feathered tail", body, 0, .22, .97);
+      for(let i=-3;i<=3;i++) b.plume(i*.053,-Math.abs(i)*.026,0,1.23-Math.abs(i)*.1,.31,i*.13,i%2?p.rust:p.cream).rotation.x=.42;
       b.flush(tail, "durong tail");
       return k => {
         const strike = himmapanStrike(k);
-        body.position.y = 1.24 + k.wind * .26 + strike * .34;
-        body.position.z = -strike * .93;
-        body.rotation.x = -k.wind * .35 + strike * .37;
-        head.rotation.x = k.wind * .22 - strike * .26;
+        body.position.y = 1.32+k.wind*.39+strike*.45;
+        body.position.z = -strike*1.17;
+        body.rotation.x = -k.wind*.37+strike*.49;
+        head.rotation.x = k.wind*.25-strike*.37;
         tail.rotation.y = Math.sin(k.t * 2.8) * .39;
-        wings.forEach((wing, i) => { wing.rotation.z = (i ? 1 : -1) * (.22 + k.wind * .67 + Math.sin(k.t * 6) * (.16 + strike * .28)); });
+        wings.forEach((wing, i) => { wing.rotation.z = (i ? 1 : -1) * (.18+k.wind*.65-strike*.19+Math.sin(k.t*6)*.17); });
         poseHimmapanLegs(legs, k, k.wind * .86 + strike * .41);
       };
     },
     kunchonWari(root) {
-      const b = ghostBuilder(root), hide = gm.corpse, fin = gm.sash3[2];
-      const body = b.joint("kunchon swimming body", root, 0, 1.06, 0);
-      b.ball(0, .04, 0, 1.27, hide).scaling.set(.9, .87, 1.57);
-      b.ball(0, -.24, .13, .96, gm.pale).scaling.set(.88, .59, 1.43);
+      const b = ghostBuilder(root), p = himmapanPalette, hide = p.ivory;
+      const body = b.joint("kunchon amphibious body", root, 0, 1.11, 0);
+      b.ball(0,.09,.12,1.40,p.teal,12).scaling.set(.91,.87,1.65);
+      b.ball(0,-.28,.11,1.15,hide,11).scaling.set(.98,.64,1.62);
+      b.ball(0,.21,-.59,1.05,hide,11).scaling.set(1.1,1.06,.96);
       for (const side of [-1, 1]) {
-        b.cyl(side * .66, -.27, .09, .72, .02, .34, fin, 5).rotation.z = -side * 1.25;
+        b.taper([[side*.57,.44,-.63,.05],[side*.46,.09,-.98,.052],[0,-.14,-1.11,.061]],p.gold);
+        for(let i=0;i<5;i++) b.plume(side*.55,.41-i*.087,-.64+i*.15,.54,.25,side*.21,i%2?p.aqua:p.gold).rotation.set(-.35,side*.3,side*.57);
       }
-      b.flush(body, "kunchon body and pectoral fins");
-      const { head, trunk } = himmapanElephantHead(b, body, hide, fin);
-      const tail = b.joint("kunchon tail base", body, 0, .03, .73);
-      b.ball(0, -.02, .28, .65, hide).scaling.set(.79, .65, 1.8);
-      b.flush(tail, "kunchon tail scales");
-      const flukes = b.joint("kunchon flukes", tail, 0, -.02, .73);
-      for (const side of [-1, 1]) {
-        const fluke = b.ball(side * .36, 0, .17, .58, fin);
-        fluke.scaling.set(1.73, .27, .77);
-        fluke.rotation.y = side * .59;
-        b.cyl(side * .6, .01, .28, .43, .015, .19, gold, 5).rotation.z = -side * Math.PI / 2;
+      for(let i=0;i<8;i++) b.plume(0,.64-i*.012,-.54+i*.18,.46-i*.021,.29,0,i%2?p.aqua:p.gold).rotation.x=-.68;
+      himmapanJewel(b,0,-.12,-1.16,.22);
+      b.flush(body, "kunchon blue scales and armour");
+      const { head, trunk } = himmapanElephantHead(b, body, hide, p.aqua);
+      const legs = ornateHimmapanLegs(b, body, p.teal, .43, .68, 1.11, .21);
+      const tail = b.joint("kunchon tail base", body, 0, .12, .99);
+      b.taper([[0,0,0,.28],[0,-.14,.34,.225],[.09,-.20,.66,.171],[.19,-.12,1.0,.124],[.26,.13,1.22,.074]],p.teal,10);
+      b.taper([[0,.27,.02,.034],[.01,.07,.37,.031],[.1,-.034,.67,.029],[.19,.004,1.0,.021],[.26,.2,1.22,.01]],p.gold,7);
+      b.flush(tail, "kunchon curved tail");
+      const flukes = b.joint("kunchon flukes", tail, .26, .11, 1.2);
+      for (let i=-3;i<=3;i++) {
+        const angle=i*.25, length=1.06-Math.abs(i)*.12;
+        b.plume(i*.07,0,0,length,.38,i*.20,p.gold).rotation.set(-.96,angle,0);
+        b.plume(i*.07,.019,0,length*.94,.318,i*.19,i%2?p.pearl:p.aqua).rotation.set(-.96,angle,0);
       }
       b.flush(flukes, "kunchon tail fin");
       return k => {
         const strike = himmapanStrike(k);
-        body.position.y = 1.06 + Math.sin(k.t * 3.1) * .16 + k.wind * .21;
-        body.rotation.y = strike * .75;
-        head.rotation.x = k.wind * .35;
-        tail.rotation.y = Math.sin(k.t * (3 + k.move * 2)) * .31 - strike * 1.12;
+        body.position.y = 1.11+Math.sin(k.t*3.1)*.045-k.wind*.12+strike*.13;
+        body.rotation.y = k.wind*.38-strike*.72;
+        head.rotation.x = k.wind*.26-strike*.18;
+        tail.rotation.y = Math.sin(k.t*(3+k.move*2))*.20+k.wind*.68-strike*1.32;
         flukes.rotation.x = Math.sin(k.t * 4) * .22;
-        trunk.forEach((joint, i) => { joint.rotation.x = Math.sin(k.t * 3 - i * .65) * .19 - k.wind * .36; });
+        trunk.rotation.x = Math.sin(k.t*3)*.14-k.wind*.29;
+        poseHimmapanLegs(legs,k,strike*.21);
       };
     },
     karavek(root) {
-      const b = ghostBuilder(root), plumage = gm.sash3[2], trim = gm.sash3[1];
-      const body = b.joint("karavek body", root, 0, 1.16, 0);
-      b.ball(0, .01, 0, .89, plumage).scaling.set(.72, .84, 1.4);
-      b.ball(0, .06, -.32, .58, trim).scaling.set(.88, 1.02, .78);
+      const b = ghostBuilder(root), p = himmapanPalette;
+      const body = b.joint("karavek body", root, 0, 1.06, 0);
+      b.ball(0,.03,.1,.91,p.pearl,10).scaling.set(.73,.88,1.42);
+      b.ball(0,.11,-.27,.71,p.cream,10).scaling.set(.85,1.2,.85);
       for (const side of [-1, 1]) {
-        b.cap(side * .14, -.46, -.02, .46, .05, gold).rotation.x = .28;
-        b.box(side * .14, -.67, -.12, .16, .08, .29, gold);
+        b.taper([[side*.155,-.25,-.05,.081],[side*.157,-.49,.05,.047],[side*.158,-.86,-.035,.052],[side*.17,-.97,-.16,.069]],p.gold);
+        for(let toe=-1;toe<=1;toe++) b.taper([[side*.17+toe*.055,-.97,-.12,.038],[side*.17+toe*.081,-.982,-.3,.025],
+          [side*.17+toe*.09,-1.02,-.38,.006]],p.claw,6);
+        b.taper([[side*.3,.39,-.39,.032],[side*.22,.19,-.62,.036],[0,.10,-.66,.049]],p.gold);
       }
-      for (let i = -1; i <= 1; i++) {
-        const plume = b.ball(i * .2, .05, .66, .4, i ? plumage : trim);
-        plume.scaling.set(.65, .23, 2.3);
-        plume.rotation.y = i * .29;
-      }
+      himmapanJewel(b,0,.106,-.69,.17);
       b.flush(body, "karavek songbird body");
-      const head = b.joint("karavek throat", body, 0, .31, -.34);
-      b.ball(0, .09, -.04, .47, plumage);
-      b.cyl(0, .05, -.34, .35, 0, .21, gold, 5).rotation.x = -Math.PI / 2;
+      const tail = b.joint("karavek long eyespot tail", body, 0, .02, .57);
+      for(let i=-3;i<=3;i++) {
+        const bend=i*.13, length=1.77-Math.abs(i)*.16, fan=i*.14;
+        b.plume(i*.055,0,0,length,.35,bend,p.gold).rotation.y=fan;
+        b.plume(i*.055,.024,.024,length*.96,.30,bend,i%2?p.pearl:p.lilac).rotation.y=fan;
+        const eyeX=i*.055+Math.sin(fan)*length*.72+bend*.67;
+        b.ball(eyeX,.061,length*.75,.23,p.aqua,7).scaling.set(.64,.18,1.1);
+        b.ball(eyeX,.081,length*.77,.14,p.teal,7).scaling.set(.64,.15,1.02);
+      }
+      b.flush(tail, "karavek peacock tail feathers");
+      const head = b.joint("karavek throat", body, 0, .25, -.29);
+      b.taper([[0,0,.02,.245],[0,.30,-.12,.167],[0,.58,-.21,.139],[0,.7,-.32,.133]],p.cream,11);
+      b.ball(0,.71,-.32,.39,p.cream,10).scaling.set(.91,.92,1.27);
+      b.taper([[0,.694,-.46,.09],[0,.661,-.59,.062],[0,.61,-.67,.008]],p.gold,7);
       for (const side of [-1, 1]) {
-        b.ball(side * .166, .135, -.19, .084, gm.eyeAmber);
-        b.cyl(side * .091, .31, .04, .38, .012, .109, gm.sash3[0], 5).rotation.x = .51;
+        b.ball(side*.158,.746,-.423,.084,p.claw,7);
+        b.ball(side*.185,.752,-.43,.052,gm.eyeAmber,7);
+        for(let i=0;i<4;i++) b.plume(side*(.04+i*.029),.844-i*.016,-.32,.72-i*.075,.14,side*.19,i%2?p.lilac:p.gold).rotation.set(-.85,side*.41,0);
       }
       b.flush(head, "karavek beak and crest");
-      const jaw = b.joint("karavek lower beak", head, 0, -.03, -.23);
-      b.cyl(0, 0, -.09, .22, .01, .14, trim, 5).rotation.x = -Math.PI / 2;
+      const jaw = b.joint("karavek lower beak", head, 0, .63, -.44);
+      b.taper([[0,0,0,.061],[0,-.025,-.1,.054],[0,-.016,-.185,.008]],p.gold,7);
       b.flush(jaw, "karavek singing beak");
-      const wings = himmapanFeatherWings(b, body, plumage, trim, 1);
+      const wings = himmapanFeatherWings(b, body, p.pearl, p.lilac, 1.14);
       return k => {
         const strike = himmapanStrike(k);
-        body.position.y = 1.16 + Math.sin(k.t * 4) * .12 + k.wind * .22;
+        body.position.y = 1.06 + Math.sin(k.t * 4) * .035 + k.wind*.22+strike*.19;
         head.rotation.x = k.wind * .45 + strike * .24;
         jaw.rotation.x = strike * (.46 + Math.sin(k.t * 28) * .25);
+        tail.rotation.x = .11-k.wind*.27+strike*.12;
+        tail.rotation.y = Math.sin(k.t*2.6)*.15;
         wings.forEach((wing, i) => { wing.rotation.z = (i ? 1 : -1) * (.35 + k.wind * .48 + Math.sin(k.t * (6 + k.move * 4)) * .29); });
       };
     },

@@ -77,6 +77,8 @@ try{
     for (const id of himmapanIds) assert.ok(state.monsters.get(id)?.specialRange>0,id);
     assert.equal(state.monsters.get("himmapan_matcha_naga")?.specialRange,4);
     assert.ok(Math.abs(state.monsters.get("himmapan_stone_yaksha")?.specialRange-2.8)<1e-6);
+    assert.ok(Math.abs(state.monsters.get("himmapan_kochasri")?.specialHalfAngle-Math.PI/4)<1e-6);
+    assert.ok(Math.abs(state.monsters.get("himmapan_kunchon_wari")?.specialInnerRange-1.2)<1e-6);
   }
   for(const room of travelers)room.send("summon",{});
   await until(()=>travelers.every(r=>r.state.summons.size===10),"ten summons across the occupied world");
