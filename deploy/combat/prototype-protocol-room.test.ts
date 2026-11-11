@@ -21,7 +21,7 @@ function fakeClient(id: string) {
   }} as unknown as Client;
   return {client,sent,fail:()=>{failResult=true;}};
 }
-const envNames = ['NODE_ENV','MONTRA_ISOLATED_STAGING','MONTRA_PROTOTYPE_PROTOCOL_V1'] as const;
+const envNames = ['NODE_ENV','MONTRA_ISOLATED_STAGING','MONTRA_PROTOTYPE_PROTOCOL_V1','MONTRA_REPLACEMENT_SKILLS'] as const;
 function withEnv(fn:()=>Promise<void>|void) {
   return async () => {
     const before = envNames.map(k=>process.env[k]);
@@ -86,11 +86,11 @@ test('per-session bucket counts malformed messages and refills without consuming
   r.simulatedMs+=1000;r.messages.prototype_protocol_v1(a.client,{seq:1,action:'probe'});assert.equal(a.sent.length,2,'replay remains rejected');
 }));
 
-test('the shipped room exposes no prototype transport even with the test flags set', withEnv(()=>{
-  enable();
+test('the standard room ignores prototype messages by default even with the fixture flags set', withEnv(()=>{
+  enable();delete process.env.MONTRA_REPLACEMENT_SKILLS;
   const room=new MyRoom() as unknown as Internal, c=fakeClient('a');
-  assert.equal(Object.hasOwn(room.messages,'prototype_protocol_v1'),false);
   room.acknowledgePrototypeProtocol(c.client,{prototypeProtocolVersion:1,prototypeGameplayVersion:1});
+  room.messages.prototype_protocol_v1(c.client,{seq:1,action:'probe'});
   assert.deepEqual(c.sent,[]);
   assert.equal(room.prototypeSessions.size,0);
 }));

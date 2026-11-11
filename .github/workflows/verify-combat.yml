@@ -291,13 +291,15 @@ jobs:
           MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
         run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/default-monster-characterization.cjs
 
-      - name: Verify disabled gameplay draft using test-only override
+      - name: Verify skill replacements and save recovery over WebSocket
         working-directory: combat-verify
         run: |
           node --test prototype-test-process.test.mjs
           node --import tsx --test prototype-gameplay-room.test.mjs prototype-shadow-room.test.mjs
           node prototype-gameplay-integration.mjs
           node prototype-shadow-integration.mjs
+          node prototype-gameplay-integration.mjs --standard-room
+          node prototype-shadow-integration.mjs --standard-room
           node prototype-ws-restore.mjs
           node prototype-ws-restore.mjs --crash
           node --import tsx --test prototype-reward-crash.test.mjs

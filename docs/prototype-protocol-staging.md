@@ -1,18 +1,36 @@
-# Prototype protocol: isolated staging only
+# Skill replacement protocol
 
-The experimental wire messages are registered only by the verification-only PrototypeTestRoom. The shipped room does not register or send them. The loopback entry point requires a disposable character directory, NODE_ENV=test, MONTRA_ISOLATED_STAGING=1 and MONTRA_PROTOTYPE_PROTOCOL_V1=1. Environment flags alone never expose the protocol in production.
+The standard room enables the eight skill replacements only when the server
+starts with MONTRA_REPLACEMENT_SKILLS=1. Use the switch on isolated staging
+while the released client is being integrated. Battlefield rooms use their
+legacy skill rules. Clients without either opt-in version may join as before.
 
-A client must opt in with `prototypeProtocolVersion: 1` on join and wait for `prototype_protocol_v1_ready` containing `{version: 1, gameplayEnabled: false}`. No client sends this yet. In the probe-only room, the only accepted `prototype_protocol_v1` command is exactly `{seq: positive safe integer, action: "probe"}`. A reserved sequence receives `prototype_protocol_v1_result` with `{version: 1, seq, status: "reserved_no_effect"}`; invalid, unsupported, duplicate or out-of-order messages are silently dropped. A per-connection token bucket allows a burst of four messages and refills one per second using server simulation time; malformed messages count too. Rate-limited commands are dropped before sequence reservation. Sequences are strictly increasing per connection and remain consumed if sending a response fails; gaps are allowed. Disconnect and room disposal clear the connection's state. No schema field indices or persisted data change.
+A capable client sends both prototypeProtocolVersion: 1 and
+prototypeGameplayVersion: 1 on join. Once offered the nonce, that connection
+uses the versioned command for the eight replacement IDs. The old skill
+command is rejected for those IDs. Other skills keep their existing routes.
+Confirmed same-map clients receive skill notices after the state patch and the
+ordinary hit events. Legacy clients still receive the ordinary state and hit
+events and keep their existing skill commands.
 
-For a later, separately reviewed feature, the integration seam is the handler after strict versioned payload validation and the sequence reservation. Define and validate distinct start/followup payloads, check authorization and authoritative game rules, apply a mutation at most once, then send the confirmed result. The current probe neither performs those checks nor starts or resolves skills. Do not route gameplay until compatible state/observer visibility, feature gating, rollback, and mixed-client handling have been designed and tested.
+Per-connection commands are rate limited before validation. The initial burst
+is four. A successful confirmation starts a six-command burst so initial
+snapshots and a timed follow-up can fit. The bucket refills one per second.
+Cast sequences are positive safe integers and must increase per connection.
+Malformed messages consume capacity but do not reserve a sequence. A replay
+does not reapply a cast, charge mana or change the save format.
 
-The production contract inventory remains unchanged. The separate test room owns the wire names; any proposal to expose them in the shipped room requires an explicit compatibility review and a separately approved contract update.
+The strict loopback fixture still requires disposable data, NODE_ENV=test,
+MONTRA_ISOLATED_STAGING=1 and MONTRA_PROTOTYPE_PROTOCOL_V1=1. The probe accepts
+exactly {seq, action: "probe"} and replies with status "reserved_no_effect".
+Run the gameplay and Shadow integration scripts with --standard-room to test
+the same commands through the standard room, including mixed admissions.
 
-The verification-only gameplay room offers a per-connection nonce in the ready response. Each participant sends an exact confirm_gameplay message with that nonce and waits for the confirmed response. A cast is blocked until every current observer has confirmed. The nonce is single-use and connection-local. This proves acknowledgement in the fixture only; a shipped client still needs compatible presentation and a way to reconcile lost outcomes.
+The gameplay room offers a per-connection nonce in the ready response. Each participant sends an exact confirm_gameplay message with that nonce and waits for the confirmed response. In the strict fixture every observer must also confirm. The nonce is single-use and connection-local.
 
-Confirmed test clients can request the current same-map Shadow marks with the exact shadow_state action. The snapshot includes the server simulation time. Mark, return and cleared notifications share the actor and mark sequence. Expiry and invalidation clear the mark before sending a terminal notice, and a snapshot can recover after a missed notice. This is a verification transport, with no shipped presentation.
+Confirmed test clients can request the current same-map Shadow marks with the exact shadow_state action. The snapshot includes the server simulation time. Mark, return and cleared notifications share the actor and mark sequence. Expiry and invalidation clear the mark before sending a terminal notice, and a snapshot can recover after a missed notice. The released client still needs presentation for these events.
 
-Confirmed gameplay test clients can send exactly `{seq: positive safe integer, action: "firm_guard"}`. The room reuses the existing Sentinel learned skill, equipped slot, mana cost and cooldown. The `braced` notice follows the cast, and `protected` follows a successful PvE monster hit against the caster or an eligible party member. Normal rooms keep the legacy Sentinel skill command.
+Confirmed gameplay test clients can send exactly `{seq: positive safe integer, action: "firm_guard"}`. The room reuses the existing Sentinel learned skill, equipped slot, mana cost and cooldown. The `braced` notice follows the cast, and `protected` follows a successful PvE monster hit against the caster or an eligible party member. Legacy clients keep the existing Sentinel skill command.
 
 The exact Ash Rice and Deep Heal casts have `action`, `seq` and `targetId`. Ash Rice accepts a monster and chooses the ground point server-side. Deep Heal accepts the caster or an eligible party member. Each placement and its terminal notice share `castId`. The exact `{action: "occult_state"}` request returns same-map active traps and wards, plus the simulation clock, via `prototype_occult_v1_state`.
 

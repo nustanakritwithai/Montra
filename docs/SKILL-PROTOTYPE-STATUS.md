@@ -1,18 +1,19 @@
 # Eight skill prototypes: development status
 
-All eight prototypes have server wiring in the synthetic loopback room. The
-shipped room hard-disables prototype gameplay even when flags are set. The
-shipped client still needs controls and visual feedback. Existing gameplay
-and character save formats are unchanged by default.
-Do not enable this in production.
+The eight replacements are wired into the standard room. Its
+MONTRA_REPLACEMENT_SKILLS setting defaults to off. When enabled, a confirmed
+client uses the replacement under its existing skill ID. Clients that do not
+opt in can still join the same room and use the existing commands. Battlefield
+rooms retain their existing behavior. The public client still needs controls
+and feedback before activation for players.
 
 The provisional rules retain the existing IDs: `flowing_blades`,
 `chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`,
 `mender_deep_heal`, `mender_deep_circle`, and `seer_spirit_rain`. They represent experimental mechanics, not balanced values.
-In the verification room, each of these IDs selects the replacement effect
-after the shared class, loadout and target validation. The former effect is
-reachable only through the existing command in rooms with the replacement
-disabled. IDs, cooldown keys and saved loadouts remain stable.
+Each replacement passes through the existing class, loadout and target
+validation. A connection offered replacement gameplay must confirm it before
+using those IDs and cannot cast the former effect. IDs, cooldown keys and saved
+loadouts remain stable.
 
 | Skill ID | Former effect | Replacement effect |
 | --- | --- | --- |
@@ -52,10 +53,9 @@ The independent rule tests exercise bounded transient state. They do not prove
 end-to-end gameplay, persistence compatibility, multiplayer, visual feedback,
 performance, mobile usability, or a safe rollout.
 
-The prototype transport belongs to a verification-only room. The shipped room
-keeps the existing contract inventory and does not register prototype messages.
-A production protocol still requires explicit compatibility review. Details and
-loopback restrictions are in `prototype-protocol-staging.md`.
+Protocol messages are additive. The standard room sends them only to sessions
+that opt in. See `prototype-protocol-staging.md` for admission, event delivery and the
+loopback verification commands.
 
 Before enabling a playable prototype, integrate each existing learned/loadout,
 class, equipment, cost, cooldown, target, map, range, line-of-sight, party and

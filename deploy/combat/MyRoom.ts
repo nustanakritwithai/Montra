@@ -145,15 +145,33 @@ type PrototypeOccultView = Readonly<{
   rescues:readonly Pick<RescueTalisman,"castId"|"ownerId"|"targetId"|"mapId"|"expiresAt">[];
   circles:readonly PrototypeCircleView[];
 }>;
+type PrototypeSkillNotice = Readonly<{
+  version: 1;
+  phase: string;
+  playerId: string;
+  targetId: string;
+  skillId: string;
+  seq?: number;
+  markSeq?: number;
+  castId?: string;
+  amount?: number;
+  targetIds?: readonly string[];
+  reason?: PrototypeShadowEndReason;
+  origin?: ShadowPoint;
+  destination?: ShadowPoint;
+  serverNowMs?: number;
+  startedAtServerMs?: number;
+  armedAtServerMs?: number;
+  expiresAtServerMs?: number;
+  durationMs?: number;
+}>;
 export type PrototypeRoomTransport = Readonly<{
   ready(client:Client, nonce:string|undefined):void;
   confirmed(client:Client):void;
   probeResult(client:Client, seq:number):void;
   shadowState(client:Client, state:Readonly<{version:1;serverNowMs:number;marks:readonly PrototypeShadowView[]}>):void;
   occultState(client:Client,state:PrototypeOccultView & Readonly<{version:1;serverNowMs:number}>):void;
-  skill(notice:Readonly<{version:1;phase:string;playerId:string;targetId:string;skillId:string;
-    seq?:number;markSeq?:number;castId?:string;amount?:number;targetIds?:readonly string[];reason?:PrototypeShadowEndReason;origin?:ShadowPoint;destination?:ShadowPoint;serverNowMs?:number;startedAtServerMs?:number;armedAtServerMs?:number;
-    expiresAtServerMs?:number;durationMs?:number}>):void;
+  skill(notice:PrototypeSkillNotice):void;
 }>;
 
 const mapsWithServices=Object.fromEntries(Object.entries(mapsWithServiceNpcs()).map(([id,map])=>[
@@ -261,8 +279,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
   private mountHitSequence = new Map<string, number>();
-  // Transport-only experiment. The flag is deliberately insufficient on its own:
-  // it must also be an explicitly designated non-production isolated staging process.
+  private readonly replacementSkillsEnabled = process.env.MONTRA_REPLACEMENT_SKILLS === "1";
+  private readonly replacementSkillNotices: Array<{notice: PrototypeSkillNotice; mapId: string}> = [];
   private prototypeSessions = new Map<string, PrototypeCommandGate>();
   private prototypeBuckets = new Map<string, CommandBucket>();
   private prototypeGameplaySessions = new Set<string>();
@@ -280,14 +298,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private prototypeOpportunities = new Map<string,CounterOpportunity>();
   private prototypeDebuffs = new Map<string,ChaiyaDebuff>();
   protected prototypeGameplayEnabled(): boolean {
-    // HARD BLOCK: staged gameplay cannot be enabled until authoritative damage
-    // event identity and complete integration/visibility review are approved.
-    // Only a dedicated room in the verification project overrides this block.
+    return this.replacementSkillsEnabled && !this.field;
+  }
+  protected requireAllPrototypeClients(): boolean {
     return false;
   }
   private prototypeGameplayAllowed(id:string):boolean {
     return this.prototypeGameplayEnabled() && this.prototypeGameplaySessions.has(id) &&
-      this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId));
+      (!this.requireAllPrototypeClients() || this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId)));
   }
   private clearPrototypeTransient(id:string):void {
     if(this.occultHealingFields.get(id)?.kind==="moving")this.clearOccultHealingField(id);
@@ -485,7 +503,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private protectMonsterHit(sequence:number,targetId:string,target:Player,monster:Monster):{id:string;factor:number}|undefined {
-    if(!this.prototypeFirmGuards.size || !this.prototypeGameplayAllowed(targetId))return;
+    if(!this.prototypeFirmGuards.size)return;
     const ally:GuardActor={id:targetId,point:target,alive:target.alive,
       eligible:!target.flying && onMapGround(target) && !this.pendingItemUses.has(targetId) &&
         !this.pendingRewards.has(targetId) && !this.pendingCharacterLeaves.has(targetId)};
@@ -523,8 +541,36 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private prototypeNotice(phase:string,playerId:string,targetId:string,skillId:string):void {
     this.prototypeTransport()?.skill({version:1,phase,playerId,targetId,skillId});
   }
+  protected readonly replacementSkillTransport: PrototypeRoomTransport = {
+    ready: (client, nonce) => client.send("prototype_protocol_v1_ready", {
+      version: 1, gameplayEnabled: nonce !== undefined, ...(nonce ? {nonce} : {}),
+    }),
+    confirmed: client => client.send("prototype_protocol_v1_confirmed", {version: 1}),
+    probeResult: (client, seq) => client.send("prototype_protocol_v1_result", {version: 1, seq, status: "reserved_no_effect"}),
+    shadowState: (client, state) => client.send("prototype_shadow_v1_state", state),
+    occultState: (client, state) => client.send("prototype_occult_v1_state", state),
+    skill: notice => this.publishReplacementSkill(notice),
+  };
+  protected publishReplacementSkill(notice: PrototypeSkillNotice): void {
+    const mapId = notice.origin?.mapId ?? this.state.players.get(notice.playerId)?.mapId;
+    if (mapId) this.replacementSkillNotices.push({notice, mapId});
+  }
+  override broadcastPatch(): boolean {
+    const patched = super.broadcastPatch();
+    if (!this.replacementSkillNotices.length) return patched;
+    // Colyseus flushes per-client patch messages before room-wide hit events.
+    // Deliver skill results after the state and hit events, to confirmed viewers only.
+    for (const {notice, mapId} of this.replacementSkillNotices.splice(0)) {
+      for (const client of this.clients) {
+        if (!this.prototypeGameplaySessions.has(client.sessionId) || this.state.players.get(client.sessionId)?.mapId !== mapId) continue;
+        try { client.send("prototype_skill_v1", notice); }
+        catch { /* Combat is committed. A disconnected observer can request current state on rejoin. */ }
+      }
+    }
+    return patched;
+  }
   protected prototypeTransport(): PrototypeRoomTransport | undefined {
-    return undefined;
+    return this.prototypeGameplayEnabled() ? this.replacementSkillTransport : undefined;
   }
   private acknowledgePrototypeProtocol(client: Client, fields: Record<string, unknown>): void {
     const transport=this.prototypeTransport();
@@ -565,6 +611,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       try {transport.confirmed(client);}catch{return;}
       this.prototypeGameplayChallenges.delete(id);
       this.prototypeGameplaySessions.add(id);
+      // Admission and initial snapshots leave room for the first cast and its follow-up.
+      this.prototypeBuckets.set(id, new CommandBucket(6, 1, this.simulatedMs));
       return;
     }
     if(action.value==="occult_state"){
@@ -601,7 +649,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const skillId=(message as {skillId?:unknown}|null)?.skillId;
     const replacement=replacementSkillFamily(skillId)===family;
     if(sequence===undefined){
-      if(replacement && this.prototypeGameplayEnabled())return this.reject(client,"prototype_protocol_required");
+      const id = client.sessionId;
+      if (replacement && this.prototypeGameplayEnabled() &&
+        (this.requireAllPrototypeClients() || this.prototypeGameplaySessions.has(id) || this.prototypeGameplayChallenges.has(id)))
+        return this.reject(client, "prototype_protocol_required");
     } else if(!replacement || !this.prototypeGameplayAllowed(client.sessionId))return;
     if(this.blockMounted(client) || !this.hotbarCastAllowed(client,message,"advanced"))return;
     switch(family){
@@ -4800,6 +4851,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+    prototype_protocol_v1: (client: Client, message: unknown) => this.handlePrototypeProtocol(client, message),
     boat_intent: (client: Client, message: unknown) => this.boatIntent(client,message),
     ghost_pot: (client: Client, message: unknown) => this.handleGhostPot(client, message),
     // A distinct message type does not alter the existing commands or their payloads.
@@ -7342,7 +7394,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const required = process.env.MONTRA_ACCOUNTS_REQUIRED !== "0";
     const fields = options && typeof options === "object" && !Array.isArray(options) ? options as Record<string,unknown> : {};
     if(!this.prototypeGameplayEnabled())this.clearAllPrototypeEffects();
-    if(this.prototypeGameplayEnabled() && (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");
+    if(this.prototypeGameplayEnabled() && this.requireAllPrototypeClients() &&
+      (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");
     const identity = required ? accounts().resolve(fields.accountSession) : null;
     if (required && !identity) throw new Error("login_required");
     const token = required ? null : getGuestToken(options);
@@ -7673,6 +7726,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const worker = this.ghostWorker;
     this.ghostWorker = undefined;
     worker?.close();
+    this.replacementSkillNotices.length = 0;
     this.prototypeSessions.clear(); this.prototypeBuckets.clear();this.prototypeGameplayChallenges.clear();this.prototypeGameplaySessions.clear();this.prototypeFirmGuards.clear();this.prototypeAshTraps.clear();this.prototypeRescues.clear();this.prototypeShadows.clear();this.prototypeFlowing.clear();this.prototypeCounters.clear();this.prototypeOpportunities.clear();this.prototypeDebuffs.clear();
     huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);

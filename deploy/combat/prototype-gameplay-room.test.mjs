@@ -42,7 +42,7 @@ test('disabled transition clears combat state and one-hit frontal guard stays si
  r.prototypeDebuffs.set(m.id,{sourceId:'a',monsterId:m.id,until:1000});process.env.MONTRA_PROTOTYPE_GAMEPLAY='0';assert.equal(r.prototypeMonsterDamage(m,100),100);r.updatePrototypeEffects();assert.equal(r.prototypeDebuffs.size,0);
 }));
 
-test('shipped gameplay is hard blocked even if every environment flag is set',wrap(()=>{
+test('test-room flags do not enable replacements in the standard room',wrap(()=>{
  const r=new MyRoom();assert.equal(r.prototypeGameplayEnabled(),false);
 }));
 

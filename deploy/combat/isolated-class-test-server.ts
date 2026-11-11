@@ -14,11 +14,11 @@ const restoreSuite = path.basename(base).startsWith('montra-skill-ws-restore-') 
 if (process.env.NODE_ENV !== 'test' || process.env.MONTRA_TEST_SANDBOX !== base ||
     process.env.MONTRA_CHARACTER_DIR !== path.join(base, folder) ||
     !(classSuite || restoreSuite) || process.env.MONTRA_ACCOUNTS_REQUIRED !== '0' ||
-    process.env.MONTRA_PROTOTYPE_PROTOCOL_V1 || process.env.MONTRA_ISOLATED_STAGING)
+    process.env.MONTRA_PROTOTYPE_PROTOCOL_V1 || process.env.MONTRA_ISOLATED_STAGING || process.env.MONTRA_REPLACEMENT_SKILLS)
   throw new Error('unsafe class or restore test environment');
-// No gameplay override: exercise the candidate's actual hard-disabled switch.
+// Exercise the default live room and existing skill behavior.
 if ((new MyRoom() as unknown as {prototypeGameplayEnabled():boolean}).prototypeGameplayEnabled() !== false)
-  throw new Error('prototype gameplay must remain hard-disabled');
+  throw new Error('replacement skills must default to disabled');
 // The integration parent kills only this disposable process at the checkpoint.
 if(process.env.MONTRA_TEST_CRASH_AFTER_REWARD_PREPARE==='1'){
   if(!restoreSuite || folder!=='source')throw new Error('unsafe reward crash fixture');
