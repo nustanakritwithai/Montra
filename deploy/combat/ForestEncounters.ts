@@ -28,9 +28,12 @@ type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil
 type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
 function inSpecialArea(monster:Monster, player:Player, attack:HimmapanAttack):boolean {
   const dx=player.x-monster.x, dz=player.z-monster.z;
-  if (!attack.halfWidth) return Math.hypot(dx,dz)<=attack.range;
+  const distance=Math.hypot(dx,dz);
   const sin=Math.sin(monster.facing), cos=Math.cos(monster.facing);
-  const forward=-dx*sin-dz*cos, lateral=dx*cos-dz*sin;
+  const forward=-dx*sin-dz*cos;
+  if (attack.halfAngle) return distance<=attack.range && forward>=distance*Math.cos(attack.halfAngle);
+  if (!attack.halfWidth) return distance>=(attack.innerRange??0) && distance<=attack.range;
+  const lateral=dx*cos-dz*sin;
   return forward>=0 && forward<=attack.range && Math.abs(lateral)<=attack.halfWidth;
 }
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
@@ -97,7 +100,8 @@ export class ForestEncounters {
         attack:Math.round(base.attack*1.55),defense:Math.round(base.defense*1.3)} : base;
       const actor=new Monster({id,x,y:groundAt(zone.map.id,x,z),z,hp:profile.maxHp,maxHp:profile.maxHp,
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense,
-        ...(special?{specialRange:special.range,specialHalfWidth:special.halfWidth}:{})});
+        ...(special?{specialRange:special.range,specialHalfWidth:special.halfWidth,
+          specialInnerRange:special.innerRange??0,specialHalfAngle:special.halfAngle??0}:{})});
       if(!this.regionalMaps.has(zone.map.id))this.monsters.set(id,actor);
       this.lives.set(id,{actor,zone,x,z,profile,special,respawnAt:0,lastAttack:-Infinity,returning:false,
         nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
@@ -229,7 +233,7 @@ export class ForestEncounters {
       if(life.returning){m.targetId="";m.aiState="return";destination=life;speed=2.4;
         if(planarDistance(m,life)<.2){life.returning=false;m.hp=m.maxHp;}}
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
-        if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 && inSpecialArea(m,target,special) && clear(target)){
+        if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 && planarDistance(m,target)<=special.range && clear(target)){
           m.aiState="windup";
           life.windupUntil=now+special.windupMs;
           life.nextChargeAt=now+8000;

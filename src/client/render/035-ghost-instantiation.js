@@ -22,11 +22,11 @@
     ["himmapan_matcha_naga", { kind: "matchaNaga", height: 1.9, width: 1.45, warningColor: "#77e4ff", warningText: "คลื่นน้ำ · หลบด้านข้าง" }],
     ["himmapan_garuda_scout", { kind: "garudaScout", height: 2.5, width: 2.25, warningColor: "#ffdb76", warningText: "เงาโฉบ · หลบด้านข้าง" }],
     ["himmapan_stone_yaksha", { kind: "stoneYaksha", height: 2.65, width: 1.7, warningColor: "#ff883b", warningText: "กระบองกระแทก · ถอยออกจากวง" }],
-    ["himmapan_kochasri", { kind: "kochasri", height: 2.35, width: 1.9, depth: 3.05, warningColor: "#ffac55", warningText: "พุ่งชน · หลบด้านข้าง" }],
+    ["himmapan_kochasri", { kind: "kochasri", height: 2.95, width: 2.3, depth: 3.65, warningColor: "#ffac55", warningText: "พุ่งชน · หลบออกจากพื้นที่เตือน", warningFill: true }],
     ["himmapan_hemaraj", { kind: "hemaraj", height: 2.35, width: 1.5, depth: 2.85, warningColor: "#ffe787", warningText: "ตะปบ · หลบออกจากด้านหน้า" }],
-    ["himmapan_durong_paksin", { kind: "durongPaksin", height: 2.75, width: 2.7, depth: 3.2, warningColor: "#ffce5f", warningText: "โผพุ่ง · หลบด้านข้าง" }],
-    ["himmapan_kunchon_wari", { kind: "kunchonWari", height: 2.25, width: 2.2, depth: 3.3, warningColor: "#78e2ff", warningText: "ตวัดหาง · ถอยออกจากวงน้ำ", impactTint: "cyan" }],
-    ["himmapan_karavek", { kind: "karavek", height: 2.2, width: 2.6, depth: 2.25, warningColor: "#dcafff", warningText: "คลื่นเสียง · ถอยออกจากวง", impactTint: "violet" }],
+    ["himmapan_durong_paksin", { kind: "durongPaksin", height: 3.0, width: 2.7, depth: 3.65, warningColor: "#ffce5f", warningText: "โผพุ่ง · หลบด้านข้าง", warningFill: true }],
+    ["himmapan_kunchon_wari", { kind: "kunchonWari", height: 2.8, width: 2.3, depth: 3.7, warningColor: "#78e2ff", warningText: "ตวัดหาง · ถอยออกจากวงน้ำ", innerWarningText: "ตวัดหาง · เข้ากลางวงหรือออกนอกขอบน้ำ", warningFill: true, impactTint: "cyan" }],
+    ["himmapan_karavek", { kind: "karavek", height: 2.55, width: 2.5, depth: 2.9, warningColor: "#ffd792", warningText: "คลื่นเสียง · ถอยออกจากวงนอกสุด", warningFill: true, warningBands: [.33, .66], impactTint: "gold" }],
   ]);
   function monsterName(monster, id) {
     if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
@@ -128,38 +128,73 @@
   function updateHimmapanWarning(mesh, monster) {
     const metadata = mesh.metadata, design = metadata.ghost.design;
     const range = Number(monster.specialRange), halfWidth = Number(monster.specialHalfWidth);
+    const inner = Number(monster.specialInnerRange) || 0, halfAngle = Number(monster.specialHalfAngle) || 0;
     if (!monster.alive || monster.aiState !== "windup" || !(range > 0)) {
       metadata.specialWarning?.setEnabled(false);
+      metadata.specialWarningFill?.setEnabled(false);
       return;
     }
     if (metadata.specialWarning?.isEnabled()) return;
     const terrain = worldDefinitions?.[monster.mapId]?.terrain;
     const facing = Number(monster.facing) || 0, sin = Math.sin(facing), cos = Math.cos(facing);
-    const points = [];
-    const add = (side, forward) => {
+    const point = (side, forward) => {
       const x = monster.x + side * cos - forward * sin;
       const z = monster.z - side * sin - forward * cos;
-      points.push(new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z));
+      return new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z);
     };
-    if (halfWidth > 0) {
-      const corners = [[-halfWidth, 0], [-halfWidth, range], [halfWidth, range], [halfWidth, 0], [-halfWidth, 0]];
-      for (let i = 1; i < corners.length; i++) {
-        const [a, b] = corners[i - 1], [c, d] = corners[i];
-        for (let j = 0; j < 6; j++) add(a + (c - a) * j / 6, b + (d - b) * j / 6);
-      }
-      add(-halfWidth, 0);
+    const rect = halfWidth > 0, fullCircle = !rect && !halfAngle;
+    const arcAngle = halfAngle || Math.PI;
+    const columns = rect ? 6 : 40;
+    const rowAt = distance => Array.from({ length: columns + 1 }, (_, i) => {
+      if (rect) return point(-halfWidth + 2 * halfWidth * i / columns, distance);
+      const angle = -arcAngle + 2 * arcAngle * i / columns;
+      return point(Math.sin(angle) * distance, Math.cos(angle) * distance);
+    });
+    const rows = Array.from({ length: 9 }, (_, i) => rowAt(inner + (range - inner) * i / 8));
+    const lines = [rows.at(-1)];
+    if (fullCircle) {
+      if (inner > 0) lines.push(rows[0]);
+      for (const band of design.warningBands || []) lines.push(rowAt(range * band));
     } else {
-      for (let i = 0; i <= 40; i++) {
-        const angle = i * Math.PI / 20;
-        add(Math.cos(angle) * range, Math.sin(angle) * range);
-      }
+      lines.push(rows.map(row => row[0]), rows.map(row => row.at(-1)));
+      if (rect) lines.push(rows[0]);
     }
-    const warning = B.MeshBuilder.CreateLines("himmapan strike boundary", { points, updatable: true, instance: metadata.specialWarning }, scene);
+    const warning = B.MeshBuilder.CreateLineSystem("himmapan strike boundary", { lines, updatable: true, instance: metadata.specialWarning }, scene);
     warning.color = B.Color3.FromHexString(design.warningColor);
     warning.isPickable = false;
     warning.setEnabled(true);
     metadata.specialWarning = warning;
-    if (monster.targetId === room?.sessionId) toast(monsterName(monster, mesh.metadata.monsterId) + " · " + design.warningText);
+    if (design.warningFill) {
+      if (!metadata.specialWarningFill) {
+        const fill = new B.Mesh("himmapan strike area", scene);
+        const paint = new B.StandardMaterial("himmapan strike area", scene);
+        paint.emissiveColor = warning.color;
+        paint.disableLighting = true;
+        paint.backFaceCulling = false;
+        paint.alpha = .19;
+        fill.material = paint;
+        fill.isPickable = false;
+        metadata.specialWarningFill = fill;
+      }
+      const fill = metadata.specialWarningFill;
+      const positions = rows.flatMap(row => row.flatMap(p => [p.x, p.y - .025, p.z]));
+      const indices = [], normals = [];
+      for (let row = 0; row < rows.length - 1; row++) {
+        for (let col = 0; col < columns; col++) {
+          const i = row * (columns + 1) + col, next = i + columns + 1;
+          indices.push(i, next, i + 1, i + 1, next, next + 1);
+        }
+      }
+      B.VertexData.ComputeNormals(positions, indices, normals);
+      const data = new B.VertexData();
+      Object.assign(data, { positions, indices, normals });
+      data.applyToMesh(fill);
+      fill.setEnabled(true);
+    }
+    if (monster.targetId === room?.sessionId) {
+      const hint = inner > 0 && design.innerWarningText ? design.innerWarningText : design.warningText;
+      toast(monsterName(monster, mesh.metadata.monsterId) + " · " + hint);
+    }
   }
   const soulMeshes = [];
   // Builds the pickable root plus the visual rig for one monster.
@@ -192,7 +227,10 @@
       modelMaterials.clear();
     };
     if (design.boss || design.himmapan) root.onDisposeObservable.add(releaseModelMaterials);
-    if (design.himmapan) root.onDisposeObservable.add(() => root.metadata.specialWarning?.dispose());
+    if (design.himmapan) root.onDisposeObservable.add(() => {
+      root.metadata.specialWarning?.dispose();
+      root.metadata.specialWarningFill?.dispose(false, true);
+    });
     const build = () => {
       if (design.boss) {
         releaseModelMaterials();
