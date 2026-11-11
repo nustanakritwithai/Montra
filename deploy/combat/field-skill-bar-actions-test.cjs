@@ -190,4 +190,12 @@ handlers.ghost_pot_state({active:false,pool:{...updated,selectedSlot:0,revision:
 assert.equal(get("ghostAttackButton").hidden,true);
 assert.match(find("ghost-ghost-7").children.at(-1).textContent,/ต้องพักฟื้น/);
 assert.equal(notices.at(-1),"ผีพ่ายแพ้และกลับเข้าหม้อ");
+const warPool={...updated,selectedSlot:0,revision:7};
+handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,combatAvailable:true,combatId:null,status:"ready"});
+assert.equal(get("ghostPotButton").hidden,true);
+assert.equal(get("ghostSummonButton").hidden,false);
+handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,combatAvailable:false,combatId:null,status:"war_ended"});
+assert.equal(get("ghostSummonButton").hidden,true);
+assert.equal(get("ghostPoolButton").hidden,false);
+assert.equal(notices.at(-1),"สงครามจบแล้ว ผีกลับเข้าหม้อ");
 console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits, follow and legacy skills");

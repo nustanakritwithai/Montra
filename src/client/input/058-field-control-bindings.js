@@ -88,6 +88,7 @@
     return {pool, byId, slots, selected, active, carry:[...slots.filter(Boolean), ...reserve].slice(0,6)};
   }
   function ghostPoolSummonAction(view) {
+    if (ghostPotState?.combatAvailable === false) return null;
     if (view.active) return view.selected && view.active !== view.selected ? "switch" : "recall";
     return view.selected ? "summon" : null;
   }
@@ -173,7 +174,7 @@
     const attack = $("ghostAttackButton"), follow = $("ghostFollowButton");
     const state = ghostPotState, view = ghostPoolView(state), action = view && ghostPoolSummonAction(view);
     group.hidden = !state;
-    capture.hidden = !state;
+    capture.hidden = !state || state.captureAvailable === false;
     poolButton.hidden = !view;
     summon.hidden = !action;
     const captureLabel = view ? "จับ" : state?.active ? "เก็บ" : state?.ghost ? "เรียก" : "จับ";
@@ -237,6 +238,7 @@
       captured:"จับ" + (captured?.name || "ผี") + "เข้าคลังแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
       summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", switched:"สลับเป็น" + (state.ghost?.name || "ผีที่เลือก") + "แล้ว",
       defeated:"ผีพ่ายแพ้และกลับเข้าหม้อ", fainted:"ผีตัวนี้ต้องพักฟื้นที่เขตปลอดภัย",
+      war_ended:"สงครามจบแล้ว ผีกลับเข้าหม้อ",
       unavailable:"หม้ออาคมยังใช้ไม่ได้", target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่",
       stale:"คลังผีเปลี่ยนแล้ว เลือกช่องใหม่อีกครั้ง", active_locked:"เก็บผีที่เรียกออกมาก่อนย้ายเข้าคลัง",
       not_owned:"ไม่พบผีตัวนี้ในคลัง", slot_empty:"ช่องเรียกนี้ยังว่าง", pool_full:"คลังผีเต็มแล้ว",

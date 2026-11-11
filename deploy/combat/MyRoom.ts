@@ -4920,7 +4920,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return [site,war.inspect(site,now)];
     }));
     if(this.field){
-      const s=states[this.field.site];this.battleActive=s.seq===this.field.seq && s.phase==="battle";
+      const s=states[this.field.site], wasActive=this.battleActive;
+      this.battleActive=s.seq===this.field.seq && s.phase==="battle";
+      if (this.ghostConfig && wasActive !== this.battleActive) {
+        for (const client of this.clients) {
+          const id = client.sessionId;
+          if (!this.warSeats.has(id)) continue;
+          if (!this.battleActive && this.activeGhosts.has(id)) this.despawnSummon(id, "ghost_war_ended");
+          else this.sendGhostPot(client, "ready");
+        }
+      }
       const gates=s.river?.gates ?? s.pilot?.gates ?? s.gates;
       if(gates)this.closedFieldGates=new Set(Object.entries(this.battleActive?gates:{}).filter(([,g])=>g.closed).map(([id])=>id));
       if(this.battleActive)this.updateWarParticipation();
@@ -4985,6 +4994,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       pool,
       capacity: GHOST_POOL_CAPACITY,
       activeInstanceId,
+      captureAvailable: !this.field,
+      combatAvailable: this.ghostBattleAllows(id),
       combatId: active?.combatId ?? null,
       combatTarget: active?.order ? {targetId: active.order.targetId, targetName: active.order.targetName} : null,
       combatHealth: guardian ? {hp: guardian.hp, maxHp: guardian.maxHp} : null,
@@ -5005,19 +5016,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const owner of this.activeGhosts.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
   }
 
+  private ghostBattleAllows(id: string) {
+    return !this.field || (this.battleActive && this.warSeats.has(id) && this.state.players.get(id)?.mapId === this.field.site);
+  }
+
   private combatGhost(targetId: string): GhostCombatActor | undefined {
     if (!targetId.startsWith("ghost:")) return;
     const ownerId = targetId.split(":")[1];
     const owner = this.state.players.get(ownerId), guardian = this.state.summons.get(ownerId);
     const active = this.activeGhosts.get(ownerId);
-    if (!active || guardian?.combatTargetId !== targetId || guardian.hp <= 0 || !owner?.alive ||
+    if (!active || guardian?.combatTargetId !== targetId || guardian.hp <= 0 || !owner?.alive || !this.ghostBattleAllows(ownerId) ||
         owner.mapId !== guardian.mapId || this.pendingWarps.has(ownerId) || this.pendingCharacterLeaves.has(ownerId) ||
         this.isProtectedArea(owner.mapId, owner) || this.isProtectedArea(owner.mapId, guardian)) return;
     return {ownerId, guardian, active};
   }
 
   private canPlayerHitGhost(attackerId: string, ghost: GhostCombatActor) {
-    return attackerId !== ghost.ownerId && this.sameCombatMap(attackerId, ghost.ownerId);
+    return attackerId !== ghost.ownerId && this.ghostBattleAllows(attackerId) && this.sameCombatMap(attackerId, ghost.ownerId);
   }
 
   private hitGhost(ghost: GhostCombatActor, attackerId: string, damage: number, ranged = false) {
@@ -5054,11 +5069,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private getGhostTarget(id: string, owner: Player, guardian: SummonedGuardian, targetId: string) {
-    if (id === targetId || !this.sameCombatMap(id, targetId) ||
+    if (id === targetId || !this.ghostBattleAllows(id) || !this.sameCombatMap(id, targetId) ||
         this.isProtectedArea(owner.mapId, guardian) || distance3d(owner, guardian) > RULES.summonLeashDistance) return null;
     const monster = this.getMonster(targetId);
     const target = monster ?? this.state.players.get(targetId);
     if (!target?.alive || target.hp <= 0 || this.seerBindings.get(targetId)?.ownerId === id ||
+        (!monster && !this.ghostBattleAllows(targetId)) ||
         (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
         distance3d(owner, target) > RULES.summonEngageDistance || !this.bodyPathClear(owner.mapId, guardian, target) ||
         !this.combatSegmentClear(owner.mapId, guardian, target)) return null;
@@ -5161,7 +5177,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private async handleGhostPot(client: Client, message: unknown) {
     const config = this.ghostConfig, id = client.sessionId, owner = this.state.players.get(id);
-    if (!config || this.field || !characterStore.economyEnabled || !owner || !this.persistentCharacters.has(id))
+    if (!config || !characterStore.economyEnabled || !owner || !this.persistentCharacters.has(id) ||
+        (this.field && !this.warSeats.has(id)))
       return this.reject(client, "ghost_pot_unavailable");
     const input = parseGhostCommand(message);
     if (!input) return this.reject(client, "invalid_ghost_pot");
@@ -5169,6 +5186,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recoverParkedGhosts(id, owner);
       return this.sendGhostPot(client, "ready");
     }
+    if (this.field && input.action === "capture") return this.reject(client, "ghost_capture_unavailable");
+    if (!("revision" in input) && !this.ghostBattleAllows(id)) return this.reject(client, "ghost_combat_war");
     if (!owner.alive || owner.mounted || owner.possessionActive || this.pendingWarps.has(id) ||
         this.pendingCharacterLeaves.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) ||
         this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
@@ -5279,7 +5298,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         throw new Error("invalid_ghost_worker_actor");
       if (this.state.players.get(id) !== owner || !owner.alive || owner.mapId !== zone ||
           this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || owner.mounted ||
-          owner.possessionActive || this.state.summons.get(id) !== priorSummon) {
+          owner.possessionActive || !this.ghostBattleAllows(id) || this.state.summons.get(id) !== priorSummon) {
         if (this.state.summons.get(id)?.kind === "captured_ghost") this.despawnSummon(id, "ghost_owner_unavailable");
         else await worker.send({owner: id, disconnect: true});
         return this.sendGhostPot(client, "unavailable");
@@ -6824,7 +6843,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const worker = this.ghostWorker;
       if (worker) void worker.send({owner: ownerId, disconnect: true}).catch(() => this.resetGhostWorker(worker));
       const client = this.clients.find(candidate => candidate.sessionId === ownerId);
-      if (client && reason !== "ghost_recalled") this.sendGhostPot(client, reason === "ghost_defeated" ? "defeated" : "ready");
+      if (client && reason !== "ghost_recalled")
+        this.sendGhostPot(client, reason === "ghost_defeated" ? "defeated" : reason === "ghost_war_ended" ? "war_ended" : "ready");
     }
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
@@ -7153,7 +7173,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   async onCreate(options?:{warRoomKey?:string;field?:Battlefield}) {
-    this.state.ghostPotAvailable = Boolean(this.ghostConfig && characterStore.economyEnabled && !options?.field);
+    this.state.ghostPotAvailable = Boolean(this.ghostConfig && characterStore.economyEnabled);
     this.state.boatsAvailable = WORLD_EXPANSION && !options?.field && process.env.MONTRA_BOATS_ENABLED!=="0";
     let cardRevision=dynamicBalanceRevision();
     this.clock.setInterval(()=>{
@@ -7622,7 +7642,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const power = ranged ? this.masteryPower(attacker,"pvp","magicAtk",bonuses.ranged) :
           this.masteryPower(attacker,"pvp","atk",meleeBonus) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery;
         const damage = calculateDamage(power, ranged ? ghost.active.magicDefense : ghost.active.defense, ghost.active.level);
-        this.hitGhost(ghost, attackerId, damage, ranged);
+        const owner = this.state.players.get(ghost.ownerId);
+        const warFactor = this.field && owner ? warEntryDamageFactor(attacker.level, owner.level) : 1;
+        this.hitGhost(ghost, attackerId, Math.max(1,Math.round(damage * warFactor)), ranged);
         continue;
       }
 

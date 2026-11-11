@@ -1705,7 +1705,8 @@
             ghost_pot_unavailable:"หม้ออาคมยังใช้ไม่ได้",invalid_ghost_pot:"คำสั่งหม้ออาคมไม่ถูกต้อง",
             ghost_combat_inactive:"ผีที่เรียกไว้เปลี่ยนแล้ว",ghost_combat_target:"ผีโจมตีเป้าหมายนี้ไม่ได้ในตอนนี้",
             ghost_skill_unlearned:"ผีตัวนี้ยังใช้วิชานี้ไม่ได้",ghost_skill_exhausted:"ผีใช้วิชานี้ครบแล้ว พักที่เขตปลอดภัย",
-            ghost_skill_cooldown:"รอให้วิชาผีพร้อมอีกครั้ง",ghost_skill_unavailable:"ใช้วิชาผีไม่สำเร็จ"};
+            ghost_skill_cooldown:"รอให้วิชาผีพร้อมอีกครั้ง",ghost_skill_unavailable:"ใช้วิชาผีไม่สำเร็จ",
+            ghost_capture_unavailable:"จับผีได้ในแผนที่โลก",ghost_combat_war:"ใช้ผีต่อสู้ได้ระหว่างสงคราม"};
           toast(ghostErrors[info.reason] || "ใช้หม้ออาคมไม่สำเร็จ");
         }
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
