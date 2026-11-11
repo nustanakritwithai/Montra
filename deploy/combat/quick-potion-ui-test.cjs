@@ -25,20 +25,21 @@ function fixture(storage = new Map()) {
       this.events = new Map();
     }
     set innerHTML(html) {
-      assert.equal((html.match(/class="chat-potion-slot"/g) || []).length, 1);
-      assert.match(html, /aria-controls="chatPotionPicker"/);
+      assert.equal((html.match(/<button\b/g) || []).length, 1);
+      assert.match(html, /class="chat-potion-use"[^>]+aria-controls="chatPotionPicker"/);
       const use = new Element('button', 'chat-potion-use');
       const icon = new Element('span', 'chat-potion-icon');
       icon.append(new Element('span', 'bag-symbol'));
       use.append(icon, new Element('b', 'chat-potion-count'));
       const list = new Element('div', 'chat-potion-picker');
       list.hidden = true;
-      this.append(use, new Element('button', 'chat-potion-swap'), list);
+      this.append(use, list);
     }
     append(...nodes) { this.children.push(...nodes); }
     replaceChildren(...nodes) { this.children = nodes; }
     setAttribute(key, value) { this.attributes[key] = value; }
     removeAttribute(key) { delete this.attributes[key]; }
+    toggleAttribute(key, enabled) { if (enabled) this.setAttribute(key, ''); else this.removeAttribute(key); }
     addEventListener(type, listener) { this.events.set(type, listener); }
     contains(node) { return this === node || this.children.some(child => child.contains(node)); }
     focus() { document.activeElement = this; }
@@ -58,9 +59,12 @@ function fixture(storage = new Map()) {
     rice: {name:'ข้าว', kind:'consumable', healHp:20, nutrition:{food:15}},
     weapon: {name:'ดาบ', kind:'mainHand'}
   };
-  const sent = [];
+  const sent = [], timers = new Map();
+  let now = 0, nextTimer = 0;
   const context = {
     document, mode:'live', room:{}, player:{characterId:'character-1', persistent:true, alive:true},
+    setTimeout: (callback, delay) => { timers.set(++nextTimer, {callback, at: now + delay}); return nextTimer; },
+    clearTimeout: id => timers.delete(id),
     slots:[stack(hp, 2), stack('rice', 3), stack(hp, 4), stack(mp, 5), stack('weapon', 1)],
     itemUsePending:false, economyPending:false, catalogRevision:1, POTION_ITEM_ID:hp,
     localStorage:{getItem:key => storage.get(key), setItem:(key, value) => storage.set(key, value)},
@@ -72,25 +76,44 @@ function fixture(storage = new Map()) {
   };
   vm.createContext(context);
   const control = vm.runInContext(controlSource + '\ncreateQuickPotionControl()', context);
-  const use = control.el.querySelector('.chat-potion-use'), swap = control.el.querySelector('.chat-potion-swap');
+  const use = control.el.querySelector('.chat-potion-use');
   const list = control.el.querySelector('.chat-potion-picker'), count = use.querySelector('.chat-potion-count');
   const row = id => list.children.find(child => child.dataset.itemId === id);
-  return {context, control, use, swap, list, count, row, sent, storage, document, listeners};
+  function advance(ms) {
+    now += ms;
+    for (const [id, timer] of timers) {
+      if (timer.at > now) continue;
+      timers.delete(id);
+      timer.callback();
+    }
+  }
+  const pointer = (type, overrides) => use.events.get(type)({
+    pointerId:1, button:0, isPrimary:true, pointerType:'touch', clientX:40, clientY:40, ...overrides,
+  });
+  const click = () => use.onclick({detail:1, pointerType:'touch'});
+  const tap = () => { pointer('pointerdown'); pointer('pointerup'); click(); };
+  const hold = () => { pointer('pointerdown'); advance(450); pointer('pointerup'); click(); };
+  const openWithKeyboard = () => use.events.get('keydown')({key:'ArrowUp', preventDefault() {}, stopPropagation() {}});
+  return {context, control, use, list, count, row, sent, storage, document, listeners, advance, pointer, click, tap, hold, openWithKeyboard};
 }
 
-test('single slot aggregates matching stacks and switches from a vertical list without consuming', () => {
+test('holding the only slot opens the list and releasing or selecting a row consumes nothing', () => {
   const f = fixture();
   f.control.render();
   assert.equal(f.control.el.hidden, false);
   assert.equal(f.count.textContent, '×6');
-  f.swap.onclick();
-  assert.equal(f.swap.attributes['aria-expanded'], 'true');
+  f.pointer('pointerdown');
+  f.advance(449);
+  assert.equal(f.list.hidden, true);
+  f.advance(1);
+  f.pointer('pointerup');
+  f.click();
+  assert.equal(f.use.attributes['aria-expanded'], 'true');
   assert.deepEqual(f.list.children.map(row => row.dataset.itemId), [hp, mp]);
   assert.equal(f.row(hp).attributes['aria-pressed'], 'true');
-  assert.equal(f.document.activeElement, f.row(hp));
   f.row(mp).onclick();
   assert.equal(f.list.hidden, true);
-  assert.equal(f.document.activeElement, f.swap);
+  assert.equal(f.document.activeElement, f.use);
   assert.equal(f.count.textContent, '×5');
   assert.match(f.use.attributes['aria-label'], /ยามานา/);
   assert.deepEqual(f.sent, []);
@@ -98,33 +121,33 @@ test('single slot aggregates matching stacks and switches from a vertical list w
 
 test('use resolves the latest inventory slot and blocks a second press while the server is pending', () => {
   const f = fixture();
-  f.swap.onclick();
+  f.hold();
   f.row(mp).onclick();
   f.context.slots = [stack(mp, 5), stack(hp, 2), null, stack('rice', 3)];
-  f.use.onclick();
-  f.use.onclick();
+  f.tap();
+  f.tap();
   assert.deepEqual(f.sent, [{command:'use_item', slot:0}]);
   assert.equal(f.count.textContent, '×5', 'count waits for the inventory update');
-  assert.equal(f.use.disabled, true);
+  assert.ok('data-unavailable' in f.use.attributes);
   f.context.slots = [stack(mp, 4), stack(hp, 2)];
   f.context.itemUsePending = false;
   f.control.render();
   assert.equal(f.count.textContent, '×4');
-  assert.equal(f.use.disabled, false);
+  assert.ok(!('data-unavailable' in f.use.attributes));
 });
 
 test('depleted selection stays at zero and is restored for the same character on rejoin', () => {
   const first = fixture();
-  first.swap.onclick();
+  first.hold();
   first.row(mp).onclick();
   const f = fixture(first.storage);
   f.context.slots = [stack(hp, 2)];
   f.control.render();
   assert.match(f.use.attributes['aria-label'], /ยามานา/);
   assert.equal(f.count.textContent, '×0');
-  f.use.onclick();
+  f.tap();
   assert.deepEqual(f.sent, []);
-  f.swap.onclick();
+  f.hold();
   assert.deepEqual(f.list.children.map(row => row.dataset.itemId), [hp]);
   f.context.player = {characterId:'character-2', persistent:true, alive:true};
   f.control.render();
@@ -138,17 +161,55 @@ test('depleted selection stays at zero and is restored for the same character on
 test('keyboard and outside taps dismiss the picker, and empty bags have usable feedback', () => {
   const f = fixture();
   f.context.slots = [];
-  f.swap.onclick();
+  f.hold();
   assert.equal(f.list.hidden, false);
   assert.equal(f.list.children[0].textContent, 'ไม่มียาในกระเป๋า');
   let prevented = false;
   f.control.el.events.get('keydown')({key:'Escape', preventDefault:() => { prevented = true; }, stopPropagation() {}});
   assert.equal(prevented, true);
-  assert.equal(f.document.activeElement, f.swap);
-  f.swap.onclick();
+  assert.equal(f.document.activeElement, f.use);
+  f.openWithKeyboard();
   f.listeners.get('pointerdown')({target:{}});
   assert.equal(f.list.hidden, true);
-  assert.equal(f.swap.attributes['aria-expanded'], 'false');
+  assert.equal(f.use.attributes['aria-expanded'], 'false');
+});
+
+test('keyboard opens and focuses a choice, and tapping an open slot dismisses without using it', () => {
+  const f = fixture();
+  f.openWithKeyboard();
+  assert.equal(f.document.activeElement, f.row(hp));
+  f.tap();
+  assert.equal(f.list.hidden, true);
+  assert.deepEqual(f.sent, []);
+  f.use.onclick({detail:0});
+  assert.deepEqual(f.sent, [{command:'use_item', slot:0}]);
+});
+
+test('cancelled, dragged and stale presses do not open the picker or consume a potion', () => {
+  const f = fixture();
+  f.pointer('pointerdown');
+  f.pointer('pointercancel');
+  f.advance(450);
+  assert.equal(f.list.hidden, true);
+  f.pointer('pointerdown');
+  f.pointer('pointermove', {clientX:60});
+  f.advance(450);
+  f.pointer('pointerup');
+  f.click();
+  assert.equal(f.list.hidden, true);
+  f.pointer('pointerdown');
+  f.context.player = {...f.context.player, characterId:'character-2'};
+  f.advance(450);
+  f.pointer('pointerup');
+  f.click();
+  assert.equal(f.list.hidden, true);
+  f.pointer('pointerdown');
+  f.context.player = {...f.context.player, characterId:'character-3'};
+  f.pointer('pointerup');
+  f.click();
+  assert.deepEqual(f.sent, []);
+  f.tap();
+  assert.deepEqual(f.sent, [{command:'use_item', slot:0}]);
 });
 
 test('the slot is attached above the real chat feed and the picker opens upward', () => {
@@ -156,5 +217,5 @@ test('the slot is attached above the real chat feed and the picker opens upward'
   assert.match(source, /function openChat\(\)\{\s+if\(!chatBox\)return;\s+chatBox\.potion\?\.close\(\)/);
   const css = readFileSync('src/styles/hud/019-vital-orb-resources-and-chat.css', 'utf8');
   assert.match(css, /\.chat-harvest\s*\{[^}]*bottom:calc\(100% \+ 5px\)/);
-  assert.match(css, /\.chat-potion-picker\s*\{[^}]*bottom:calc\(100% \+ 4px\)/);
+  assert.match(css, /\.chat-potion-picker\s*\{[^}]*bottom:calc\(100% \+ 4px\)[^}]*width:min\(148px, 75vw\)[^}]*overflow-y:auto/);
 });

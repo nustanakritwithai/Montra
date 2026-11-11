@@ -107,25 +107,42 @@
     const el = document.createElement("div");
     el.className = "chat-potion-control";
     el.hidden = true;
-    el.innerHTML = `<div class="chat-potion-slot" role="group" aria-label="ช่องยาลัด">
-      <button type="button" class="chat-potion-use" aria-label="ใช้ยา" disabled>
+    el.innerHTML = `<button type="button" class="chat-potion-use" aria-label="ใช้ยา · กดค้างเพื่อเลือกยา"
+        aria-expanded="false" aria-controls="chatPotionPicker" aria-keyshortcuts="ArrowUp">
         <span class="chat-potion-icon bag-slot" aria-hidden="true"><span class="bag-symbol">🧪</span></span>
         <b class="chat-potion-count" aria-hidden="true">×0</b>
       </button>
-      <button type="button" class="chat-potion-swap" aria-label="สลับยา" aria-expanded="false" aria-controls="chatPotionPicker">▲</button>
-    </div><div id="chatPotionPicker" class="chat-potion-picker" role="group" aria-label="เลือกยาประจำช่อง" hidden></div>`;
+      <div id="chatPotionPicker" class="chat-potion-picker" role="group" aria-label="เลือกยาประจำช่อง" hidden></div>`;
     const use = el.querySelector(".chat-potion-use");
-    const swap = el.querySelector(".chat-potion-swap");
     const icon = use.querySelector(".chat-potion-icon");
     const count = use.querySelector(".chat-potion-count");
     const list = el.querySelector(".chat-potion-picker");
     const choices = new Map();
     let ownerKey = "", selected = "", slots = null, revision = -1;
+    let canUse = false, press = null, suppressPointerClick = false;
+
+    function finishPress(cancelClick) {
+      if (!press) return;
+      clearTimeout(press.timer);
+      press = null;
+      suppressPointerClick = cancelClick;
+    }
 
     function close() {
+      finishPress(true);
       if (list.hidden) return;
       list.hidden = true;
-      swap.setAttribute("aria-expanded", "false");
+      use.setAttribute("aria-expanded", "false");
+    }
+
+    function openPicker(focusChoice) {
+      if (el.hidden || !list.hidden) return;
+      list.hidden = false;
+      use.setAttribute("aria-expanded", "true");
+      renderList();
+      if (focusChoice) {
+        (list.querySelector('[aria-pressed="true"]') || list.querySelector("button"))?.focus({preventScroll:true});
+      }
     }
 
     function potionName(id) {
@@ -156,7 +173,7 @@
           close();
           renderSelection();
           render();
-          swap.focus({preventScroll:true});
+          use.focus({preventScroll:true});
         };
         rows.push(row);
       }
@@ -167,15 +184,15 @@
       } else {
         list.replaceChildren(...rows);
       }
-      if (focusedId) (rows.find(row => row.dataset.itemId === focusedId) || swap).focus({preventScroll:true});
+      if (focusedId) (rows.find(row => row.dataset.itemId === focusedId) || use).focus({preventScroll:true});
     }
 
     function renderSelection() {
       const quantity = choices.get(selected)?.quantity ?? 0;
       const label = selected ? potionName(selected) + " · เหลือ " + quantity + " ขวด" : "ช่องยาว่าง";
       count.textContent = "×" + quantity;
-      use.title = label;
-      use.setAttribute("aria-label", (quantity ? "ใช้ " : "") + label);
+      use.title = label + " · กดค้างเพื่อเลือกยา";
+      use.setAttribute("aria-label", (quantity ? "ใช้ " : "") + use.title);
       paintIcon(icon, selected);
     }
 
@@ -207,32 +224,66 @@
         renderSelection();
         if (!list.hidden) renderList();
       }
-      use.disabled = !choices.has(selected) || !player.alive || itemUsePending || economyPending;
+      canUse = choices.has(selected) && player.alive && !itemUsePending && !economyPending;
+      use.toggleAttribute("data-unavailable", !canUse);
     }
 
-    use.onclick = () => {
+    use.addEventListener("pointerdown", event => {
+      if (!event.isPrimary || event.button !== 0 || press) return;
       render();
-      if (el.hidden || use.disabled) return;
-      close();
-      sendBagCommand("use_item", {slot:choices.get(selected).slot});
+      if (el.hidden) return;
+      suppressPointerClick = false;
+      const {pointerId, clientX, clientY} = event;
+      const timer = setTimeout(() => {
+        render();
+        if (!press) return;
+        finishPress(true);
+        openPicker(false);
+      }, 450);
+      press = {pointerId, clientX, clientY, timer};
+    });
+    use.addEventListener("pointermove", event => {
+      if (!press || press.pointerId !== event.pointerId) return;
+      if (Math.hypot(event.clientX - press.clientX, event.clientY - press.clientY) > 8) finishPress(true);
+    });
+    use.addEventListener("pointerup", event => {
+      if (press?.pointerId !== event.pointerId) return;
       render();
-    };
-    swap.onclick = () => {
+      finishPress(false);
+    });
+    for (const type of ["pointercancel", "pointerleave", "lostpointercapture"]) {
+      use.addEventListener(type, event => {
+        if (press?.pointerId === event.pointerId) finishPress(true);
+      });
+    }
+    use.addEventListener("contextmenu", event => event.preventDefault());
+    use.onclick = event => {
+      if (event.pointerType && event.isPrimary === false) return;
+      if (suppressPointerClick && (event.detail > 0 || event.pointerType)) {
+        suppressPointerClick = false;
+        return;
+      }
       render();
       if (el.hidden) return;
       if (!list.hidden) { close(); return; }
-      list.hidden = false;
-      swap.setAttribute("aria-expanded", "true");
-      renderList();
-      (list.querySelector('[aria-pressed="true"]') || list.querySelector("button"))?.focus({preventScroll:true});
+      if (!canUse) return;
+      sendBagCommand("use_item", {slot:choices.get(selected).slot});
+      render();
     };
+    use.addEventListener("keydown", event => {
+      if (event.key !== "ArrowUp") return;
+      event.preventDefault();
+      event.stopPropagation();
+      render();
+      openPicker(true);
+    });
     document.addEventListener("pointerdown", event => { if (!el.contains(event.target)) close(); }, true);
     el.addEventListener("keydown", event => {
       if (event.key !== "Escape" || list.hidden) return;
       event.preventDefault();
       event.stopPropagation();
       close();
-      swap.focus({preventScroll:true});
+      use.focus({preventScroll:true});
     });
     return {el, render, close};
   }
