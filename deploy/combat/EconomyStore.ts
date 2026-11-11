@@ -13,7 +13,8 @@ import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js"
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, cityMarketSide, type CityContractOrder, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
+  CITY_PRODUCT, cityMarketSide, type CityContractOrder, type CityDisband, type CityFactoryOrder, type CityHaulOrder,
+  type CityMarketContributionOrder, type CityMarketItem,
   type CityMarketOrder, type CityMember,
   type CityMissionOrder, type CityNeutralMarketOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
@@ -338,6 +339,23 @@ export class EconomyStore {
     const {atCity,atMarket,contractsEnabled,now} = location;
     return {contracts:this.viewTradeContracts(actor, member, cities, atCity, atMarket, contractsEnabled),
       report:this.city.tradeRouteReport(now)};
+  }
+  viewMarketContribution(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.marketContributionView(actor, member, ownership);
+  }
+  marketContributionOrder(actor: string, member: CityMember | undefined, order: CityMarketContributionOrder,
+    ownership: CityOwnership, atCity: CitySite | null, now: number) {
+    const {requestId,epoch,amount} = order;
+    return this.once(actor, requestId, "city_market_contribution", {epoch,amount}, () => {
+      if (atCity !== CITY_MINING_SITE) throw Error("city_contribution_location");
+      if (!member) throw Error("city_not_member");
+      const receipt = this.city.recordMarketContribution(actor, member, order, ownership, now);
+      const account = this.account(actor);
+      if (account.gold < amount) throw Error("insufficient_gold");
+      account.gold -= amount;
+      this.put(actor, account);
+      return receipt;
+    });
   }
   tradeContractOrder(actor: string, member: CityMember | undefined, order: CityContractOrder, cities: CityOwnerships,
     atCity: CitySite | null, atMarket: CitySite | null, now: number) {

@@ -359,6 +359,7 @@
       local_market_trade:(cityMarketPlayerBuys(data)?"ซื้อแร่แล้ว · จ่าย ":"ขายแร่แล้ว · ได้รับ ")+data.total+" ทอง",
       neutral_market_list:"ฝากแร่ขึ้นขายแล้ว",neutral_market_buy:"ซื้อแร่แล้ว · จ่าย "+data.total+" ทอง",
       neutral_market_withdraw:"รับแร่คืน "+data.amount+" ชิ้น",
+      market_contribute:"สมทบทองตลาดกิลด์แล้ว "+data.amount+" ทอง",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -429,6 +430,9 @@
       city_neutral_market_closed:"รอบตลาดฝากขายสิ้นสุดแล้ว · ตรวจรายการรอรับคืน",
       city_neutral_market_full:"ชั้นฝากขายเต็ม · กรุณาตรวจจำนวนว่าง",
       city_neutral_offer_missing:"รายการฝากขายเปลี่ยนแล้ว · กรุณารีเฟรช",
+      city_contribution_disabled:"พักรับเงินสมทบตลาดกิลด์",
+      city_contribution_location:"ไปที่ด่านผนึกจันทราและยืนบนพื้นก่อนสมทบทอง",
+      city_contribution_siege:"พักรับเงินสมทบระหว่างศึก",
       insufficient_gold:"ทองในกระเป๋าไม่พอ",
       city_policy_disabled:"ศาลาว่าการยังไม่เปิด",city_policy_location:"ไปยืนบนพื้นในด่านผนึกจันทราก่อนเปลี่ยนนโยบาย",
       city_policy_siege:"พักเปลี่ยนนโยบายระหว่างศึก",city_policy_cooldown:"เปลี่ยนนโยบายได้ทุก 24 ชั่วโมง · กรุณารีเฟรช",
@@ -645,6 +649,24 @@
     }
     for(const entry of manage.history)note(target,new Date(entry.at).toLocaleString("th-TH")+" · "+entry.amount+" ชิ้น · "+entry.total+" ทอง");
   }
+  function renderCityMarketContribution(body,contribution,note,button,locked){
+    const section=marketText("section","gx-page");body.append(section);
+    section.append(marketText("h3","cp-h","สมทบทองตลาดจันทรา"));
+    note(section,"ทองในกระเป๋า "+cityMarkets.wallet+" · ทองตลาดกิลด์พร้อมใช้ "+contribution.available+" ทอง");
+    if(contribution.siege)note(section,"พักรับเงินสมทบระหว่างศึก");
+    else if(cityMarkets.atSite!=="moon_pass"){
+      note(section,"ยืนบนพื้นในด่านผนึกจันทราเพื่อสมทบทอง");
+      button(section,"ปักหมุดไปจันทรา",()=>pinCityTradeRoute("moon_pass"),locked);
+    }else if(cityMarkets.wallet>0){
+      cityAmountForm(section,"สมทบทองตลาด",[["ทองจากกระเป๋า",cityMarkets.wallet]],amount=>{
+        if(cityPositive(amount,cityMarkets.wallet) && window.confirm("สมทบ "+amount+" ทองให้กิลด์ผู้ครองจันทราใช่หรือไม่")){
+          sendCityProduction("market_contribute",{epoch:contribution.epoch,amount});
+        }
+      },locked);
+    }
+    for(const receipt of contribution.receipts)
+      note(section,"สมทบ "+receipt.gold+" ทอง · "+new Date(receipt.at).toLocaleString("th-TH"));
+  }
   function renderCityMarket(){
     const body=$("cityProductionContent"),ready=cityMarketReady(),locked=!!cityPending;
     if(!body)return;
@@ -659,6 +681,7 @@
     if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
     if(!ready)return;
     if(!cityMarkets){note(body,"กำลังโหลดราคาตลาดเมือง…");return;}
+    if(cityMarkets.contribution)renderCityMarketContribution(body,cityMarkets.contribution,note,button,locked);
     note(body,"ราคาของแต่ละชิ้นอาจเปลี่ยนตามสต็อก");
     const markets=cityMarketRows();
     for(const market of markets){
@@ -706,6 +729,7 @@
     contract_hold:"กันทองสัญญาจัดซื้อ",contract_paid:"จ่ายค่าของตามสัญญา",contract_release:"คืนทองสัญญาจัดซื้อ",
     local_market_hold:"กันงบตลาดเมือง",local_market_release:"คืนงบตลาดเมือง",
     local_market_income:"ขายสินค้าที่ตลาดเมือง",local_market_paid:"รับซื้อสินค้าที่ตลาดเมือง",
+    market_contribution:"สมาชิกสมทบทองตลาด",
     policy_industry:"เลือกนโยบายเน้นผลิต",policy_procurement:"เลือกนโยบายเน้นจัดซื้อ"
   };
   function renderCityGovernance(){
@@ -741,6 +765,7 @@
       " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" · ตลาดเมือง "+(treasury.localHeld ?? 0)+
       (treasury.contractHeld?" · สัญญาจัดซื้อ "+treasury.contractHeld:"")+" ทอง");
     note(ledger,"รายรับสะสม "+treasury.earned+" ทอง · จ่ายแล้ว "+treasury.paid+" ทอง");
+    if(treasury.contributions>0)note(ledger,"เงินสมทบจากสมาชิกสะสม "+treasury.contributions+" ทอง");
     const storage=group("คลังจันทรา");
     note(storage,"ใช้ "+used+" / "+capacity+" ชิ้น รวมพื้นที่ที่กันไว้");
     for(const row of stock)note(storage,cityItemName(row.item)+" × "+row.quantity);

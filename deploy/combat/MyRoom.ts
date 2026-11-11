@@ -91,11 +91,13 @@ import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, 
 import {
   CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_PRODUCT, CITY_MINING_SITE,
   CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
-  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MISSIONS_ENABLED, CITY_NEUTRAL_MARKET_ENABLED, CITY_PURCHASE_ENABLED,
+  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MARKET_CONTRIBUTIONS_ENABLED,
+  CITY_MISSIONS_ENABLED, CITY_NEUTRAL_MARKET_ENABLED, CITY_PURCHASE_ENABLED,
   CITY_RETURN_MARKET_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_TRADE_CONTRACTS_ENABLED, CITY_WORKSHOP_ENABLED,
   isCityContractOrder, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityNeutralMarketOrder, isCityPurchaseOrder, isCitySupplyOrder,
   isWarehouseOrder, parseCityOrder,
-  type CityContractOrder, type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityNeutralMarketOrder,
+  type CityContractOrder, type CityHaulOrder, type CityMarketContributionOrder, type CityMarketOrder,
+  type CityMissionOrder, type CityNeutralMarketOrder,
   type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
   type CitySite, type CitySupplyOrder,
 } from "./CityProductionRules.js";
@@ -190,6 +192,7 @@ const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MI
 const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
 const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
 const cityMarketIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_LOCAL_MARKET_ENABLED;
+const cityMarketContributionIntake = cityMarketIntake && CITY_MARKET_CONTRIBUTIONS_ENABLED;
 const cityReturnMarketIntake = cityMarketIntake && CITY_RETURN_MARKET_ENABLED;
 const cityNeutralMarketIntake = cityMarketIntake && CITY_NEUTRAL_MARKET_ENABLED;
 const cityContractIntake = cityMarketIntake && cityMissionIntake && CITY_TRADE_CONTRACTS_ENABLED;
@@ -4285,7 +4288,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder |
-    CityHaulOrder | CitySupplyOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder>, claimsOnly = false): void {
+    CityHaulOrder | CitySupplyOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder | CityMarketContributionOrder>,
+    claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
@@ -4441,13 +4445,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       fail(reason);
     }
   }
-  private cityMarketAction(client: Client, order?: CityMarketOrder | CityNeutralMarketOrder): void {
+  private cityMarketAction(client: Client, order?: CityMarketOrder | CityNeutralMarketOrder | CityMarketContributionOrder): void {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const cleanup = order?.action === "neutral_market_withdraw" || (order?.action === "local_market_config" ? !order.open :
       (order?.action === "local_market_stock" || order?.action === "local_market_budget") && order.amount < 0);
-    const intake = !order ? cityMarketIntake : isCityNeutralMarketOrder(order) ? cityNeutralMarketIntake :
+    const intake = !order ? cityMarketIntake : order.action === "market_contribute" ? cityMarketContributionIntake :
+      isCityNeutralMarketOrder(order) ? cityNeutralMarketIntake :
       order.item === CITY_MINING_PRODUCT ? cityReturnMarketIntake : cityMarketIntake;
-    if (!this.state.cityMarketSupported || (order && !cleanup && !intake)) return fail("city_market_disabled");
+    if (!this.state.cityMarketSupported || (order && !cleanup && !intake))
+      return fail(order?.action === "market_contribute" ? "city_contribution_disabled" : "city_market_disabled");
     const id = client.sessionId;
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -4462,7 +4468,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (order) {
         try {
           let result;
-          if (isCityNeutralMarketOrder(order)) {
+          if (order.action === "market_contribute") {
+            result = store.marketContributionOrder(actor, member, order, cities[CITY_MINING_SITE], atSite, now);
+            this.syncEconomy(client, actor);
+          } else if (isCityNeutralMarketOrder(order)) {
             result = store.neutralMarketOrder(actor, order, cities[CITY_PRODUCTION_SITE], atMarket, now);
             this.syncEconomy(client, actor);
           } else {
@@ -4483,6 +4492,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake, cityReturnMarketIntake, cityNeutralMarketIntake),
         tradeRoute: cityMarketIntake ? store.viewCityTradeRoute(actor, member, cities,
           {atCity:atSite, atMarket, contractsEnabled:cityContractIntake, now}) : null,
+        contribution: cityMarketContributionIntake ? store.viewMarketContribution(actor, member, cities[CITY_MINING_SITE]) : null,
         atSite, atMarket, enabled: cityMarketIntake, serverNow: now});
     } catch (error) {
       console.error("MONTRA city market action failed", error);
@@ -5157,7 +5167,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!order) return client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
       if (isCityPurchaseOrder(order)) this.cityBoardAction(client, "purchase", order);
       else if (isCityMissionOrder(order) || isCityHaulOrder(order) || isCityContractOrder(order)) this.cityBoardAction(client, "mission", order);
-      else if (isCityMarketOrder(order) || isCityNeutralMarketOrder(order)) this.cityMarketAction(client, order);
+      else if (isCityMarketOrder(order) || isCityNeutralMarketOrder(order) || order.action === "market_contribute")
+        this.cityMarketAction(client, order);
       else if (order.action === "policy_set" || isCitySupplyOrder(order)) this.cityGovernanceAction(client, order);
       else this.cityProductionAction(client, order);
     },

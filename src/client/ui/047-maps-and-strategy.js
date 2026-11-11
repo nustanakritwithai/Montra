@@ -904,7 +904,7 @@
         button("เปิดกระดานเพื่อออกสัญญา",openCityMission);
     }
     button("รีเฟรชราคาและสัญญา",refreshCityMarkets);
-    button("เปิดตลาดเมือง",openCityMarket);
+    button(cityMarkets.contribution?"เปิดตลาดและสมทบทอง":"เปิดตลาดเมือง",openCityMarket);
     if(job)button("เปิดกระดานสัญญา",openCityMission);
     if(job?.yours && job.expires>cityTradeNow())button("ปักหมุดไปส่งที่จันทรา",()=>pinCityTradeRoute(destination,job));
     else button("ปักหมุดไปสามลาน",()=>pinCityTradeRoute(source,open?job:null));

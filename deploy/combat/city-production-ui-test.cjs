@@ -478,6 +478,31 @@ test("the atlas compares exact contract quantities and follows the pinned delive
   assert.equal(f.wire.at(-1).command,"get_city_markets");
 });
 
+test("the market requires an on-site member, a valid amount and confirmation before funding the guild", () => {
+  const f=fixture({marketSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMarket();
+  const state={atSite:moon,markets:[],serverNow:1_000_000,history:[],wallet:100};
+  const contribution={epoch:8,available:0,receipts:[],siege:false};
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,atSite:river,contribution});
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,contribution:{...contribution,siege:true}});
+  assert.equal(f.button("สมทบทองตลาด"),undefined);
+  f.ctx.cityReceiveMarkets({...state,contribution});
+  f.submit("สมทบทองตลาด",101);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.ctx.window.confirm=()=>false;
+  f.submit("สมทบทองตลาด",96);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.ctx.window.confirm=()=>true;
+  f.submit("สมทบทองตลาด",96);
+  const sent=f.wire.at(-1).payload;
+  assert.deepEqual(sent,{action:"market_contribute",epoch:8,amount:96,requestId:sent.requestId});
+  f.ctx.cityReceiveResult({...sent,available:96});
+  assert.match(f.nodes.cityStatus.textContent,/สมทบทองตลาดกิลด์แล้ว 96 ทอง/);
+});
+
 test("the return quote uses tier-two quantities and the disabled market can release its budget", () => {
   const f=fixture({marketSupported:true});
   const river="sam_lan_estuary", moon="moon_pass", item="mat_metal_2";

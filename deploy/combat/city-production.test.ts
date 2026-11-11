@@ -64,7 +64,7 @@ function fixture(t: TestContext) {
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
       !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) &&
       !isCityMarketOrder(parsed) && !isCityContractOrder(parsed) && !isCitySupplyOrder(parsed) &&
-      !isCityNeutralMarketOrder(parsed) && parsed.action !== "policy_set");
+      !isCityNeutralMarketOrder(parsed) && parsed.action !== "policy_set" && parsed.action !== "market_contribute");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -1355,6 +1355,90 @@ test("neutral shelf caps and stale rounds survive even if conquest and abandonme
   assert.equal(f.board(visitor,f.now+2).job,null);
   assert.equal(f.miningStock(f.now+2).marketGold,100);
   assert.throws(()=>f.market(member,f.listing,f.now+2),/city_neutral_market_closed/);
+});
+
+function contributionFixture(t: TestContext) {
+  const f=miningFixture(t,leader), river=CITY_PRODUCTION_SITE, moon=CITY_MINING_SITE, now=1_001;
+  f.guild.war.government.settleVictory(river,null,now,false);
+  f.economy.register(visitor,bag());
+  const cities=(at:number)=>({[river]:f.sync(at,river),[moon]:f.sync(at,moon)});
+  const epoch=cities(now)[moon].active!.id;
+  const contribute=(actor:string,amount:number,atCity:CitySite|null=moon,requestId=f.request(),at=now,expected=epoch)=>{
+    const order=parseCityOrder({action:"market_contribute",epoch:expected,amount,requestId});
+    assert.ok(order?.action==="market_contribute");
+    return f.economy.marketContributionOrder(actor,f.guild.war.member(actor),order,cities(at)[moon],atCity,at);
+  };
+  const contribution=(actor:string,at=now)=>
+    f.economy.viewMarketContribution(actor,f.guild.war.member(actor),cities(at)[moon]);
+  return {...f,get economy(){return f.economy;},get guild(){return f.guild;},now,epoch,contribute,contribution,cities};
+}
+
+test("member contributions start the first contract and turn its shipment into the first Moon factory output", t=>{
+  const f=contributionFixture(t), river=CITY_PRODUCTION_SITE, moon=CITY_MINING_SITE, {now,epoch}=f;
+  assert.equal(f.contribution(visitor),null);
+  assert.equal(f.contribution(member)?.available,0);
+  assert.equal(f.miningStock(now).level,0);
+  assert.equal(parseCityOrder({action:"market_contribute",epoch,amount:-1,requestId:f.request()}),null);
+  assert.throws(()=>f.contribute(visitor,1),/city_not_member/);
+  assert.throws(()=>f.contribute(rival,1),/city_not_owner/);
+  assert.throws(()=>f.contribute(member,1,river),/city_contribution_location/);
+  assert.throws(()=>f.contribute(member,1,moon,f.request(),now,epoch+1),/city_ownership_changed/);
+  assert.throws(()=>f.contribute(member,1001),/insufficient_gold/);
+  assert.equal(f.contribution(member)?.available,0);
+  assert.deepEqual(f.contribution(member)?.receipts,[]);
+  const requestId=f.request(), receipt=f.contribute(member,46,moon,requestId);
+  assert.deepEqual(receipt,{amount:46,available:46});
+  assert.equal(f.contribute(leader,50).available,96);
+  f.restart();
+  assert.deepEqual(f.contribute(member,46,moon,requestId),receipt);
+  assert.throws(()=>f.contribute(member,47,moon,requestId),/request_id_conflict/);
+  assert.equal(f.economy.getAccount(member).gold,954);
+  assert.equal(f.economy.getAccount(leader).gold,950);
+  assert.equal(f.contribution(member)?.available,96);
+  assert.equal(f.contribution(member)?.receipts.length,1);
+
+  const inventory=bag();inventory.slots[2]={itemId:CITY_PRODUCT,quantity:6};
+  f.economy.saveCharacter(rival,{},inventory);
+  const source=f.cities(now)[river];
+  assert.ok(source.neutralEpoch!==undefined);
+  f.economy.neutralMarketOrder(rival,{action:"neutral_market_list",epoch:source.neutralEpoch,slot:2,amount:6,unitPrice:13,
+    requestId:f.request()},source,river,now);
+  const {contractId}=f.economy.tradeContractOrder(leader,f.guildMember(leader),
+    {action:"contract_open",epoch,amount:6,gold:96,requestId:f.request()},f.cities(now),moon,moon,now);
+  assert.equal(f.contribution(leader)?.available,0);
+  f.economy.tradeContractOrder(visitor,undefined,{action:"contract_accept",contractId,total:78,requestId:f.request()},
+    f.cities(now),river,river,now);
+  f.economy.tradeContractOrder(visitor,undefined,{action:"contract_deliver",contractId,requestId:f.request()},
+    f.cities(now+1),moon,moon,now+1);
+  assert.equal(f.economy.getAccount(visitor).gold,1018);
+  assert.equal(f.economy.getAccount(rival).gold,1078);
+  f.mine({action:"deposit",slot:1,item:CITY_MINING_ORE,amount:7},now+1);
+  assert.deepEqual(f.mine({action:"build"},now+1),{level:1});
+  const batch=f.mine({action:"start"},now+1);
+  assert.deepEqual(f.miningStock(Number(batch.readyAt)).stock.map(row=>[row.item,row.quantity]),[[CITY_MINING_PRODUCT,1]]);
+  const treasury=f.economy.viewCityGovernance(f.guildMember(leader),f.sync(Number(batch.readyAt),moon)).treasury;
+  assert.equal(treasury.contributions,96);
+  assert.equal(treasury.contractPaid,96);
+  assert.equal(treasury.available,0);
+});
+
+test("market contributions belong to the original guild through conquest and disband", t=>{
+  const f=contributionFixture(t), moon=CITY_MINING_SITE, {now,epoch}=f;
+  const siege={...f.cities(now)[moon],siegeStarted:now};
+  assert.throws(()=>f.economy.marketContributionOrder(member,f.guildMember(member),
+    {action:"market_contribute",epoch,amount:1,requestId:f.request()},siege,moon,now),/city_contribution_siege/);
+  f.contribute(member,40);
+  f.capture(rival,now+1,moon);
+  f.restart();
+  assert.equal(f.contribution(member,now+1),null);
+  assert.equal(f.contribution(rival,now+1)?.available,0);
+  assert.equal(f.miningStock(now+1).marketGold,40);
+  assert.throws(()=>f.contribute(member,1,moon,f.request(),now+1),/city_not_owner/);
+  f.guild.leave(member);
+  const guild=f.guildMember(leader).id;
+  f.guild.settleCityDisband(f.economy,f.guild.beginCityDisband(leader,guild,now+2));
+  assert.equal(f.economy.cityDisbandClaims(leader).find(row=>row.item==="gold")?.amount,40);
+  assert.equal(f.economy.getAccount(member).gold,960);
 });
 
 test("cross-guild freight reserves capacity only after approval and pays the assigned courier exactly once", t => {

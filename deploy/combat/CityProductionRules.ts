@@ -18,6 +18,7 @@ export const CITY_LOCAL_MARKET_ENABLED = process.env.MONTRA_CITY_LOCAL_MARKETS =
 export const CITY_RETURN_MARKET_ENABLED = process.env.MONTRA_CITY_RETURN_MARKET === "1";
 export const CITY_TRADE_CONTRACTS_ENABLED = process.env.MONTRA_CITY_TRADE_CONTRACTS === "1";
 export const CITY_NEUTRAL_MARKET_ENABLED = process.env.MONTRA_CITY_NEUTRAL_MARKET === "1";
+export const CITY_MARKET_CONTRIBUTIONS_ENABLED = process.env.MONTRA_CITY_MARKET_CONTRIBUTIONS === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
@@ -123,6 +124,7 @@ export type CityNeutralMarketOrder = {requestId: string} & (
   {action: "neutral_market_buy"; epoch: number; amount: number; total: number} |
   {action: "neutral_market_withdraw"; offerId: string}
 );
+export type CityMarketContributionOrder = {requestId: string; action: "market_contribute"; epoch: number; amount: number};
 export type CityHaulOrder = {requestId: string} & (
   {action: "haul_open"; epoch: number; destination: CitySite; destinationEpoch: number;
     amount: number; reward: number; audience: "guild" | "public"} |
@@ -143,7 +145,8 @@ export type CityFactoryOrder = {requestId: string} & (
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
 export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder |
-  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder | ({requestId: string} & (
+  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder |
+  CityMarketContributionOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -280,6 +283,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.total, 1, CITY_MARKET_QUANTITY * CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "market_contribute":
+      return keys("epoch", "amount") && integer(order.amount, 1, CITY_MARKET_BUDGET) ? order as CityOrder : null;
     case "contract_open":
       return keys("epoch", "amount", "gold") && integer(order.amount, 1, CITY_MARKET_QUANTITY) &&
         integer(order.gold, 1, CITY_MISSION_MAX_REWARD) ? order as CityOrder : null;
