@@ -8,14 +8,15 @@ import {pathToFileURL} from "node:url";
 export type PotGhost = {instanceId: string; name: string; level: number};
 type Position = {x: number; y: number; z: number};
 type Command = {
-  commandId: string; instanceId: string; zone: string; kind: "summon" | "recall";
-  targetPoint?: Position; expectedActiveGeneration?: number;
+  commandId: string; instanceId: string; zone: string; kind: "summon" | "recall" | "switch";
+  targetPoint?: Position; expectedActiveInstanceId?: string; expectedActiveGeneration?: number;
 };
 type Result = {
   accepted: boolean; code: string; replay?: boolean;
-  active?: (Position & {actorId: string; generation: number}) | null;
+  active?: (Position & {actorId: string; instanceId: string; generation: number}) | null;
 };
-type Request = {owner: string; position: Position; ghost: PotGhost & {speciesId: string}; command: Command}
+type PartyGhost = Pick<PotGhost, "instanceId" | "level"> & {speciesId: string; slot: number};
+type Request = {owner: string; position: Position; party: PartyGhost[]; command: Command}
   | {owner: string; disconnect: true};
 type Pending = {resolve: (result: Result) => void; reject: (error: Error) => void; timer: NodeJS.Timeout};
 

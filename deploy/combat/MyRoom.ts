@@ -19,7 +19,11 @@ import {RIVER_CITY,RIVER_WAREHOUSE_PLOT,riverNodes,riverPosts,riverSupplied} fro
 import {CASTLE_ID,CAPTURE_RADIUS,castleObjectives,musterNodes,pilotSpawn,forwardCamps,castleLogistics} from "./CastlePilot.js";
 import { Encoder, StateView } from "@colyseus/schema";
 import { randomUUID,randomInt } from "node:crypto";
-import {ghostPotConfig, LegacyGhostWorker, POT_CAPTURE_PROFILE, rollPotCapture, type PotGhost} from "./LegacyGhostPot.js";
+import {ghostPotConfig, LegacyGhostWorker, POT_CAPTURE_PROFILE, rollPotCapture} from "./LegacyGhostPot.js";
+import {
+  addCapturedGhost, findPoolGhost, GHOST_POOL_CAPACITY, makeGhostPool, parseGhostCommand, placePoolGhost,
+  type GhostPool,
+} from "./GhostPool.js";
 import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
   CHARACTER_SAVE_INTERVAL_MS, characterStore, characterIdFromToken,
@@ -280,8 +284,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private readonly boatWorld = new MontraBoats();
   private readonly ghostConfig = ghostPotConfig();
   private ghostWorker?: LegacyGhostWorker;
-  private readonly ghostPots = new Map<string, PotGhost>();
-  private readonly ghostGenerations = new Map<string, number>();
+  private readonly ghostPools = new Map<string, GhostPool>();
+  private readonly activeGhosts = new Map<string, {instanceId: string; generation: number}>();
   private readonly ghostControlPending = new Set<string>();
   private readonly ghostCaptureTargets = new Set<string>();
   private readonly ghostCaptureReadyAt = new Map<string, number>();
@@ -4955,12 +4959,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(signature!==this.warSent.get(c.sessionId)){c.send("territory_state",payload);this.warSent.set(c.sessionId,signature);}
     }
   }
-  private sendGhostPot(client: Client, status: string) {
+  private sendGhostPot(client: Client, status: string, capturedInstanceId?: string) {
     const id = client.sessionId;
+    const pool = this.ghostPools.get(id) ?? makeGhostPool();
+    const activeInstanceId = this.activeGhosts.get(id)?.instanceId ?? null;
     client.send("ghost_pot_state", {
-      ghost: this.ghostPots.get(id) ?? null,
-      active: this.ghostGenerations.has(id),
+      ghost: findPoolGhost(pool, activeInstanceId ?? pool.slots[pool.selectedSlot]) ?? null,
+      active: activeInstanceId !== null,
       status,
+      pool,
+      capacity: GHOST_POOL_CAPACITY,
+      activeInstanceId,
+      capturedInstanceId,
     });
   }
 
@@ -4968,27 +4978,46 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (this.ghostWorker !== worker) return;
     this.ghostWorker = undefined;
     worker.close();
-    for (const owner of this.ghostGenerations.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
+    for (const owner of this.activeGhosts.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
   }
 
   private async handleGhostPot(client: Client, message: unknown) {
     const config = this.ghostConfig, id = client.sessionId, owner = this.state.players.get(id);
     if (!config || this.field || !characterStore.economyEnabled || !owner || !this.persistentCharacters.has(id))
       return this.reject(client, "ghost_pot_unavailable");
-    if (!message || typeof message !== "object" || Array.isArray(message)) return this.reject(client, "invalid_ghost_pot");
-    const input = message as {action?: unknown; targetId?: unknown};
-    if (Object.keys(input).some(key => key !== "action" && key !== "targetId"))
-      return this.reject(client, "invalid_ghost_pot");
-    if (input.action === "read" && input.targetId === undefined) return this.sendGhostPot(client, "ready");
+    const input = parseGhostCommand(message);
+    if (!input) return this.reject(client, "invalid_ghost_pot");
+    if (input.action === "read") return this.sendGhostPot(client, "ready");
     if (!owner.alive || owner.mounted || owner.possessionActive || this.pendingWarps.has(id) ||
         this.pendingCharacterLeaves.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) ||
         this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) return this.reject(client, "ghost_pot_busy");
 
-    const ghost = this.ghostPots.get(id);
+    const pool = this.ghostPools.get(id) ?? makeGhostPool();
+    const current = this.activeGhosts.get(id);
+    if ("revision" in input) {
+      const placement = placePoolGhost(pool, input, current?.instanceId);
+      if (placement.pool === pool) return this.sendGhostPot(client, placement.status);
+      const snapshot = this.captureCharacterSnapshot(id);
+      if (!snapshot) return this.sendGhostPot(client, "unavailable");
+      const task = characterStore.save({...snapshot, ghostPool: placement.pool})
+        .then(() => {
+          this.ghostPools.set(id, placement.pool);
+          this.sendGhostPot(client, placement.status);
+        })
+        .catch(error => {
+          console.error("MONTRA ghost pool placement failed", error);
+          this.sendGhostPot(client, "unavailable");
+        })
+        .finally(() => this.pendingItemUses.delete(id));
+      this.pendingItemUses.set(id, task);
+      await task;
+      return;
+    }
+
     if (input.action === "capture") {
-      if (ghost || this.state.summons.has(id)) return this.reject(client, "ghost_pot_occupied");
-      if (typeof input.targetId !== "string" || input.targetId.length > 96) return this.reject(client, "invalid_ghost_pot");
+      if (this.state.summons.has(id)) return this.reject(client, "ghost_pot_occupied");
+      if (pool.collection.length >= GHOST_POOL_CAPACITY) return this.sendGhostPot(client, "pool_full");
       const targetId = input.targetId, target = this.getMonster(targetId);
       if (!target?.alive || target.hp <= 0 || target.tier !== "normal" || target.level > 60 ||
           target.mapId !== owner.mapId || distance3d(owner, target) > 8 || !this.bodyPathClear(owner.mapId, owner, target))
@@ -5009,12 +5038,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const snapshot = this.captureCharacterSnapshot(id);
           if (!snapshot) return this.sendGhostPot(client, "unavailable");
           const captured = {instanceId: randomUUID(), name: (target.displayName || "ผี").slice(0, 80), level: target.level};
-          // Economy-mode saves commit synchronously to SQLite before resolving.
-          // The pot becomes occupied only after the character snapshot commits.
-          await characterStore.save({...snapshot, ghostPot: captured});
-          this.ghostPots.set(id, captured);
+          const nextPool = addCapturedGhost(pool, captured);
+          await characterStore.save({...snapshot, ghostPool: nextPool});
+          this.ghostPools.set(id, nextPool);
           this.retireMonster(target);
-          this.sendGhostPot(client, "captured");
+          this.sendGhostPot(client, "captured", captured.instanceId);
         } catch (error) {
           console.error("MONTRA ghost capture failed", error);
           this.sendGhostPot(client, "unavailable");
@@ -5028,19 +5056,27 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
 
     const kind = input.action;
-    if ((kind !== "summon" && kind !== "recall") || input.targetId !== undefined)
+    if (kind !== "summon" && kind !== "recall" && kind !== "switch")
       return this.reject(client, "invalid_ghost_pot");
+    const ghost = findPoolGhost(pool, kind === "recall" ? current?.instanceId : pool.slots[pool.selectedSlot]);
     if (!ghost) return this.reject(client, "ghost_pot_empty");
-    const generation = this.ghostGenerations.get(id);
-    if (kind === "summon" ? this.state.summons.has(id) : !generation)
+    const priorSummon = this.state.summons.get(id);
+    if (kind === "summon" ? priorSummon : !current || priorSummon?.kind !== "captured_ghost")
       return this.reject(client, "ghost_pot_busy");
+    if (kind === "switch" && ghost.instanceId === current?.instanceId) return this.sendGhostPot(client, "ready");
     const zone = owner.mapId, position = {x: owner.x, y: owner.y, z: owner.z};
+    const party = pool.slots.flatMap((instanceId, slot) => {
+      const entry = findPoolGhost(pool, instanceId);
+      return entry ? [{instanceId: entry.instanceId, level: entry.level, slot, speciesId: POT_CAPTURE_PROFILE}] : [];
+    });
     const worker = this.ghostWorker ??= new LegacyGhostWorker(config.worker);
     this.ghostControlPending.add(id);
     try {
-      const reply = await worker.send({owner: id, position, ghost: {...ghost, speciesId: POT_CAPTURE_PROFILE}, command: {
+      const reply = await worker.send({owner: id, position, party, command: {
         commandId: randomUUID(), instanceId: ghost.instanceId, zone, kind,
-        ...(kind === "summon" ? {targetPoint: position} : {expectedActiveGeneration: generation}),
+        ...(kind !== "recall" && {targetPoint: position}),
+        ...(current && {expectedActiveGeneration: current.generation}),
+        ...(kind === "switch" && current && {expectedActiveInstanceId: current.instanceId}),
       }});
       if (this.ghostWorker !== worker) return;
       if (!reply.accepted) return this.sendGhostPot(client, "unavailable");
@@ -5049,20 +5085,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.sendGhostPot(client, "recalled");
       }
       const active = reply.active;
-      if (!active || !Number.isSafeInteger(active.generation) || ![active.x, active.y, active.z].every(Number.isFinite))
+      if (!active || active.instanceId !== ghost.instanceId || !Number.isSafeInteger(active.generation) ||
+          ![active.x, active.y, active.z].every(Number.isFinite))
         throw new Error("invalid_ghost_worker_actor");
       if (this.state.players.get(id) !== owner || !owner.alive || owner.mapId !== zone ||
           this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || owner.mounted ||
-          owner.possessionActive || this.state.summons.has(id)) {
-        await worker.send({owner: id, disconnect: true});
-        return;
+          owner.possessionActive || this.state.summons.get(id) !== priorSummon) {
+        if (this.state.summons.get(id)?.kind === "captured_ghost") this.despawnSummon(id, "ghost_owner_unavailable");
+        else await worker.send({owner: id, disconnect: true});
+        return this.sendGhostPot(client, "unavailable");
       }
-      this.ghostGenerations.set(id, active.generation);
+      this.activeGhosts.set(id, {instanceId: ghost.instanceId, generation: active.generation});
       this.state.summons.set(id, new SummonedGuardian({
         ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
       }));
       this.broadcast("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
-      this.sendGhostPot(client, "summoned");
+      this.sendGhostPot(client, kind === "switch" ? "switched" : "summoned");
     } catch (error) {
       console.error("MONTRA ghost worker failed", error);
       this.resetGhostWorker(worker);
@@ -6584,12 +6622,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const summon = this.state.summons.get(ownerId);
     if (!summon) return;
     if (summon.kind === "captured_ghost") {
-      this.ghostGenerations.delete(ownerId);
+      this.activeGhosts.delete(ownerId);
       const worker = this.ghostWorker;
       if (worker) void worker.send({owner: ownerId, disconnect: true}).catch(() => this.resetGhostWorker(worker));
-      this.clients.find(client => client.sessionId === ownerId)?.send("ghost_pot_state", {
-        ghost: this.ghostPots.get(ownerId) ?? null, active: false, status: "ready",
-      });
+      const client = this.clients.find(candidate => candidate.sessionId === ownerId);
+      if (client && reason !== "ghost_recalled") this.sendGhostPot(client, "ready");
     }
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
@@ -7746,7 +7783,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       y:civilian?.y??(shore ? (getWorldMap(player.mapId)?.reliefLabels ? 0 : shore.y) :
         player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
       z:civilian?.z??shore?.z??player.z,
-      ghostPot: this.ghostPots.get(id),
+      ghostPool: this.ghostPools.get(id),
       inventory, updatedAt: new Date().toISOString(),
     };
   }
@@ -7941,7 +7978,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (!saved?.inventory) throw new Error("inventory_migration_missing");
         if (characterStore.economyEnabled) this.needs.set(client.sessionId, characterStore.economy.needsState(characterId));
         this.persistentCharacters.set(client.sessionId, characterId);
-        if (saved.ghostPot) this.ghostPots.set(client.sessionId, saved.ghostPot);
+        if (saved.ghostPool || saved.ghostPot)
+          this.ghostPools.set(client.sessionId, saved.ghostPool ?? makeGhostPool(saved.ghostPot));
         this.guildSubscriptions.set(client.sessionId,subscribeGuild(characterId,()=>this.sendGuild(client,characterId)));
         this.inventories.set(client.sessionId, saved.inventory);
         this.activeGuestAccounts.set(client.sessionId, accountId);
@@ -8092,7 +8130,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.swordGuards.delete(id);
       this.hpRegenRemainder.delete(id);
       this.inventories.delete(id);
-      this.ghostPots.delete(id);
+      this.ghostPools.delete(id);
+      this.activeGhosts.delete(id);
       this.ghostCaptureReadyAt.delete(id);
       this.itemUseReadyAt.delete(id);
       this.lastInventoryReadMs.delete(id);

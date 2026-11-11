@@ -67,12 +67,210 @@
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
   let ghostPotState = null;
+  let ghostPoolPending = null, ghostPoolFocus = null, ghostPoolTab = "carry";
+  let ghostPoolFocusKey = null;
+  const ghostPendingLabels = {capture:"กำลังจับ…",summon:"กำลังเรียก…",recall:"กำลังเก็บ…",switch:"กำลังสลับ…",
+    select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…"};
+
+  function ghostPoolView(state) {
+    const pool = state?.pool;
+    if (!Array.isArray(pool?.collection) || !Array.isArray(pool.slots) || pool.slots.length !== 3) return null;
+    const byId = new Map(pool.collection.map(ghost => [ghost.instanceId, ghost]));
+    const slots = pool.slots.map(id => byId.get(id) ?? null);
+    const assigned = new Set(pool.slots);
+    const reserve = pool.collection.filter(ghost => !assigned.has(ghost.instanceId));
+    const selected = slots[pool.selectedSlot] ?? null;
+    const active = byId.get(state.activeInstanceId) ?? null;
+    return {pool, byId, slots, selected, active, carry:[...slots.filter(Boolean), ...reserve].slice(0,6)};
+  }
+  function ghostPoolSummonAction(view) {
+    if (view.active) return view.selected && view.active !== view.selected ? "switch" : "recall";
+    return view.selected ? "summon" : null;
+  }
+  function clearGhostPoolPending() {
+    if (ghostPoolPending) clearTimeout(ghostPoolPending.timer);
+    ghostPoolPending = null;
+  }
+  function resetGhostPotUi() {
+    ghostPotState = null;
+    ghostPoolFocus = null;
+    ghostPoolFocusKey = null;
+    clearGhostPoolPending();
+    syncGhostPoolUi();
+  }
+  function sendGhostPoolCommand(action, args = {}) {
+    if (mode !== "live" || !room || !ghostPotState || ghostPoolPending) return;
+    const currentRoom = room;
+    ghostPoolPending = {action, timer:setTimeout(() => {
+      clearGhostPoolPending();
+      syncGhostPoolUi();
+      if (room !== currentRoom) return;
+      toast("ยังไม่ได้รับผลจากหม้ออาคม · กำลังโหลดสถานะ");
+      try { currentRoom.send("ghost_pot", {action:"read"}); }
+      catch (_) { toast("โหลดสถานะหม้ออาคมไม่สำเร็จ"); }
+    }, 6500)};
+    syncGhostPoolUi();
+    try { currentRoom.send("ghost_pot", {action,...args}); }
+    catch (_) {
+      clearGhostPoolPending();
+      syncGhostPoolUi();
+      toast("ส่งคำสั่งหม้ออาคมไม่สำเร็จ");
+    }
+  }
+  function ghostPoolCommandLabel(action) {
+    return {summon:"เรียก",recall:"เก็บ",switch:"สลับ"}[action] || "เรียก";
+  }
+  function syncGhostPoolUi() {
+    const group = $("ghostFieldActions"), capture = $("ghostPotButton"), summon = $("ghostSummonButton");
+    if (!group || !capture || !summon) return;
+    const poolButton = $("ghostPoolButton"), caption = $("ghostFieldStatus");
+    const state = ghostPotState, view = ghostPoolView(state), action = view && ghostPoolSummonAction(view);
+    group.hidden = !state;
+    capture.hidden = !state;
+    poolButton.hidden = !view;
+    summon.hidden = !action;
+    const captureLabel = view ? "จับ" : state?.active ? "เก็บ" : state?.ghost ? "เรียก" : "จับ";
+    capture.textContent = captureLabel;
+    capture.title = view?.active ? "เก็บผีก่อนจับตัวถัดไป" : !view && state?.active ? "เก็บผีกลับหม้อ"
+      : !view && state?.ghost ? "เรียก" + state.ghost.name : "จับผีใส่หม้อ";
+    capture.setAttribute("aria-label",capture.title);
+    capture.disabled = Boolean(ghostPoolPending || view?.active);
+    capture.setAttribute("aria-pressed",String(!view && state?.active === true));
+    summon.textContent = ghostPoolCommandLabel(action);
+    summon.title = summon.textContent + (action === "recall" ? view?.active?.name || "ผี" : view?.selected?.name || "ผี");
+    summon.setAttribute("aria-label",summon.title);
+    summon.disabled = Boolean(ghostPoolPending);
+    const pending = ghostPendingLabels[ghostPoolPending?.action];
+    const selected = view?.selected ? "ช่อง " + (view.pool.selectedSlot+1) + " · " + view.selected.name : "";
+    const active = view?.active ? "ออกมาแล้ว · " + view.active.name : "";
+    const text = pending || [selected, active].filter(Boolean).join(" / ");
+    caption.hidden = !text;
+    if (caption.textContent !== text) caption.textContent = text;
+    if (drawerActive === "ghostPool") {
+      if (view) renderGhostPool(view);
+      else closeDrawer();
+    }
+  }
+  function receiveGhostPot(state) {
+    clearGhostPoolPending();
+    ghostPotState = state;
+    syncGhostPoolUi();
+    const captured = ghostPoolView(state)?.byId.get(state.capturedInstanceId) ?? state.ghost;
+    const notices = {
+      captured:"จับ" + (captured?.name || "ผี") + "เข้าคลังแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
+      summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", switched:"สลับเป็น" + (state.ghost?.name || "ผีที่เลือก") + "แล้ว",
+      unavailable:"หม้ออาคมยังใช้ไม่ได้", target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่",
+      stale:"คลังผีเปลี่ยนแล้ว เลือกช่องใหม่อีกครั้ง", active_locked:"เก็บผีที่เรียกออกมาก่อนย้ายเข้าคลัง",
+      not_owned:"ไม่พบผีตัวนี้ในคลัง", slot_empty:"ช่องเรียกนี้ยังว่าง", pool_full:"คลังผีเต็มแล้ว",
+    };
+    if (Object.hasOwn(notices,state.status)) toast(notices[state.status]);
+  }
+  function renderGhostPool(view) {
+    const root = document.createElement("div");
+    root.className = "ghost-pool";
+    const focusedKey = document.activeElement?.dataset.ghostPoolKey ?? ghostPoolFocusKey;
+    ghostPoolFocusKey = ghostPoolPending ? focusedKey : null;
+    let restoreFocus = null;
+    const element = (parent, tag, text, className = "") => {
+      const node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text) node.textContent = text;
+      parent.append(node);
+      return node;
+    };
+    const button = (parent,label,key,click,{disabled=false,pressed}={}) => {
+      const node = element(parent,"button",label);
+      node.type = "button";
+      node.disabled = disabled;
+      node.dataset.ghostPoolKey = key;
+      if (pressed !== undefined) node.setAttribute("aria-pressed",String(pressed));
+      node.onclick = click;
+      if (key === focusedKey) restoreFocus = node;
+      return node;
+    };
+    const busy = Boolean(ghostPoolPending);
+    if (busy) element(root,"p",ghostPendingLabels[ghostPoolPending.action],"muted").setAttribute("role","status");
+    const order = (action,args) => sendGhostPoolCommand(action,{...args,revision:view.pool.revision});
+    element(root,"h3","ช่องเรียก");
+    const slots = element(root,"div","","ghost-pool-grid");
+    view.slots.forEach((ghost,slot) => {
+      const label = "ช่อง " + (slot+1) + " · " + (ghost?.name ?? "ว่าง");
+      button(slots,label,"slot-"+slot,() => {
+        ghostPoolFocus = ghost.instanceId;
+        if (view.pool.selectedSlot === slot) renderGhostPool(view);
+        else order("select",{slot});
+      },{disabled:busy || !ghost,pressed:view.pool.selectedSlot === slot && Boolean(ghost)});
+    });
+    const commandRow = element(root,"div","","ghost-pool-buttons");
+    const summonAction = ghostPoolSummonAction(view);
+    if (summonAction) {
+      button(commandRow,ghostPoolCommandLabel(summonAction) + (summonAction === "recall" ? view.active.name : view.selected.name),
+        "summon",() => sendGhostPoolCommand(summonAction),{disabled:busy});
+      if (summonAction === "switch") button(commandRow,"เก็บ" + view.active.name,"recall",
+        () => sendGhostPoolCommand("recall"),{disabled:busy});
+    }
+    const tabs = element(root,"div","","ghost-pool-buttons");
+    const capacity = Number.isSafeInteger(ghostPotState.capacity) ? "/" + ghostPotState.capacity : "";
+    for (const [id,label] of [["carry","พูลพก "+view.carry.length+"/6"],["all","คลังทั้งหมด "+view.pool.collection.length+capacity]]) {
+      button(tabs,label,"tab-"+id,() => {ghostPoolTab=id;ghostPoolFocus=null;renderGhostPool(view);},{pressed:ghostPoolTab===id});
+    }
+    const ghosts = ghostPoolTab === "carry" ? view.carry : view.pool.collection;
+    const cards = element(root,"div","","ghost-pool-grid ghost-pool-cards");
+    const badge = ghost => {
+      if (view.active === ghost) return "กำลังเรียก";
+      const slot = view.slots.indexOf(ghost);
+      return slot >= 0 ? "ช่อง " + (slot+1) : "สำรอง";
+    };
+    for (const ghost of ghosts) {
+      const card = button(cards,"","ghost-"+ghost.instanceId,() => {ghostPoolFocus=ghost.instanceId;renderGhostPool(view);},
+        {pressed:ghostPoolFocus===ghost.instanceId});
+      const portrait = element(card,"span","👻","ghost-pool-portrait");
+      portrait.setAttribute("aria-hidden","true");
+      element(card,"strong",ghost.name);
+      element(card,"small","Lv. "+ghost.level+" · "+badge(ghost));
+    }
+    if (!ghosts.length) element(root,"p","เลือกผีในฉากแล้วกดจับเพื่อเพิ่มเข้าคลัง","muted");
+    const ghost = view.byId.get(ghostPoolFocus);
+    if (ghost) {
+      const detail = element(root,"section","","ghost-pool-detail");
+      detail.setAttribute("aria-label","รายละเอียดผี");
+      element(detail,"h3",ghost.name);
+      element(detail,"p","Lv. "+ghost.level+" · "+badge(ghost));
+      const actions = element(detail,"div","","ghost-pool-buttons");
+      view.slots.forEach((occupant,slot) => {
+        button(actions,"ใส่ช่อง "+(slot+1),"assign-"+slot,() => order("assign",{slot,instanceId:ghost.instanceId}),
+          {disabled:busy || occupant===ghost || Boolean(occupant && occupant===view.active)});
+      });
+      if (view.slots.includes(ghost)) button(actions,"เก็บเป็นสำรอง","reserve",
+        () => order("reserve",{instanceId:ghost.instanceId}),{disabled:busy || view.active===ghost});
+      if (view.active===ghost) element(detail,"small","เก็บผีกลับหม้อก่อนย้ายเป็นสำรอง","muted");
+    }
+    ui.drawerBody.replaceChildren(root);
+    if (restoreFocus && !restoreFocus.disabled) restoreFocus.focus({preventScroll:true});
+  }
+  $("ghostPoolButton")?.addEventListener("click", () => {
+    const view = ghostPoolView(ghostPotState);
+    if (!view) return;
+    ghostPoolTab = "carry";
+    ghostPoolFocus = null;
+    ghostPoolFocusKey = null;
+    openDrawer("ghostPool","คลังผี","");
+    renderGhostPool(view);
+  });
   $("ghostPotButton")?.addEventListener("click", () => {
-    if (mode !== "live" || !room || !ghostPotState) return;
+    const state = ghostPotState;
+    if (!state) return;
+    if (!ghostPoolView(state) && (state.active || state.ghost)) {
+      return sendGhostPoolCommand(state.active ? "recall" : "summon");
+    }
     const targetId = selectedForestTarget || (hudTarget.until > performance.now() ? hudTarget.id : null);
-    if (!ghostPotState.ghost && !targetId) return toast("เลือกผีที่อยู่ใกล้ก่อนใช้หม้ออาคม");
-    const action = ghostPotState.active ? "recall" : ghostPotState.ghost ? "summon" : "capture";
-    room.send("ghost_pot", action === "capture" ? {action, targetId} : {action});
+    if (!targetId) return toast("เลือกผีที่อยู่ใกล้ก่อนใช้หม้ออาคม");
+    sendGhostPoolCommand("capture",{targetId});
+  });
+  $("ghostSummonButton")?.addEventListener("click", () => {
+    const view = ghostPoolView(ghostPotState);
+    const action = view && ghostPoolSummonAction(view);
+    if (action) sendGhostPoolCommand(action);
   });
   function triggerWarBanner() {
     if (window.MontraBanner?.plantBanner) {

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -112,7 +112,12 @@
       <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
       <div id="sentinelHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาผู้พิทักษ์" hidden></div>
       <button id="fly" class="orb-action orb-fly" type="button" aria-label="ขึ้นบิน" aria-pressed="false" hidden><span aria-hidden="true">🪽</span></button>
-      <button id="ghostPotButton" class="orb-action orb-ghost-pot" type="button" aria-label="จับผีใส่หม้อ" aria-pressed="false" hidden><span aria-hidden="true">🏺</span></button>
+      <div id="ghostFieldActions" class="ghost-field-actions" role="group" aria-label="หม้ออาคม" hidden>
+        <span id="ghostFieldStatus" class="ghost-field-status" role="status" hidden></span>
+        <button id="ghostPotButton" class="orb-action" type="button" aria-label="จับผีใส่หม้อ" aria-pressed="false" hidden>จับ</button>
+        <button id="ghostSummonButton" class="orb-action" type="button" hidden>เรียก</button>
+        <button id="ghostPoolButton" class="orb-action" type="button" aria-haspopup="dialog" aria-controls="drawer" hidden>คลังผี</button>
+      </div>
       </div>
     </section>
 

@@ -28,7 +28,22 @@
 .learned-bar .orb-action { position: absolute; right: 0; display: grid; place-items: center; flex: none; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0; border-radius: 50%;
   border: 1.5px solid #8fd0ff; background: radial-gradient(circle at 50% 30%, #2a5a7a, #0c1a26); color: #dff4ff; font-size: 17px; line-height: 1; pointer-events: auto; box-shadow: 0 3px 6px #0009; }
 .learned-bar .orb-fly { bottom: 36px; }
-.learned-bar .orb-ghost-pot { bottom: 72px; }
+.learned-bar .ghost-field-actions { position: absolute; right: 0; bottom: 72px; display: flex; align-items: center; gap: 4px; pointer-events: auto; }
+.learned-bar .ghost-field-actions[hidden], .ghost-field-status[hidden] { display: none; }
+.learned-bar .ghost-field-actions .orb-action { position: static; width: auto; min-width: 42px; min-height: 42px; padding: 4px 7px; border-radius: 10px; font-size: 12px; }
+.learned-bar .ghost-field-actions .orb-action:disabled { opacity: .5; }
+.learned-bar[data-wide] .ghost-field-actions { position: relative; bottom: auto; order: 3; }
+.ghost-field-status { position: absolute; right: 0; bottom: calc(100% + 4px); width: max-content; max-width: min(190px,45vw); padding: 3px 6px; border-radius: 6px; background: #0c1825f5; color: #dff4ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+.ghost-pool { display: grid; gap: 10px; }
+.ghost-pool h3, .ghost-pool p { margin: 0; }
+.ghost-pool-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+.ghost-pool-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.ghost-pool button { min-height: 44px; overflow-wrap: anywhere; }
+.ghost-pool button[aria-pressed="true"] { border-color: #8fd0ff; color: #dff4ff; background: #213e54; }
+.ghost-pool-cards button { display: grid; justify-items: center; gap: 2px; min-width: 0; padding: 8px 4px; text-align: center; }
+.ghost-pool-cards strong, .ghost-pool-cards small { overflow-wrap: anywhere; }
+.ghost-pool-portrait { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid #628caa; border-radius: 9px; background: #1a2b3c; }
+.ghost-pool-detail { display: grid; gap: 6px; padding: 10px; border: 1px solid #486479; border-radius: 9px; background: #142335; }
 .learned-bar .orb-action[hidden] { display: none; }
 .learned-bar .orb-action[aria-pressed="true"] { border-color: #7fe8ff; box-shadow: 0 0 12px #7fe8ffaa; color: #c9f7ff; }
 .learned-bar[data-wide] .orb-action { position: relative; right: auto; bottom: auto; order: 3; width: 40px; height: 40px; }

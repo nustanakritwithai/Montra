@@ -75,6 +75,7 @@ $files = @(
   @{ Name = "AccountRoutes.ts"; Target = "src\rooms\AccountRoutes.ts"; Check = "installAccountRoutes" },
   @{ Name = "MyRoom.ts"; Target = "src\rooms\MyRoom.ts"; Check = "equip_weapon" },
   @{ Name = "LegacyGhostPot.ts"; Target = "src\rooms\LegacyGhostPot.ts"; Check = "class LegacyGhostWorker" },
+  @{ Name = "GhostPool.ts"; Target = "src\rooms\GhostPool.ts"; Check = "function parseGhostCommand" },
   @{ Name = "MontraBoats.ts"; Target = "src\rooms\MontraBoats.ts"; Check = "class MontraBoats" },
   @{ Name = "PirateBoatRules.ts"; Target = "src\rooms\PirateBoatRules.ts"; Check = "AUTHORITATIVE_BOAT_DEFINITIONS" },
   @{ Name = "PirateBoatSimulation.ts"; Target = "src\rooms\PirateBoatSimulation.ts"; Check = "class BoatSimulation" },

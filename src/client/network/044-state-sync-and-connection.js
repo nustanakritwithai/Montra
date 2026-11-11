@@ -140,9 +140,7 @@
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
   function resetGhostPot() {
-    ghostPotState = null;
-    const button = $("ghostPotButton");
-    if (button) button.hidden = true;
+    resetGhostPotUi();
   }
 
   const REPLACEMENT_SKILLS = Object.freeze({
@@ -450,18 +448,7 @@
       joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
       joined.onMessage("ghost_pot_state", payload => {
         if (room !== joined || !payload || typeof payload.active !== "boolean") return;
-        const button = $("ghostPotButton");
-        if (!button) return;
-        ghostPotState = payload;
-        const label = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
-        button.title = label;
-        button.setAttribute("aria-label", label);
-        button.setAttribute("aria-pressed", String(payload.active));
-        button.hidden = false;
-        const notice = {captured:"จับ" + (payload.ghost?.name || "ผี") + "ใส่หม้อแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
-          summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", unavailable:"หม้ออาคมยังใช้ไม่ได้",
-          target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่"};
-        if (Object.hasOwn(notice, payload.status)) toast(notice[payload.status]);
+        receiveGhostPot(payload);
       });
       joined.onMessage("chat_message", message => {
         if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
@@ -1690,8 +1677,14 @@
         else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
         else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
         else if (info?.reason === "ghost_target_unavailable") toast("ต้องเป็นผีทั่วไปที่ยังมีชีวิตและอยู่ในระยะ");
-        else if (info?.reason === "ghost_pot_busy") toast("รอสักครู่ก่อนใช้หม้ออาคม");
-        else if (info?.reason === "ghost_pot_occupied") toast("มีผีในหม้อหรือมีผีที่เรียกไว้อยู่แล้ว");
+        else if (typeof info?.reason === "string" && /^(ghost_|invalid_ghost_pot$)/.test(info.reason)) {
+          clearGhostPoolPending();
+          syncGhostPoolUi();
+          const ghostErrors = {ghost_pot_busy:"รอสักครู่ก่อนใช้หม้ออาคม",ghost_pot_occupied:"เก็บผีที่เรียกอยู่ก่อนจับตัวถัดไป",
+            ghost_pot_empty:"เลือกผีในช่องเรียกก่อน",ghost_target_unavailable:"จับผีตัวนี้ไม่ได้หรืออยู่นอกระยะ",
+            ghost_pot_unavailable:"หม้ออาคมยังใช้ไม่ได้",invalid_ghost_pot:"คำสั่งหม้ออาคมไม่ถูกต้อง"};
+          toast(ghostErrors[info.reason] || "ใช้หม้ออาคมไม่สำเร็จ");
+        }
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
         else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");

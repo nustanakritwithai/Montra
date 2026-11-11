@@ -5,7 +5,7 @@ node scripts/build-client.mjs --prepare
 # Generated sandbox only; never points at the VPS or existing player files.
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
-cp deploy/combat/MyRoom.ts deploy/combat/LegacyGhostPot.ts combat-verify/src/rooms/
+cp deploy/combat/MyRoom.ts deploy/combat/LegacyGhostPot.ts deploy/combat/GhostPool.ts combat-verify/src/rooms/
 cp deploy/combat/{MontraBoats,PirateBoatRules,PirateBoatSimulation}.ts combat-verify/src/rooms/
 cp deploy/combat/ghost-pot-integration.mjs deploy/combat/boat-integration.mjs combat-verify/
 cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
