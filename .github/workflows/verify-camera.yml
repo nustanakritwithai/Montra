@@ -24,6 +24,9 @@ permissions:
 jobs:
   camera:
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.56.1-noble@sha256:f1e7e01021efd65dd1a2c56064be399f3e4de00fd021ac561325f2bfbb2b837a
+      options: --ipc=host
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -36,7 +39,6 @@ jobs:
       - name: Install isolated browser runner
         run: |
           npm install --no-save --package-lock=false playwright@1.56.1
-          bash scripts/install-ci-chromium.sh npx playwright install --with-deps chromium
       - run: node deploy/combat/camera-browser-test.cjs
       - uses: actions/upload-artifact@v4
         if: always()
