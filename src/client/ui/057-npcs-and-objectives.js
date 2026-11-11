@@ -38,6 +38,10 @@
           if(books[path])books[path]();else toast("เลือกอาชีพก่อนดูวิชา");}};
       handlers[npc.role]?.();
     };
+    if(npc.role==="market" && room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,activeMapId)){
+      const cityMarket=document.createElement("button");cityMarket.type="button";cityMarket.className="secondary";
+      cityMarket.textContent="ตลาดประจำเมือง";cityMarket.onclick=openCityMarket;ui.drawerBody.append(cityMarket);
+    }
     if(npc.role==="mentor"){
       const rebirth=document.createElement("button");rebirth.type="button";rebirth.className="secondary";rebirth.textContent="เกิดใหม่และความชำนาญ";rebirth.onclick=openRebirth;ui.drawerBody.append(rebirth);
     }

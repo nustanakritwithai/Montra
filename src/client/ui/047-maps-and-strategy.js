@@ -789,6 +789,10 @@
       if(button)button.setAttribute("aria-label",button.dataset.baseLabel+" · "+strategicWarLabel(entry,now));
     }
   }
+  function updateAtlasCityMarket(){
+    const price=$("atlasCityMarket");
+    if(drawerActive==="strategy" && price)price.textContent=cityMarketSummary(price.dataset.site);
+  }
   function openStrategicMap(destination){
     const maps=worldDefinitions,origin=activeMapId;
     if(!maps?.[origin])return;
@@ -834,6 +838,12 @@
       const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
       directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
       detail.replaceChildren(title,description,directions);
+      if(room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,id)){
+        const price=document.createElement("p");price.id="atlasCityMarket";price.dataset.site=id;
+        const market=document.createElement("button");market.type="button";market.className="secondary";
+        market.textContent="เปิดตลาดประจำเมือง";market.onclick=openCityMarket;
+        detail.append(price,market);updateAtlasCityMarket();
+      }
       if(territoryState && (map.strategic?.kind==="territory" || territoryState.warTimes?.[id])){
         const owner=document.createElement("p");owner.id="atlasOwner";owner.dataset.site=id;detail.append(owner);updateAtlasOwner();
         const timer=document.createElement("p");timer.dataset.warSite=id;timer.setAttribute("aria-live","off");detail.append(timer);updateAtlasWarTimes();
@@ -842,6 +852,7 @@
     const selected=typeof destination==="string" && maps[destination] && atlasCells[destination]?destination:origin;
     select(selected);updateAtlasWarTimes();
     if(mode==="live")room?.send("get_territories",{});
+    if(room?.state?.cityMarketSupported===true)refreshCityMarkets();
     const scroll=board.parentElement;
     scroll.scrollTop=atlasCells[selected][1]-scroll.clientHeight/2;
   }

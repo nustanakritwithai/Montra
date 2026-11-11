@@ -13,7 +13,8 @@ import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js"
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketOrder, type CityMember,
+  type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
 } from "./CityProductionRules.js";
@@ -319,6 +320,46 @@ export class EconomyStore {
   }
   viewCityGovernance(member: CityMember, ownership: CityOwnership) {
     return this.city.governanceView(member, ownership);
+  }
+  hasCityMarketAssets(): boolean {
+    return this.city.hasLocalMarketAssets();
+  }
+  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean) {
+    const account = this.account(actor);
+    let itemCount = 0, bagSpace = 0;
+    for (const stack of account.inventory.slots) {
+      if (!stack) bagSpace += 99;
+      else if (stack.itemId === CITY_PRODUCT) {
+        itemCount += stack.quantity;
+        bagSpace += 99 - stack.quantity;
+      }
+    }
+    return {
+      markets: CITY_SITES.map(site => this.city.localMarketView(site, cities[site], member, enabled)),
+      wallet: account.gold, walletSpace: MAX_GOLD - account.gold, itemCount, bagSpace,
+      history: this.city.localMarketHistory(actor),
+    };
+  }
+  cityMarketOrder(actor: string, member: CityMember | undefined, order: CityMarketOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_local_market", intent, () => {
+      if (order.action !== "local_market_trade") {
+        if (!member) throw Error("city_not_member");
+        return this.city.configureLocalMarket(member, order, ownership, now);
+      }
+      const account = this.account(actor), trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
+      if (order.site === CITY_PRODUCTION_SITE) {
+        if (account.gold < trade.total) throw Error("insufficient_gold");
+        account.inventory = add(account.inventory, {itemId: CITY_PRODUCT, quantity: trade.amount});
+        account.gold -= trade.total;
+      } else {
+        if (account.gold + trade.total > MAX_GOLD) throw Error("city_wallet_full");
+        consume(account, CITY_PRODUCT, trade.amount, "item_unavailable");
+        account.gold += trade.total;
+      }
+      this.put(actor, account);
+      return trade;
+    });
   }
   setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
     return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {

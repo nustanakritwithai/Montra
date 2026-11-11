@@ -91,9 +91,11 @@ import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, 
 import {
   CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE,
   CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
-  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
-  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, isWarehouseOrder, parseCityOrder,
-  type CityHaulOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder, type CitySite, type CitySupplyOrder,
+  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED,
+  CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
+  isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, isWarehouseOrder, parseCityOrder,
+  type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
+  type CitySite, type CitySupplyOrder,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -185,6 +187,7 @@ const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithSer
 const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_PURCHASE_ENABLED;
 const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
 const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
+const cityMarketIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_LOCAL_MARKET_ENABLED;
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
   if (site === CITY_MINING_SITE)
@@ -4272,7 +4275,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | CitySupplyOrder>, claimsOnly = false): void {
+  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | CitySupplyOrder | CityMarketOrder>, claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
@@ -4417,6 +4420,44 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return fail("city_unavailable");
       }
       fail(reason);
+    }
+  }
+  private cityMarketAction(client: Client, order?: CityMarketOrder): void {
+    const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
+    const cleanup = order?.action === "local_market_config" ? !order.open :
+      (order?.action === "local_market_stock" || order?.action === "local_market_budget") && order.amount < 0;
+    if (!this.state.cityMarketSupported || (order && !cleanup && !cityMarketIntake)) return fail("city_market_disabled");
+    const id = client.sessionId;
+    if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
+    const actor = this.economyId(client, fail);
+    if (!actor) return;
+    const player = this.state.players.get(id)!;
+    const site = CITY_SITES.find(city => city === player.mapId);
+    const atSite = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
+    const atMarket = atSite && serviceNpcsFor(atSite).some(npc => npc.role === "market" &&
+      Math.hypot(player.x - npc.x, player.z - npc.z) <= npc.radius) ? atSite : null;
+    try {
+      const now = Date.now(), store = characterStore.economy, member = guildStore().war.member(actor);
+      const cities = {[CITY_PRODUCTION_SITE]: syncCityProduction(now), [CITY_MINING_SITE]: syncCityProduction(now, CITY_MINING_SITE)};
+      if (order) {
+        const trade = order.action === "local_market_trade";
+        try {
+          if (order.site !== (trade ? atMarket : atSite)) throw Error("city_market_location");
+          const result = store.cityMarketOrder(actor, member, order, cities[order.site], now);
+          if (trade) this.syncEconomy(client, actor);
+          client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "";
+          if (reason !== "city_ownership_unavailable" && (reason.startsWith("city_") ||
+              ["request_id_conflict", "insufficient_gold", "inventory_full", "item_unavailable"].includes(reason))) fail(reason);
+          else throw error;
+        }
+      }
+      client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake),
+        atSite, atMarket, enabled: cityMarketIntake, serverNow: now});
+    } catch (error) {
+      console.error("MONTRA city market action failed", error);
+      fail("city_unavailable");
     }
   }
   private cityGovernanceAction(client: Client, order?: CityPolicyOrder | CitySupplyOrder): void {
@@ -5079,11 +5120,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     get_city_governance:(client:Client,message:unknown)=>{
       if (parseEmptyCommand(message)) this.cityGovernanceAction(client);
     },
+    get_city_markets:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityMarketAction(client);
+    },
     city_production:(client:Client,message:unknown)=>{
       const order = parseCityOrder(message);
       if (!order) return client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
       if (isCityPurchaseOrder(order)) this.cityBoardAction(client, "purchase", order);
       else if (isCityMissionOrder(order) || isCityHaulOrder(order)) this.cityBoardAction(client, "mission", order);
+      else if (isCityMarketOrder(order)) this.cityMarketAction(client, order);
       else if (order.action === "policy_set" || isCitySupplyOrder(order)) this.cityGovernanceAction(client, order);
       else this.cityProductionAction(client, order);
     },
@@ -6801,6 +6846,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       (cityPurchaseIntake || characterStore.economy.hasOpenCityPurchase());
     this.state.cityMissionSupported = this.state.cityRecoveryAvailable &&
       (cityMissionIntake || characterStore.economy.hasOpenCityMission() || characterStore.economy.hasOpenCityHaul());
+    this.state.cityMarketSupported = this.state.cityRecoveryAvailable &&
+      (cityMarketIntake || characterStore.economy.hasCityMarketAssets());
     this.state.cityGovernanceAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED && CITY_GOVERNANCE_ENABLED;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);

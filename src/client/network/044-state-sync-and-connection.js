@@ -622,6 +622,7 @@
       joined.onMessage("city_workshop_state", data=>{if(room===joined)cityReceiveWorkshop(data);});
       joined.onMessage("city_purchase_state", data=>{if(room===joined)cityReceivePurchase(data);});
       joined.onMessage("city_mission_state", data=>{if(room===joined)cityReceiveMission(data);});
+      joined.onMessage("city_markets_state", data=>{if(room===joined)cityReceiveMarkets(data);});
       joined.onMessage("city_governance_state", data=>{if(room===joined)cityReceiveGovernance(data);});
       joined.onMessage("city_production_result", data=>{if(room===joined)cityReceiveResult(data);});
       joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});

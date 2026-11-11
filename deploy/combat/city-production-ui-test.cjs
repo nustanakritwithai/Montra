@@ -21,11 +21,12 @@ function node(tag = "div") {
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
     replaceChildren(...children) { this.children = children; },
+    setAttribute() {},
   };
 }
 
 function fixture({enabled = true, recovery = true, member = true, workshopSupported = false,
-  purchaseSupported = false, missionSupported = false, governanceAvailable = false} = {}) {
+  purchaseSupported = false, missionSupported = false, governanceAvailable = false, marketSupported = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
@@ -34,7 +35,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
     $, document: {createElement: node}, performance: {now: () => now},
     room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
       cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported, cityMissionSupported: missionSupported,
-      cityGovernanceAvailable: governanceAvailable},
+      cityGovernanceAvailable: governanceAvailable, cityMarketSupported: marketSupported},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -341,6 +342,32 @@ test("the city hall only permits spending reserved supplies after defense and bi
   f.button("ซ่อมประตูหลังศึก").onclick();
   const request=f.wire.at(-1).payload;
   assert.deepEqual(request,{requestId:request.requestId,action:"supply_repair",epoch:2,supplyId:"reserve-1"});
+});
+
+test("local market submits the selected batch total only at the broker and uses new prices after rejection", () => {
+  const f=fixture({marketSupported:true,member:false});
+  const river="sam_lan_estuary", moon="moon_pass";
+  f.ctx.openCityMarket();
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  const riverMarket={site:river,epoch:1,status:"open",prices:[10,10,11],manage:null};
+  const moonMarket={site:moon,epoch:2,status:"open",prices:[16,15,15],manage:null};
+  const state={atMarket:null,markets:[riverMarket,moonMarket],serverNow:1_000_000,history:[],
+    wallet:100,walletSpace:100,itemCount:0,bagSpace:5};
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.button("ยืนยันซื้อแร่"),undefined);
+  f.ctx.cityReceiveMarkets({...state,atMarket:river});
+  f.submit("ยืนยันซื้อแร่",3);
+  const initial=f.wire.at(-1).payload;
+  assert.deepEqual(initial,{requestId:initial.requestId,action:"local_market_trade",site:river,epoch:1,amount:3,total:31});
+  f.ctx.cityReceiveError({requestId:initial.requestId,reason:"city_market_price_changed"});
+  f.ctx.cityReceiveMarkets({...state,atMarket:river,markets:[{...riverMarket,prices:[11,11,12]},moonMarket]});
+  f.submit("ยืนยันซื้อแร่",3);
+  assert.equal(f.wire.at(-1).payload.total,34);
+  f.ctx.cityReceiveResult(f.wire.at(-1).payload);
+  f.ctx.cityReceiveMarkets({...state,atMarket:moon,itemCount:2});
+  f.submit("ยืนยันขายแร่",2);
+  assert.equal(f.wire.at(-1).payload.total,31);
+  assert.equal(f.wire.at(-1).payload.site,moon);
 });
 
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
