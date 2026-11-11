@@ -32,15 +32,24 @@
     const persona=service.persona || "guide";
     if(speakBtn)bindSpeechButton(speakBtn, service.dialogue, persona, "🔊 ฟังเสียงพูดไทย");
     const action=$("serviceNpcAction");action.textContent=service.action;
+    const marketHere=npc.role==="market" && room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,activeMapId);
+    if(marketHere)action.textContent="เปิดตลาดประจำเมือง";
     action.onclick=()=>{
-      const handlers={smith:openSmith,market:openEconomy,guild:openGuild,party:openParty,travel:openMap,strategy:openStrategicMap,guide:openHelp,
+      const handlers={smith:openSmith,market:marketHere?openCityMarket:openEconomy,guild:openGuild,
+        party:openParty,travel:openMap,strategy:openStrategicMap,guide:openHelp,war:openWarPanel,
+        cityWarehouse:()=>openCityProduction("warehouse"),cityFactory:()=>openCityProduction("factory"),
+        cityMissions:openCityMission,cityHall:openCityGovernance,
         mentor:()=>{const path=ownServerCharacter()?.pathId,books={muay_boran:openMuayBook,phutthaisawan:openSwordTree,blade:openBladeBook,sentinel:openSentinelBook,seer:openOccultBook,mender:openOccultBook};
           if(books[path])books[path]();else toast("เลือกอาชีพก่อนดูวิชา");}};
       handlers[npc.role]?.();
     };
-    if(npc.role==="market" && room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,activeMapId)){
-      const cityMarket=document.createElement("button");cityMarket.type="button";cityMarket.className="secondary";
-      cityMarket.textContent="ตลาดประจำเมือง";cityMarket.onclick=openCityMarket;ui.drawerBody.append(cityMarket);
+    if(marketHere){
+      const worldMarket=document.createElement("button");worldMarket.type="button";worldMarket.className="secondary";
+      worldMarket.textContent="เปิดตลาดโลก";worldMarket.onclick=openEconomy;ui.drawerBody.append(worldMarket);
+      if(activeMapId==="moon_pass" && room.state.cityPurchaseSupported===true){
+        const purchase=document.createElement("button");purchase.type="button";purchase.className="secondary";
+        purchase.textContent="เปิดใบสั่งซื้อกิลด์";purchase.onclick=openCityPurchase;ui.drawerBody.append(purchase);
+      }
     }
     if(npc.role==="mentor"){
       const rebirth=document.createElement("button");rebirth.type="button";rebirth.className="secondary";rebirth.textContent="เกิดใหม่และความชำนาญ";rebirth.onclick=openRebirth;ui.drawerBody.append(rebirth);

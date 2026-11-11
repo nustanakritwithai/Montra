@@ -9,6 +9,7 @@ import {RIVER_CITY,RIVER_WAR_DURATION,riverNodes,newRiverBattle,changeRiverGate,
 import {CASTLE_ID,CASTLE_DURATION,CASTLE_SEATS,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
 
 export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR_SIDE_SIZE=5;
+export const WAR_ENTRY_RADIUS=5;
 // Only direct player-versus-player damage inside an active war uses this floor.
 // HP, actual levels, equipment and saved character stats remain unchanged.
 export const WAR_ENTRY_FLOOR_LEVEL=40;

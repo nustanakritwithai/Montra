@@ -21,6 +21,7 @@ function node(tag = "div") {
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
     replaceChildren(...children) { this.children = children; },
+    scrollIntoView() { this.scrolled = true; },
     querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
     setAttribute() {},
   };
@@ -568,6 +569,57 @@ test("neutral return orders show wallet escrow, accept a quoted sale and support
   f.submit("รับแร่จากใบสั่งซื้อ",1);
   const claim=f.wire.at(-1).payload;
   assert.deepEqual(claim,{requestId:claim.requestId,action:"neutral_return_claim",orderId:"old-order",amount:1});
+});
+
+test("warehouse and factory NPC entry points focus their own sections when city state arrives", () => {
+  const f=fixture();
+  f.ctx.openCityProduction("warehouse");
+  f.state();
+  assert.equal(f.$("cityWarehouseSection").scrolled,true);
+  assert.equal(f.$("cityFactorySection").scrolled,undefined);
+  f.ctx.openCityProduction("factory");
+  assert.equal(f.$("cityFactorySection").scrolled,true);
+  f.state();
+  assert.equal(f.$("cityFactorySection").scrolled,undefined);
+});
+
+test("service NPCs dispatch to city panels and keep war actions on the war board", () => {
+  const code=readFileSync(join(__dirname,"../../src/client/ui/057-npcs-and-objectives.js"),"utf8");
+  const visual=readFileSync(join(__dirname,"../../src/client/world/015-forest-gates-and-services.js"),"utf8");
+  const calls=[],body=node(),buttons={};
+  const ctx={
+    $:id=>buttons[id] ||= node(),
+    ui:{drawerBody:body},document:{createElement:node},bindSpeechButton(){},
+    openDrawer(){body.replaceChildren();},ownServerCharacter:()=>null,
+    activeMapId:"moon_pass",citySiteNames:{moon_pass:"จันทรา"},
+    room:{state:{cityMarketSupported:true,cityPurchaseSupported:true}},
+    territoryState:{local:{site:"moon_pass"}},
+  };
+  for(const handler of ["openSmith","openEconomy","openGuild","openParty","openMap","openStrategicMap","openHelp",
+    "openWarPanel","openCityProduction","openCityMission","openCityGovernance","openCityMarket","openCityPurchase"]){
+    ctx[handler]=(...args)=>calls.push([handler,...args]);
+  }
+  vm.runInNewContext(visual.slice(visual.indexOf("  const serviceNpcUi="),visual.indexOf("  const serviceNpcLooks="))+
+    code.slice(code.indexOf("  function openServiceNpc("),code.indexOf("  function syncQuestRanger(")),ctx);
+  for(const [role,expected] of [
+    ["war",["openWarPanel"]],["cityWarehouse",["openCityProduction","warehouse"]],
+    ["cityFactory",["openCityProduction","factory"]],["cityMissions",["openCityMission"]],
+    ["cityHall",["openCityGovernance"]],["market",["openCityMarket"]],
+  ]){
+    ctx.openServiceNpc({role,name:role});
+    assert.ok(buttons.serviceNpcAction.textContent);
+    buttons.serviceNpcAction.onclick();
+    assert.deepEqual(calls.at(-1),expected);
+  }
+  body.children.find(button=>button.textContent==="เปิดตลาดโลก").onclick();
+  assert.deepEqual(calls.at(-1),["openEconomy"]);
+  body.children.find(button=>button.textContent==="เปิดใบสั่งซื้อกิลด์").onclick();
+  assert.deepEqual(calls.at(-1),["openCityPurchase"]);
+  ctx.activeMapId="other_map";
+  ctx.openServiceNpc({role:"market",name:"นายหน้าตลาด"});
+  buttons.serviceNpcAction.onclick();
+  assert.deepEqual(calls.at(-1),["openEconomy"]);
+  assert.equal(body.children.length,0);
 });
 
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {

@@ -263,13 +263,13 @@
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
   let cityPurchase=null, cityMission=null, cityGovernance=null, cityMarkets=null;
-  let cityTradePin=null, cityTradeClock=null;
+  let cityTradePin=null, cityTradeClock=null, cityProductionTarget=null;
   let cityReplyTimer=0, cityJobTimer=0;
   const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
     cityState=null;cityWorkshop=null;cityPurchase=null;cityMission=null;cityGovernance=null;cityMarkets=null;
-    cityTradePin=null;cityTradeClock=null;
+    cityTradePin=null;cityTradeClock=null;cityProductionTarget=null;
     cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
@@ -1119,7 +1119,8 @@
     if(Number.isFinite(nextTick))cityJobTimer=setTimeout(updateCityCountdown,nextTick);
     if(refresh)try{room.send("get_city_production",{});}catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";$("cityStatus").textContent=cityStatus;}
   }
-  function openCityProduction(){
+  function openCityProduction(target){
+    cityProductionTarget=target==="warehouse" || target==="factory"?target:null;
     openDrawer("cityProduction",guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"ทรัพย์สินกิลด์เดิม",
       '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← กิลด์</button>'+
       '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
@@ -1145,8 +1146,9 @@
       const node=marketText("button","secondary",text);
       node.type="button";node.disabled=disabled;node.onclick=run;return node;
     };
-    const group=(title)=>{
+    const group=(title,id)=>{
       const section=marketText("section","gx-page");
+      if(id)section.id=id;
       section.append(marketText("h3","cp-h",title));body.append(section);return section;
     };
     const note=(target,text)=>target.append(marketText("p","note",text));
@@ -1155,7 +1157,7 @@
     if(cityPending && !cityPending.waiting)body.append(button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready));
     if(!ready)return;
     if(cityWorkshop?.enabled || cityWorkshop?.job){
-      const workshop=cityWorkshop,section=group("โรงงานสาธารณะเวียงปากน้ำสามลาน");
+      const workshop=cityWorkshop,section=group("โรงงานสาธารณะเวียงปากน้ำสามลาน","cityPublicWorkshopSection");
       if(workshop.job){
         const job=workshop.job,clock=marketText("p","note"),claim=button("รับผลผลิต · "+cityItemName(job.item)+" × "+job.quantity,
           ()=>sendCityProduction("workshop_claim",{jobId:job.id}),true);
@@ -1189,7 +1191,7 @@
     }
     if(guildState && !state)note(body,"กำลังโหลดคลังเมือง…");
     if(state){
-      const summary=group(state.cityName || "เวียงปากน้ำสามลาน");
+      const summary=group(state.cityName || "เวียงปากน้ำสามลาน","cityWarehouseSection");
       note(summary,"ทองตลาด "+state.marketGold+" หน่วย");
       if(room.state.cityMarketSupported===true)summary.append(button("ตลาดประจำเมือง",openCityMarket,locked));
       if(state.epoch!==null && state.officer && state.site===state.miningSite && room.state.cityGovernanceAvailable===true)
@@ -1251,7 +1253,7 @@
             }
           }
         }
-        const factory=group("โรงงาน");
+        const factory=group("โรงงาน","cityFactorySection");
         note(factory,inputs.map(i=>cityItemName(i.item)+" × "+i.amount).join(" + ")+" → "+cityItemName(state.recipe.output));
         if(state.job){const clock=marketText("p","note");clock.id="cityJobClock";factory.append(clock);}
         if(local && state.officer){
@@ -1310,6 +1312,11 @@
       note(claims,asset.name+" · "+label+" × "+asset.amount);
       submit(claims,"รับ "+label,[["จำนวน",Math.min(asset.item==="gold"?1_000_000_000:99,asset.amount)]],
         amount=>sendCityProduction("claim_disband",{guildId:asset.guildId,item:asset.item,amount}));
+    }
+    if(cityProductionTarget){
+      const target=cityProductionTarget==="warehouse"?$("cityWarehouseSection"):
+        $("cityFactorySection") || (cityWorkshop?.atCity?$("cityPublicWorkshopSection"):null);
+      if(target){cityProductionTarget=null;target.scrollIntoView?.({block:"start"});}
     }
     updateCityCountdown();
   }
