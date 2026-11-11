@@ -39,7 +39,7 @@ function fixture({pool=false}={}) {
     recordPracticeCast:noop,playAction:(...args)=>calls.push(['action',...args]),SFX:(...args)=>calls.push(['sound',...args]),playSkillVoiceShout:noop,toast:noop,
     syncBladeUI:noop,syncSentinelUI:noop,syncOccultUI:noop,syncMuayHotbar:noop,syncSwordStatus:noop,swordSkillAction:()=> 'cast',faceAvatarToward:noop,floatAtPlayer:noop,floatAtMonster:noop,swordData:()=>null,
     bladeBookState:null,occultBookState:null,spellTargetId:'wrong',gold:{},bronzeMat:{},talismanPaper:{},vfxMat:(shape,color)=>({shape,color}),
-    SKILL_SOURCES:new Set(),playAttack:noop,hitBurst:(...args)=>calls.push(['burst',...args]),syncForestMonsters:noop,monsterName:()=> 'ghost',triggerCombatCallout:noop,
+    SKILL_SOURCES:new Set(),hudTarget:{},hudKills:{},registerComboHit:noop,playAttack:noop,hitBurst:(...args)=>calls.push(['burst',...args]),syncForestMonsters:noop,monsterName:()=> 'ghost',triggerCombatCallout:noop,
     syncSummons:noop,summonAvatars:new Map([['me',{}]]),clearWorldFx:noop};
   vm.createContext(ctx);
   vm.runInContext(spells.slice(0,spells.indexOf('  const localHpBar')),ctx);
@@ -48,7 +48,7 @@ function fixture({pool=false}={}) {
     const source=read('src/client/render/007-world-effects.js');
     vm.runInContext(source.slice(source.indexOf('  const worldFx =')),ctx);
     const update=read('src/client/render/009-effects-and-target-hud.js');
-    vm.runInContext(update.slice(0,update.indexOf('  // Hit flash:')),ctx);
+    vm.runInContext(update.slice(0,update.indexOf('  function hitBurst(')),ctx);
     vm.runInContext(between(update,'  function windupTelegraph(','  // The selected monster'),ctx);
     // Ambient updates intentionally have no avatar during allocator/cleanup tests.
     ctx.avatars.clear();ctx.ownServerCharacter=()=>null;
@@ -134,14 +134,14 @@ test('buffalo and combat hits reject wrong-map/missing/stale targets before effe
   for(const event of ['seer_buffalo_hit','combat_hit'])for(const variant of ['map','missing','stale']) {
     const f=fixture();
     if(variant==='map')f.actual.mapId='forbidden_forest';if(variant==='missing')f.joined.state.monsters.delete('actual');if(variant==='stale')f.ctx.room={};
-    const sounds=read('src/client/audio/023-action-and-impact-sounds.js');vm.runInContext(between(sounds,'  const HIT_WORDS','  let lastCombatAt'),f.ctx);
-    const n=f.meshes.length;f.emit(event,{playerId:'me',attackerId:'other',targetId:'actual',damage:10,hp:80,source:'melee',from:{x:1,y:0,z:2},to:{x:3,y:0,z:4}});
+    const sounds=read('src/client/audio/023-action-and-impact-sounds.js');vm.runInContext(sounds,f.ctx);
+    const n=f.meshes.length;f.emit(event,{playerId:'me',attackerId:'me',targetId:'actual',damage:10,hp:80,source:'melee',from:{x:1,y:0,z:2},to:{x:3,y:0,z:4}});
     assert.equal(f.calls.length,0,event+':'+variant);assert.equal(f.meshes.length,n);
   }
   // Positive control prevents a mute-everything regression, including final hits.
   const f=fixture();f.actual.alive=false;
-  const sounds=read('src/client/audio/023-action-and-impact-sounds.js');vm.runInContext(between(sounds,'  const HIT_WORDS','  let lastCombatAt'),f.ctx);
-  f.emit('combat_hit',{attackerId:'other',targetId:'actual',damage:10,hp:0,source:'melee'});assert(f.calls.some(c=>c[0]==='burst'));assert(f.calls.some(c=>c[0]==='sound'));
+  const sounds=read('src/client/audio/023-action-and-impact-sounds.js');vm.runInContext(sounds,f.ctx);
+  f.emit('combat_hit',{attackerId:'me',targetId:'actual',damage:10,hp:0,source:'melee'});assert(f.calls.some(c=>c[0]==='burst'));assert(f.calls.some(c=>c[0]==='sound'));
 });
 test('map and room changes cull delayed/followed effects before their birth time',()=>{
   for(const changed of ['map','room','follow-map']) for(const attached of [false,true]) {
@@ -161,12 +161,12 @@ test('explicit teardown disposes owned effects and text repeatedly without dispo
   }
   assert(between(network,'await verifyJoinedSlot(joined, requestedSlot);','room = joined;').includes('clearCombatVfx();'),'same-map new room clears all old effects');
 });
-test('cosmetic saturation preserves four complete telegraph planes within hard140 limit and reuses meshes',()=>{
+test('48 cosmetic planes leave room for complete telegraphs and pooled mesh reuse',()=>{
   const f=fixture({pool:true});
-  for(let i=0;i<140;i++)f.ctx.spawnFx('glow','gold',0,0,0,{life:2000});assert.equal(f.eval('worldFx.length'),116);
-  for(let i=0;i<24;i++)f.ctx.spawnFx('ring','red',0,0,0,{life:2000,critical:true});assert.equal(f.eval('worldFx.length'),140);
+  for(let i=0;i<140;i++)f.ctx.spawnFx('glow','gold',0,0,0,{life:2000});assert.equal(f.eval('worldFx.length'),48);
+  for(let i=0;i<92;i++)f.ctx.spawnFx('ring','red',0,0,0,{life:2000,critical:true});assert.equal(f.eval('worldFx.length'),140);
   const allocated=f.meshes.length;f.ctx.windupTelegraph({position:{x:1,z:2}}, {tall:2,ty:0});
-  assert.equal(f.eval('worldFx.length'),140);assert.equal(f.eval('worldFx.filter(f=>f.critical).length'),28);
+  assert.equal(f.eval('worldFx.length'),140);assert.equal(f.eval('worldFx.filter(f=>f.critical).length'),96);
   assert.deepEqual(Array.from(f.eval('worldFx.slice(-4).map(f=>f.m.material.shape)')),['disc','dash','ring','cross']);assert.equal(f.meshes.length,allocated,'eviction reuses pooled planes');
   f.ctx.clearWorldFx();assert.equal(f.eval('worldFxPool.length'),140);
   for(let i=0;i<140;i++)assert(f.ctx.spawnFx('ring','red',0,0,0,{critical:true}));

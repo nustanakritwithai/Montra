@@ -981,7 +981,7 @@
   function showMeteorImpact(event) {
     if(mode!=="live" || event?.mapId!==activeMapId || ![event.x,event.y,event.z].every(Number.isFinite))return;
     if(event.ownerId===localId)meteorPendingUntil=0;
-    sparks("gold",event.x,event.y+.1,event.z,36,{speed:5,up:2,life:550});
+    sparks("gold",event.x,event.y+.1,event.z,8,{speed:4,up:2,life:320});
   }
   function showCombatFeatureError(reason) {
     const labels={

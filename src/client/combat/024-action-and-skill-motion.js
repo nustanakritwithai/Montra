@@ -4,10 +4,12 @@
     a.action = { type, start: now, end: now + ACTIONS[type].dur * 1000 };
     if (type === "twin" || type === "m_basic" || type === "m_side") a.action.side = (a.twinFlip = !a.twinFlip) ? 1 : -1; // alternate right / left
     if (opts) Object.assign(a.action, opts);
-    if (type !== "hit" && type !== "rise") flashStrike(a, type);
-    if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = performance.now();
-    actionSound(a, type, a.action);
-    actionFx(a, type);
+    if (a.local && (ACTIONS[type].swing || type === "hit" || type === "cast")) lastCombatAt = now;
+    if (!opts?.motionOnly) {
+      if (type !== "hit" && type !== "rise") flashStrike(a, type);
+      actionSound(a, type, a.action);
+      actionFx(a, type);
+    }
     if (ACTIONS[type].swing) a.swingUntil = now + 380; // procedural fallback body
   }
   // A sword skill's motion follows its effect type in the server catalog,
@@ -75,5 +77,7 @@
     const a = avatars.get(attackerId);
     if (!a) return;
     if (Number.isFinite(targetX) && Number.isFinite(targetZ)) faceAvatarToward(attackerId, targetX, targetZ);
-    playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch");
+    const current = a.action;
+    if (current?.end > performance.now() && (ACTIONS[current.type]?.swing || current.type === "cast")) return;
+    playAction(a, ranged ? "cast" : MELEE[a.weaponId] || "punch", { motionOnly: true });
   }

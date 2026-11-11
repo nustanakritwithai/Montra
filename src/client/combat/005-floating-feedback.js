@@ -1,10 +1,11 @@
   // ---- Floating combat text (Ragnarok-style) ----
   // Numbers and short words pop above the target, overshoot, arc sideways
   // and fall while fading. Drawn as DOM over the canvas at the projected head
-  // position; a small pool, at most 28 on screen, oldest dropped first.
+  // position; keep at most eight labels on screen.
   const floatLayer = document.createElement("div"); floatLayer.className = "float-layer"; floatLayer.setAttribute("aria-hidden", "true");
   document.getElementById("game")?.append(floatLayer);
-  const floatProj = new B.Vector3();
+  const floatProj = new B.Vector3(), floatWorld = new B.Vector3();
+  const MAX_FLOAT_LABELS = 8;
   // Canvas size in CSS pixels, read once per frame: getBoundingClientRect forces layout, and the
   // overlay code otherwise called it several times a frame between DOM writes.
   let canvasRectFrame = -1, canvasRectCache = null;
@@ -16,11 +17,11 @@
   function floatText(x, y, z, text, kind = "dealt", opts = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(z)) return;
     const rect = canvasRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
-    B.Vector3.ProjectToRef(new B.Vector3(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
+    B.Vector3.ProjectToRef(floatWorld.set(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
     if (floatProj.z < 0 || floatProj.z > 1) return;
     const sx = floatProj.x * rect.width / w, sy = floatProj.y * rect.height / h;
     if (sx < -40 || sy < -40 || sx > rect.width + 40 || sy > rect.height + 40) return;
-    while (floatLayer.childElementCount >= 28) floatLayer.firstElementChild.remove();
+    while (floatLayer.childElementCount >= MAX_FLOAT_LABELS) floatLayer.firstElementChild.remove();
     const el = document.createElement("span"); el.className = "ftxt " + kind + (opts.big ? " big" : "");
     el._world = [x, y, z]; // re-projected every frame so the text stays on its target while the camera moves
     el._lift = opts.lift || 0; el._side = opts.side || 0;
@@ -38,7 +39,7 @@
     const tm = scene.getTransformMatrix(), vp = camera.viewport.toGlobal(w, h);
     for (const el of floatLayer.children) {
       const p = el._world; if (!p) continue;
-      B.Vector3.ProjectToRef(new B.Vector3(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
+      B.Vector3.ProjectToRef(floatWorld.set(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
       el.style.left = (floatProj.x * rect.width / w + el._side).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
     }
   }

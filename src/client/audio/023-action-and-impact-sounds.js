@@ -11,7 +11,7 @@
       case "m_hook": case "m_elbow": at(a, "whoosh", d * .4, { pitch: 1.2, len: .6, intensity: .75 }); break;
       case "m_knee": case "m_teep": at(a, "whoosh", d * .4, { pitch: .8, len: .7, intensity: .7 }); break;
       case "m_counter": at(a, "block", d * .1, { intensity: .6 }); at(a, "whoosh", d * .45, { pitch: 1.2, len: .6, intensity: .75 }); break;
-      case "m_flurry": case "m_rush": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.15 + i * .2), { pitch: 1.7, len: .4, intensity: .5 }); break;
+      case "m_flurry": case "m_rush": at(a, "whoosh", d * .15, { pitch: 1.7, len: .4, intensity: .5 }); break;
       case "m_guard": case "m_parry": case "guard": at(a, "block", .05, { intensity: .45 }); break;
       case "m_evade": at(a, "whoosh", .05, { pitch: .9, len: .8, intensity: .4 }); break;
       case "m_clinch": at(a, "fist", .05, { intensity: .4 }); break;
@@ -19,8 +19,8 @@
       case "m_wai": case "dance": case "rally": at(a, "gong", .1, { freq: type === "rally" ? 196 : 147, gain: .6 }); break;
       case "lunge": at(a, "dash", .05); at(a, "whoosh", d * .55, { pitch: 1.1 }); break;
       case "counter": at(a, "clash", d * .2, { intensity: .7 }); at(a, "whoosh", d * .5, { pitch: 1.3, len: .7 }); break;
-      case "flurry": for (let i = 0; i < 4; i++) at(a, "whoosh", d * (.12 + i * .24), { pitch: 1.2, len: .6, intensity: .7 }); break;
-      case "finale": at(a, "whoosh", d * .12, { pitch: 1.1 }); at(a, "whoosh", d * .44, { pitch: 1.1 }); at(a, "whoosh", d * .78, { pitch: .8, len: 1.2, intensity: 1.2 }); break;
+      case "flurry": at(a, "whoosh", d * .12, { pitch: 1.2, len: .6, intensity: .7 }); break;
+      case "finale": at(a, "whoosh", d * .78, { pitch: .8, len: 1.2, intensity: 1 }); break;
       case "sweep": at(a, "whoosh", d * .2, { pitch: .9, len: 2.2, intensity: 1.1 }); break;
       case "cast": at(a, "cast", .02); break;
       case "summon": at(a, "summon", .02, { important: true }); break;
@@ -31,27 +31,28 @@
       case "arrive": at(a, "warp", 0); break;
     }
   }
-  // Contact sound at the target, chosen by the attacker's weapon and move.
-  const HIT_WORDS = { blade: ["ฉัวะ!", "เฉือน!", "ฟึ่บ!"], fist: ["ปั้ก!", "ผัวะ!", "ตุบ!"], elbow: ["เพี้ยะ!", "ป้าบ!"], kick: ["ตุ้บ!", "อั้ก!"],
-    blunt: ["โป๊ก!", "ตึง!"], rice: ["ซ่า!", "เปาะ!"], talisman: ["แปะ!", "ฉึบ!"], slam: ["ตูม!"] };
-  function impactAt(attackerId, x, z, source, ghost, kind, victimId, isCrit = false) {
-    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
-    const a = avatars.get(attackerId), w = a?.weaponId || "", move = a?.action?.type || "";
-    let name = "fist", intensity = 1;
+  // Rapid confirmed hits share a short cooldown for sound and flashes.
+  let lastCombatImpactAt = -Infinity;
+  function combatImpactReady() {
+    const now = performance.now();
+    if (now - lastCombatImpactAt < 140) return false;
+    lastCombatImpactAt = now;
+    return true;
+  }
+
+  function impactAt(attackerId, x, z, source, victimId, isCrit = false, y = 0) {
+    const mine = attackerId === localId;
+    if ((!mine && victimId !== localId) || !Number.isFinite(x) || !Number.isFinite(z) || !combatImpactReady()) return;
+    const a = avatars.get(attackerId), weapon = a?.weaponId, move = a?.action?.type || "";
+    let name = "fist";
     if (source === "ranged") name = "rice";
     else if (source === "talisman") name = "talisman";
-    else if (w === "thai_dual" || w === "arcane_sword" || w === "ritual_dagger") { name = "blade"; intensity = w === "ritual_dagger" ? .7 : 1; }
-    else if (w === "spirit_staff") name = "blunt";
-    else if (w === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
-    SFX(name, { x, z, intensity });
-    { const mine = attackerId === localId;
-      const heavy = mine && (SKILL_SOURCES.has(source) || name === "slam" || name === "blunt" || isCrit);
-      hitBurst(x, z, mine ? (isCrit ? "orange" : "gold") : victimId === localId ? "red" : "cyan", heavy, a?.y ?? getLocalAvatar()?.y ?? 0, isCrit);
-      if (mine && (isCrit || heavy)) shakeCamera(isCrit ? 0.45 : 0.28, isCrit ? 300 : 200);
-    }
-    // Comic hit word (short Thai onomatopoeia), only for hits that involve us, to keep the far view readable.
-    if (attackerId === localId) { const words = isCrit ? ["ฉึบ!", "เปรี้ยง!", "ฟันขาด!"] : (HIT_WORDS[name] || HIT_WORDS.fist); floatText(x, 2.4, z, words[Math.random() * words.length | 0], "onoma", { side: 46, drift: 30, rise: 26, life: 900 }); }
-    if (ghost && kind) SFX("ghost", { kind, ev: "hurt", x, z, delay: .03, intensity: .8 });
-    else if (ghost) SFX("ghost_hit", { x, z, delay: .02, intensity: .8 });
+    else if (["thai_dual", "arcane_sword", "ritual_dagger"].includes(weapon)) name = "blade";
+    else if (weapon === "spirit_staff") name = "blunt";
+    else if (weapon === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
+    SFX(name, { x, z, intensity: .7 });
+    const heavy = mine && (SKILL_SOURCES.has(source) || name === "blunt");
+    hitBurst(x, z, mine ? (isCrit ? "orange" : "gold") : "red", heavy, y, isCrit);
+    if (mine && isCrit) shakeCamera(.22, 160);
   }
   let lastCombatAt = -1e9, musicSyncIn = 0;
