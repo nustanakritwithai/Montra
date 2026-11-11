@@ -6,9 +6,9 @@ console.log('[TEST] Verifying Typhoon Tactical Combat Callouts System...');
 const mainSrc = fs.readFileSync('main.js', 'utf8');
 const cssSrc = fs.readFileSync('styles.css', 'utf8');
 
-// 1. Verify CSS styles for combat alerts
-assert(cssSrc.includes('.voice-guidance-hud.combat-alert'), 'styles.css defines .voice-guidance-hud.combat-alert');
-assert(cssSrc.includes('@keyframes pulseAvatarDanger'), 'styles.css defines @keyframes pulseAvatarDanger');
+// 1. Tactical warnings remain audio-only.
+assert(!cssSrc.includes('.voice-guidance-hud'), 'combat callouts have no floating panel');
+assert(mainSrc.includes('playVoiceGuidance(item)'), 'combat callouts still play speech');
 
 // 2. Verify TYPHOON_COMBAT_CALLOUTS dictionary
 assert(mainSrc.includes('const TYPHOON_COMBAT_CALLOUTS = {'), 'main.js defines TYPHOON_COMBAT_CALLOUTS');

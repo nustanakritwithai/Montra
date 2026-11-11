@@ -4824,32 +4824,92 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="phuttha_core"],
 .skill-modal-glyph[data-skill-glyph="phuttha_core"],
 .glyph[data-skill-glyph="phuttha_core"],
-.field-slot[data-skill-id="phuttha_core"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22phutBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff7a18%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%23b83000%22%20stop-opacity%3D%220.8%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d0a00%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22phutBlade1%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2230%25%22%20stop-color%3D%22%23ffe8a3%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23ff9900%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23d63000%22/%3E%20%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22phutBlade2%22%20x1%3D%22100%25%22%20y1%3D%220%25%22%20x2%3D%220%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23ffc83b%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23ff4500%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22phutGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23phutBg%29%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2228%22%20fill%3D%22none%22%20stroke%3D%22%23ffaa00%22%20stroke-width%3D%220.75%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Slash%201%20%28Primary%20heavy%20slash%29%20--%3E%20%3Cpath%20d%3D%22M%2010%2052%20C%2022%2042%2C%2042%2022%2C%2054%2012%20C%2046%2026%2C%2026%2046%2C%2010%2052%20Z%22%20fill%3D%22url%28%23phutBlade1%29%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3C%21--%20Slash%202%20%28Cross%20slash%29%20--%3E%20%3Cpath%20d%3D%22M%2012%2014%20C%2024%2024%2C%2044%2044%2C%2052%2050%20C%2042%2040%2C%2024%2020%2C%2012%2014%20Z%22%20fill%3D%22url%28%23phutBlade2%29%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3C%21--%20Slash%203%20%28Center%20finishing%20thrust%29%20--%3E%20%3Cpath%20d%3D%22M%206%2032%20C%2022%2030%2C%2048%2030%2C%2058%2032%20C%2048%2034%2C%2022%2034%2C%206%2032%20Z%22%20fill%3D%22%23fff%22%20opacity%3D%220.85%22/%3E%20%3C%21--%20Spark%20bursts%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2034%2C31%2041%2C32%2034%2C33%2032%2C40%2030%2C33%2023%2C32%2030%2C31%22%20fill%3D%22%23ffffff%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3Ccircle%20cx%3D%2246%22%20cy%3D%2218%22%20r%3D%222%22%20fill%3D%22%23ffe082%22/%3E%20%3Ccircle%20cx%3D%2218%22%20cy%3D%2246%22%20r%3D%221.5%22%20fill%3D%22%23ff7043%22/%3E%20%3Ccircle%20cx%3D%2248%22%20cy%3D%2244%22%20r%3D%221.8%22%20fill%3D%22%23ffca28%22/%3E%20%3Ccircle%20cx%3D%2216%22%20cy%3D%2218%22%20r%3D%221.5%22%20fill%3D%22%23ffd54f%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="phuttha_core"] .glyph,
+.kg-glyph[data-skill-glyph="twin_cut"],
+.skill-book-icon[data-skill-glyph="twin_cut"],
+.skill-modal-glyph[data-skill-glyph="twin_cut"],
+.glyph[data-skill-glyph="twin_cut"],
+.field-slot[data-skill-id="twin_cut"] .glyph,
+.kg-glyph[data-skill-glyph="twin_finale"],
+.skill-book-icon[data-skill-glyph="twin_finale"],
+.skill-modal-glyph[data-skill-glyph="twin_finale"],
+.glyph[data-skill-glyph="twin_finale"],
+.field-slot[data-skill-id="twin_finale"] .glyph,
+.kg-glyph[data-skill-glyph="flowing_blades"],
+.skill-book-icon[data-skill-glyph="flowing_blades"],
+.skill-modal-glyph[data-skill-glyph="flowing_blades"],
+.glyph[data-skill-glyph="flowing_blades"],
+.field-slot[data-skill-id="flowing_blades"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22phutBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff7a18%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%23b83000%22%20stop-opacity%3D%220.8%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d0a00%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22phutBlade1%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2230%25%22%20stop-color%3D%22%23ffe8a3%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23ff9900%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23d63000%22/%3E%20%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22phutBlade2%22%20x1%3D%22100%25%22%20y1%3D%220%25%22%20x2%3D%220%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23ffc83b%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23ff4500%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22phutGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23phutBg%29%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2228%22%20fill%3D%22none%22%20stroke%3D%22%23ffaa00%22%20stroke-width%3D%220.75%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Slash%201%20%28Primary%20heavy%20slash%29%20--%3E%20%3Cpath%20d%3D%22M%2010%2052%20C%2022%2042%2C%2042%2022%2C%2054%2012%20C%2046%2026%2C%2026%2046%2C%2010%2052%20Z%22%20fill%3D%22url%28%23phutBlade1%29%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3C%21--%20Slash%202%20%28Cross%20slash%29%20--%3E%20%3Cpath%20d%3D%22M%2012%2014%20C%2024%2024%2C%2044%2044%2C%2052%2050%20C%2042%2040%2C%2024%2020%2C%2012%2014%20Z%22%20fill%3D%22url%28%23phutBlade2%29%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3C%21--%20Slash%203%20%28Center%20finishing%20thrust%29%20--%3E%20%3Cpath%20d%3D%22M%206%2032%20C%2022%2030%2C%2048%2030%2C%2058%2032%20C%2048%2034%2C%2022%2034%2C%206%2032%20Z%22%20fill%3D%22%23fff%22%20opacity%3D%220.85%22/%3E%20%3C%21--%20Spark%20bursts%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2034%2C31%2041%2C32%2034%2C33%2032%2C40%2030%2C33%2023%2C32%2030%2C31%22%20fill%3D%22%23ffffff%22%20filter%3D%22url%28%23phutGlow%29%22/%3E%20%3Ccircle%20cx%3D%2246%22%20cy%3D%2218%22%20r%3D%222%22%20fill%3D%22%23ffe082%22/%3E%20%3Ccircle%20cx%3D%2218%22%20cy%3D%2246%22%20r%3D%221.5%22%20fill%3D%22%23ff7043%22/%3E%20%3Ccircle%20cx%3D%2248%22%20cy%3D%2244%22%20r%3D%221.8%22%20fill%3D%22%23ffca28%22/%3E%20%3Ccircle%20cx%3D%2216%22%20cy%3D%2218%22%20r%3D%221.5%22%20fill%3D%22%23ffd54f%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="sritra_core"],
 .skill-book-icon[data-skill-glyph="sritra_core"],
 .skill-modal-glyph[data-skill-glyph="sritra_core"],
 .glyph[data-skill-glyph="sritra_core"],
-.field-slot[data-skill-id="sritra_core"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sriBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232a75d3%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%23113e78%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2305152b%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22sriShield%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%220%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23f5e0a3%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23c99738%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%236e4e14%22/%3E%20%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22sriSteel%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23a8c7e0%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234a709c%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22sriGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sriBg%29%22%20stroke%3D%22%2368b4f3%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2228%22%20fill%3D%22none%22%20stroke%3D%22%233ba1ff%22%20stroke-width%3D%220.75%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Defensive%20Wave%20Rings%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2222%22%20ry%3D%2214%22%20fill%3D%22none%22%20stroke%3D%22%2390caf9%22%20stroke-width%3D%221.2%22%20opacity%3D%220.4%22/%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2226%22%20ry%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%2364b5f6%22%20stroke-width%3D%220.8%22%20opacity%3D%220.3%22/%3E%20%3C%21--%20Fortress%20Shield%20Body%20--%3E%20%3Cpath%20d%3D%22M%2032%2010%20L%2048%2016%20C%2048%2032%2C%2042%2046%2C%2032%2054%20C%2022%2046%2C%2016%2032%2C%2016%2016%20Z%22%20fill%3D%22url%28%23sriShield%29%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20filter%3D%22url%28%23sriGlow%29%22/%3E%20%3C%21--%20Shield%20Inner%20Relief%20--%3E%20%3Cpath%20d%3D%22M%2032%2014%20L%2044%2019%20C%2044%2031%2C%2039%2042%2C%2032%2048%20C%2025%2042%2C%2020%2031%2C%2020%2019%20Z%22%20fill%3D%22%23153658%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%220.8%22/%3E%20%3C%21--%20Crossed%20Guard%20Blades%20--%3E%20%3Cline%20x1%3D%2218%22%20y1%3D%2246%22%20x2%3D%2246%22%20y2%3D%2218%22%20stroke%3D%22url%28%23sriSteel%29%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3Cline%20x1%3D%2246%22%20y1%3D%2246%22%20x2%3D%2218%22%20y2%3D%2218%22%20stroke%3D%22url%28%23sriSteel%29%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3C%21--%20Center%20Protective%20Gem%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2037%2C32%2032%2C40%2027%2C32%22%20fill%3D%22%2300e5ff%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23fff%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="sritra_core"] .glyph,
+.kg-glyph[data-skill-glyph="measure"],
+.skill-book-icon[data-skill-glyph="measure"],
+.skill-modal-glyph[data-skill-glyph="measure"],
+.glyph[data-skill-glyph="measure"],
+.field-slot[data-skill-id="measure"] .glyph,
+.kg-glyph[data-skill-glyph="steady_guard"],
+.skill-book-icon[data-skill-glyph="steady_guard"],
+.skill-modal-glyph[data-skill-glyph="steady_guard"],
+.glyph[data-skill-glyph="steady_guard"],
+.field-slot[data-skill-id="steady_guard"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sriBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232a75d3%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%23113e78%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2305152b%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22sriShield%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%220%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23f5e0a3%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23c99738%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%236e4e14%22/%3E%20%3C/linearGradient%3E%20%3ClinearGradient%20id%3D%22sriSteel%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23a8c7e0%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234a709c%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22sriGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sriBg%29%22%20stroke%3D%22%2368b4f3%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2228%22%20fill%3D%22none%22%20stroke%3D%22%233ba1ff%22%20stroke-width%3D%220.75%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Defensive%20Wave%20Rings%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2222%22%20ry%3D%2214%22%20fill%3D%22none%22%20stroke%3D%22%2390caf9%22%20stroke-width%3D%221.2%22%20opacity%3D%220.4%22/%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%2226%22%20ry%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%2364b5f6%22%20stroke-width%3D%220.8%22%20opacity%3D%220.3%22/%3E%20%3C%21--%20Fortress%20Shield%20Body%20--%3E%20%3Cpath%20d%3D%22M%2032%2010%20L%2048%2016%20C%2048%2032%2C%2042%2046%2C%2032%2054%20C%2022%2046%2C%2016%2032%2C%2016%2016%20Z%22%20fill%3D%22url%28%23sriShield%29%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20filter%3D%22url%28%23sriGlow%29%22/%3E%20%3C%21--%20Shield%20Inner%20Relief%20--%3E%20%3Cpath%20d%3D%22M%2032%2014%20L%2044%2019%20C%2044%2031%2C%2039%2042%2C%2032%2048%20C%2025%2042%2C%2020%2031%2C%2020%2019%20Z%22%20fill%3D%22%23153658%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%220.8%22/%3E%20%3C%21--%20Crossed%20Guard%20Blades%20--%3E%20%3Cline%20x1%3D%2218%22%20y1%3D%2246%22%20x2%3D%2246%22%20y2%3D%2218%22%20stroke%3D%22url%28%23sriSteel%29%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3Cline%20x1%3D%2246%22%20y1%3D%2246%22%20x2%3D%2218%22%20y2%3D%2218%22%20stroke%3D%22url%28%23sriSteel%29%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3C%21--%20Center%20Protective%20Gem%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2037%2C32%2032%2C40%2027%2C32%22%20fill%3D%22%2300e5ff%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23fff%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="atamat_core"],
 .skill-book-icon[data-skill-glyph="atamat_core"],
 .skill-modal-glyph[data-skill-glyph="atamat_core"],
 .glyph[data-skill-glyph="atamat_core"],
-.field-slot[data-skill-id="atamat_core"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22ataBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2300b4d8%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%230077b6%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2303045e%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22ataWind%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%2390e0ef%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%230077b6%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22ataGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23ataBg%29%22%20stroke%3D%22%2348cae4%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Vortex%20Arcs%20--%3E%20%3Cpath%20d%3D%22M%2032%208%20A%2024%2024%200%200%201%2056%2032%20C%2050%2032%2C%2042%2026%2C%2032%2020%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%2056%2032%20A%2024%2024%200%200%201%2032%2056%20C%2032%2050%2C%2026%2042%2C%2020%2032%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%2032%2056%20A%2024%2024%200%200%201%208%2032%20C%2014%2032%2C%2022%2038%2C%2032%2044%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%208%2032%20A%2024%2024%200%200%201%2032%208%20C%2032%2014%2C%2038%2022%2C%2044%2032%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3C%21--%20Cyclone%20Speed%20Lines%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%23caf0f8%22%20stroke-width%3D%221.8%22%20stroke-dasharray%3D%226%2C4%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2212%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22%20stroke-dasharray%3D%224%2C3%22/%3E%20%3C%21--%20Center%20Spinning%20Dual%20Sabers%20Eye%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%225%22%20fill%3D%22%23fff%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%222.5%22%20fill%3D%22%2303045e%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="atamat_core"] .glyph,
+.kg-glyph[data-skill-glyph="sweep"],
+.skill-book-icon[data-skill-glyph="sweep"],
+.skill-modal-glyph[data-skill-glyph="sweep"],
+.glyph[data-skill-glyph="sweep"],
+.field-slot[data-skill-id="sweep"] .glyph,
+.kg-glyph[data-skill-glyph="circle_guard"],
+.skill-book-icon[data-skill-glyph="circle_guard"],
+.skill-modal-glyph[data-skill-glyph="circle_guard"],
+.glyph[data-skill-glyph="circle_guard"],
+.field-slot[data-skill-id="circle_guard"] .glyph,
+.kg-glyph[data-skill-glyph="opening_cut"],
+.skill-book-icon[data-skill-glyph="opening_cut"],
+.skill-modal-glyph[data-skill-glyph="opening_cut"],
+.glyph[data-skill-glyph="opening_cut"],
+.field-slot[data-skill-id="opening_cut"] .glyph,
+.kg-glyph[data-skill-glyph="guardian_sweep"],
+.skill-book-icon[data-skill-glyph="guardian_sweep"],
+.skill-modal-glyph[data-skill-glyph="guardian_sweep"],
+.glyph[data-skill-glyph="guardian_sweep"],
+.field-slot[data-skill-id="guardian_sweep"] .glyph,
+.kg-glyph[data-skill-glyph="open_circle"],
+.skill-book-icon[data-skill-glyph="open_circle"],
+.skill-modal-glyph[data-skill-glyph="open_circle"],
+.glyph[data-skill-glyph="open_circle"],
+.field-slot[data-skill-id="open_circle"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22ataBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2300b4d8%22%20stop-opacity%3D%220.9%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%230077b6%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2303045e%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22ataWind%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%2390e0ef%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%230077b6%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22ataGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23ataBg%29%22%20stroke%3D%22%2348cae4%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Vortex%20Arcs%20--%3E%20%3Cpath%20d%3D%22M%2032%208%20A%2024%2024%200%200%201%2056%2032%20C%2050%2032%2C%2042%2026%2C%2032%2020%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%2056%2032%20A%2024%2024%200%200%201%2032%2056%20C%2032%2050%2C%2026%2042%2C%2020%2032%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%2032%2056%20A%2024%2024%200%200%201%208%2032%20C%2014%2032%2C%2022%2038%2C%2032%2044%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Cpath%20d%3D%22M%208%2032%20A%2024%2024%200%200%201%2032%208%20C%2032%2014%2C%2038%2022%2C%2044%2032%20Z%22%20fill%3D%22url%28%23ataWind%29%22%20opacity%3D%220.85%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3C%21--%20Cyclone%20Speed%20Lines%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%23caf0f8%22%20stroke-width%3D%221.8%22%20stroke-dasharray%3D%226%2C4%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2212%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22%20stroke-dasharray%3D%224%2C3%22/%3E%20%3C%21--%20Center%20Spinning%20Dual%20Sabers%20Eye%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%225%22%20fill%3D%22%23fff%22%20filter%3D%22url%28%23ataGlow%29%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%222.5%22%20fill%3D%22%2303045e%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="chumphon_core"],
 .skill-book-icon[data-skill-glyph="chumphon_core"],
 .skill-modal-glyph[data-skill-glyph="chumphon_core"],
 .glyph[data-skill-glyph="chumphon_core"],
-.field-slot[data-skill-id="chumphon_core"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22chumBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffd166%22%20stop-opacity%3D%220.95%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23f77f00%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234a2200%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22chumGold%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23ffd700%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22chumGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23chumBg%29%22%20stroke%3D%22%23ffe6a7%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Sacred%208-Direction%20Rays%20--%3E%20%3Cg%20stroke%3D%22url%28%23chumGold%29%22%20stroke-width%3D%221.5%22%20opacity%3D%220.7%22%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%226%22%20x2%3D%2232%22%20y2%3D%2258%22/%3E%20%3Cline%20x1%3D%226%22%20y1%3D%2232%22%20x2%3D%2258%22%20y2%3D%2232%22/%3E%20%3Cline%20x1%3D%2214%22%20y1%3D%2214%22%20x2%3D%2250%22%20y2%3D%2250%22/%3E%20%3Cline%20x1%3D%2214%22%20y1%3D%2250%22%20x2%3D%2250%22%20y2%3D%2214%22/%3E%20%3C/g%3E%20%3C%21--%20Concentric%20Mystic%20Mandala%20Circles%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2222%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222%2C3%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2216%22%20fill%3D%22none%22%20stroke%3D%22%23ffd700%22%20stroke-width%3D%221.8%22/%3E%20%3C%21--%20Octagon%20Warding%20Seal%20--%3E%20%3Cpolygon%20points%3D%2232%2C12%2046%2C18%2052%2C32%2046%2C46%2032%2C52%2018%2C46%2012%2C32%2018%2C18%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20filter%3D%22url%28%23chumGlow%29%22/%3E%20%3C%21--%20Center%20Sacred%20Diamond%20--%3E%20%3Cpolygon%20points%3D%2232%2C22%2042%2C32%2032%2C42%2022%2C32%22%20fill%3D%22url%28%23chumGold%29%22%20filter%3D%22url%28%23chumGlow%29%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%224%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="chumphon_core"] .glyph,
+.kg-glyph[data-skill-glyph="naval_guard"],
+.skill-book-icon[data-skill-glyph="naval_guard"],
+.skill-modal-glyph[data-skill-glyph="naval_guard"],
+.glyph[data-skill-glyph="naval_guard"],
+.field-slot[data-skill-id="naval_guard"] .glyph,
+.kg-glyph[data-skill-glyph="protect_ally"],
+.skill-book-icon[data-skill-glyph="protect_ally"],
+.skill-modal-glyph[data-skill-glyph="protect_ally"],
+.glyph[data-skill-glyph="protect_ally"],
+.field-slot[data-skill-id="protect_ally"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22chumBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffd166%22%20stop-opacity%3D%220.95%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23f77f00%22%20stop-opacity%3D%220.85%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%234a2200%22%20stop-opacity%3D%220.95%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22chumGold%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%23ffd700%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3C/linearGradient%3E%20%3Cfilter%20id%3D%22chumGlow%22%20x%3D%22-20%25%22%20y%3D%22-20%25%22%20width%3D%22140%25%22%20height%3D%22140%25%22%3E%20%3CfeGaussianBlur%20stdDeviation%3D%222%22%20result%3D%22blur%22/%3E%20%3CfeComposite%20in%3D%22SourceGraphic%22%20in2%3D%22blur%22%20operator%3D%22over%22/%3E%20%3C/filter%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23chumBg%29%22%20stroke%3D%22%23ffe6a7%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Sacred%208-Direction%20Rays%20--%3E%20%3Cg%20stroke%3D%22url%28%23chumGold%29%22%20stroke-width%3D%221.5%22%20opacity%3D%220.7%22%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%226%22%20x2%3D%2232%22%20y2%3D%2258%22/%3E%20%3Cline%20x1%3D%226%22%20y1%3D%2232%22%20x2%3D%2258%22%20y2%3D%2232%22/%3E%20%3Cline%20x1%3D%2214%22%20y1%3D%2214%22%20x2%3D%2250%22%20y2%3D%2250%22/%3E%20%3Cline%20x1%3D%2214%22%20y1%3D%2250%22%20x2%3D%2250%22%20y2%3D%2214%22/%3E%20%3C/g%3E%20%3C%21--%20Concentric%20Mystic%20Mandala%20Circles%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2222%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%222%2C3%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2216%22%20fill%3D%22none%22%20stroke%3D%22%23ffd700%22%20stroke-width%3D%221.8%22/%3E%20%3C%21--%20Octagon%20Warding%20Seal%20--%3E%20%3Cpolygon%20points%3D%2232%2C12%2046%2C18%2052%2C32%2046%2C46%2032%2C52%2018%2C46%2012%2C32%2018%2C18%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.2%22%20filter%3D%22url%28%23chumGlow%29%22/%3E%20%3C%21--%20Center%20Sacred%20Diamond%20--%3E%20%3Cpolygon%20points%3D%2232%2C22%2042%2C32%2032%2C42%2022%2C32%22%20fill%3D%22url%28%23chumGold%29%22%20filter%3D%22url%28%23chumGlow%29%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%224%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="class_sword"],
@@ -4858,7 +4918,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .glyph[data-skill-glyph="class_sword"],
 .field-slot[data-skill-id="class_sword"] .glyph,
 .kg-center-class-orb[data-skill-glyph="class_sword"] {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22swCrestBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffeaa7%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3Cstop%20offset%3D%2280%25%22%20stop-color%3D%22%238c6d1f%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d2c04%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22swGoldBlade%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2235%25%22%20stop-color%3D%22%23fff2a3%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23f39c12%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23a04000%22/%3E%20%3C/linearGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23swCrestBg%29%22%20stroke%3D%22%23f1c40f%22%20stroke-width%3D%222%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2226%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%220.8%22%20stroke-dasharray%3D%223%2C2%22/%3E%20%3C%21--%20Thai%20Twin%20Swords%20Crossed%20--%3E%20%3Cg%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%3E%20%3C%21--%20Blade%201%20--%3E%20%3Cpath%20d%3D%22M%2016%2048%20L%2048%2016%22%20stroke%3D%22url%28%23swGoldBlade%29%22%20stroke-width%3D%223.5%22/%3E%20%3Cpath%20d%3D%22M%2044%2014%20L%2050%2018%22%20stroke%3D%22%23f39c12%22%20stroke-width%3D%222.5%22/%3E%20%3Ccircle%20cx%3D%2216%22%20cy%3D%2248%22%20r%3D%222.5%22%20fill%3D%22%23f1c40f%22/%3E%20%3C%21--%20Blade%202%20--%3E%20%3Cpath%20d%3D%22M%2048%2048%20L%2016%2016%22%20stroke%3D%22url%28%23swGoldBlade%29%22%20stroke-width%3D%223.5%22/%3E%20%3Cpath%20d%3D%22M%2014%2018%20L%2020%2014%22%20stroke%3D%22%23f39c12%22%20stroke-width%3D%222.5%22/%3E%20%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%222.5%22%20fill%3D%22%23f1c40f%22/%3E%20%3C/g%3E%20%3C%21--%20Center%20Star%20Emblem%20--%3E%20%3Cpolygon%20points%3D%2232%2C22%2035%2C29%2042%2C32%2035%2C35%2032%2C42%2029%2C35%2022%2C32%2029%2C29%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22swCrestBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffeaa7%22/%3E%20%3Cstop%20offset%3D%2240%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3Cstop%20offset%3D%2280%25%22%20stop-color%3D%22%238c6d1f%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d2c04%22/%3E%20%3C/radialGradient%3E%20%3ClinearGradient%20id%3D%22swGoldBlade%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ffffff%22/%3E%20%3Cstop%20offset%3D%2235%25%22%20stop-color%3D%22%23fff2a3%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23f39c12%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23a04000%22/%3E%20%3C/linearGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23swCrestBg%29%22%20stroke%3D%22%23f1c40f%22%20stroke-width%3D%222%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2226%22%20fill%3D%22none%22%20stroke%3D%22%23fff%22%20stroke-width%3D%220.8%22%20stroke-dasharray%3D%223%2C2%22/%3E%20%3C%21--%20Thai%20Twin%20Swords%20Crossed%20--%3E%20%3Cg%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22%20stroke-linecap%3D%22round%22%3E%20%3C%21--%20Blade%201%20--%3E%20%3Cpath%20d%3D%22M%2016%2048%20L%2048%2016%22%20stroke%3D%22url%28%23swGoldBlade%29%22%20stroke-width%3D%223.5%22/%3E%20%3Cpath%20d%3D%22M%2044%2014%20L%2050%2018%22%20stroke%3D%22%23f39c12%22%20stroke-width%3D%222.5%22/%3E%20%3Ccircle%20cx%3D%2216%22%20cy%3D%2248%22%20r%3D%222.5%22%20fill%3D%22%23f1c40f%22/%3E%20%3C%21--%20Blade%202%20--%3E%20%3Cpath%20d%3D%22M%2048%2048%20L%2016%2016%22%20stroke%3D%22url%28%23swGoldBlade%29%22%20stroke-width%3D%223.5%22/%3E%20%3Cpath%20d%3D%22M%2014%2018%20L%2020%2014%22%20stroke%3D%22%23f39c12%22%20stroke-width%3D%222.5%22/%3E%20%3Ccircle%20cx%3D%2248%22%20cy%3D%2248%22%20r%3D%222.5%22%20fill%3D%22%23f1c40f%22/%3E%20%3C/g%3E%20%3C%21--%20Center%20Star%20Emblem%20--%3E%20%3Cpolygon%20points%3D%2232%2C22%2035%2C29%2042%2C32%2035%2C35%2032%2C42%2029%2C35%2022%2C32%2029%2C29%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="muay_chaiya"],
@@ -4870,8 +4930,53 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="chaiya"],
 .skill-modal-glyph[data-skill-glyph="chaiya"],
 .glyph[data-skill-glyph="chaiya"],
-.field-slot[data-skill-id="chaiya"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22cyBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232a9d8f%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23144d46%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2308201d%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23cyBg%29%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Guarding%20Arms%20Form%20--%3E%20%3Cpath%20d%3D%22M%2020%2046%20L%2024%2024%20L%2032%2030%22%20fill%3D%22none%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2044%2046%20L%2040%2024%20L%2032%2030%22%20fill%3D%22none%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%20%3C%21--%20Sacred%20Mongkhon%20Headband%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2218%22%20rx%3D%228%22%20ry%3D%224%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2214%22%20x2%3D%2232%22%20y2%3D%228%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Defensive%20Shield%20Ripple%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2220%22%20fill%3D%22none%22%20stroke%3D%22%23e9c46a%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%223%2C3%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="chaiya"] .glyph,
+.kg-glyph[data-skill-glyph="parry"],
+.skill-book-icon[data-skill-glyph="parry"],
+.skill-modal-glyph[data-skill-glyph="parry"],
+.glyph[data-skill-glyph="parry"],
+.field-slot[data-skill-id="parry"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_elbow"],
+.skill-book-icon[data-skill-glyph="chaiya_elbow"],
+.skill-modal-glyph[data-skill-glyph="chaiya_elbow"],
+.glyph[data-skill-glyph="chaiya_elbow"],
+.field-slot[data-skill-id="chaiya_elbow"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_knee"],
+.skill-book-icon[data-skill-glyph="chaiya_knee"],
+.skill-modal-glyph[data-skill-glyph="chaiya_knee"],
+.glyph[data-skill-glyph="chaiya_knee"],
+.field-slot[data-skill-id="chaiya_knee"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_finish"],
+.skill-book-icon[data-skill-glyph="chaiya_finish"],
+.skill-modal-glyph[data-skill-glyph="chaiya_finish"],
+.glyph[data-skill-glyph="chaiya_finish"],
+.field-slot[data-skill-id="chaiya_finish"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_cover"],
+.skill-book-icon[data-skill-glyph="chaiya_cover"],
+.skill-modal-glyph[data-skill-glyph="chaiya_cover"],
+.glyph[data-skill-glyph="chaiya_cover"],
+.field-slot[data-skill-id="chaiya_cover"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_return"],
+.skill-book-icon[data-skill-glyph="chaiya_return"],
+.skill-modal-glyph[data-skill-glyph="chaiya_return"],
+.glyph[data-skill-glyph="chaiya_return"],
+.field-slot[data-skill-id="chaiya_return"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_advanced_counter"],
+.skill-book-icon[data-skill-glyph="chaiya_advanced_counter"],
+.skill-modal-glyph[data-skill-glyph="chaiya_advanced_counter"],
+.glyph[data-skill-glyph="chaiya_advanced_counter"],
+.field-slot[data-skill-id="chaiya_advanced_counter"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_master_counter"],
+.skill-book-icon[data-skill-glyph="chaiya_master_counter"],
+.skill-modal-glyph[data-skill-glyph="chaiya_master_counter"],
+.glyph[data-skill-glyph="chaiya_master_counter"],
+.field-slot[data-skill-id="chaiya_master_counter"] .glyph,
+.kg-glyph[data-skill-glyph="chaiya_final_counter"],
+.skill-book-icon[data-skill-glyph="chaiya_final_counter"],
+.skill-modal-glyph[data-skill-glyph="chaiya_final_counter"],
+.glyph[data-skill-glyph="chaiya_final_counter"],
+.field-slot[data-skill-id="chaiya_final_counter"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22cyBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232a9d8f%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23144d46%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2308201d%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23cyBg%29%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Guarding%20Arms%20Form%20--%3E%20%3Cpath%20d%3D%22M%2020%2046%20L%2024%2024%20L%2032%2030%22%20fill%3D%22none%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2044%2046%20L%2040%2024%20L%2032%2030%22%20fill%3D%22none%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%224.5%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22/%3E%20%3C%21--%20Sacred%20Mongkhon%20Headband%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2218%22%20rx%3D%228%22%20ry%3D%224%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%222%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2214%22%20x2%3D%2232%22%20y2%3D%228%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Defensive%20Shield%20Ripple%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2220%22%20fill%3D%22none%22%20stroke%3D%22%23e9c46a%22%20stroke-width%3D%221.2%22%20stroke-dasharray%3D%223%2C3%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="muay_korat"],
@@ -4883,8 +4988,63 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="korat"],
 .skill-modal-glyph[data-skill-glyph="korat"],
 .glyph[data-skill-glyph="korat"],
-.field-slot[data-skill-id="korat"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22koBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23e76f51%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%239d2a14%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d0d04%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23koBg%29%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Fist%20Striking%20Right%20--%3E%20%3Crect%20x%3D%2222%22%20y%3D%2222%22%20width%3D%2220%22%20height%3D%2220%22%20rx%3D%226%22%20fill%3D%22%23f4a261%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2228%22%20y1%3D%2222%22%20x2%3D%2228%22%20y2%3D%2242%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2234%22%20y1%3D%2222%22%20x2%3D%2234%22%20y2%3D%2242%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Impact%20shock%20lines%20--%3E%20%3Cpath%20d%3D%22M%2046%2020%20L%2056%2014%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2048%2032%20L%2060%2032%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2046%2044%20L%2056%2050%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="korat"] .glyph,
+.kg-glyph[data-skill-glyph="punch"],
+.skill-book-icon[data-skill-glyph="punch"],
+.skill-modal-glyph[data-skill-glyph="punch"],
+.glyph[data-skill-glyph="punch"],
+.field-slot[data-skill-id="punch"] .glyph,
+.kg-glyph[data-skill-glyph="teep"],
+.skill-book-icon[data-skill-glyph="teep"],
+.skill-modal-glyph[data-skill-glyph="teep"],
+.glyph[data-skill-glyph="teep"],
+.field-slot[data-skill-id="teep"] .glyph,
+.kg-glyph[data-skill-glyph="grapple"],
+.skill-book-icon[data-skill-glyph="grapple"],
+.skill-modal-glyph[data-skill-glyph="grapple"],
+.glyph[data-skill-glyph="grapple"],
+.field-slot[data-skill-id="grapple"] .glyph,
+.kg-glyph[data-skill-glyph="korat_heavy"],
+.skill-book-icon[data-skill-glyph="korat_heavy"],
+.skill-modal-glyph[data-skill-glyph="korat_heavy"],
+.glyph[data-skill-glyph="korat_heavy"],
+.field-slot[data-skill-id="korat_heavy"] .glyph,
+.kg-glyph[data-skill-glyph="korat_swing"],
+.skill-book-icon[data-skill-glyph="korat_swing"],
+.skill-modal-glyph[data-skill-glyph="korat_swing"],
+.glyph[data-skill-glyph="korat_swing"],
+.field-slot[data-skill-id="korat_swing"] .glyph,
+.kg-glyph[data-skill-glyph="korat_finish"],
+.skill-book-icon[data-skill-glyph="korat_finish"],
+.skill-modal-glyph[data-skill-glyph="korat_finish"],
+.glyph[data-skill-glyph="korat_finish"],
+.field-slot[data-skill-id="korat_finish"] .glyph,
+.kg-glyph[data-skill-glyph="korat_pierce"],
+.skill-book-icon[data-skill-glyph="korat_pierce"],
+.skill-modal-glyph[data-skill-glyph="korat_pierce"],
+.glyph[data-skill-glyph="korat_pierce"],
+.field-slot[data-skill-id="korat_pierce"] .glyph,
+.kg-glyph[data-skill-glyph="korat_press"],
+.skill-book-icon[data-skill-glyph="korat_press"],
+.skill-modal-glyph[data-skill-glyph="korat_press"],
+.glyph[data-skill-glyph="korat_press"],
+.field-slot[data-skill-id="korat_press"] .glyph,
+.kg-glyph[data-skill-glyph="korat_advanced_strike"],
+.skill-book-icon[data-skill-glyph="korat_advanced_strike"],
+.skill-modal-glyph[data-skill-glyph="korat_advanced_strike"],
+.glyph[data-skill-glyph="korat_advanced_strike"],
+.field-slot[data-skill-id="korat_advanced_strike"] .glyph,
+.kg-glyph[data-skill-glyph="korat_master_strike"],
+.skill-book-icon[data-skill-glyph="korat_master_strike"],
+.skill-modal-glyph[data-skill-glyph="korat_master_strike"],
+.glyph[data-skill-glyph="korat_master_strike"],
+.field-slot[data-skill-id="korat_master_strike"] .glyph,
+.kg-glyph[data-skill-glyph="korat_final_strike"],
+.skill-book-icon[data-skill-glyph="korat_final_strike"],
+.skill-modal-glyph[data-skill-glyph="korat_final_strike"],
+.glyph[data-skill-glyph="korat_final_strike"],
+.field-slot[data-skill-id="korat_final_strike"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22koBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23e76f51%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%239d2a14%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233d0d04%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23koBg%29%22%20stroke%3D%22%23f4a261%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Fist%20Striking%20Right%20--%3E%20%3Crect%20x%3D%2222%22%20y%3D%2222%22%20width%3D%2220%22%20height%3D%2220%22%20rx%3D%226%22%20fill%3D%22%23f4a261%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2228%22%20y1%3D%2222%22%20x2%3D%2228%22%20y2%3D%2242%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2234%22%20y1%3D%2222%22%20x2%3D%2234%22%20y2%3D%2242%22%20stroke%3D%22%23e76f51%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Impact%20shock%20lines%20--%3E%20%3Cpath%20d%3D%22M%2046%2020%20L%2056%2014%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2048%2032%20L%2060%2032%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%20%3Cpath%20d%3D%22M%2046%2044%20L%2056%2050%22%20stroke%3D%22%23ffeb3b%22%20stroke-width%3D%222.5%22%20stroke-linecap%3D%22round%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="muay_lopburi"],
@@ -4896,8 +5056,68 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="lopburi"],
 .skill-modal-glyph[data-skill-glyph="lopburi"],
 .glyph[data-skill-glyph="lopburi"],
-.field-slot[data-skill-id="lopburi"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22lopBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%239c27b0%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%234a148c%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%231a0533%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23lopBg%29%22%20stroke%3D%22%23ba68c8%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Feint%20Ghost%20Fist%20%28Afterimage%29%20--%3E%20%3Ccircle%20cx%3D%2224%22%20cy%3D%2226%22%20r%3D%229%22%20fill%3D%22none%22%20stroke%3D%22%23e1bee7%22%20stroke-width%3D%222%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Main%20Swift%20Fist%20--%3E%20%3Ccircle%20cx%3D%2238%22%20cy%3D%2236%22%20r%3D%2211%22%20fill%3D%22%23ba68c8%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Cpath%20d%3D%22M%2012%2044%20C%2020%2040%2C%2028%2036%2C%2038%2036%22%20stroke%3D%22%23e1bee7%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="lopburi"] .glyph,
+.kg-glyph[data-skill-glyph="footwork"],
+.skill-book-icon[data-skill-glyph="footwork"],
+.skill-modal-glyph[data-skill-glyph="footwork"],
+.glyph[data-skill-glyph="footwork"],
+.field-slot[data-skill-id="footwork"] .glyph,
+.kg-glyph[data-skill-glyph="circle_step"],
+.skill-book-icon[data-skill-glyph="circle_step"],
+.skill-modal-glyph[data-skill-glyph="circle_step"],
+.glyph[data-skill-glyph="circle_step"],
+.field-slot[data-skill-id="circle_step"] .glyph,
+.kg-glyph[data-skill-glyph="step"],
+.skill-book-icon[data-skill-glyph="step"],
+.skill-modal-glyph[data-skill-glyph="step"],
+.glyph[data-skill-glyph="step"],
+.field-slot[data-skill-id="step"] .glyph,
+.kg-glyph[data-skill-glyph="evade"],
+.skill-book-icon[data-skill-glyph="evade"],
+.skill-modal-glyph[data-skill-glyph="evade"],
+.glyph[data-skill-glyph="evade"],
+.field-slot[data-skill-id="evade"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_angle"],
+.skill-book-icon[data-skill-glyph="lopburi_angle"],
+.skill-modal-glyph[data-skill-glyph="lopburi_angle"],
+.glyph[data-skill-glyph="lopburi_angle"],
+.field-slot[data-skill-id="lopburi_angle"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_counter"],
+.skill-book-icon[data-skill-glyph="lopburi_counter"],
+.skill-modal-glyph[data-skill-glyph="lopburi_counter"],
+.glyph[data-skill-glyph="lopburi_counter"],
+.field-slot[data-skill-id="lopburi_counter"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_finish"],
+.skill-book-icon[data-skill-glyph="lopburi_finish"],
+.skill-modal-glyph[data-skill-glyph="lopburi_finish"],
+.glyph[data-skill-glyph="lopburi_finish"],
+.field-slot[data-skill-id="lopburi_finish"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_reverse"],
+.skill-book-icon[data-skill-glyph="lopburi_reverse"],
+.skill-modal-glyph[data-skill-glyph="lopburi_reverse"],
+.glyph[data-skill-glyph="lopburi_reverse"],
+.field-slot[data-skill-id="lopburi_reverse"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_slipcounter"],
+.skill-book-icon[data-skill-glyph="lopburi_slipcounter"],
+.skill-modal-glyph[data-skill-glyph="lopburi_slipcounter"],
+.glyph[data-skill-glyph="lopburi_slipcounter"],
+.field-slot[data-skill-id="lopburi_slipcounter"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_advanced_angle"],
+.skill-book-icon[data-skill-glyph="lopburi_advanced_angle"],
+.skill-modal-glyph[data-skill-glyph="lopburi_advanced_angle"],
+.glyph[data-skill-glyph="lopburi_advanced_angle"],
+.field-slot[data-skill-id="lopburi_advanced_angle"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_master_counter"],
+.skill-book-icon[data-skill-glyph="lopburi_master_counter"],
+.skill-modal-glyph[data-skill-glyph="lopburi_master_counter"],
+.glyph[data-skill-glyph="lopburi_master_counter"],
+.field-slot[data-skill-id="lopburi_master_counter"] .glyph,
+.kg-glyph[data-skill-glyph="lopburi_final_counter"],
+.skill-book-icon[data-skill-glyph="lopburi_final_counter"],
+.skill-modal-glyph[data-skill-glyph="lopburi_final_counter"],
+.glyph[data-skill-glyph="lopburi_final_counter"],
+.field-slot[data-skill-id="lopburi_final_counter"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22lopBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%239c27b0%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%234a148c%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%231a0533%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23lopBg%29%22%20stroke%3D%22%23ba68c8%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Feint%20Ghost%20Fist%20%28Afterimage%29%20--%3E%20%3Ccircle%20cx%3D%2224%22%20cy%3D%2226%22%20r%3D%229%22%20fill%3D%22none%22%20stroke%3D%22%23e1bee7%22%20stroke-width%3D%222%22%20stroke-dasharray%3D%223%2C2%22%20opacity%3D%220.6%22/%3E%20%3C%21--%20Main%20Swift%20Fist%20--%3E%20%3Ccircle%20cx%3D%2238%22%20cy%3D%2236%22%20r%3D%2211%22%20fill%3D%22%23ba68c8%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Cpath%20d%3D%22M%2012%2044%20C%2020%2040%2C%2028%2036%2C%2038%2036%22%20stroke%3D%22%23e1bee7%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="muay_thasao"],
@@ -4909,8 +5129,48 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="thasao"],
 .skill-modal-glyph[data-skill-glyph="thasao"],
 .glyph[data-skill-glyph="thasao"],
-.field-slot[data-skill-id="thasao"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22tsBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2300b4d8%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23005f73%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23021c22%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23tsBg%29%22%20stroke%3D%22%2394d2bd%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20High%20Crescent%20Kick%20Arc%20--%3E%20%3Cpath%20d%3D%22M%2014%2050%20C%2018%2020%2C%2036%2012%2C%2052%2018%22%20fill%3D%22none%22%20stroke%3D%22%23e9d8a6%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%20%3C%21--%20Wind%20Blade%20Slash%20--%3E%20%3Cpath%20d%3D%22M%2022%2042%20C%2028%2024%2C%2040%2018%2C%2054%2022%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2252%22%20cy%3D%2218%22%20r%3D%224%22%20fill%3D%22%230a9396%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.5%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="thasao"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_step"],
+.skill-book-icon[data-skill-glyph="thasao_step"],
+.skill-modal-glyph[data-skill-glyph="thasao_step"],
+.glyph[data-skill-glyph="thasao_step"],
+.field-slot[data-skill-id="thasao_step"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_flurry"],
+.skill-book-icon[data-skill-glyph="thasao_flurry"],
+.skill-modal-glyph[data-skill-glyph="thasao_flurry"],
+.glyph[data-skill-glyph="thasao_flurry"],
+.field-slot[data-skill-id="thasao_flurry"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_finish"],
+.skill-book-icon[data-skill-glyph="thasao_finish"],
+.skill-modal-glyph[data-skill-glyph="thasao_finish"],
+.glyph[data-skill-glyph="thasao_finish"],
+.field-slot[data-skill-id="thasao_finish"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_rush"],
+.skill-book-icon[data-skill-glyph="thasao_rush"],
+.skill-modal-glyph[data-skill-glyph="thasao_rush"],
+.glyph[data-skill-glyph="thasao_rush"],
+.field-slot[data-skill-id="thasao_rush"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_retreat"],
+.skill-book-icon[data-skill-glyph="thasao_retreat"],
+.skill-modal-glyph[data-skill-glyph="thasao_retreat"],
+.glyph[data-skill-glyph="thasao_retreat"],
+.field-slot[data-skill-id="thasao_retreat"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_advanced_flurry"],
+.skill-book-icon[data-skill-glyph="thasao_advanced_flurry"],
+.skill-modal-glyph[data-skill-glyph="thasao_advanced_flurry"],
+.glyph[data-skill-glyph="thasao_advanced_flurry"],
+.field-slot[data-skill-id="thasao_advanced_flurry"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_master_rush"],
+.skill-book-icon[data-skill-glyph="thasao_master_rush"],
+.skill-modal-glyph[data-skill-glyph="thasao_master_rush"],
+.glyph[data-skill-glyph="thasao_master_rush"],
+.field-slot[data-skill-id="thasao_master_rush"] .glyph,
+.kg-glyph[data-skill-glyph="thasao_final_rush"],
+.skill-book-icon[data-skill-glyph="thasao_final_rush"],
+.skill-modal-glyph[data-skill-glyph="thasao_final_rush"],
+.glyph[data-skill-glyph="thasao_final_rush"],
+.field-slot[data-skill-id="thasao_final_rush"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22tsBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2300b4d8%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23005f73%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23021c22%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23tsBg%29%22%20stroke%3D%22%2394d2bd%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20High%20Crescent%20Kick%20Arc%20--%3E%20%3Cpath%20d%3D%22M%2014%2050%20C%2018%2020%2C%2036%2012%2C%2052%2018%22%20fill%3D%22none%22%20stroke%3D%22%23e9d8a6%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22/%3E%20%3C%21--%20Wind%20Blade%20Slash%20--%3E%20%3Cpath%20d%3D%22M%2022%2042%20C%2028%2024%2C%2040%2018%2C%2054%2022%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.5%22/%3E%20%3Ccircle%20cx%3D%2252%22%20cy%3D%2218%22%20r%3D%224%22%20fill%3D%22%230a9396%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221.5%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_mark"],
@@ -4918,7 +5178,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-modal-glyph[data-skill-glyph="seer_mark"],
 .glyph[data-skill-glyph="seer_mark"],
 .field-slot[data-skill-id="seer_mark"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22smBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c1121f%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23780000%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%232b0000%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23smBg%29%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Crimson%20Talisman%20Paper%20--%3E%20%3Crect%20x%3D%2220%22%20y%3D%2212%22%20width%3D%2224%22%20height%3D%2240%22%20rx%3D%223%22%20fill%3D%22%23b7094c%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Golden%20Yantra%20Inscription%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2222%22%20r%3D%224%22%20fill%3D%22none%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2228%22%20x2%3D%2232%22%20y2%3D%2246%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2226%22%20y1%3D%2234%22%20x2%3D%2238%22%20y2%3D%2234%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2226%22%20y1%3D%2240%22%20x2%3D%2238%22%20y2%3D%2240%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22smBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23c1121f%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23780000%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%232b0000%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23smBg%29%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Crimson%20Talisman%20Paper%20--%3E%20%3Crect%20x%3D%2220%22%20y%3D%2212%22%20width%3D%2224%22%20height%3D%2240%22%20rx%3D%223%22%20fill%3D%22%23b7094c%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Golden%20Yantra%20Inscription%20--%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2222%22%20r%3D%224%22%20fill%3D%22none%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2228%22%20x2%3D%2232%22%20y2%3D%2246%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.5%22/%3E%20%3Cline%20x1%3D%2226%22%20y1%3D%2234%22%20x2%3D%2238%22%20y2%3D%2234%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2226%22%20y1%3D%2240%22%20x2%3D%2238%22%20y2%3D%2240%22%20stroke%3D%22%23fdf0d5%22%20stroke-width%3D%221.2%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_rice"],
@@ -4930,8 +5190,18 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="seer_scatter"],
 .skill-modal-glyph[data-skill-glyph="seer_scatter"],
 .glyph[data-skill-glyph="seer_scatter"],
-.field-slot[data-skill-id="seer_scatter"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22srBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2348cae4%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%230077b6%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2303045e%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23srBg%29%22%20stroke%3D%22%23caf0f8%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Rice%20Grains%20Radiating%20--%3E%20%3Cg%20fill%3D%22%23ffffff%22%20stroke%3D%22%2390e0ef%22%20stroke-width%3D%220.8%22%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2220%22%20rx%3D%222.5%22%20ry%3D%225%22/%3E%20%3Cellipse%20cx%3D%2242%22%20cy%3D%2226%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%2835%2042%2026%29%22/%3E%20%3Cellipse%20cx%3D%2244%22%20cy%3D%2238%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%2875%2044%2038%29%22/%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2246%22%20rx%3D%222.5%22%20ry%3D%225%22/%3E%20%3Cellipse%20cx%3D%2220%22%20cy%3D%2238%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%28-75%2020%2038%29%22/%3E%20%3Cellipse%20cx%3D%2222%22%20cy%3D%2226%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%28-35%2022%2026%29%22/%3E%20%3C%21--%20Center%20Grain%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%223%22%20ry%3D%226%22%20fill%3D%22%23ffd166%22/%3E%20%3C/g%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="seer_scatter"] .glyph,
+.kg-glyph[data-skill-glyph="seer_ash_rice"],
+.skill-book-icon[data-skill-glyph="seer_ash_rice"],
+.skill-modal-glyph[data-skill-glyph="seer_ash_rice"],
+.glyph[data-skill-glyph="seer_ash_rice"],
+.field-slot[data-skill-id="seer_ash_rice"] .glyph,
+.kg-glyph[data-skill-glyph="seer_spirit_rain"],
+.skill-book-icon[data-skill-glyph="seer_spirit_rain"],
+.skill-modal-glyph[data-skill-glyph="seer_spirit_rain"],
+.glyph[data-skill-glyph="seer_spirit_rain"],
+.field-slot[data-skill-id="seer_spirit_rain"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22srBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%2348cae4%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%230077b6%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2303045e%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23srBg%29%22%20stroke%3D%22%23caf0f8%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Rice%20Grains%20Radiating%20--%3E%20%3Cg%20fill%3D%22%23ffffff%22%20stroke%3D%22%2390e0ef%22%20stroke-width%3D%220.8%22%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2220%22%20rx%3D%222.5%22%20ry%3D%225%22/%3E%20%3Cellipse%20cx%3D%2242%22%20cy%3D%2226%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%2835%2042%2026%29%22/%3E%20%3Cellipse%20cx%3D%2244%22%20cy%3D%2238%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%2875%2044%2038%29%22/%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2246%22%20rx%3D%222.5%22%20ry%3D%225%22/%3E%20%3Cellipse%20cx%3D%2220%22%20cy%3D%2238%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%28-75%2020%2038%29%22/%3E%20%3Cellipse%20cx%3D%2222%22%20cy%3D%2226%22%20rx%3D%222.5%22%20ry%3D%225%22%20transform%3D%22rotate%28-35%2022%2026%29%22/%3E%20%3C%21--%20Center%20Grain%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2232%22%20rx%3D%223%22%20ry%3D%226%22%20fill%3D%22%23ffd166%22/%3E%20%3C/g%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_buffalo"],
@@ -4939,39 +5209,74 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-modal-glyph[data-skill-glyph="seer_buffalo"],
 .glyph[data-skill-glyph="seer_buffalo"],
 .field-slot[data-skill-id="seer_buffalo"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sbBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23805b10%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233a2503%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sbBg%29%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Horns%20--%3E%20%3Cpath%20d%3D%22M%2018%2016%20C%2024%2022%2C%2028%2026%2C%2032%2030%20C%2036%2026%2C%2040%2022%2C%2046%2016%20C%2042%2012%2C%2036%2018%2C%2032%2020%20C%2028%2018%2C%2022%2012%2C%2018%2016%20Z%22%20fill%3D%22%23ffd700%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221%22/%3E%20%3C%21--%20Head%20%26%20Snout%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2040%2C36%2036%2C46%2028%2C46%2024%2C36%22%20fill%3D%22%236e4e14%22%20stroke%3D%22%23ffd700%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Glowing%20Red%20Eyes%20--%3E%20%3Ccircle%20cx%3D%2228%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23ff0000%22/%3E%20%3Ccircle%20cx%3D%2236%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23ff0000%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2242%22%20r%3D%222%22%20fill%3D%22%23ffd700%22/%3E%20%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sbBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23d4af37%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23805b10%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%233a2503%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sbBg%29%22%20stroke%3D%22%23f3c768%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Horns%20--%3E%20%3Cpath%20d%3D%22M%2018%2016%20C%2024%2022%2C%2028%2026%2C%2032%2030%20C%2036%2026%2C%2040%2022%2C%2046%2016%20C%2042%2012%2C%2036%2018%2C%2032%2020%20C%2028%2018%2C%2022%2012%2C%2018%2016%20Z%22%20fill%3D%22%23ffd700%22%20stroke%3D%22%23fff%22%20stroke-width%3D%221%22/%3E%20%3C%21--%20Head%20%26%20Snout%20--%3E%20%3Cpolygon%20points%3D%2232%2C24%2040%2C36%2036%2C46%2028%2C46%2024%2C36%22%20fill%3D%22%236e4e14%22%20stroke%3D%22%23ffd700%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Glowing%20Red%20Eyes%20--%3E%20%3Ccircle%20cx%3D%2228%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23ff0000%22/%3E%20%3Ccircle%20cx%3D%2236%22%20cy%3D%2232%22%20r%3D%222%22%20fill%3D%22%23ff0000%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2242%22%20r%3D%222%22%20fill%3D%22%23ffd700%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_curse"],
 .skill-book-icon[data-skill-glyph="seer_curse"],
 .skill-modal-glyph[data-skill-glyph="seer_curse"],
 .glyph[data-skill-glyph="seer_curse"],
-.field-slot[data-skill-id="seer_curse"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22scBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%237209b7%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%233a0ca3%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2310002b%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23scBg%29%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Soul%20Skull%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2228%22%20rx%3D%2214%22%20ry%3D%2212%22%20fill%3D%22%23240046%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.5%22/%3E%20%3Crect%20x%3D%2226%22%20y%3D%2238%22%20width%3D%2212%22%20height%3D%228%22%20rx%3D%222%22%20fill%3D%22%23240046%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20Eye%20Sockets%20--%3E%20%3Ccircle%20cx%3D%2227%22%20cy%3D%2227%22%20r%3D%223%22%20fill%3D%22%23f72585%22/%3E%20%3Ccircle%20cx%3D%2237%22%20cy%3D%2227%22%20r%3D%223%22%20fill%3D%22%23f72585%22/%3E%20%3C%21--%20Curse%20Smoke%20Wisp%20--%3E%20%3Cpath%20d%3D%22M%2032%2010%20Q%2038%206%2C%2032%202%22%20stroke%3D%22%23e0aaff%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="seer_curse"] .glyph,
+.kg-glyph[data-skill-glyph="seer_deep_curse"],
+.skill-book-icon[data-skill-glyph="seer_deep_curse"],
+.skill-modal-glyph[data-skill-glyph="seer_deep_curse"],
+.glyph[data-skill-glyph="seer_deep_curse"],
+.field-slot[data-skill-id="seer_deep_curse"] .glyph,
+.kg-glyph[data-skill-glyph="seer_hexburst"],
+.skill-book-icon[data-skill-glyph="seer_hexburst"],
+.skill-modal-glyph[data-skill-glyph="seer_hexburst"],
+.glyph[data-skill-glyph="seer_hexburst"],
+.field-slot[data-skill-id="seer_hexburst"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22scBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%237209b7%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%233a0ca3%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2310002b%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23scBg%29%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Soul%20Skull%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2228%22%20rx%3D%2214%22%20ry%3D%2212%22%20fill%3D%22%23240046%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.5%22/%3E%20%3Crect%20x%3D%2226%22%20y%3D%2238%22%20width%3D%2212%22%20height%3D%228%22%20rx%3D%222%22%20fill%3D%22%23240046%22%20stroke%3D%22%23f72585%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20Eye%20Sockets%20--%3E%20%3Ccircle%20cx%3D%2227%22%20cy%3D%2227%22%20r%3D%223%22%20fill%3D%22%23f72585%22/%3E%20%3Ccircle%20cx%3D%2237%22%20cy%3D%2227%22%20r%3D%223%22%20fill%3D%22%23f72585%22/%3E%20%3C%21--%20Curse%20Smoke%20Wisp%20--%3E%20%3Cpath%20d%3D%22M%2032%2010%20Q%2038%206%2C%2032%202%22%20stroke%3D%22%23e0aaff%22%20stroke-width%3D%221.5%22%20fill%3D%22none%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_binding"],
 .skill-book-icon[data-skill-glyph="seer_binding"],
 .skill-modal-glyph[data-skill-glyph="seer_binding"],
 .glyph[data-skill-glyph="seer_binding"],
-.field-slot[data-skill-id="seer_binding"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sbindBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%234a4e69%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%2322223b%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%230a090c%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sbindBg%29%22%20stroke%3D%22%23f2e9e4%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Interwoven%20Sacred%20Holy%20Threads%20--%3E%20%3Cpolygon%20points%3D%2232%2C10%2050%2C44%2014%2C44%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Cpolygon%20points%3D%2232%2C54%2050%2C20%2014%2C20%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%228%22%20fill%3D%22none%22%20stroke%3D%22%23ffd166%22%20stroke-width%3D%221.2%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%223%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="seer_binding"] .glyph,
+.kg-glyph[data-skill-glyph="seer_seal"],
+.skill-book-icon[data-skill-glyph="seer_seal"],
+.skill-modal-glyph[data-skill-glyph="seer_seal"],
+.glyph[data-skill-glyph="seer_seal"],
+.field-slot[data-skill-id="seer_seal"] .glyph,
+.kg-glyph[data-skill-glyph="seer_spirit_bind"],
+.skill-book-icon[data-skill-glyph="seer_spirit_bind"],
+.skill-modal-glyph[data-skill-glyph="seer_spirit_bind"],
+.glyph[data-skill-glyph="seer_spirit_bind"],
+.field-slot[data-skill-id="seer_spirit_bind"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sbindBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%234a4e69%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%2322223b%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%230a090c%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sbindBg%29%22%20stroke%3D%22%23f2e9e4%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Interwoven%20Sacred%20Holy%20Threads%20--%3E%20%3Cpolygon%20points%3D%2232%2C10%2050%2C44%2014%2C44%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Cpolygon%20points%3D%2232%2C54%2050%2C20%2014%2C20%22%20fill%3D%22none%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.8%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%228%22%20fill%3D%22none%22%20stroke%3D%22%23ffd166%22%20stroke-width%3D%221.2%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%223%22%20fill%3D%22%23ffffff%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_burst"],
 .skill-book-icon[data-skill-glyph="seer_burst"],
 .skill-modal-glyph[data-skill-glyph="seer_burst"],
 .glyph[data-skill-glyph="seer_burst"],
-.field-slot[data-skill-id="seer_burst"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sburstBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff007f%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%237b2cbf%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23240046%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sburstBg%29%22%20stroke%3D%22%23ff70a6%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Burst%20Radiance%20--%3E%20%3Cpolygon%20points%3D%2232%2C12%2036%2C26%2050%2C20%2038%2C30%2050%2C40%2036%2C36%2032%2C52%2028%2C36%2014%2C40%2026%2C30%2014%2C20%2028%2C26%22%20fill%3D%22%23ffffff%22%20stroke%3D%22%23ff70a6%22%20stroke-width%3D%221%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%226%22%20fill%3D%22%23ffd166%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="seer_burst"] .glyph,
+.kg-glyph[data-skill-glyph="seer_ward_break"],
+.skill-book-icon[data-skill-glyph="seer_ward_break"],
+.skill-modal-glyph[data-skill-glyph="seer_ward_break"],
+.glyph[data-skill-glyph="seer_ward_break"],
+.field-slot[data-skill-id="seer_ward_break"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22sburstBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23ff007f%22/%3E%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%237b2cbf%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23240046%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23sburstBg%29%22%20stroke%3D%22%23ff70a6%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Burst%20Radiance%20--%3E%20%3Cpolygon%20points%3D%2232%2C12%2036%2C26%2050%2C20%2038%2C30%2050%2C40%2036%2C36%2032%2C52%2028%2C36%2014%2C40%2026%2C30%2014%2C20%2028%2C26%22%20fill%3D%22%23ffffff%22%20stroke%3D%22%23ff70a6%22%20stroke-width%3D%221%22/%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%226%22%20fill%3D%22%23ffd166%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_pot"],
 .skill-book-icon[data-skill-glyph="seer_pot"],
 .skill-modal-glyph[data-skill-glyph="seer_pot"],
 .glyph[data-skill-glyph="seer_pot"],
-.field-slot[data-skill-id="seer_pot"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22spotBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23a0522d%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%235c2e14%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23231006%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23spotBg%29%22%20stroke%3D%22%23cd853f%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Earthen%20Pot%20Body%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2238%22%20rx%3D%2216%22%20ry%3D%2214%22%20fill%3D%22%238b4513%22%20stroke%3D%22%23d2691e%22%20stroke-width%3D%221.5%22/%3E%20%3Crect%20x%3D%2222%22%20y%3D%2222%22%20width%3D%2220%22%20height%3D%226%22%20rx%3D%222%22%20fill%3D%22%23a0522d%22%20stroke%3D%22%23d2691e%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20White%20Sacred%20Talisman%20Cloth%20on%20Top%20--%3E%20%3Cpath%20d%3D%22M%2020%2022%20C%2026%2018%2C%2038%2018%2C%2044%2022%20L%2040%2026%20L%2024%2026%20Z%22%20fill%3D%22%23ffffff%22%20stroke%3D%22%23e63946%22%20stroke-width%3D%221%22/%3E%20%3Cline%20x1%3D%2228%22%20y1%3D%2220%22%20x2%3D%2236%22%20y2%3D%2224%22%20stroke%3D%22%23e63946%22%20stroke-width%3D%221%22/%3E%20%3C/svg%3E");
+.field-slot[data-skill-id="seer_pot"] .glyph,
+.kg-glyph[data-skill-glyph="seer_spirit"],
+.skill-book-icon[data-skill-glyph="seer_spirit"],
+.skill-modal-glyph[data-skill-glyph="seer_spirit"],
+.glyph[data-skill-glyph="seer_spirit"],
+.field-slot[data-skill-id="seer_spirit"] .glyph,
+.kg-glyph[data-skill-glyph="seer_trance"],
+.skill-book-icon[data-skill-glyph="seer_trance"],
+.skill-modal-glyph[data-skill-glyph="seer_trance"],
+.glyph[data-skill-glyph="seer_trance"],
+.field-slot[data-skill-id="seer_trance"] .glyph {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22spotBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23a0522d%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%235c2e14%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23231006%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23spotBg%29%22%20stroke%3D%22%23cd853f%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Earthen%20Pot%20Body%20--%3E%20%3Cellipse%20cx%3D%2232%22%20cy%3D%2238%22%20rx%3D%2216%22%20ry%3D%2214%22%20fill%3D%22%238b4513%22%20stroke%3D%22%23d2691e%22%20stroke-width%3D%221.5%22/%3E%20%3Crect%20x%3D%2222%22%20y%3D%2222%22%20width%3D%2220%22%20height%3D%226%22%20rx%3D%222%22%20fill%3D%22%23a0522d%22%20stroke%3D%22%23d2691e%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20White%20Sacred%20Talisman%20Cloth%20on%20Top%20--%3E%20%3Cpath%20d%3D%22M%2020%2022%20C%2026%2018%2C%2038%2018%2C%2044%2022%20L%2040%2026%20L%2024%2026%20Z%22%20fill%3D%22%23ffffff%22%20stroke%3D%22%23e63946%22%20stroke-width%3D%221%22/%3E%20%3Cline%20x1%3D%2228%22%20y1%3D%2220%22%20x2%3D%2236%22%20y2%3D%2224%22%20stroke%3D%22%23e63946%22%20stroke-width%3D%221%22/%3E%20%3C/svg%3E") !important;
 }
 
 .kg-glyph[data-skill-glyph="seer_poison"],
@@ -4979,7 +5284,7 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-modal-glyph[data-skill-glyph="seer_poison"],
 .glyph[data-skill-glyph="seer_poison"],
 .field-slot[data-skill-id="seer_poison"] .glyph {
-  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22spoisBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232dc653%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23155d27%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23061c0c%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23spoisBg%29%22%20stroke%3D%22%236a994e%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Mystical%20Toxic%20Leaves%20--%3E%20%3Cpath%20d%3D%22M%2032%2048%20C%2024%2038%2C%2016%2026%2C%2032%2016%20C%2048%2026%2C%2040%2038%2C%2032%2048%20Z%22%20fill%3D%22%2352b788%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2220%22%20x2%3D%2232%22%20y2%3D%2244%22%20stroke%3D%22%23d8f3dc%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20Toxic%20Bubbles%20--%3E%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2222%22%20r%3D%222.5%22%20fill%3D%22%2374c69d%22/%3E%20%3Ccircle%20cx%3D%2242%22%20cy%3D%2224%22%20r%3D%223%22%20fill%3D%22%23b7e4c7%22/%3E%20%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2064%2064%22%3E%20%3Cdefs%3E%20%3CradialGradient%20id%3D%22spoisBg%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%232dc653%22/%3E%20%3Cstop%20offset%3D%2270%25%22%20stop-color%3D%22%23155d27%22/%3E%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23061c0c%22/%3E%20%3C/radialGradient%3E%20%3C/defs%3E%20%3Ccircle%20cx%3D%2232%22%20cy%3D%2232%22%20r%3D%2230%22%20fill%3D%22url%28%23spoisBg%29%22%20stroke%3D%22%236a994e%22%20stroke-width%3D%221.5%22/%3E%20%3C%21--%20Mystical%20Toxic%20Leaves%20--%3E%20%3Cpath%20d%3D%22M%2032%2048%20C%2024%2038%2C%2016%2026%2C%2032%2016%20C%2048%2026%2C%2040%2038%2C%2032%2048%20Z%22%20fill%3D%22%2352b788%22%20stroke%3D%22%23ffffff%22%20stroke-width%3D%221.2%22/%3E%20%3Cline%20x1%3D%2232%22%20y1%3D%2220%22%20x2%3D%2232%22%20y2%3D%2244%22%20stroke%3D%22%23d8f3dc%22%20stroke-width%3D%221.2%22/%3E%20%3C%21--%20Toxic%20Bubbles%20--%3E%20%3Ccircle%20cx%3D%2222%22%20cy%3D%2222%22%20r%3D%222.5%22%20fill%3D%22%2374c69d%22/%3E%20%3Ccircle%20cx%3D%2242%22%20cy%3D%2224%22%20r%3D%223%22%20fill%3D%22%23b7e4c7%22/%3E%20%3C/svg%3E") !important;
 }
 .hud-btn-icon[data-hud-icon] {
   display: inline-block;
@@ -4994,11 +5299,11 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   line-height: 0;
   flex-shrink: 0;
 }
-.hud-btn-icon[data-hud-icon="bag"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22bagLeather%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23bcaaa4%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%238d6e63%22/%3E %3Cstop offset=%2275%25%22 stop-color=%22%235d4037%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%233e2723%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Pouch Body --%3E %3Cpath d=%22M12 20 C10 32%2C 12 40%2C 24 42 C36 40%2C 38 32%2C 36 20 L30 14 L18 14 Z%22 fill=%22url%28%23bagLeather%29%22 stroke=%22%23ffb74d%22 stroke-width=%221.2%22/%3E %3C%21-- Bag Flap / Tied Neck --%3E %3Cellipse cx=%2224%22 cy=%2218%22 rx=%228%22 ry=%224%22 fill=%22%236d4c41%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Golden Tie Cord %26 Tassels --%3E %3Cline x1=%2220%22 y1=%2219%22 x2=%2218%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2228%22 y1=%2219%22 x2=%2230%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3C%21-- Center Golden Medallion / Buckle --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%223.2%22 fill=%22%23ffb300%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%221.2%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E"); }
-.hud-btn-icon[data-hud-icon="skills"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22skillBolt%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff6f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Background Glow --%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2218%22 fill=%22%23ff9800%22 opacity=%220.25%22/%3E %3C%21-- Lightning Bolt --%3E %3Cpolygon points=%2226%2C4 12%2C24 22%2C24 18%2C44 36%2C20 26%2C20%22 fill=%22url%28%23skillBolt%29%22 stroke=%22%23ffffff%22 stroke-width=%221.2%22/%3E %3C%21-- Spark particles --%3E %3Ccircle cx=%2236%22 cy=%2212%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3Ccircle cx=%2210%22 cy=%2234%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3C/svg%3E"); }
-.hud-btn-icon[data-hud-icon="chat"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22chatBubble%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2300acc1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23006064%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Speech Talisman Bubble --%3E %3Cpath d=%22M8 12 C8 8%2C 40 8%2C 40 12 L40 30 C40 34%2C 30 34%2C 24 34 L16 40 L16 34 L8 34 Z%22 fill=%22url%28%23chatBubble%29%22 stroke=%22%23e0f7fa%22 stroke-width=%221.2%22/%3E %3C%21-- 3 Chat Dots --%3E %3Ccircle cx=%2218%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2224%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2230%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.hud-btn-icon[data-hud-icon="menu"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22menuGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffb300%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- 3 Stylized Golden Royal Bars --%3E %3Crect x=%228%22 y=%2210%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Crect x=%228%22 y=%2221%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Crect x=%228%22 y=%2232%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3C%21-- Gem Insets on Bars --%3E %3Ccircle cx=%2212%22 cy=%2212.5%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3Ccircle cx=%2212%22 cy=%2223.5%22 r=%221.5%22 fill=%22%2300bcd4%22/%3E %3Ccircle cx=%2212%22 cy=%2234.5%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E"); }
-.hud-btn-icon[data-hud-icon="mana"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3CradialGradient id=%22manaDrop%22 cx=%2238%25%22 cy=%2240%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23e0f7fa%22/%3E %3Cstop offset=%2230%25%22 stop-color=%22%2340c4ff%22/%3E %3Cstop offset=%2270%25%22 stop-color=%22%230288d1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/radialGradient%3E %3C/defs%3E %3C%21-- Teardrop Gem --%3E %3Cpath d=%22M24 6 C24 6%2C 38 22%2C 38 30 C38 38%2C 32 44%2C 24 44 C16 44%2C 10 38%2C 10 30 C10 22%2C 24 6%2C 24 6 Z%22 fill=%22url%28%23manaDrop%29%22 stroke=%22%2380d8ff%22 stroke-width=%221.2%22/%3E %3C%21-- Highlight Flare --%3E %3Cellipse cx=%2220%22 cy=%2226%22 rx=%224%22 ry=%227%22 transform=%22rotate%28-20 20 26%29%22 fill=%22%23ffffff%22 opacity=%220.6%22/%3E %3Cpolygon points=%2224%2C14 25%2C17 28%2C18 25%2C19 24%2C22 23%2C19 20%2C18 23%2C17%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); width: 14px; height: 14px; }
+.hud-btn-icon[data-hud-icon="bag"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22bagLeather%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23bcaaa4%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%238d6e63%22/%3E %3Cstop offset=%2275%25%22 stop-color=%22%235d4037%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%233e2723%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Pouch Body --%3E %3Cpath d=%22M12 20 C10 32%2C 12 40%2C 24 42 C36 40%2C 38 32%2C 36 20 L30 14 L18 14 Z%22 fill=%22url%28%23bagLeather%29%22 stroke=%22%23ffb74d%22 stroke-width=%221.2%22/%3E %3C%21-- Bag Flap / Tied Neck --%3E %3Cellipse cx=%2224%22 cy=%2218%22 rx=%228%22 ry=%224%22 fill=%22%236d4c41%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Golden Tie Cord %26 Tassels --%3E %3Cline x1=%2220%22 y1=%2219%22 x2=%2218%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2228%22 y1=%2219%22 x2=%2230%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3C%21-- Center Golden Medallion / Buckle --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%223.2%22 fill=%22%23ffb300%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%221.2%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E") !important; }
+.hud-btn-icon[data-hud-icon="skills"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22skillBolt%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff6f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Background Glow --%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2218%22 fill=%22%23ff9800%22 opacity=%220.25%22/%3E %3C%21-- Lightning Bolt --%3E %3Cpolygon points=%2226%2C4 12%2C24 22%2C24 18%2C44 36%2C20 26%2C20%22 fill=%22url%28%23skillBolt%29%22 stroke=%22%23ffffff%22 stroke-width=%221.2%22/%3E %3C%21-- Spark particles --%3E %3Ccircle cx=%2236%22 cy=%2212%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3Ccircle cx=%2210%22 cy=%2234%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3C/svg%3E") !important; }
+.hud-btn-icon[data-hud-icon="chat"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22chatBubble%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2300acc1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23006064%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Speech Talisman Bubble --%3E %3Cpath d=%22M8 12 C8 8%2C 40 8%2C 40 12 L40 30 C40 34%2C 30 34%2C 24 34 L16 40 L16 34 L8 34 Z%22 fill=%22url%28%23chatBubble%29%22 stroke=%22%23e0f7fa%22 stroke-width=%221.2%22/%3E %3C%21-- 3 Chat Dots --%3E %3Ccircle cx=%2218%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2224%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2230%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.hud-btn-icon[data-hud-icon="menu"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22menuGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffb300%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- 3 Stylized Golden Royal Bars --%3E %3Crect x=%228%22 y=%2210%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Crect x=%228%22 y=%2221%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Crect x=%228%22 y=%2232%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22url%28%23menuGold%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3C%21-- Gem Insets on Bars --%3E %3Ccircle cx=%2212%22 cy=%2212.5%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3Ccircle cx=%2212%22 cy=%2223.5%22 r=%221.5%22 fill=%22%2300bcd4%22/%3E %3Ccircle cx=%2212%22 cy=%2234.5%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E") !important; }
+.hud-btn-icon[data-hud-icon="mana"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3CradialGradient id=%22manaDrop%22 cx=%2238%25%22 cy=%2240%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23e0f7fa%22/%3E %3Cstop offset=%2230%25%22 stop-color=%22%2340c4ff%22/%3E %3Cstop offset=%2270%25%22 stop-color=%22%230288d1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/radialGradient%3E %3C/defs%3E %3C%21-- Teardrop Gem --%3E %3Cpath d=%22M24 6 C24 6%2C 38 22%2C 38 30 C38 38%2C 32 44%2C 24 44 C16 44%2C 10 38%2C 10 30 C10 22%2C 24 6%2C 24 6 Z%22 fill=%22url%28%23manaDrop%29%22 stroke=%22%2380d8ff%22 stroke-width=%221.2%22/%3E %3C%21-- Highlight Flare --%3E %3Cellipse cx=%2220%22 cy=%2226%22 rx=%224%22 ry=%227%22 transform=%22rotate%28-20 20 26%29%22 fill=%22%23ffffff%22 opacity=%220.6%22/%3E %3Cpolygon points=%2224%2C14 25%2C17 28%2C18 25%2C19 24%2C22 23%2C19 20%2C18 23%2C17%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; width: 14px; height: 14px; }
 .drawer-nav-icon[data-menu-icon] {
   display: inline-block;
   width: 26px;
@@ -5012,18 +5317,18 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   line-height: 0;
   flex-shrink: 0;
 }
-.drawer-nav-icon[data-menu-icon="quest"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22parchment%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffe082%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ffb74d%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Rolled Scroll Body --%3E %3Cpath d=%22M12 10 C10 8%2C 34 8%2C 36 10 L34 38 C32 40%2C 10 40%2C 12 38 Z%22 fill=%22url%28%23parchment%29%22 stroke=%22%238d6e63%22 stroke-width=%221%22/%3E %3C%21-- Scroll Rolls on Top %26 Bottom --%3E %3Crect x=%228%22 y=%227%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22%23d7ccc8%22 stroke=%22%236d4c41%22 stroke-width=%221%22/%3E %3Crect x=%228%22 y=%2237%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22%23d7ccc8%22 stroke=%22%236d4c41%22 stroke-width=%221%22/%3E %3C%21-- Red Wax Seal --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%225%22 fill=%22%23d32f2f%22 stroke=%22%23b71c1c%22 stroke-width=%221%22/%3E %3Cpolygon points=%2224%2C23 25%2C25 27%2C26 25%2C27 24%2C29 23%2C27 21%2C26 23%2C25%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="character"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22heroGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2216%22 r=%227%22 fill=%22url%28%23heroGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Cpath d=%22M10 40 C10 28%2C 16 26%2C 24 26 C32 26%2C 38 28%2C 38 40 Z%22 fill=%22url%28%23heroGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2224%22 cy=%2233%22 r=%223%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="bag"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22bagLeather%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23bcaaa4%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%238d6e63%22/%3E %3Cstop offset=%2275%25%22 stop-color=%22%235d4037%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%233e2723%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Pouch Body --%3E %3Cpath d=%22M12 20 C10 32%2C 12 40%2C 24 42 C36 40%2C 38 32%2C 36 20 L30 14 L18 14 Z%22 fill=%22url%28%23bagLeather%29%22 stroke=%22%23ffb74d%22 stroke-width=%221.2%22/%3E %3C%21-- Bag Flap / Tied Neck --%3E %3Cellipse cx=%2224%22 cy=%2218%22 rx=%228%22 ry=%224%22 fill=%22%236d4c41%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Golden Tie Cord %26 Tassels --%3E %3Cline x1=%2220%22 y1=%2219%22 x2=%2218%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2228%22 y1=%2219%22 x2=%2230%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3C%21-- Center Golden Medallion / Buckle --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%223.2%22 fill=%22%23ffb300%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%221.2%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="skills"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22skillBolt%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff6f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Background Glow --%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2218%22 fill=%22%23ff9800%22 opacity=%220.25%22/%3E %3C%21-- Lightning Bolt --%3E %3Cpolygon points=%2226%2C4 12%2C24 22%2C24 18%2C44 36%2C20 26%2C20%22 fill=%22url%28%23skillBolt%29%22 stroke=%22%23ffffff%22 stroke-width=%221.2%22/%3E %3C%21-- Spark particles --%3E %3Ccircle cx=%2236%22 cy=%2212%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3Ccircle cx=%2210%22 cy=%2234%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="map"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22mapParchment%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23d7ccc8%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect x=%228%22 y=%228%22 width=%2232%22 height=%2232%22 rx=%224%22 fill=%22url%28%23mapParchment%29%22 stroke=%22%238d6e63%22 stroke-width=%221.2%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2210%22 fill=%22none%22 stroke=%22%23b0bec5%22 stroke-width=%221%22/%3E %3C%21-- Compass Needle --%3E %3Cpolygon points=%2224%2C15 28%2C24 24%2C23 20%2C24%22 fill=%22%23d32f2f%22/%3E %3Cpolygon points=%2224%2C33 28%2C24 24%2C25 20%2C24%22 fill=%22%2337474f%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%222%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="mount"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22horseGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23f57f17%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Stylized Royal Warhorse Profile --%3E %3Cpath d=%22M14 40 L16 28 C16 22%2C 22 16%2C 26 12 L32 10 L34 16 L28 20 L36 24 C36 30%2C 32 36%2C 26 38 L24 42 Z%22 fill=%22url%28%23horseGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2229%22 cy=%2217%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3C%21-- Mane / Bridle --%3E %3Cpath d=%22M26 12 C24 16%2C 20 22%2C 18 28%22 stroke=%22%23ffffff%22 stroke-width=%221.5%22 fill=%22none%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="chat"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22chatBubble%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2300acc1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23006064%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Speech Talisman Bubble --%3E %3Cpath d=%22M8 12 C8 8%2C 40 8%2C 40 12 L40 30 C40 34%2C 30 34%2C 24 34 L16 40 L16 34 L8 34 Z%22 fill=%22url%28%23chatBubble%29%22 stroke=%22%23e0f7fa%22 stroke-width=%221.2%22/%3E %3C%21-- 3 Chat Dots --%3E %3Ccircle cx=%2218%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2224%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2230%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="party"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22partyBlue%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380d8ff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%230091ea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Left Shield --%3E %3Cpath d=%22M16 16 C22 16%2C 24 20%2C 24 28 C22 34%2C 18 38%2C 16 40 C14 38%2C 10 34%2C 8 28 C8 20%2C 10 16%2C 16 16 Z%22 fill=%22%2378909c%22 opacity=%220.8%22/%3E %3C%21-- Right Shield --%3E %3Cpath d=%22M32 16 C38 16%2C 40 20%2C 40 28 C38 34%2C 34 38%2C 32 40 C30 38%2C 26 34%2C 24 28 C24 20%2C 26 16%2C 32 16 Z%22 fill=%22%2378909c%22 opacity=%220.8%22/%3E %3C%21-- Center Main Shield --%3E %3Cpath d=%22M24 10 C32 10%2C 36 15%2C 35 26 C33 34%2C 28 40%2C 24 44 C20 40%2C 15 34%2C 13 26 C12 15%2C 16 10%2C 24 10 Z%22 fill=%22url%28%23partyBlue%29%22 stroke=%22%23fff%22 stroke-width=%221.2%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%223%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="guild"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22guildGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Fortress Pagoda Tower --%3E %3Crect x=%2218%22 y=%2222%22 width=%2212%22 height=%2218%22 rx=%221%22 fill=%22url%28%23guildGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3C%21-- Pagoda Tiered Roofs --%3E %3Cpolygon points=%2224%2C6 34%2C14 14%2C14%22 fill=%22%23d32f2f%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3Cpolygon points=%2224%2C12 38%2C20 10%2C20%22 fill=%22%23d32f2f%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Gate Arches --%3E %3Cpath d=%22M21 40 L21 32 C21 30%2C 27 30%2C 27 32 L27 40 Z%22 fill=%22%233e2723%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%222%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="market"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22scaleGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Balance Beam %26 Pillar --%3E %3Cline x1=%2224%22 y1=%2210%22 x2=%2224%22 y2=%2240%22 stroke=%22url%28%23scaleGold%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2210%22 y1=%2214%22 x2=%2238%22 y2=%2214%22 stroke=%22url%28%23scaleGold%29%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E %3C%21-- Left Pan --%3E %3Cpath d=%22M10 14 L8 24 L16 24 Z%22 fill=%22none%22 stroke=%22%23ffb74d%22 stroke-width=%221%22/%3E %3Cpath d=%22M6 24 C8 28%2C 16 28%2C 18 24 Z%22 fill=%22url%28%23scaleGold%29%22/%3E %3C%21-- Right Pan --%3E %3Cpath d=%22M38 14 L36 24 L44 24 Z%22 fill=%22none%22 stroke=%22%23ffb74d%22 stroke-width=%221%22/%3E %3Cpath d=%22M34 24 C36 28%2C 44 28%2C 46 24 Z%22 fill=%22url%28%23scaleGold%29%22/%3E %3C%21-- Base Stand --%3E %3Crect x=%2216%22 y=%2238%22 width=%2216%22 height=%224%22 rx=%222%22 fill=%22url%28%23scaleGold%29%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="settings"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22gearGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23cfd8dc%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%2390a4ae%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23455a64%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2214%22 fill=%22url%28%23gearGold%29%22 stroke=%22%23ffd54f%22 stroke-width=%222%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%225%22 fill=%22%23263238%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3C%21-- Gear Teeth --%3E %3Cpolygon points=%2222%2C6 26%2C6 25%2C10 23%2C10%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2222%2C42 26%2C42 25%2C38 23%2C38%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%226%2C22 6%2C26 10%2C25 10%2C23%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2242%2C22 42%2C26 38%2C25 38%2C23%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2212%2C12 15%2C9 17%2C12 14%2C15%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2236%2C36 39%2C33 37%2C30 34%2C33%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2236%2C12 39%2C15 37%2C18 34%2C15%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2212%2C36 15%2C39 17%2C36 14%2C33%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.drawer-nav-icon[data-menu-icon="account"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22badgeGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2220%22 r=%2212%22 fill=%22url%28%23badgeGold%29%22 stroke=%22%23fff%22 stroke-width=%221.2%22/%3E %3Cpolygon points=%2224%2C12 26%2C16 30%2C17 27%2C20 28%2C24 24%2C22 20%2C24 21%2C20 18%2C17 22%2C16%22 fill=%22%23d32f2f%22/%3E %3C%21-- Hanging Ribbon Ends --%3E %3Cpolygon points=%2218%2C30 14%2C42 20%2C40 24%2C30%22 fill=%22%23c62828%22/%3E %3Cpolygon points=%2230%2C30 34%2C42 28%2C40 24%2C30%22 fill=%22%23b71c1c%22/%3E %3C/svg%3E"); }
+.drawer-nav-icon[data-menu-icon="quest"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22parchment%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffe082%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ffb74d%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Rolled Scroll Body --%3E %3Cpath d=%22M12 10 C10 8%2C 34 8%2C 36 10 L34 38 C32 40%2C 10 40%2C 12 38 Z%22 fill=%22url%28%23parchment%29%22 stroke=%22%238d6e63%22 stroke-width=%221%22/%3E %3C%21-- Scroll Rolls on Top %26 Bottom --%3E %3Crect x=%228%22 y=%227%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22%23d7ccc8%22 stroke=%22%236d4c41%22 stroke-width=%221%22/%3E %3Crect x=%228%22 y=%2237%22 width=%2232%22 height=%225%22 rx=%222.5%22 fill=%22%23d7ccc8%22 stroke=%22%236d4c41%22 stroke-width=%221%22/%3E %3C%21-- Red Wax Seal --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%225%22 fill=%22%23d32f2f%22 stroke=%22%23b71c1c%22 stroke-width=%221%22/%3E %3Cpolygon points=%2224%2C23 25%2C25 27%2C26 25%2C27 24%2C29 23%2C27 21%2C26 23%2C25%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="character"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22heroGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2216%22 r=%227%22 fill=%22url%28%23heroGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Cpath d=%22M10 40 C10 28%2C 16 26%2C 24 26 C32 26%2C 38 28%2C 38 40 Z%22 fill=%22url%28%23heroGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2224%22 cy=%2233%22 r=%223%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="bag"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22bagLeather%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23bcaaa4%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%238d6e63%22/%3E %3Cstop offset=%2275%25%22 stop-color=%22%235d4037%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%233e2723%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Pouch Body --%3E %3Cpath d=%22M12 20 C10 32%2C 12 40%2C 24 42 C36 40%2C 38 32%2C 36 20 L30 14 L18 14 Z%22 fill=%22url%28%23bagLeather%29%22 stroke=%22%23ffb74d%22 stroke-width=%221.2%22/%3E %3C%21-- Bag Flap / Tied Neck --%3E %3Cellipse cx=%2224%22 cy=%2218%22 rx=%228%22 ry=%224%22 fill=%22%236d4c41%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Golden Tie Cord %26 Tassels --%3E %3Cline x1=%2220%22 y1=%2219%22 x2=%2218%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2228%22 y1=%2219%22 x2=%2230%22 y2=%2228%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22 stroke-linecap=%22round%22/%3E %3C%21-- Center Golden Medallion / Buckle --%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%223.2%22 fill=%22%23ffb300%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%221.2%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="skills"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22skillBolt%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff6f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Background Glow --%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2218%22 fill=%22%23ff9800%22 opacity=%220.25%22/%3E %3C%21-- Lightning Bolt --%3E %3Cpolygon points=%2226%2C4 12%2C24 22%2C24 18%2C44 36%2C20 26%2C20%22 fill=%22url%28%23skillBolt%29%22 stroke=%22%23ffffff%22 stroke-width=%221.2%22/%3E %3C%21-- Spark particles --%3E %3Ccircle cx=%2236%22 cy=%2212%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3Ccircle cx=%2210%22 cy=%2234%22 r=%221.5%22 fill=%22%23ffe082%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="map"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22mapParchment%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23d7ccc8%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Crect x=%228%22 y=%228%22 width=%2232%22 height=%2232%22 rx=%224%22 fill=%22url%28%23mapParchment%29%22 stroke=%22%238d6e63%22 stroke-width=%221.2%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2210%22 fill=%22none%22 stroke=%22%23b0bec5%22 stroke-width=%221%22/%3E %3C%21-- Compass Needle --%3E %3Cpolygon points=%2224%2C15 28%2C24 24%2C23 20%2C24%22 fill=%22%23d32f2f%22/%3E %3Cpolygon points=%2224%2C33 28%2C24 24%2C25 20%2C24%22 fill=%22%2337474f%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%222%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="mount"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22horseGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23f57f17%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Stylized Royal Warhorse Profile --%3E %3Cpath d=%22M14 40 L16 28 C16 22%2C 22 16%2C 26 12 L32 10 L34 16 L28 20 L36 24 C36 30%2C 32 36%2C 26 38 L24 42 Z%22 fill=%22url%28%23horseGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2229%22 cy=%2217%22 r=%221.5%22 fill=%22%23d32f2f%22/%3E %3C%21-- Mane / Bridle --%3E %3Cpath d=%22M26 12 C24 16%2C 20 22%2C 18 28%22 stroke=%22%23ffffff%22 stroke-width=%221.5%22 fill=%22none%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="chat"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22chatBubble%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2300acc1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23006064%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Speech Talisman Bubble --%3E %3Cpath d=%22M8 12 C8 8%2C 40 8%2C 40 12 L40 30 C40 34%2C 30 34%2C 24 34 L16 40 L16 34 L8 34 Z%22 fill=%22url%28%23chatBubble%29%22 stroke=%22%23e0f7fa%22 stroke-width=%221.2%22/%3E %3C%21-- 3 Chat Dots --%3E %3Ccircle cx=%2218%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2224%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3Ccircle cx=%2230%22 cy=%2222%22 r=%222.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="party"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22partyBlue%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%2380d8ff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%230091ea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Left Shield --%3E %3Cpath d=%22M16 16 C22 16%2C 24 20%2C 24 28 C22 34%2C 18 38%2C 16 40 C14 38%2C 10 34%2C 8 28 C8 20%2C 10 16%2C 16 16 Z%22 fill=%22%2378909c%22 opacity=%220.8%22/%3E %3C%21-- Right Shield --%3E %3Cpath d=%22M32 16 C38 16%2C 40 20%2C 40 28 C38 34%2C 34 38%2C 32 40 C30 38%2C 26 34%2C 24 28 C24 20%2C 26 16%2C 32 16 Z%22 fill=%22%2378909c%22 opacity=%220.8%22/%3E %3C%21-- Center Main Shield --%3E %3Cpath d=%22M24 10 C32 10%2C 36 15%2C 35 26 C33 34%2C 28 40%2C 24 44 C20 40%2C 15 34%2C 13 26 C12 15%2C 16 10%2C 24 10 Z%22 fill=%22url%28%23partyBlue%29%22 stroke=%22%23fff%22 stroke-width=%221.2%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%223%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="guild"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22guildGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fffde7%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%2285%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Main Fortress Pagoda Tower --%3E %3Crect x=%2218%22 y=%2222%22 width=%2212%22 height=%2218%22 rx=%221%22 fill=%22url%28%23guildGold%29%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3C%21-- Pagoda Tiered Roofs --%3E %3Cpolygon points=%2224%2C6 34%2C14 14%2C14%22 fill=%22%23d32f2f%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3Cpolygon points=%2224%2C12 38%2C20 10%2C20%22 fill=%22%23d32f2f%22 stroke=%22%23ffd54f%22 stroke-width=%221%22/%3E %3C%21-- Gate Arches --%3E %3Cpath d=%22M21 40 L21 32 C21 30%2C 27 30%2C 27 32 L27 40 Z%22 fill=%22%233e2723%22/%3E %3Ccircle cx=%2224%22 cy=%2226%22 r=%222%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="market"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22scaleGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3C%21-- Balance Beam %26 Pillar --%3E %3Cline x1=%2224%22 y1=%2210%22 x2=%2224%22 y2=%2240%22 stroke=%22url%28%23scaleGold%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2210%22 y1=%2214%22 x2=%2238%22 y2=%2214%22 stroke=%22url%28%23scaleGold%29%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E %3C%21-- Left Pan --%3E %3Cpath d=%22M10 14 L8 24 L16 24 Z%22 fill=%22none%22 stroke=%22%23ffb74d%22 stroke-width=%221%22/%3E %3Cpath d=%22M6 24 C8 28%2C 16 28%2C 18 24 Z%22 fill=%22url%28%23scaleGold%29%22/%3E %3C%21-- Right Pan --%3E %3Cpath d=%22M38 14 L36 24 L44 24 Z%22 fill=%22none%22 stroke=%22%23ffb74d%22 stroke-width=%221%22/%3E %3Cpath d=%22M34 24 C36 28%2C 44 28%2C 46 24 Z%22 fill=%22url%28%23scaleGold%29%22/%3E %3C%21-- Base Stand --%3E %3Crect x=%2216%22 y=%2238%22 width=%2216%22 height=%224%22 rx=%222%22 fill=%22url%28%23scaleGold%29%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="settings"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22gearGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23cfd8dc%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%2390a4ae%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23455a64%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%2214%22 fill=%22url%28%23gearGold%29%22 stroke=%22%23ffd54f%22 stroke-width=%222%22/%3E %3Ccircle cx=%2224%22 cy=%2224%22 r=%225%22 fill=%22%23263238%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3C%21-- Gear Teeth --%3E %3Cpolygon points=%2222%2C6 26%2C6 25%2C10 23%2C10%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2222%2C42 26%2C42 25%2C38 23%2C38%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%226%2C22 6%2C26 10%2C25 10%2C23%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2242%2C22 42%2C26 38%2C25 38%2C23%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2212%2C12 15%2C9 17%2C12 14%2C15%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2236%2C36 39%2C33 37%2C30 34%2C33%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2236%2C12 39%2C15 37%2C18 34%2C15%22 fill=%22%23ffd54f%22/%3E %3Cpolygon points=%2212%2C36 15%2C39 17%2C36 14%2C33%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.drawer-nav-icon[data-menu-icon="account"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3ClinearGradient id=%22badgeGold%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23ffd54f%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23ff8f00%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Ccircle cx=%2224%22 cy=%2220%22 r=%2212%22 fill=%22url%28%23badgeGold%29%22 stroke=%22%23fff%22 stroke-width=%221.2%22/%3E %3Cpolygon points=%2224%2C12 26%2C16 30%2C17 27%2C20 28%2C24 24%2C22 20%2C24 21%2C20 18%2C17 22%2C16%22 fill=%22%23d32f2f%22/%3E %3C%21-- Hanging Ribbon Ends --%3E %3Cpolygon points=%2218%2C30 14%2C42 20%2C40 24%2C30%22 fill=%22%23c62828%22/%3E %3Cpolygon points=%2230%2C30 34%2C42 28%2C40 24%2C30%22 fill=%22%23b71c1c%22/%3E %3C/svg%3E") !important; }
 .bag-stat-icon[data-stat-icon] {
   display: inline-block;
   width: 22px;
@@ -5037,16 +5342,16 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   vertical-align: middle;
   filter: drop-shadow(0 1px 3px rgba(0,0,0,0.6));
 }
-.bag-stat-icon[data-stat-icon="hp"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3CradialGradient id=%22heartRuby%22 cx=%2235%25%22 cy=%2235%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ff8a80%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ff1744%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23b71c1c%22/%3E %3C/radialGradient%3E %3C/defs%3E %3Cpath d=%22M16 28 C6 20%2C 2 14%2C 2 8 C2 4%2C 6 2%2C 10 2 C13 2%2C 15 4%2C 16 6 C17 4%2C 19 2%2C 22 2 C26 2%2C 30 4%2C 30 8 C30 14%2C 26 20%2C 16 28 Z%22 fill=%22url%28%23heartRuby%29%22 stroke=%22%23ffffff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%229%22 cy=%227%22 r=%221.5%22 fill=%22%23ffffff%22 opacity=%220.7%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="atk"], .bag-stat-icon[data-stat-icon="melee"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22bladeAtk%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2300838f%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cline x1=%226%22 y1=%2226%22 x2=%2226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2226%22 y1=%2226%22 x2=%226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="ranged"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22bladeAtk%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2300838f%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cline x1=%226%22 y1=%2226%22 x2=%2226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2226%22 y1=%2226%22 x2=%226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="def"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22defShield%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23fbc02d%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cpath d=%22M16 3 C25 3%2C 28 6%2C 27 15 C26 23%2C 20 28%2C 16 30 C12 28%2C 6 23%2C 5 15 C4 6%2C 7 3%2C 16 3 Z%22 fill=%22url%28%23defShield%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2216%22 cy=%2215%22 r=%222.5%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="stamina"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cpolygon points=%2218%2C2 7%2C16 15%2C16 12%2C30 25%2C14 17%2C14%22 fill=%22%23ffd54f%22 stroke=%22%23ff8f00%22 stroke-width=%221%22/%3E %3Ccircle cx=%2224%22 cy=%228%22 r=%221.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="mana"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3CradialGradient id=%22manaDrop%22 cx=%2238%25%22 cy=%2240%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23e0f7fa%22/%3E %3Cstop offset=%2230%25%22 stop-color=%22%2340c4ff%22/%3E %3Cstop offset=%2270%25%22 stop-color=%22%230288d1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/radialGradient%3E %3C/defs%3E %3C%21-- Teardrop Gem --%3E %3Cpath d=%22M24 6 C24 6%2C 38 22%2C 38 30 C38 38%2C 32 44%2C 24 44 C16 44%2C 10 38%2C 10 30 C10 22%2C 24 6%2C 24 6 Z%22 fill=%22url%28%23manaDrop%29%22 stroke=%22%2380d8ff%22 stroke-width=%221.2%22/%3E %3C%21-- Highlight Flare --%3E %3Cellipse cx=%2220%22 cy=%2226%22 rx=%224%22 ry=%227%22 transform=%22rotate%28-20 20 26%29%22 fill=%22%23ffffff%22 opacity=%220.6%22/%3E %3Cpolygon points=%2224%2C14 25%2C17 28%2C18 25%2C19 24%2C22 23%2C19 20%2C18 23%2C17%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="magicAtk"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3CradialGradient id=%22orbMagic%22 cx=%2240%25%22 cy=%2240%25%22 r=%2255%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%23e040fb%22/%3E %3Cstop offset=%2280%25%22 stop-color=%22%237c4dff%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23311b92%22/%3E %3C/radialGradient%3E %3C/defs%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22url%28%23orbMagic%29%22 stroke=%22%23ea80fc%22 stroke-width=%221%22/%3E %3Cpolygon points=%2216%2C8 18%2C13 23%2C13 19%2C16 21%2C21 16%2C18 11%2C21 13%2C16 9%2C13 14%2C13%22 fill=%22%23ffffff%22 opacity=%220.8%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="magicDef"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cpolygon points=%2216%2C3 27%2C9 27%2C23 16%2C29 5%2C23 5%2C9%22 fill=%22rgba%28128%2C 222%2C 234%2C 0.35%29%22 stroke=%22%2300e5ff%22 stroke-width=%221.8%22/%3E %3Cpolygon points=%2216%2C7 23%2C12 23%2C20 16%2C25 9%2C20 9%2C12%22 fill=%22%2300bcd4%22 opacity=%220.6%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="forge"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3C%21-- Anvil Base --%3E %3Cpolygon points=%227%2C20 25%2C20 28%2C26 4%2C26%22 fill=%22%2378909c%22 stroke=%22%23cfd8dc%22 stroke-width=%220.8%22/%3E %3C%21-- Hammer Head striking --%3E %3Crect x=%2214%22 y=%226%22 width=%2212%22 height=%226%22 rx=%221.5%22 transform=%22rotate%28-30 20 9%29%22 fill=%22%23ffd54f%22 stroke=%22%23e65100%22 stroke-width=%220.8%22/%3E %3C%21-- Hammer Handle --%3E %3Cline x1=%2220%22 y1=%229%22 x2=%2228%22 y2=%2218%22 stroke=%22%238d6e63%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E %3C%21-- Spark --%3E %3Ccircle cx=%2216%22 cy=%2218%22 r=%221.5%22 fill=%22%23ffffff%22/%3E %3C/svg%3E"); }
-.bag-stat-icon[data-stat-icon="socket"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22%23263238%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22/%3E %3Cpolygon points=%2216%2C8 22%2C12 22%2C20 16%2C24 10%2C20 10%2C12%22 fill=%22%23d50000%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.2%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E"); }
+.bag-stat-icon[data-stat-icon="hp"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3CradialGradient id=%22heartRuby%22 cx=%2235%25%22 cy=%2235%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ff8a80%22/%3E %3Cstop offset=%2240%25%22 stop-color=%22%23ff1744%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23b71c1c%22/%3E %3C/radialGradient%3E %3C/defs%3E %3Cpath d=%22M16 28 C6 20%2C 2 14%2C 2 8 C2 4%2C 6 2%2C 10 2 C13 2%2C 15 4%2C 16 6 C17 4%2C 19 2%2C 22 2 C26 2%2C 30 4%2C 30 8 C30 14%2C 26 20%2C 16 28 Z%22 fill=%22url%28%23heartRuby%29%22 stroke=%22%23ffffff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%229%22 cy=%227%22 r=%221.5%22 fill=%22%23ffffff%22 opacity=%220.7%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="atk"], .bag-stat-icon[data-stat-icon="melee"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22bladeAtk%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2300838f%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cline x1=%226%22 y1=%2226%22 x2=%2226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2226%22 y1=%2226%22 x2=%226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="ranged"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22bladeAtk%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%2380deea%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2300838f%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cline x1=%226%22 y1=%2226%22 x2=%2226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Cline x1=%2226%22 y1=%2226%22 x2=%226%22 y2=%226%22 stroke=%22url%28%23bladeAtk%29%22 stroke-width=%222.5%22 stroke-linecap=%22round%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="def"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3ClinearGradient id=%22defShield%22 x1=%220%25%22 y1=%220%25%22 x2=%22100%25%22 y2=%22100%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23fff59d%22/%3E %3Cstop offset=%2250%25%22 stop-color=%22%23fbc02d%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23e65100%22/%3E %3C/linearGradient%3E %3C/defs%3E %3Cpath d=%22M16 3 C25 3%2C 28 6%2C 27 15 C26 23%2C 20 28%2C 16 30 C12 28%2C 6 23%2C 5 15 C4 6%2C 7 3%2C 16 3 Z%22 fill=%22url%28%23defShield%29%22 stroke=%22%23fff%22 stroke-width=%220.8%22/%3E %3Ccircle cx=%2216%22 cy=%2215%22 r=%222.5%22 fill=%22%23d32f2f%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="stamina"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cpolygon points=%2218%2C2 7%2C16 15%2C16 12%2C30 25%2C14 17%2C14%22 fill=%22%23ffd54f%22 stroke=%22%23ff8f00%22 stroke-width=%221%22/%3E %3Ccircle cx=%2224%22 cy=%228%22 r=%221.2%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="mana"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 48 48%22%3E %3Cdefs%3E %3CradialGradient id=%22manaDrop%22 cx=%2238%25%22 cy=%2240%25%22 r=%2260%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23e0f7fa%22/%3E %3Cstop offset=%2230%25%22 stop-color=%22%2340c4ff%22/%3E %3Cstop offset=%2270%25%22 stop-color=%22%230288d1%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%2301579b%22/%3E %3C/radialGradient%3E %3C/defs%3E %3C%21-- Teardrop Gem --%3E %3Cpath d=%22M24 6 C24 6%2C 38 22%2C 38 30 C38 38%2C 32 44%2C 24 44 C16 44%2C 10 38%2C 10 30 C10 22%2C 24 6%2C 24 6 Z%22 fill=%22url%28%23manaDrop%29%22 stroke=%22%2380d8ff%22 stroke-width=%221.2%22/%3E %3C%21-- Highlight Flare --%3E %3Cellipse cx=%2220%22 cy=%2226%22 rx=%224%22 ry=%227%22 transform=%22rotate%28-20 20 26%29%22 fill=%22%23ffffff%22 opacity=%220.6%22/%3E %3Cpolygon points=%2224%2C14 25%2C17 28%2C18 25%2C19 24%2C22 23%2C19 20%2C18 23%2C17%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="magicAtk"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cdefs%3E %3CradialGradient id=%22orbMagic%22 cx=%2240%25%22 cy=%2240%25%22 r=%2255%25%22%3E %3Cstop offset=%220%25%22 stop-color=%22%23ffffff%22/%3E %3Cstop offset=%2235%25%22 stop-color=%22%23e040fb%22/%3E %3Cstop offset=%2280%25%22 stop-color=%22%237c4dff%22/%3E %3Cstop offset=%22100%25%22 stop-color=%22%23311b92%22/%3E %3C/radialGradient%3E %3C/defs%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%2212%22 fill=%22url%28%23orbMagic%29%22 stroke=%22%23ea80fc%22 stroke-width=%221%22/%3E %3Cpolygon points=%2216%2C8 18%2C13 23%2C13 19%2C16 21%2C21 16%2C18 11%2C21 13%2C16 9%2C13 14%2C13%22 fill=%22%23ffffff%22 opacity=%220.8%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="magicDef"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Cpolygon points=%2216%2C3 27%2C9 27%2C23 16%2C29 5%2C23 5%2C9%22 fill=%22rgba%28128%2C 222%2C 234%2C 0.35%29%22 stroke=%22%2300e5ff%22 stroke-width=%221.8%22/%3E %3Cpolygon points=%2216%2C7 23%2C12 23%2C20 16%2C25 9%2C20 9%2C12%22 fill=%22%2300bcd4%22 opacity=%220.6%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.5%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="forge"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3C%21-- Anvil Base --%3E %3Cpolygon points=%227%2C20 25%2C20 28%2C26 4%2C26%22 fill=%22%2378909c%22 stroke=%22%23cfd8dc%22 stroke-width=%220.8%22/%3E %3C%21-- Hammer Head striking --%3E %3Crect x=%2214%22 y=%226%22 width=%2212%22 height=%226%22 rx=%221.5%22 transform=%22rotate%28-30 20 9%29%22 fill=%22%23ffd54f%22 stroke=%22%23e65100%22 stroke-width=%220.8%22/%3E %3C%21-- Hammer Handle --%3E %3Cline x1=%2220%22 y1=%229%22 x2=%2228%22 y2=%2218%22 stroke=%22%238d6e63%22 stroke-width=%222%22 stroke-linecap=%22round%22/%3E %3C%21-- Spark --%3E %3Ccircle cx=%2216%22 cy=%2218%22 r=%221.5%22 fill=%22%23ffffff%22/%3E %3C/svg%3E") !important; }
+.bag-stat-icon[data-stat-icon="socket"] { background-image: url("data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22%23263238%22 stroke=%22%23ffd54f%22 stroke-width=%221.5%22/%3E %3Cpolygon points=%2216%2C8 22%2C12 22%2C20 16%2C24 10%2C20 10%2C12%22 fill=%22%23d50000%22 stroke=%22%23fff%22 stroke-width=%221%22/%3E %3Ccircle cx=%2216%22 cy=%2216%22 r=%222.2%22 fill=%22%23ffd54f%22/%3E %3C/svg%3E") !important; }
 
 /* Extra styling for map shortcuts & flyout icons */
 .map-shortcuts button .hud-btn-icon {
@@ -5260,6 +5565,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   color: transparent !important;
 }
 
+
+/* Unknown/new catalog IDs still get visible artwork until a dedicated mapping is added.
+   Zero specificity keeps every named technique's artwork authoritative. */
+:where(.glyph[data-skill-glyph], .skill-book-icon[data-skill-glyph], .skill-modal-glyph[data-skill-glyph], .kg-glyph[data-skill-glyph]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23272930' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M32 9 38 26 55 32 38 38 32 55 26 38 9 32 26 26Z' fill='%23f4d781' stroke='%23fff0bd' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23846b3e'/%3E%3C/svg%3E") !important;
+}
 /* --- BLADE (คมดาบ) SKILL ARTWORK --- */
 
 /* blade_vanish: มนต์พรางเงา (Shadow Cloak & Eagle Eye) */
@@ -5267,7 +5578,22 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="blade_vanish"],
 .skill-modal-glyph[data-skill-glyph="blade_vanish"],
 .glyph[data-skill-glyph="blade_vanish"],
-.field-slot[data-skill-id="blade_vanish"] .glyph {
+.field-slot[data-skill-id="blade_vanish"] .glyph,
+.kg-glyph[data-skill-glyph="cloak"],
+.skill-book-icon[data-skill-glyph="cloak"],
+.skill-modal-glyph[data-skill-glyph="cloak"],
+.glyph[data-skill-glyph="cloak"],
+.field-slot[data-skill-id="cloak"] .glyph,
+.kg-glyph[data-skill-glyph="quiet_step"],
+.skill-book-icon[data-skill-glyph="quiet_step"],
+.skill-modal-glyph[data-skill-glyph="quiet_step"],
+.glyph[data-skill-glyph="quiet_step"],
+.field-slot[data-skill-id="quiet_step"] .glyph,
+.kg-glyph[data-skill-glyph="veil_guard"],
+.skill-book-icon[data-skill-glyph="veil_guard"],
+.skill-modal-glyph[data-skill-glyph="veil_guard"],
+.glyph[data-skill-glyph="veil_guard"],
+.field-slot[data-skill-id="veil_guard"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='vanBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%236a0dad'/%3E%3Cstop offset='60%25' stop-color='%2338006b'/%3E%3Cstop offset='100%25' stop-color='%23120024'/%3E%3C/radialGradient%3E%3Cfilter id='vanGlow'%3E%3CfeGaussianBlur stdDeviation='2' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23vanBg)' stroke='%23b388ff' stroke-width='1.5'/%3E%3Cpath d='M10 32 C14 20, 26 14, 32 14 C38 14, 50 20, 54 32 C50 44, 38 50, 32 50 C26 50, 14 44, 10 32 Z' fill='%23240046' stroke='%23d1c4e9' stroke-width='1.5' filter='url(%23vanGlow)'/%3E%3Cellipse cx='32' cy='32' rx='10' ry='10' fill='%23651fff'/%3E%3Ccircle cx='32' cy='32' r='4.5' fill='%2300e5ff' filter='url(%23vanGlow)'/%3E%3Ccircle cx='34' cy='30' r='1.5' fill='%23ffffff'/%3E%3Cpath d='M16 22 C22 28, 30 24, 36 18' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3Cpath d='M48 42 C42 36, 34 40, 28 46' stroke='%23b388ff' stroke-width='1.2' fill='none' opacity='0.7'/%3E%3C/svg%3E") !important;
 }
 
@@ -5276,7 +5602,42 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="blade_heavy"],
 .skill-modal-glyph[data-skill-glyph="blade_heavy"],
 .glyph[data-skill-glyph="blade_heavy"],
-.field-slot[data-skill-id="blade_heavy"] .glyph {
+.field-slot[data-skill-id="blade_heavy"] .glyph,
+.kg-glyph[data-skill-glyph="hidden_edge"],
+.skill-book-icon[data-skill-glyph="hidden_edge"],
+.skill-modal-glyph[data-skill-glyph="hidden_edge"],
+.glyph[data-skill-glyph="hidden_edge"],
+.field-slot[data-skill-id="hidden_edge"] .glyph,
+.kg-glyph[data-skill-glyph="marked_cut"],
+.skill-book-icon[data-skill-glyph="marked_cut"],
+.skill-modal-glyph[data-skill-glyph="marked_cut"],
+.glyph[data-skill-glyph="marked_cut"],
+.field-slot[data-skill-id="marked_cut"] .glyph,
+.kg-glyph[data-skill-glyph="piercing_edge"],
+.skill-book-icon[data-skill-glyph="piercing_edge"],
+.skill-modal-glyph[data-skill-glyph="piercing_edge"],
+.glyph[data-skill-glyph="piercing_edge"],
+.field-slot[data-skill-id="piercing_edge"] .glyph,
+.kg-glyph[data-skill-glyph="sever_mark"],
+.skill-book-icon[data-skill-glyph="sever_mark"],
+.skill-modal-glyph[data-skill-glyph="sever_mark"],
+.glyph[data-skill-glyph="sever_mark"],
+.field-slot[data-skill-id="sever_mark"] .glyph,
+.kg-glyph[data-skill-glyph="shadow_cut"],
+.skill-book-icon[data-skill-glyph="shadow_cut"],
+.skill-modal-glyph[data-skill-glyph="shadow_cut"],
+.glyph[data-skill-glyph="shadow_cut"],
+.field-slot[data-skill-id="shadow_cut"] .glyph,
+.kg-glyph[data-skill-glyph="rune_break"],
+.skill-book-icon[data-skill-glyph="rune_break"],
+.skill-modal-glyph[data-skill-glyph="rune_break"],
+.glyph[data-skill-glyph="rune_break"],
+.field-slot[data-skill-id="rune_break"] .glyph,
+.kg-glyph[data-skill-glyph="sealed_finale"],
+.skill-book-icon[data-skill-glyph="sealed_finale"],
+.skill-modal-glyph[data-skill-glyph="sealed_finale"],
+.glyph[data-skill-glyph="sealed_finale"],
+.field-slot[data-skill-id="sealed_finale"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='hvyBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23d50000'/%3E%3Cstop offset='70%25' stop-color='%235c0000'/%3E%3Cstop offset='100%25' stop-color='%231a0000'/%3E%3C/radialGradient%3E%3ClinearGradient id='hvyBlade' x1='0%25' y1='0%25' x2='100%25' y2='100%25'%3E%3Cstop offset='0%25' stop-color='%23ffffff'/%3E%3Cstop offset='30%25' stop-color='%23ff8a80'/%3E%3Cstop offset='80%25' stop-color='%23d50000'/%3E%3C/linearGradient%3E%3Cfilter id='hvyGlow'%3E%3CfeGaussianBlur stdDeviation='2.5' result='blur'/%3E%3CfeComposite in='SourceGraphic' in2='blur' operator='over'/%3E%3C/filter%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23hvyBg)' stroke='%23ff5252' stroke-width='1.5'/%3E%3Cpath d='M12 52 C24 40, 44 20, 52 12 C44 28, 28 44, 12 52 Z' fill='url(%23hvyBlade)' filter='url(%23hvyGlow)'/%3E%3Cpolygon points='34,22 42,16 48,22 40,28' fill='%23ffd54f' stroke='%23fff' stroke-width='1'/%3E%3Cpolygon points='30,30 32,36 38,36 33,40 35,46 30,42 25,46 27,40 22,36 28,36' fill='%23ffffff' filter='url(%23hvyGlow)'/%3E%3Ccircle cx='44' cy='18' r='2' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 
@@ -5285,7 +5646,17 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="blade_withdraw"],
 .skill-modal-glyph[data-skill-glyph="blade_withdraw"],
 .glyph[data-skill-glyph="blade_withdraw"],
-.field-slot[data-skill-id="blade_withdraw"] .glyph {
+.field-slot[data-skill-id="blade_withdraw"] .glyph,
+.kg-glyph[data-skill-glyph="shadow_step"],
+.skill-book-icon[data-skill-glyph="shadow_step"],
+.skill-modal-glyph[data-skill-glyph="shadow_step"],
+.glyph[data-skill-glyph="shadow_step"],
+.field-slot[data-skill-id="shadow_step"] .glyph,
+.kg-glyph[data-skill-glyph="retreat"],
+.skill-book-icon[data-skill-glyph="retreat"],
+.skill-modal-glyph[data-skill-glyph="retreat"],
+.glyph[data-skill-glyph="retreat"],
+.field-slot[data-skill-id="retreat"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='witBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%23004385'/%3E%3Cstop offset='100%25' stop-color='%23001737'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23witBg)' stroke='%2340c4ff' stroke-width='1.5'/%3E%3Cpath d='M44 14 C30 18, 20 30, 20 44 C28 40, 36 34, 40 26 Z' fill='%23ffffff' opacity='0.9'/%3E%3Cpath d='M50 20 C38 24, 28 34, 28 48 C34 44, 42 40, 46 32 Z' fill='%2380d8ff' opacity='0.6'/%3E%3Cpolygon points='16,36 24,30 24,42' fill='%2300e5ff'/%3E%3Cline x1='24' y1='36' x2='38' y2='36' stroke='%2300e5ff' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E") !important;
 }
 
@@ -5294,7 +5665,17 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="blade_fury"],
 .skill-modal-glyph[data-skill-glyph="blade_fury"],
 .glyph[data-skill-glyph="blade_fury"],
-.field-slot[data-skill-id="blade_fury"] .glyph {
+.field-slot[data-skill-id="blade_fury"] .glyph,
+.kg-glyph[data-skill-glyph="rhythm"],
+.skill-book-icon[data-skill-glyph="rhythm"],
+.skill-modal-glyph[data-skill-glyph="rhythm"],
+.glyph[data-skill-glyph="rhythm"],
+.field-slot[data-skill-id="rhythm"] .glyph,
+.kg-glyph[data-skill-glyph="killer_focus"],
+.skill-book-icon[data-skill-glyph="killer_focus"],
+.skill-modal-glyph[data-skill-glyph="killer_focus"],
+.glyph[data-skill-glyph="killer_focus"],
+.field-slot[data-skill-id="killer_focus"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='furBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff6d00'/%3E%3Cstop offset='60%25' stop-color='%23c43e00'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23furBg)' stroke='%23ffab40' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3' stroke-linecap='round'%3E%3Cline x1='14' y1='50' x2='50' y2='14'/%3E%3Cline x1='14' y1='14' x2='50' y2='50'/%3E%3Cline x1='10' y1='32' x2='54' y2='32'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='8' fill='%23ffd600' stroke='%23fff' stroke-width='1.5'/%3E%3Cpolygon points='32,20 35,28 43,32 35,36 32,44 29,36 21,32 29,28' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 
@@ -5305,7 +5686,22 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="mender_core_heal"],
 .skill-modal-glyph[data-skill-glyph="mender_core_heal"],
 .glyph[data-skill-glyph="mender_core_heal"],
-.field-slot[data-skill-id="mender_core_heal"] .glyph {
+.field-slot[data-skill-id="mender_core_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_heal"],
+.skill-book-icon[data-skill-glyph="mender_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_heal"],
+.glyph[data-skill-glyph="mender_heal"],
+.field-slot[data-skill-id="mender_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit_heal"],
+.skill-book-icon[data-skill-glyph="mender_spirit_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit_heal"],
+.glyph[data-skill-glyph="mender_spirit_heal"],
+.field-slot[data-skill-id="mender_spirit_heal"] .glyph,
+.kg-glyph[data-skill-glyph="mender_deep_heal"],
+.skill-book-icon[data-skill-glyph="mender_deep_heal"],
+.skill-modal-glyph[data-skill-glyph="mender_deep_heal"],
+.glyph[data-skill-glyph="mender_deep_heal"],
+.field-slot[data-skill-id="mender_deep_heal"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='healBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e676'/%3E%3Cstop offset='60%25' stop-color='%2300897b'/%3E%3Cstop offset='100%25' stop-color='%23004d40'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23healBg)' stroke='%23b9f6ca' stroke-width='1.5'/%3E%3Cpath d='M32 12 C32 12, 44 26, 44 34 C44 42, 38 48, 32 48 C26 48, 20 42, 20 34 C20 26, 32 12, 32 12 Z' fill='%23e0f2f1' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='34' r='6' fill='%2300e676'/%3E%3Cpolygon points='32,24 34,29 39,30 35,34 36,39 32,36 28,39 29,34 25,30 30,29' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
 }
 
@@ -5314,7 +5710,22 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="mender_core_circle"],
 .skill-modal-glyph[data-skill-glyph="mender_core_circle"],
 .glyph[data-skill-glyph="mender_core_circle"],
-.field-slot[data-skill-id="mender_core_circle"] .glyph {
+.field-slot[data-skill-id="mender_core_circle"] .glyph,
+.kg-glyph[data-skill-glyph="mender_area"],
+.skill-book-icon[data-skill-glyph="mender_area"],
+.skill-modal-glyph[data-skill-glyph="mender_area"],
+.glyph[data-skill-glyph="mender_area"],
+.field-slot[data-skill-id="mender_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_deep_circle"],
+.skill-book-icon[data-skill-glyph="mender_deep_circle"],
+.skill-modal-glyph[data-skill-glyph="mender_deep_circle"],
+.glyph[data-skill-glyph="mender_deep_circle"],
+.field-slot[data-skill-id="mender_deep_circle"] .glyph,
+.kg-glyph[data-skill-glyph="mender_trance"],
+.skill-book-icon[data-skill-glyph="mender_trance"],
+.skill-modal-glyph[data-skill-glyph="mender_trance"],
+.glyph[data-skill-glyph="mender_trance"],
+.field-slot[data-skill-id="mender_trance"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='cirBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd700'/%3E%3Cstop offset='60%25' stop-color='%23ff8f00'/%3E%3Cstop offset='100%25' stop-color='%23bf360c'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23cirBg)' stroke='%23fff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='20' fill='none' stroke='%23ffffff' stroke-width='2' stroke-dasharray='4,3'/%3E%3Cpolygon points='32,14 46,24 46,40 32,50 18,40 18,24' fill='none' stroke='%23ffffff' stroke-width='1.5'/%3E%3Ccircle cx='32' cy='32' r='6' fill='%23ffffff'/%3E%3C/svg%3E") !important;
 }
 
@@ -5323,7 +5734,27 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="mender_core_ward"],
 .skill-modal-glyph[data-skill-glyph="mender_core_ward"],
 .glyph[data-skill-glyph="mender_core_ward"],
-.field-slot[data-skill-id="mender_core_ward"] .glyph {
+.field-slot[data-skill-id="mender_core_ward"] .glyph,
+.kg-glyph[data-skill-glyph="mender_ward"],
+.skill-book-icon[data-skill-glyph="mender_ward"],
+.skill-modal-glyph[data-skill-glyph="mender_ward"],
+.glyph[data-skill-glyph="mender_ward"],
+.field-slot[data-skill-id="mender_ward"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit"],
+.skill-book-icon[data-skill-glyph="mender_spirit"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit"],
+.glyph[data-skill-glyph="mender_spirit"],
+.field-slot[data-skill-id="mender_spirit"] .glyph,
+.kg-glyph[data-skill-glyph="mender_ward_area"],
+.skill-book-icon[data-skill-glyph="mender_ward_area"],
+.skill-modal-glyph[data-skill-glyph="mender_ward_area"],
+.glyph[data-skill-glyph="mender_ward_area"],
+.field-slot[data-skill-id="mender_ward_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_shelter"],
+.skill-book-icon[data-skill-glyph="mender_shelter"],
+.skill-modal-glyph[data-skill-glyph="mender_shelter"],
+.glyph[data-skill-glyph="mender_shelter"],
+.field-slot[data-skill-id="mender_shelter"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='wrdBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300e5ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%2301579b'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23wrdBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Cpolygon points='32,10 52,22 48,46 32,56 16,46 12,22' fill='%23e1f5fe' opacity='0.8' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cpolygon points='32,18 44,26 40,42 32,48 24,42 20,26' fill='%2380d8ff' opacity='0.6' stroke='%23ffffff' stroke-width='1'/%3E%3C/svg%3E") !important;
 }
 
@@ -5332,7 +5763,27 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="mender_core_cleanse"],
 .skill-modal-glyph[data-skill-glyph="mender_core_cleanse"],
 .glyph[data-skill-glyph="mender_core_cleanse"],
-.field-slot[data-skill-id="mender_core_cleanse"] .glyph {
+.field-slot[data-skill-id="mender_core_cleanse"] .glyph,
+.kg-glyph[data-skill-glyph="mender_cleanse"],
+.skill-book-icon[data-skill-glyph="mender_cleanse"],
+.skill-modal-glyph[data-skill-glyph="mender_cleanse"],
+.glyph[data-skill-glyph="mender_cleanse"],
+.field-slot[data-skill-id="mender_cleanse"] .glyph,
+.kg-glyph[data-skill-glyph="mender_cleanse_area"],
+.skill-book-icon[data-skill-glyph="mender_cleanse_area"],
+.skill-modal-glyph[data-skill-glyph="mender_cleanse_area"],
+.glyph[data-skill-glyph="mender_cleanse_area"],
+.field-slot[data-skill-id="mender_cleanse_area"] .glyph,
+.kg-glyph[data-skill-glyph="mender_pve_rice"],
+.skill-book-icon[data-skill-glyph="mender_pve_rice"],
+.skill-modal-glyph[data-skill-glyph="mender_pve_rice"],
+.glyph[data-skill-glyph="mender_pve_rice"],
+.field-slot[data-skill-id="mender_pve_rice"] .glyph,
+.kg-glyph[data-skill-glyph="mender_spirit_rice"],
+.skill-book-icon[data-skill-glyph="mender_spirit_rice"],
+.skill-modal-glyph[data-skill-glyph="mender_spirit_rice"],
+.glyph[data-skill-glyph="mender_spirit_rice"],
+.field-slot[data-skill-id="mender_spirit_rice"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='clnBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23f48fb1'/%3E%3Cstop offset='60%25' stop-color='%23ad1457'/%3E%3Cstop offset='100%25' stop-color='%234a0072'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23clnBg)' stroke='%23ff80ab' stroke-width='1.5'/%3E%3Cpolygon points='32,8 36,24 52,28 38,36 42,52 32,42 22,52 26,36 12,28 28,24' fill='%23ffffff' stroke='%23ffd54f' stroke-width='1.2'/%3E%3Ccircle cx='32' cy='30' r='5' fill='%23ff4081'/%3E%3C/svg%3E") !important;
 }
 
@@ -5343,7 +5794,22 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="shock"],
 .skill-modal-glyph[data-skill-glyph="shock"],
 .glyph[data-skill-glyph="shock"],
-.field-slot[data-skill-id="shock"] .glyph {
+.field-slot[data-skill-id="shock"] .glyph,
+.kg-glyph[data-skill-glyph="bash"],
+.skill-book-icon[data-skill-glyph="bash"],
+.skill-modal-glyph[data-skill-glyph="bash"],
+.glyph[data-skill-glyph="bash"],
+.field-slot[data-skill-id="bash"] .glyph,
+.kg-glyph[data-skill-glyph="slam"],
+.skill-book-icon[data-skill-glyph="slam"],
+.skill-modal-glyph[data-skill-glyph="slam"],
+.glyph[data-skill-glyph="slam"],
+.field-slot[data-skill-id="slam"] .glyph,
+.kg-glyph[data-skill-glyph="line_sweep"],
+.skill-book-icon[data-skill-glyph="line_sweep"],
+.skill-modal-glyph[data-skill-glyph="line_sweep"],
+.glyph[data-skill-glyph="line_sweep"],
+.field-slot[data-skill-id="line_sweep"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='shkBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ffd600'/%3E%3Cstop offset='60%25' stop-color='%23ff6f00'/%3E%3Cstop offset='100%25' stop-color='%23e65100'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23shkBg)' stroke='%23ffe082' stroke-width='1.5'/%3E%3Cpolygon points='36,6 18,32 30,32 26,56 46,26 34,26' fill='%23ffffff' stroke='%23ff6f00' stroke-width='1.2'/%3E%3Ccircle cx='44' cy='16' r='2' fill='%23fff'/%3E%3Ccircle cx='14' cy='46' r='2' fill='%23fff'/%3E%3C/svg%3E") !important;
 }
 
@@ -5352,7 +5818,27 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="bulwark"],
 .skill-modal-glyph[data-skill-glyph="bulwark"],
 .glyph[data-skill-glyph="bulwark"],
-.field-slot[data-skill-id="bulwark"] .glyph {
+.field-slot[data-skill-id="bulwark"] .glyph,
+.kg-glyph[data-skill-glyph="guard"],
+.skill-book-icon[data-skill-glyph="guard"],
+.skill-modal-glyph[data-skill-glyph="guard"],
+.glyph[data-skill-glyph="guard"],
+.field-slot[data-skill-id="guard"] .glyph,
+.kg-glyph[data-skill-glyph="fortitude"],
+.skill-book-icon[data-skill-glyph="fortitude"],
+.skill-modal-glyph[data-skill-glyph="fortitude"],
+.glyph[data-skill-glyph="fortitude"],
+.field-slot[data-skill-id="fortitude"] .glyph,
+.kg-glyph[data-skill-glyph="anchor"],
+.skill-book-icon[data-skill-glyph="anchor"],
+.skill-modal-glyph[data-skill-glyph="anchor"],
+.glyph[data-skill-glyph="anchor"],
+.field-slot[data-skill-id="anchor"] .glyph,
+.kg-glyph[data-skill-glyph="firm_guard"],
+.skill-book-icon[data-skill-glyph="firm_guard"],
+.skill-modal-glyph[data-skill-glyph="firm_guard"],
+.glyph[data-skill-glyph="firm_guard"],
+.field-slot[data-skill-id="firm_guard"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='bwBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2378909c'/%3E%3Cstop offset='60%25' stop-color='%2337474f'/%3E%3Cstop offset='100%25' stop-color='%23212121'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23bwBg)' stroke='%23cfd8dc' stroke-width='1.5'/%3E%3Cpath d='M32 10 L48 18 L48 38 C48 48, 32 56, 32 56 C32 56, 16 48, 16 38 L16 18 Z' fill='%23546e7a' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cline x1='32' y1='18' x2='32' y2='48' stroke='%23ffd54f' stroke-width='2.5'/%3E%3Cline x1='22' y1='30' x2='42' y2='30' stroke='%23ffd54f' stroke-width='2.5'/%3E%3C/svg%3E") !important;
 }
 
@@ -5361,7 +5847,37 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="riposte"],
 .skill-modal-glyph[data-skill-glyph="riposte"],
 .glyph[data-skill-glyph="riposte"],
-.field-slot[data-skill-id="riposte"] .glyph {
+.field-slot[data-skill-id="riposte"] .glyph,
+.kg-glyph[data-skill-glyph="seize"],
+.skill-book-icon[data-skill-glyph="seize"],
+.skill-modal-glyph[data-skill-glyph="seize"],
+.glyph[data-skill-glyph="seize"],
+.field-slot[data-skill-id="seize"] .glyph,
+.kg-glyph[data-skill-glyph="turning_counter"],
+.skill-book-icon[data-skill-glyph="turning_counter"],
+.skill-modal-glyph[data-skill-glyph="turning_counter"],
+.glyph[data-skill-glyph="turning_counter"],
+.field-slot[data-skill-id="turning_counter"] .glyph,
+.kg-glyph[data-skill-glyph="final_counter"],
+.skill-book-icon[data-skill-glyph="final_counter"],
+.skill-modal-glyph[data-skill-glyph="final_counter"],
+.glyph[data-skill-glyph="final_counter"],
+.field-slot[data-skill-id="final_counter"] .glyph,
+.kg-glyph[data-skill-glyph="counter"],
+.skill-book-icon[data-skill-glyph="counter"],
+.skill-modal-glyph[data-skill-glyph="counter"],
+.glyph[data-skill-glyph="counter"],
+.field-slot[data-skill-id="counter"] .glyph,
+.kg-glyph[data-skill-glyph="shadow_counter"],
+.skill-book-icon[data-skill-glyph="shadow_counter"],
+.skill-modal-glyph[data-skill-glyph="shadow_counter"],
+.glyph[data-skill-glyph="shadow_counter"],
+.field-slot[data-skill-id="shadow_counter"] .glyph,
+.kg-glyph[data-skill-glyph="steadfast_counter"],
+.skill-book-icon[data-skill-glyph="steadfast_counter"],
+.skill-modal-glyph[data-skill-glyph="steadfast_counter"],
+.glyph[data-skill-glyph="steadfast_counter"],
+.field-slot[data-skill-id="steadfast_counter"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='ripBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%23ff5722'/%3E%3Cstop offset='60%25' stop-color='%23bf360c'/%3E%3Cstop offset='100%25' stop-color='%233e1000'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23ripBg)' stroke='%23ffab91' stroke-width='1.5'/%3E%3Cg stroke='%23ffffff' stroke-width='3.5' stroke-linecap='round'%3E%3Cline x1='16' y1='48' x2='48' y2='16'/%3E%3Cline x1='48' y1='48' x2='16' y2='16'/%3E%3C/g%3E%3Ccircle cx='32' cy='32' r='4' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
 }
 
@@ -5370,7 +5886,32 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .skill-book-icon[data-skill-glyph="protect"],
 .skill-modal-glyph[data-skill-glyph="protect"],
 .glyph[data-skill-glyph="protect"],
-.field-slot[data-skill-id="protect"] .glyph {
+.field-slot[data-skill-id="protect"] .glyph,
+.kg-glyph[data-skill-glyph="taunt"],
+.skill-book-icon[data-skill-glyph="taunt"],
+.skill-modal-glyph[data-skill-glyph="taunt"],
+.glyph[data-skill-glyph="taunt"],
+.field-slot[data-skill-id="taunt"] .glyph,
+.kg-glyph[data-skill-glyph="ward"],
+.skill-book-icon[data-skill-glyph="ward"],
+.skill-modal-glyph[data-skill-glyph="ward"],
+.glyph[data-skill-glyph="ward"],
+.field-slot[data-skill-id="ward"] .glyph,
+.kg-glyph[data-skill-glyph="intercept"],
+.skill-book-icon[data-skill-glyph="intercept"],
+.skill-modal-glyph[data-skill-glyph="intercept"],
+.glyph[data-skill-glyph="intercept"],
+.field-slot[data-skill-id="intercept"] .glyph,
+.kg-glyph[data-skill-glyph="party_ward"],
+.skill-book-icon[data-skill-glyph="party_ward"],
+.skill-modal-glyph[data-skill-glyph="party_ward"],
+.glyph[data-skill-glyph="party_ward"],
+.field-slot[data-skill-id="party_ward"] .glyph,
+.kg-glyph[data-skill-glyph="enduring_ward"],
+.skill-book-icon[data-skill-glyph="enduring_ward"],
+.skill-modal-glyph[data-skill-glyph="enduring_ward"],
+.glyph[data-skill-glyph="enduring_ward"],
+.field-slot[data-skill-id="enduring_ward"] .glyph {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cdefs%3E%3CradialGradient id='prtBg' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='%2300b0ff'/%3E%3Cstop offset='60%25' stop-color='%230091ea'/%3E%3Cstop offset='100%25' stop-color='%230d47a1'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='32' cy='32' r='30' fill='url(%23prtBg)' stroke='%2380d8ff' stroke-width='1.5'/%3E%3Ccircle cx='22' cy='22' r='6' fill='%23ffffff'/%3E%3Cpath d='M14 44 C14 36, 18 32, 22 32 C26 32, 30 36, 30 44 Z' fill='%23ffffff'/%3E%3Ccircle cx='42' cy='22' r='6' fill='%23ffd54f'/%3E%3Cpath d='M34 44 C34 36, 38 32, 42 32 C46 32, 50 36, 50 44 Z' fill='%23ffd54f'/%3E%3C/svg%3E") !important;
 }
 
@@ -5570,140 +6111,12 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 }
 
 
-/* ===== Typhoon Voice Guidance Subtitle HUD ===== */
-.voice-guidance-hud {
-  position: absolute;
-  top: 18px;
-  left: 50%;
-  transform: translateX(-50%) translateY(0);
-  width: 90%;
-  max-width: 520px;
-  background: rgba(18, 12, 10, 0.94);
-  border: 1.5px solid #ffcc00;
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 14px rgba(255, 204, 0, 0.35);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  z-index: 99;
-  pointer-events: auto;
-  transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2);
-}
-.voice-guidance-hud[hidden] {
-  display: none !important;
-}
-.voice-guidance-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: radial-gradient(circle, #ffcc00 20%, #8c5210 100%);
-  border: 2px solid #ffd84a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
-  animation: pulseAvatar 1.5s infinite alternate;
-}
-@keyframes pulseAvatar {
-  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ffaa00); }
-  100% { transform: scale(1.08); filter: drop-shadow(0 0 12px #ffdd44); }
-}
-.voice-guidance-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.voice-guidance-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.voice-guidance-title {
-  font: 900 13px/1 "Noto Sans Thai", system-ui, sans-serif;
-  color: #ffd84a;
-  letter-spacing: 0.5px;
-  text-shadow: 0 1px 3px #000;
-}
-.voice-guidance-badge {
-  font: 800 10px/1 "Arial", sans-serif;
-  color: #fff;
-  background: linear-gradient(135deg, #ff4500, #ff8c00);
-  padding: 2px 5px;
-  border-radius: 4px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-.voice-guidance-text {
-  font: 600 12px/1.35 "Noto Sans Thai", system-ui, sans-serif;
-  color: #f5eedb;
-  text-shadow: 0 1px 2px #000;
-  margin: 0;
-  word-break: break-word;
-}
-.voice-guidance-skip {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 204, 0, 0.4);
-  color: #ffd84a;
-  font: 700 11px/1 "Noto Sans Thai", system-ui, sans-serif;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.voice-guidance-skip:hover {
-  background: rgba(255, 204, 0, 0.2);
-  border-color: #ffcc00;
-}
-.voice-guidance-hud.combat-alert {
-  border-color: #ff3344;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(255, 51, 68, 0.55);
-}
-.voice-guidance-hud.combat-alert .voice-guidance-avatar {
-  background: radial-gradient(circle, #ff3344 20%, #771122 100%);
-  border-color: #ff6677;
-  animation: pulseAvatarDanger 0.8s infinite alternate;
-}
-@keyframes pulseAvatarDanger {
-  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff2233); }
-  100% { transform: scale(1.12); filter: drop-shadow(0 0 16px #ff4455); }
-}
-.voice-guidance-hud.spirit-whisper {
-  border-color: #38bdf8;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 18px rgba(56, 189, 248, 0.55);
-}
-.voice-guidance-hud.spirit-whisper .voice-guidance-avatar {
-  background: radial-gradient(circle, #38bdf8 20%, #0369a1 100%);
-  border-color: #7dd3fc;
-  animation: pulseAvatarSpirit 1.2s infinite alternate;
-}
-@keyframes pulseAvatarSpirit {
-  0% { transform: scale(1); filter: drop-shadow(0 0 4px #0284c7); }
-  100% { transform: scale(1.1); filter: drop-shadow(0 0 16px #38bdf8); }
-}
+/* Voice guidance is audio-only; retain the persona selector in sound settings. */
 .voice-persona-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-}
-
-/* Beauty pass: a lighter subtitle bar that sits below the top HUD instead of covering the player card. */
-.voice-guidance-hud { top: 16px; width: min(92%, 460px); gap: 9px; padding: 7px 10px; border-width: 1px; border-color: #c9a35a99; border-radius: 14px;
-  background: linear-gradient(180deg, rgba(14, 18, 14, .82), rgba(8, 10, 8, .78)); box-shadow: 0 6px 18px rgba(0, 0, 0, .55); backdrop-filter: blur(3px); }
-.voice-guidance-avatar { width: 32px; height: 32px; font-size: 17px; border-width: 1.5px; animation-duration: 2.2s; }
-.voice-guidance-title { font-size: 12px; }
-.voice-guidance-badge { font-size: 8.5px; padding: 1px 4px; opacity: .85; }
-.voice-guidance-text { font-size: 12.5px; line-height: 1.4; }
-.voice-guidance-skip { padding: 5px 8px; font-size: 10.5px; }
-@media (max-width: 640px) and (orientation: portrait) {
-  /* Phones: a subtitle above the skill arc, clear of the top HUD and the menu buttons under the minimap. */
-  .voice-guidance-hud { top: auto; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 262px); width: calc(100% - 20px); transform: translateX(-50%); }
 }
 /* World Market shell over the existing market catalog. */
 #drawer:has(.world-market){width:min(1100px,96vw);max-width:96vw;left:50%;right:auto;transform:translateX(-50%);background:#0f1a33;border:2px solid #c9a24a;box-shadow:0 0 0 1px #5a4317,0 18px 50px rgba(0,0,0,.6)}
