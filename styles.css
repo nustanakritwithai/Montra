@@ -1721,8 +1721,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .ftxt.heal { color: #7dff8a; -webkit-text-stroke-color: #002a08; animation-name: ftRise; }
 .ftxt.exp { color: #8ad8ff; font-size: 16px; -webkit-text-stroke-width: 3px; -webkit-text-stroke-color: #001a2a; animation-name: ftRise; }
 .ftxt.status { color: #f0b8ff; font: 900 18px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #2a0a3a; paint-order: stroke fill; animation-name: ftRise; }
-.ftxt.combo { color: #ffb84a; font: 900 17px/1 system-ui, "Noto Sans Thai", sans-serif; -webkit-text-stroke: 4px #3a1400; paint-order: stroke fill; animation-name: ftRise; }
-.ftxt.combo.big { font-size: 24px; }
 .ftxt.weak { color: #9fd4ff; font: 800 14px/1 system-ui, sans-serif; -webkit-text-stroke: 3px #001a2a; paint-order: stroke fill; animation-name: ftRise; }
 .ftxt.levelup { color: #ffe27a; font: 900 34px/1 Georgia, serif; -webkit-text-stroke: 5px #3a2000; paint-order: stroke fill; text-shadow: 0 0 18px #ffb84a, 0 0 36px #ff9a2a88; animation: ftLevel 2.2s ease-out forwards; }
 /* Pop, overshoot, arc sideways and drop while fading (the Ragnarok bounce). */
@@ -5957,29 +5955,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .combo-streak-hits::after {
   content: " HITS"; font-size: 18px; color: #ffd84a; -webkit-text-stroke: 3px #260f00;
 }
-.combo-streak-label {
-  font: 900 13px/1 "Noto Sans Thai", system-ui, sans-serif;
-  color: #ffd84a; -webkit-text-stroke: 2px #3a1500; text-transform: uppercase;
-  letter-spacing: 0.8px; margin-top: 2px; text-shadow: 0 2px 4px #000;
-}
-.combo-streak-grade {
-  font: 900 22px/1 "Arial Black", Impact, sans-serif;
-  padding: 2px 10px; border-radius: 6px; margin-top: 4px;
-  background: rgba(18, 12, 10, 0.8); border: 2px solid #ffcc00; box-shadow: 0 0 14px #ffaa0088;
-}
-.combo-streak-grade.grade-c { color: #8ad8ff; border-color: #8ad8ff; box-shadow: 0 0 12px #8ad8ff66; }
-.combo-streak-grade.grade-b { color: #7dff8a; border-color: #7dff8a; box-shadow: 0 0 12px #7dff8a66; }
-.combo-streak-grade.grade-a { color: #ffd84a; border-color: #ffd84a; box-shadow: 0 0 14px #ffd84a88; }
-.combo-streak-grade.grade-s { color: #ff3a2a; border-color: #ff3a2a; box-shadow: 0 0 18px #ff3a2aaa; animation: pulseGrade 0.6s infinite alternate; }
-@keyframes comboPop {
-  0% { transform: scale(1.4) rotate(4deg); }
-  100% { transform: scale(1) rotate(0deg); }
-}
-@keyframes pulseGrade {
-  0% { transform: scale(1); filter: drop-shadow(0 0 4px #ff3300); }
-  100% { transform: scale(1.12); filter: drop-shadow(0 0 12px #ff7700); }
-}
-
 /* ===== Phase 6: Epic Boss & Execute Encounter ===== */
 .target-overhead-execute {
   display: inline-block;

@@ -48,8 +48,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/009-effects-and-target-hud.js",
-  "bytes": 20250,
-  "sha256": "13b4370110d468f01af3804aeda30a8d0b51b6b97ddc24376eb6b48dad707531"
+  "bytes": 18701,
+  "sha256": "582e5a1fd3edd97772b0f3bbac1dad545f7bf794a91c9afe736445166d4f7381"
 },
 {
   "path": "combat/005-floating-feedback.js",
@@ -256,16 +256,17 @@ const reviewedReleaseFragments = new Map([
     "path": "audio/036-ghost-voices.js",
     "bytes": 3272,
     "sha256": "15ee292d8918b9d48b035d07b07038c2afd3c3ab45d6f469b2fa64d5dbfe6a47"
-  }
-, {"path":"audio/002-voice-guidance.js","bytes":22456,"sha256":"48db11a5e02c570e15435503dd9e0a0717415ccbc6b28143cc90c104ba0792db"}].map(entry => [entry.path, entry]));
+  },
+  {"path":"audio/002-voice-guidance.js","bytes":21830,"sha256":"eeeb78a5d11cf9e42fa50431a80b7ee480357ba7019bd3cfdd749debf4127712"}
+].map(entry => [entry.path, entry]));
 
 test('reviewed combined client preserves unchanged snapshot bytes and deterministic assembly', () => {
   const baseline = JSON.parse(readFileSync(join(clientRoot, 'src/client/extraction-baseline.json')));
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1970296);
-  assert.equal(hash(bytes), '44197592ba3500f740f98fe73bea5d87af78f55a2cd8f2c90ce282a2ba3359c9');
+  assert.equal(bytes.length, 1968121);
+  assert.equal(hash(bytes), '8aa607ce81a91f729700769a0b74c5d4ec8c0fe89ed75edadf84037a0c0c59fa');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
