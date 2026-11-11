@@ -108,6 +108,10 @@ export const SummonedGuardian = schema({
   action: t.string().default("follow"), // follow|chase|attack
   targetId: t.string().default(""),
   hitSeq: t.number().default(0),
+  combatTargetId: t.string().default(""),
+  hp: t.number().default(0),
+  maxHp: t.number().default(0),
+  mapId: t.string().default(""),
 }, "MontraSummonedGuardian");
 
 export type SummonedGuardian = SchemaType<typeof SummonedGuardian>;

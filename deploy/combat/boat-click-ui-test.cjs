@@ -54,7 +54,7 @@ function fixture() {
   const tap = (type,x,z,hit=ground) => {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
-  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,
+  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
 
@@ -105,6 +105,15 @@ test("aiming a ghost order redirects taps on monsters and players to the ghost",
   f.tap("touch",9,54,f.enemy);
   f.tap("mouse",9,54,player);
   assert.deepEqual(f.ghostOrders,["possessed-1","opponent"]);
+  assert.deepEqual(f.stats(),{rayCalls:0,attacks:0,walks:0});
+});
+
+test("tapping an opposing captured ghost sends its server-issued attack target",()=>{
+  const f = fixture();
+  const targetId = "ghost:opponent:01234567-89ab-4cde-8f01-23456789abcd";
+  const ghost = {isEnabled:()=>true,metadata:{ghostCombatTargetId:targetId}};
+  f.tap("touch",9,54,ghost);
+  assert.deepEqual(f.packets.at(-1),{type:"attack",targetId});
   assert.deepEqual(f.stats(),{rayCalls:0,attacks:0,walks:0});
 });
 

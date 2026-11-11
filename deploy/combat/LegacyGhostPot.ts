@@ -13,7 +13,8 @@ type Command = {
 };
 type Result = {
   accepted: boolean; code: string; replay?: boolean;
-  active?: (Position & {actorId: string; instanceId: string; generation: number}) | null;
+  active?: (Position & {actorId: string; instanceId: string; generation: number;
+    hpScale: number; defenseScale: number; magicDefenseScale: number}) | null;
 };
 type PartyGhost = Pick<PotGhost, "instanceId" | "level"> & {speciesId: string; slot: number};
 type Request = {owner: string; position: Position; party: PartyGhost[]; command: Command}

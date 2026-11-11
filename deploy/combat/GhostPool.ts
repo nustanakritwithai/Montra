@@ -35,6 +35,13 @@ function isTargetId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= 96;
 }
 
+export function parseGhostTargetCommand(message: unknown) {
+  if (!message || typeof message !== "object" || Array.isArray(message) || Object.keys(message).length !== 1 ||
+      !Object.hasOwn(message, "targetId")) return null;
+  const {targetId} = message as {targetId?: unknown};
+  return typeof targetId === "string" && /^ghost:[A-Za-z0-9_-]{6,64}:[0-9a-f-]{36}$/.test(targetId) ? {targetId} : null;
+}
+
 export function parseGhostCommand(message: unknown): GhostCommand | null {
   if (!message || typeof message !== "object" || Array.isArray(message)) return null;
   const input = message as Record<string, unknown>;

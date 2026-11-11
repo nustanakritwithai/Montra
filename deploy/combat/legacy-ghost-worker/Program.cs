@@ -55,8 +55,13 @@ object Handle(Request input)
     var result = runtime.Handle(input.Owner, command, now);
     var active = world.CaptureOwnedActors(command.Zone, now)
         .SingleOrDefault(actor => actor.OwnerId == input.Owner);
-    return new { result.Accepted, result.Code, result.Replay, active = active is null ? null : new
-        { active.ActorId, instanceId = result.Monster?.InstanceId, active.Generation, active.Pose.X, active.Pose.Y, active.Pose.Z } };
+    var monster = result.Monster;
+    var stats = monster is null ? null : roster.ReadParty(input.Owner)
+        .SingleOrDefault(ghost => ghost.InstanceId == monster.InstanceId)?.Profile.Stats;
+    return new { result.Accepted, result.Code, result.Replay, active = active is null || stats is null ? null : new
+        { active.ActorId, monster!.InstanceId, active.Generation, active.Pose.X, active.Pose.Y, active.Pose.Z,
+            hpScale = stats.HpMax / Roster.BaseStats.HpMax, defenseScale = stats.Def / Roster.BaseStats.Def,
+            magicDefenseScale = stats.SpDef / Roster.BaseStats.SpDef } };
 }
 
 sealed record Ghost(string InstanceId, string SpeciesId, int Level, int Slot);
@@ -65,6 +70,7 @@ sealed record Request(string Owner, OwnedMonsterPoint? Position, Ghost[]? Party,
 sealed class Roster : IOwnedMonsterCanonicalReader
 {
     private static readonly CombatActionDefinition BasicAttack = CombatActionCatalogProviderV91.LoadEmbedded().GetRequired("SK_FIRE_01").Definition;
+    public static CombatStats BaseStats { get; } = CalculateProfile("montra-ghost-baseline", 1).Stats;
     private readonly Dictionary<string, OwnedMonsterDefinition[]> definitions = new(StringComparer.Ordinal);
 
     public IReadOnlyList<OwnedMonsterDefinition> ReadParty(string ownerId) =>
@@ -80,13 +86,14 @@ sealed class Roster : IOwnedMonsterCanonicalReader
             current.Profile.Level == ghost.Level && current.PartySlot == ghost.Slot) ?? Create(ownerId, ghost)).ToArray();
     }
 
-    private static OwnedMonsterDefinition Create(string ownerId, Ghost ghost)
-    {
-        var profile = PocketMonsterCombatCalculator.Calculate(new PocketMonsterCombatInput(
-            ghost.InstanceId, "pocket-monster", ImmutableArray.Create("normal"),
+    private static OwnedMonsterDefinition Create(string ownerId, Ghost ghost) =>
+        new(ghost.InstanceId, ownerId, ghost.SpeciesId, CalculateProfile(ghost.InstanceId, ghost.Level), [],
+            ghost.Slot, BasicAttack: BasicAttack);
+
+    private static BaseCombatProfile CalculateProfile(string instanceId, int level) =>
+        PocketMonsterCombatCalculator.Calculate(new PocketMonsterCombatInput(
+            instanceId, "pocket-monster", ImmutableArray.Create("normal"),
             new MonsterStatVector(46, 38, 34, 54, 38, 46), new MonsterStatVector(0, 0, 0, 0, 0, 0),
-            new MonsterStatVector(0, 0, 0, 0, 0, 0), ghost.Level,
+            new MonsterStatVector(0, 0, 0, 0, 0, 0), level,
             new CombatRatings(1, .05, .02, .1, .05), 1, 1, "montra-ghost-pot-v1", 1));
-        return new(ghost.InstanceId, ownerId, ghost.SpeciesId, profile, [], ghost.Slot, BasicAttack: BasicAttack);
-    }
 }

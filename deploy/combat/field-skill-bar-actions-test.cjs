@@ -51,7 +51,7 @@ const context = vm.createContext({
   $: get, document, ui:{drawerBody}, drawerActive:null,
   openDrawer(name){context.drawerActive=name;},closeDrawer(){context.drawerActive=null;},
   setTimeout:()=>1,clearTimeout(){},
-  mode: 'live', room: joined, joined, selectedForestTarget: null, targetedSkill:null,
+  mode: 'live', room: joined, joined, localId:"local", summonAvatars:new Map(), selectedForestTarget: null, targetedSkill:null,
   setTargetedSkill(skill){context.targetedSkill=skill;context.syncGhostPoolUi();},
   hudTarget: { until: 0 }, performance: { now: () => 100 },
   toast: notice => notices.push(notice), syncState() {},
@@ -126,7 +126,12 @@ handlers["ghostSummonButton:click"]();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
 assert.equal(get("ghostAttackButton").hidden,true,"legacy server has no combat control");
 handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
-  pool:{...updated,selectedSlot:0,revision:7},status:"switched"});
+  pool:{...updated,selectedSlot:0,revision:7},combatHealth:{hp:100,maxHp:100},status:"switched"});
+assert.match(get("ghostFieldStatus").textContent,/HP 100\/100/);
+handlers.ghost_damaged({ownerId:"local",combatId:"previous",attackerId:"mob",hp:15,maxHp:100});
+assert.match(get("ghostFieldStatus").textContent,/HP 100\/100/);
+handlers.ghost_damaged({ownerId:"local",combatId:"current",attackerId:"mob",hp:83,maxHp:100});
+assert.match(get("ghostFieldStatus").textContent,/HP 83\/100/);
 handlers["ghostAttackButton:click"]();
 assert.equal(context.targetedSkill,"ghostAttack");
 assert.equal(get("ghostAttackButton")["aria-pressed"],"true");
@@ -155,4 +160,9 @@ assert.match(get("ghostFieldStatus").textContent,/กำลังเรียก
 handlers.ghost_combat_state({combatId:"current",status:"following"});
 assert.equal(get("ghostFollowButton").hidden,true);
 assert.match(get("ghostFieldStatus").textContent,/กลับมาตาม/);
+handlers.ghost_pot_state({active:false,pool:{...updated,selectedSlot:0,revision:7},
+  fainted:["ghost-7"],combatId:null,status:"defeated"});
+assert.equal(get("ghostAttackButton").hidden,true);
+assert.match(find("ghost-ghost-7").children.at(-1).textContent,/ต้องพักฟื้น/);
+assert.equal(notices.at(-1),"ผีพ่ายแพ้และกลับเข้าหม้อ");
 console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits and follow");

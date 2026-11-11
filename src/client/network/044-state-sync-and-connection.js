@@ -38,7 +38,10 @@
 
     const present = new Set();
     synced.forEach((npc, ownerId) => {
-      if (state.players?.get?.(ownerId)?.mapId && state.players.get(ownerId).mapId !== activeMapId) return;
+      const owner = state.players?.get?.(ownerId);
+      if (npc.combatTargetId && !owner) return;
+      const mapId = npc.mapId || owner?.mapId;
+      if (mapId && mapId !== activeMapId) return;
       const x = Number(npc.x), z = Number(npc.z);
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
       present.add(ownerId);
@@ -51,8 +54,10 @@
       actor.targetY = Number.isFinite(Number(npc.y)) ? Number(npc.y) : 0;
       actor.targetZ = z;
       actor.action = typeof npc.action === "string" ? npc.action : "follow";
+      syncGhostAttackPicker(actor,ownerId !== localId && npc.hp > 0 ? npc.combatTargetId : "");
       const yaw = Number(npc.facing);
       if (Number.isFinite(yaw)) actor.desiredFacing = yaw;
+      actor.combatTargetId = npc.combatTargetId;
     });
 
     for (const id of [...summonAvatars.keys()]) {
@@ -452,6 +457,16 @@
       });
       joined.onMessage("ghost_combat_state", payload => {
         if (room === joined) receiveGhostCombat(payload);
+      });
+      joined.onMessage("ghost_damaged", payload => {
+        if (room !== joined) return;
+        if (payload?.ownerId === localId) receiveGhostDamaged(payload);
+        const actor = summonAvatars.get(payload?.ownerId);
+        if (!actor || actor.combatTargetId !== payload.targetId) return;
+        if (avatars.has(payload.attackerId)) playAttack(payload.attackerId,payload.ranged === true,actor.x,actor.z);
+        if (payload.attackerId === localId) {
+          floatText(actor.x,actor.y + 1.55,actor.z,String(Math.round(payload.damage)),"dealt");
+        }
       });
       joined.onMessage("chat_message", message => {
         if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
@@ -932,7 +947,7 @@
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
         { const s=summonAvatars.get(notice?.ownerId); if (s) eventFx("unsummon",{x:s.x??s.node?.position.x,z:s.z??s.node?.position.z,y:s.y||0}); }
-        if (notice?.ownerId === localId && notice.reason !== "possessed" && notice.reason !== "ghost_recalled") {
+        if (notice?.ownerId === localId && notice.reason !== "possessed" && notice.reason !== "ghost_recalled" && notice.reason !== "ghost_defeated") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
             : "เก็บวิญญาณผู้พิทักษ์แล้ว");
@@ -1300,7 +1315,10 @@
           victim.hitFlashUntil = performance.now() + 180;
           playAction(victim, "hit", { motionOnly: true });
         }
-        playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
+        if (hit.source === "summon") {
+          const summon = summonAvatars.get(hit.summonOwnerId);
+          if (summon) summon.hitUntil = performance.now() + 260;
+        } else playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
         const taken = hit.targetId === localId, mine = hit.attackerId === localId;
         if (taken || mine) {
           if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, hit.targetId, victim.y || 0);

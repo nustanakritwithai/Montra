@@ -1,5 +1,20 @@
   // Distinct server-owned 3D NPCs; ownerId matches the Colyseus session ID.
   const summonAvatars = new Map();
+  function syncGhostAttackPicker(actor, targetId) {
+    if (!targetId) {
+      actor.picker?.setEnabled(false);
+      return;
+    }
+    if (!actor.picker) {
+      const picker = B.MeshBuilder.CreateBox("captured-ghost-target-" + actor.ownerId,{width:1.15,height:1.75,depth:1.15},scene);
+      picker.parent = actor.node;
+      picker.position.y = 1;
+      picker.visibility = 0;
+      actor.picker = picker;
+    }
+    actor.picker.metadata = {ghostCombatTargetId:targetId};
+    actor.picker.setEnabled(true);
+  }
   function createSummonAvatar(ownerId, x, z) {
     const parent = new B.TransformNode("guardian-" + ownerId, scene);
     const body = B.MeshBuilder.CreateSphere("guardian-body-" + ownerId,

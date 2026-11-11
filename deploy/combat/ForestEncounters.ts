@@ -25,9 +25,10 @@ export type ForestTraceBatch = Readonly<{events:readonly ForestTraceEvent[];over
 const FOREST_TRACE_LIMIT=1024;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
 type Point = {x:number;z:number};
+export type MonsterCombatTarget = Pick<Player, "x" | "y" | "z" | "alive" | "mapId" | "boatId">;
 type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; retreat?:Point; nav:MonsterRRTNavigator};
 type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
-function inSpecialArea(monster:Monster, origin:Point, player:Player, attack:HimmapanPhase, rear=false):boolean {
+function inSpecialArea(monster:Monster, origin:Point, player:MonsterCombatTarget, attack:HimmapanPhase, rear=false):boolean {
   const dx=player.x-origin.x, dz=player.z-origin.z;
   const distance=Math.hypot(dx,dz);
   const sin=Math.sin(monster.facing), cos=Math.cos(monster.facing);
@@ -196,9 +197,9 @@ export class ForestEncounters {
   }
   clearTarget(id:string):void {for(const m of this.monsters.values())if(m.targetId===id)m.targetId="";for(const life of this.lives.values())if(life.tauntOwner===id){life.tauntOwner="";life.tauntUntil=0;}}
   engaged(id:string):boolean {return [...this.monsters.values()].some(m=>m.alive&&m.targetId===id);}
-  update(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
+  update(now:number,dt:number,players:ReadonlyMap<string,MonsterCombatTarget>,blocked:ReadonlySet<string>,
     hit:(targetId:string,monster:Monster,force:number|undefined,attackAt:number)=>void,respawn:(id:string)=>void,
-    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
+    canDetect?:(id:string,player:MonsterCombatTarget,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
     walk?:(monster:Monster,previous:Readonly<{x:number;y:number;z:number}>)=>void):void {
     if (!this.traceEnabled) {this.updateImpl(now,dt,players,blocked,hit,respawn,canDetect,isBound,walk);return;}
     this.traceUpdateDepth++;
@@ -206,9 +207,9 @@ export class ForestEncounters {
     catch(error) {this.traceIncomplete=true;throw error;}
     finally {this.traceUpdateDepth--;}
   }
-  private updateImpl(now:number,dt:number,players:MyRoomState["players"],blocked:ReadonlySet<string>,
+  private updateImpl(now:number,dt:number,players:ReadonlyMap<string,MonsterCombatTarget>,blocked:ReadonlySet<string>,
     hit:(targetId:string,monster:Monster,force:number|undefined,attackAt:number)=>void,respawn:(id:string)=>void,
-    canDetect?:(id:string,player:Player,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
+    canDetect?:(id:string,player:MonsterCombatTarget,monster:Monster)=>boolean,isBound?:(id:string)=>boolean,
     walk?:(monster:Monster,previous:Readonly<{x:number;y:number;z:number}>)=>void):void {
     const occupied=new Set(Array.from(players.values(),p=>p.mapId));
     const regions=new Set([...occupied].filter(id=>this.regionalMaps.has(id)));
@@ -238,9 +239,9 @@ export class ForestEncounters {
       const special=life.special;
       if(isBound?.(id)){if(special)cancelSpecial(life);m.aiState="stagger";continue;}
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
-      const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
+      const eligible=(pid:string,p:MonsterCombatTarget|undefined):p is MonsterCombatTarget=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&(p.boatId || onMapGround(p))&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
-      const clear=(target:Player,origin:{x:number;y:number;z:number}=m)=>
+      const clear=(target:MonsterCombatTarget,origin:{x:number;y:number;z:number}=m)=>
         isMonsterSegmentClear(origin,target,obstacles,MONSTER_NAV.radius,map.bounds) &&
         (!map.terrain || isWorldSegmentClear(map.id,origin,target));
       const titan=id===TITAN_BOSS.id;

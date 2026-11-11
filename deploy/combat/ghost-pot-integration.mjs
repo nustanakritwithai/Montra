@@ -24,7 +24,9 @@ class GhostTestRoom extends MyRoom {
     await super.onJoin(client,options);
     fixture = this;
   }
-  updateMonsterAI() {}
+  updateMonsterAI(...args) {
+    if (this.enableDefaultMonster) super.updateMonsterAI(...args);
+  }
   prepareTarget() {
     const ghost = this.state.monster;
     Object.assign(ghost,{alive:true,hp:1,x:0,y:0,z:15});
@@ -54,10 +56,11 @@ const client = () => new Client("http://127.0.0.1:"+port);
 const ownerOptions = options(), rooms = new Set();
 const legacy = {instanceId:randomUUID(),name:"ผีในหม้อเดิม",level:7};
 function observe(room) {
-  const info = {room,states:[],combat:[],rejections:[]};
+  const info = {room,states:[],combat:[],damage:[],rejections:[]};
   rooms.add(room);
   room.onMessage("ghost_pot_state",value=>info.states.push(value));
   room.onMessage("ghost_combat_state",value=>info.combat.push(value));
+  room.onMessage("ghost_damaged",value=>info.damage.push(value));
   room.onMessage("command_rejected",value=>info.rejections.push(value.reason));
   room.onMessage("*",()=>{});
   return info;
@@ -76,11 +79,12 @@ async function combatCommand(info,action,args,status) {
   send(info,action,args);
   return until(()=>info.combat.slice(count).find(event=>event.status===status),status);
 }
-async function rejected(info,action,args,reason) {
+async function rejectedMessage(info,type,args,reason) {
   const count=info.rejections.length;
-  send(info,action,args);
+  info.room.send(type,args);
   await until(()=>info.rejections.slice(count).includes(reason),reason);
 }
+const rejected = (info,action,args,reason) => rejectedMessage(info,"ghost_pot",{action,...args},reason);
 
 try {
   const spawn={x:0,y:0,z:15};
@@ -204,6 +208,22 @@ try {
   await until(()=>party?.members.length===2,"party accepted");
   await rejected(a,"attack",pvp,"ghost_combat_target");
   assert.equal(victim.hitSeq,hitsAfterFollow,"party member takes no damage");
+  const attackGhost = targetId => ({targetId});
+  await rejectedMessage(b,"attack",attackGhost(guardian.combatTargetId),"target_unavailable");
+
+  const ownerHp=owner.hp;
+  const ghostMaxHp=guardian.maxHp;
+  assert.equal(guardian.hp,ghostMaxHp);
+  Object.assign(guardian,{x:0,z:15});
+  Object.assign(prey,{alive:true,hp:prey.maxHp,x:0,y:0,z:15.5,targetId:""});
+  Object.assign(victim,{x:0,z:17});
+  fixture.enableDefaultMonster=true;
+  const npcHit=await until(()=>a.damage.find(hit=>hit.attackerId===prey.id),"wild monster strikes the ghost");
+  fixture.enableDefaultMonster=false;
+  prey.targetId="";
+  assert.ok(npcHit.damage>0 && npcHit.hp>0 && npcHit.hp<ghostMaxHp);
+  assert.equal(owner.hp,ownerHp,"monster hit belongs to the ghost");
+  await until(()=>b.room.state.summons.get(a.room.sessionId)?.hp===npcHit.hp,"ghost HP replicated");
 
   await wait(700);
   await command(a,"reserve",{instanceId:reserved.instanceId,revision:switched.pool.revision},"active_locked");
@@ -212,6 +232,73 @@ try {
   await until(()=>!b.room.state.summons.has(a.room.sessionId),"recall replicated");
   await rejected(a,"attack",pvp,"ghost_combat_inactive");
   await wait(700);
+  const returned=await command(a,"summon",{},"summoned");
+  assert.equal(returned.combatHealth.hp,npcHit.hp,"recalling and calling again preserves injuries");
+  const nextGuardian=fixture.state.summons.get(a.room.sessionId);
+  assert.notEqual(nextGuardian.combatTargetId,guardian.combatTargetId);
+  b.room.send("party_leave",{});
+  await until(()=>party?.members.length===1,"party member left");
+  await rejectedMessage(b,"attack",attackGhost(guardian.combatTargetId),"target_unavailable");
+  await wait(700);
+  await rejectedMessage(a,"attack",attackGhost(nextGuardian.combatTargetId),"target_unavailable");
+  await wait(700);
+  Object.assign(victim,{mapId:"forbidden_forest",x:0,z:15});
+  await rejectedMessage(b,"attack",attackGhost(nextGuardian.combatTargetId),"target_unavailable");
+  await wait(700);
+  Object.assign(victim,{mapId:"ritual_village",x:0,z:7});
+  Object.assign(owner,{x:0,z:5.9});
+  Object.assign(nextGuardian,{x:0,z:5.9});
+  await rejectedMessage(b,"attack",attackGhost(nextGuardian.combatTargetId),"target_unavailable");
+  await wait(700);
+  assert.equal(nextGuardian.hp,npcHit.hp,"safe area prevents damage");
+  Object.assign(owner,{x:0,z:14});
+  Object.assign(nextGuardian,{x:0,z:15});
+  Object.assign(victim,{x:0,z:16});
+  b.room.send("attack",attackGhost(nextGuardian.combatTargetId));
+  const playerHit=await until(()=>a.damage.find(hit=>hit.attackerId===b.room.sessionId),"player strikes the ghost");
+  assert.ok(playerHit.damage>0 && playerHit.hp>0 && playerHit.hp<npcHit.hp);
+  assert.equal(owner.pkDeaths,0);
+  const defeats=a.states.length;
+  nextGuardian.hp=1;
+  const defeated=await until(()=>a.states.slice(defeats).find(state=>state.status==="defeated"),"ghost defeat settles");
+  await until(()=>!b.room.state.summons.has(a.room.sessionId),"ghost defeat replicated");
+  assert.equal(defeated.activeInstanceId,null);
+  assert.deepEqual(defeated.fainted,[reserved.instanceId]);
+  assert.equal(owner.pkDeaths,0,"a ghost defeat is not a player death");
+  assert.equal(victim.pkKills,0,"a ghost defeat is not a player kill");
+  assert.equal((await command(a,"summon",{},"fainted")).activeInstanceId,null);
+  await wait(700);
+  await rejected(a,"attack",{combatId:returned.combatId,targetId},"ghost_combat_inactive");
+
+  Object.assign(owner,{x:0,z:0});
+  await wait(5100);
+  const rested=await command(a,"read",{},"ready");
+  assert.deepEqual(rested.fainted,[],"a parked ghost recovers when its owner rests");
+  const recovered=await command(a,"summon",{},"summoned");
+  assert.equal(recovered.combatHealth.hp,ghostMaxHp);
+  Object.assign(owner,{x:-10,z:-56});
+  a.room.send("warp",{portalId:"village_to_forest"});
+  await until(()=>owner.mapId==="forbidden_forest","owner warped through a real portal");
+  await until(()=>!a.room.state.summons.has(a.room.sessionId),"warp despawns ghost");
+  await rejected(a,"attack",{combatId:recovered.combatId,targetId},"ghost_combat_inactive");
+  await wait(700);
+
+  const forestCall=await command(a,"summon",{},"summoned");
+  const forestGuardian=fixture.state.summons.get(a.room.sessionId);
+  const forestMonster=fixture.state.monsters.get("forest_west_1");
+  assert.ok(forestMonster?.alive);
+  Object.assign(forestGuardian,{x:forestMonster.x,y:forestMonster.y,z:forestMonster.z});
+  Object.assign(owner,{x:forestMonster.x,y:forestMonster.y,z:forestMonster.z+1.8});
+  forestMonster.targetId=forestGuardian.combatTargetId;
+  await until(()=>a.damage.find(hit=>hit.attackerId===forestMonster.id && hit.combatId===forestCall.combatId),"forest AI strikes ghost");
+  Object.assign(owner,{x:forestMonster.x,y:forestMonster.y,z:forestMonster.z,hp:1});
+  forestMonster.targetId=a.room.sessionId;
+  await until(()=>!owner.alive,"forest AI knocks out the owner");
+  await until(()=>!a.room.state.summons.has(a.room.sessionId),"owner knockout removes the ghost");
+  await until(()=>owner.alive,"owner respawns");
+  await rejected(a,"attack",{combatId:forestCall.combatId,targetId},"ghost_combat_inactive");
+  await wait(700);
+
   const stored=await command(a,"reserve",{instanceId:reserved.instanceId,revision:switched.pool.revision},"placed");
   assert.equal(stored.pool.slots[1],null);
 
@@ -222,6 +309,7 @@ try {
   const durable=await command(restored,"read",{},"ready");
   assert.deepEqual(durable.pool,stored.pool);
   assert.equal(durable.activeInstanceId,null);
+  await rejected(restored,"attack",{combatId:forestCall.combatId,targetId},"ghost_combat_inactive");
 
   const fullOptions=options();
   const fullCharacter=(await characterStore.loadOrCreate(fullOptions.guestToken,spawn)).character;
@@ -240,7 +328,7 @@ try {
   assert.equal(disabled.room.state.ghostPotAvailable,false);
   send(disabled,"read");
   await until(()=>disabled.rejections.includes("ghost_pot_unavailable"),"worker disabled");
-  console.log("PASS ghost pool and combat: legacy save, capture race, C# summon/switch/recall, PvE defeat, PvP hit, follow, ownership, stale orders, range, safe area, cross-map, party, reconnect and full pool");
+  console.log("PASS ghost pool and combat: C# lifecycle and stats, default/forest PvE and PvP damage, fainting, recovery, warp, owner knockout, ownership, stale orders, range, safe area, cross-map, party, reconnect and save compatibility");
 } catch(error) {
   console.error(error);
   process.exitCode=1;

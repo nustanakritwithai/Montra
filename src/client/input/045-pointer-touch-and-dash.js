@@ -83,6 +83,7 @@
       (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
       (mesh === enemy && enemy.isEnabled()) ||
       (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
+      (mode === "live" && !targetedSkill && mesh.metadata?.ghostCombatTargetId) ||
       (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
@@ -96,6 +97,11 @@
     if (!picked?.hit) {steerSailingAt(px,py);return;}
     cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;
+    if (hitMesh?.metadata?.ghostCombatTargetId) {
+      try { room.send("attack",{targetId:hitMesh.metadata.ghostCombatTargetId}); }
+      catch (_) { toast("ส่งคำสั่งโจมตีผีไม่สำเร็จ"); }
+      return;
+    }
     if (hitMesh?.metadata?.sailingBoatId) {clickSailingDeck(hitMesh.metadata.sailingBoatId,picked.pickedPoint);return;}
     if(hitMesh?.metadata?.stairId){requestClimb(hitMesh.metadata.stairId);return;}
     if(hitMesh?.metadata?.resourceId){

@@ -162,7 +162,10 @@
     if (result?.status === "hit") combat = result.targetName + (result.hp === 0 ? " · พ่ายแพ้" : " · โดน " + Math.round(result.damage));
     else if (result?.status === "following") combat = "ผีกลับมาตามแล้ว";
     else if (result?.status === "ended") combat = "ผีหยุดโจมตี " + result.targetName;
-    const text = pending || (aiming ? "แตะมอนสเตอร์หรือผู้เล่น" : combat) || [selected, active].filter(Boolean).join(" / ");
+    const detail = pending || (aiming ? "แตะมอนสเตอร์หรือผู้เล่น" : combat) || [selected, active].filter(Boolean).join(" / ");
+    const health = state?.combatHealth;
+    const hp = health?.maxHp > 0 ? "HP " + Math.ceil(health.hp) + "/" + Math.ceil(health.maxHp) : "";
+    const text = [hp,detail].filter(Boolean).join(" · ");
     caption.hidden = !text;
     if (caption.textContent !== text) caption.textContent = text;
     if (renderPool && drawerActive === "ghostPool") {
@@ -182,6 +185,7 @@
     const notices = {
       captured:"จับ" + (captured?.name || "ผี") + "เข้าคลังแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
       summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", switched:"สลับเป็น" + (state.ghost?.name || "ผีที่เลือก") + "แล้ว",
+      defeated:"ผีพ่ายแพ้และกลับเข้าหม้อ", fainted:"ผีตัวนี้ต้องพักฟื้นที่เขตปลอดภัย",
       unavailable:"หม้ออาคมยังใช้ไม่ได้", target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่",
       stale:"คลังผีเปลี่ยนแล้ว เลือกช่องใหม่อีกครั้ง", active_locked:"เก็บผีที่เรียกออกมาก่อนย้ายเข้าคลัง",
       not_owned:"ไม่พบผีตัวนี้ในคลัง", slot_empty:"ช่องเรียกนี้ยังว่าง", pool_full:"คลังผีเต็มแล้ว",
@@ -206,6 +210,12 @@
       if (state.status === "following" && ghostPoolPending?.action === "follow") clearGhostPoolPending();
     } else return;
     syncGhostPoolUi(state.status === "ordered" || state.status === "following");
+  }
+  function receiveGhostDamaged(state) {
+    if (!ghostPotState?.combatId || state.combatId !== ghostPotState.combatId ||
+        !Number.isFinite(state.hp) || !Number.isFinite(state.maxHp)) return;
+    ghostPotState.combatHealth = {hp:state.hp,maxHp:state.maxHp};
+    syncGhostPoolUi(false);
   }
   function renderGhostPool(view) {
     const root = document.createElement("div");
@@ -260,6 +270,7 @@
     const cards = element(root,"div","","ghost-pool-grid ghost-pool-cards");
     const badge = ghost => {
       if (view.active === ghost) return "กำลังเรียก";
+      if (ghostPotState.fainted?.includes(ghost.instanceId)) return "ต้องพักฟื้น";
       const slot = view.slots.indexOf(ghost);
       return slot >= 0 ? "ช่อง " + (slot+1) : "สำรอง";
     };

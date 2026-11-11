@@ -38,8 +38,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
-  "bytes": 14978,
-  "sha256": "b663488359e4b844e90052f7f50a1afc8744af4375f37f6f66565f832953dece"
+  "bytes": 15320,
+  "sha256": "d9ebc1d104268f3254b9181087ca096ddcefde376a107ecd147721a88b04cd7a"
+},
+{
+  "path": "render/027-summon-models-and-animation.js",
+  "bytes": 12965,
+  "sha256": "4d488320c95ded22c3abdf608ce5907590c37403f3712e050e54368815478e29"
 },
 {
   "path": "render/007-world-effects.js",
@@ -133,8 +138,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 162506,
-  "sha256": "3ff5868013c58c08bf499012cc45a506db1f91193c6234298ea70a07decd27e5"
+  "bytes": 163524,
+  "sha256": "7bd1d09d681d99dec929cf524fdc3500d17182c83f4583aab3f4dc88efd0bbe7"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -174,8 +179,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 22716,
-    "sha256": "3b234630a2bafd06bfbd9970d4e972a75f55284e876c1ccf473a741b81b59d3c"
+    "bytes": 23519,
+    "sha256": "3191dfebfaf3e687c6b2255a9076ffa50b79eff1240b27d96c9f152c0f66f87c"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
@@ -274,8 +279,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2080526);
-  assert.equal(hash(bytes), '3ebdb26d9efde90ab9416e8275e0d52ca55ee1fcfaa2f46a093585d98893b538');
+  assert.equal(bytes.length, 2083202);
+  assert.equal(hash(bytes), 'ddf0a4e9809545160aa043183787194f7e6146a7198f05ebf298b9e62d98982e');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
