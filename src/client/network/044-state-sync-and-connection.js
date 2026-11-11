@@ -136,9 +136,13 @@
     closeForgePicker(false);
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearSyncPoll();
-    ghostPotState = null;
-    if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+    resetGhostPot();
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
+  }
+  function resetGhostPot() {
+    ghostPotState = null;
+    const button = $("ghostPotButton");
+    if (button) button.hidden = true;
   }
 
   const REPLACEMENT_SKILLS = Object.freeze({
@@ -362,6 +366,7 @@
         const old = room;
         room = null;
         clearSyncPoll();
+        resetGhostPot();
         showDemo();
         try { await old.leave(); } catch (error) { console.warn("MONTRA old room leave", error); }
         await new Promise(resolve => setTimeout(resolve, 350));
@@ -441,16 +446,18 @@
           joined.send("ghost_pot", {action: "read"});
         }
       };
-      ghostPotState = null;
-      if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+      resetGhostPot();
       joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
       joined.onMessage("ghost_pot_state", payload => {
         if (room !== joined || !payload || typeof payload.active !== "boolean") return;
-        const label = $("menuGhostPotLabel"), button = $("menuGhostPot");
-        if (!label || !button) return;
+        const button = $("ghostPotButton");
+        if (!button) return;
         ghostPotState = payload;
+        const label = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
+        button.title = label;
+        button.setAttribute("aria-label", label);
+        button.setAttribute("aria-pressed", String(payload.active));
         button.hidden = false;
-        label.textContent = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
         const notice = {captured:"จับ" + (payload.ghost?.name || "ผี") + "ใส่หม้อแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
           summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", unavailable:"หม้ออาคมยังใช้ไม่ได้",
           target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่"};

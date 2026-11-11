@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -97,7 +97,6 @@
     <button id="fishButton" class="warp-button" type="button" hidden>🎣 ตกปลา</button>
     <button id="siegeGateButton" class="warp-button" type="button" hidden></button>
     <button id="climb" class="warp-button climb-context" type="button" title="ปีนหรือไต่ลงกำแพง" hidden><span aria-hidden="true">⇧</span> <span>ปีน</span></button>
-    <button id="fly" class="warp-button flight-context" type="button" aria-pressed="false" hidden><span aria-hidden="true">✦</span> <span>ลงจอด</span></button>
       </div>
     <section class="controls" aria-label="ปุ่มควบคุมและพื้นที่ปัดพุ่งเหนือแถบสกิล">
       <div id="grappleResponse" class="sword-hotbar" aria-live="polite" hidden><button id="grappleResponseButton" class="sword-hotkey" type="button"></button></div>
@@ -112,6 +111,8 @@
       <div id="occultHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาอาคม" hidden></div>
       <div id="bladeHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาคมดาบ" hidden></div>
       <div id="sentinelHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาผู้พิทักษ์" hidden></div>
+      <button id="fly" class="orb-action orb-fly" type="button" aria-label="ขึ้นบิน" aria-pressed="false" hidden><span aria-hidden="true">🪽</span></button>
+      <button id="ghostPotButton" class="orb-action orb-ghost-pot" type="button" aria-label="จับผีใส่หม้อ" aria-pressed="false" hidden><span aria-hidden="true">🏺</span></button>
       </div>
     </section>
 
@@ -132,7 +133,6 @@
       <button id="bannerButton" type="button" disabled aria-pressed="false" title="ธงชัยอาคม: เร็ว ๆ นี้ · ยังไม่มีผลป้องกัน"><span class="hud-btn-icon" data-hud-icon="banner" aria-hidden="true">🚩</span><i>ธงชัย · เร็ว ๆ นี้</i></button>
       <button id="petButton" type="button" aria-pressed="false" title="ภูติตกแต่งเท่านั้น · ไม่มีผลต่อการต่อสู้ [P]"><span class="hud-btn-icon" data-hud-icon="pet" aria-hidden="true">✨</span><i>ภูติตกแต่ง</i></button>
       <button id="meteorButton" type="button" hidden title="ทุบธรณี"><span class="hud-btn-icon" aria-hidden="true">☄</span><i>ทุบธรณี</i></button>
-      <button id="flightButton" type="button" aria-pressed="false" title="สยายปีกทะยานเวหา [F]"><span class="hud-btn-icon" data-hud-icon="flight" aria-hidden="true">🪽</span><i>ทะยานฟ้า</i></button>
       <button id="bossEncounterButton" type="button" disabled aria-pressed="false" title="ท้าวเวสสุวรรณ: เร็ว ๆ นี้ · ยังไม่เปิดการต่อสู้"><span class="hud-btn-icon" data-hud-icon="boss" aria-hidden="true">👹</span><i>จอมอสูร · เร็ว ๆ นี้</i></button>
       <button id="mountButton" type="button" aria-pressed="false" hidden><span>♞</span><i>เรียกม้า</i></button>
     </nav>
@@ -168,7 +168,6 @@
         </div></section>
         <section id="menu-travel" data-journal-panel="travel" aria-label="เดินทาง" hidden><div class="menu-tiles">
           <button id="mapButton" type="button"><span class="drawer-nav-icon" data-menu-icon="map" aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
-          <button id="menuGhostPot" type="button" hidden><span class="drawer-nav-icon" aria-hidden="true">🏺</span><strong id="menuGhostPotLabel">หม้ออาคม</strong></button>
           <button id="menuMount" type="button"><span class="drawer-nav-icon" data-menu-icon="mount" aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
         </div></section>
         <section id="menu-social" data-journal-panel="social" aria-label="ชุมชนและการค้า" hidden><div class="menu-tiles">
@@ -300,6 +299,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
-  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader-city-trade-combat-feedback-trade-contracts-samlan-market-unified-hits-combo-counter-trade-routes-target-hud-market-contributions-bag-108-neutral-return-quick-potion-slot-himmapan-mountain-guild-city-npcs-voice-skill-art" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader-city-trade-combat-feedback-trade-contracts-samlan-market-unified-hits-combo-counter-trade-routes-target-hud-market-contributions-bag-108-neutral-return-quick-potion-slot-himmapan-mountain-guild-city-npcs-voice-skill-art-bottom-skill-actions" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

@@ -333,9 +333,8 @@
     const summary=Object.entries(labels).map(([category,label])=>clean(label)+" "+(progress[category] || 0)).join(" · ");
     container.innerHTML='<p>สาย'+(path==="seer"?"ผู้ร่ายเวท":"พระ")+' · แต้มว่าง '+points+' · ใช้ไป '+(data.points-points)+' / '+data.points+' แต้ม · ผลฝึกรวม '+training+'</p>'+(summary?'<p>ผลฝึกแยกหมวด: '+summary+'</p><p class="note">ผีจากหม้อนับครั้งแรกที่โจมตีมอนสเตอร์ต่อการเรียกหนึ่งครั้ง ส่วนผีที่ได้รับคำสั่งนับเมื่อโจมตีสำเร็จ</p>':'')+
       (path==="mender" && Number.isFinite(data.menderRicePve)?'<p class="note">ข้าวสารพื้นฐานโจมตีมอนสเตอร์ '+Math.round(data.menderRicePve*100)+'% · PvP ใช้ค่าเดิม</p>':'')+
-      '<article class="sword-node learned"><div><strong>เหินเวหา</strong><small>วิชาพื้นฐานจอมอาคม · ขึ้นบินและลงจอดในพื้นที่ที่อนุญาต</small></div><button type="button" id="occultFlight">ใช้วิชา</button></article>'+
+      '<article class="sword-node learned"><div><strong>เหินเวหา</strong><small>วิชาพื้นฐานจอมอาคม · ใช้ปุ่มขึ้นบินและลงจอดที่แถบสกิลล่าง</small></div></article>'+
       '<p class="note">เรียนและอัปขั้นได้ทุกที่หลังพ้นการต่อสู้ 5 วินาที · จัดช่องและคืนแต้มที่ลานพัก · คืนแต้มไม่ลบผลฝึกหรือคูลดาวน์</p>'+rows+'<button id="resetOccultBook" type="button" class="secondary" '+(!learned.length?"disabled":"")+'>คืนแต้มสายนี้</button>';
-    $("occultFlight").onclick=()=>{closeDrawer();toggleFlight();};
     container.querySelectorAll("[data-occult-learn]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"learn",skillId:button.dataset.occultLearn}));
     container.querySelectorAll("[data-occult-upgrade]").forEach(button=>button.onclick=()=>room.send("occult_book",{action:"upgrade",skillId:button.dataset.occultUpgrade}));
     container.querySelectorAll("[data-occult-equip]").forEach(select=>select.onchange=()=>{if(select.value!=="")room.send("occult_book",{action:"equip",slot:Number(select.value),skillId:select.dataset.occultEquip});select.blur();});

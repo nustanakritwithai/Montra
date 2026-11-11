@@ -248,7 +248,7 @@
     if(!fishingState || fishingPending || !room)return;
     fishingPending=true;fishingPendingUntil=performance.now()+8000;room.send("fish_reel",{id:fishingState.id});
   };
-  $("fly").onclick = toggleFlight;
+  $("fly").onclick = toggleFlightCommand;
 
   let elapsed=0, lastMapDraw=0;
   engine.runRenderLoop(() => {

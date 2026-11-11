@@ -24,18 +24,18 @@
 .chat-box.composing .cb-input, .chat-box.composing .cb-target { min-height:44px; font-size:16px; }
 .chat-box.composing .cb-target { max-width:120px; }
 .chat-box.composing .cb-send { min-width:44px; min-height:44px; }
-/* Fly button next to the horse; harmful-effect boxes under the orb. */
-.learned-bar #fly.orb-fly > span:last-child { display: none; } .learned-bar #fly.orb-fly > span:first-child { font-size: 17px; }
-.learned-bar #fly.orb-fly { bottom: auto; left: auto; }
-.learned-bar #fly.orb-fly.fly-active { border-color: #7fe8ff; box-shadow: 0 0 12px #7fe8ffaa; color: #c9f7ff; }
+/* Flight and ghost pot sit next to the horse, outside the four class slots. */
+.learned-bar .orb-action { position: absolute; right: 0; display: grid; place-items: center; flex: none; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0; border-radius: 50%;
+  border: 1.5px solid #8fd0ff; background: radial-gradient(circle at 50% 30%, #2a5a7a, #0c1a26); color: #dff4ff; font-size: 17px; line-height: 1; pointer-events: auto; box-shadow: 0 3px 6px #0009; }
+.learned-bar .orb-fly { bottom: 36px; }
+.learned-bar .orb-ghost-pot { bottom: 72px; }
+.learned-bar .orb-action[hidden] { display: none; }
+.learned-bar .orb-action[aria-pressed="true"] { border-color: #7fe8ff; box-shadow: 0 0 12px #7fe8ffaa; color: #c9f7ff; }
+.learned-bar[data-wide] .orb-action { position: relative; right: auto; bottom: auto; order: 3; width: 40px; height: 40px; }
+/* Harmful-effect boxes under the orb. */
 .orb-fx { position: absolute; display: flex; justify-content: center; gap: 2px; pointer-events: auto; }
 .orb-fx .fx-box { width: 16px; height: 16px; font-size: 10px; border-radius: 3px; } .orb-fx .fx-box b { font-size: 7.5px; right: -3px; bottom: -4px; }
 .learned-bar[data-wide] .orb-fx { position: static; order: 2; flex-direction: column; width: auto !important; }
-.learned-bar[data-wide] #fly.orb-fly { order: 3; position: relative; }
-.learned-bar #fly.orb-fly { position: absolute; display: grid; place-items: center; flex: none; width: 32px; height: 32px; min-height: 0; margin: 0; padding: 0; border-radius: 50%;
-  border: 1.5px solid #8fd0ff; background: radial-gradient(circle at 50% 30%, #2a5a7a, #0c1a26); color: #dff4ff; font-size: 0; pointer-events: auto; box-shadow: 0 3px 6px #0009; transform: none; }
-.learned-bar #fly.orb-fly[hidden] { display: none; }
-.learned-bar[data-wide] #fly.orb-fly { position: relative; width: 40px; height: 40px; }
 /* The vital orb carries HP, mana, stamina and effects, so the player card drops its old bars and status row. */
 .identity .hud-meter, .character-info .hud-meter, .hud-journal .identity .hud-meter.hp, .hud-journal .identity .hud-meter.st, .hud-journal .identity .hud-meter.mana { display: none !important; }
 .hud-journal .self-fx { display: none !important; }
