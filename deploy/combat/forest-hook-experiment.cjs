@@ -16,14 +16,14 @@ const ready=(async()=>{
   const home=path.join(temp,name);fs.mkdirSync(path.join(home,'src'),{recursive:true});fs.cpSync(staged,path.join(home,'src/rooms'),{recursive:true});
   fs.symlinkSync(path.join(root,'combat-verify/node_modules'),path.join(home,'node_modules'),'dir');fs.writeFileSync(path.join(home,'package.json'),'{"type":"module"}\n');
  }
- const fork=path.join(temp,'fork/src/rooms/ForestEncounters.ts');let code=fs.readFileSync(fork,'utf8');
+ const fork=path.join(temp,'fork/src/rooms/ForestEncounters.ts');let code=fs.readFileSync(fork,'utf8').replace(/\r\n/g,'\n');
  code=replaceOnce(code,'export class ForestEncounters {',`export class ForestEncounters {
   // TEST FORK ONLY: deliberately reentrant, not a production interface.
   private __testHook?: (event:any)=>void;
   setTestHook(hook:(event:any)=>void):void { this.__testHook=hook; }
   private __testEvent(event:any):void { if(this.__testHook)this.__testHook(Object.freeze(event)); }
 `,'class');
- const life='this.lives.set(id,{actor,zone,x,z,profile,respawnAt:0,lastAttack:-Infinity,returning:false,\n        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});';
+ const life='this.lives.set(id,{actor,zone,x,z,profile,special,respawnAt:0,lastAttack:-Infinity,returning:false,\n        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});';
  code=replaceOnce(code,life,life+'\n      if(this.__testHook)this.__testEvent({kind:this.monsters.has(id)?"spawn":"initialized_inactive",monsterId:id,mapId:actor.mapId,to:Object.freeze({x:actor.x,y:actor.y,z:actor.z})});','initial spawn');
  const withdraw='if(this.traceEnabled)this.traceEvent({kind:"withdrawn",now,monsterId:id,mapId:life.actor.mapId,from:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});';
  code=replaceOnce(code,withdraw,withdraw+'\n        if(this.__testHook)this.__testEvent({kind:"withdrawn",now,monsterId:id,mapId:life.actor.mapId});','withdraw');
