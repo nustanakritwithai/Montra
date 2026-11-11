@@ -332,6 +332,13 @@ export class EconomyStore {
     atCity: CitySite | null, atMarket: CitySite | null, enabled: boolean) {
     return this.city.tradeContractView(actor, member, cities, atCity, atMarket, enabled);
   }
+  viewCityTradeRoute(actor: string, member: CityMember | undefined, cities: CityOwnerships, location: {
+    atCity: CitySite | null; atMarket: CitySite | null; contractsEnabled: boolean; now: number;
+  }) {
+    const {atCity,atMarket,contractsEnabled,now} = location;
+    return {contracts:this.viewTradeContracts(actor, member, cities, atCity, atMarket, contractsEnabled),
+      report:this.city.tradeRouteReport(now)};
+  }
   tradeContractOrder(actor: string, member: CityMember | undefined, order: CityContractOrder, cities: CityOwnerships,
     atCity: CitySite | null, atMarket: CitySite | null, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));

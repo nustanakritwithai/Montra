@@ -265,6 +265,7 @@
     syncQuestRanger();
     syncWarQuartermaster();
     if(mode==="live" && room?.state?.forestObjectivesAvailable)room.send("get_forest_objective",{});
+    if(currentCityTradePin()?.contractId)refreshCityMarkets();
     renderForestObjectiveHud();
     marker.setEnabled(false);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;

@@ -68,8 +68,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/019-state-and-portals.js",
-  "bytes": 22959,
-  "sha256": "ae7a427a8f8d2250552f5ae3539cd0ec0354c0c0f481e28038fb29d1c8c81301"
+  "bytes": 23022,
+  "sha256": "9bd447df02ff1a47183d289e91cce53e921cfbb1726a85a95d1ac99c70cff457"
 },
 {
   "path": "world/018-region-dressing.js",
@@ -103,8 +103,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 41532,
-  "sha256": "1847579efaf08bb114c0572a1b518e37426f59e151fafe6a79cdfd63800f0518"
+  "bytes": 41591,
+  "sha256": "d1f69f0d4086bbe5792fdc8785708875265aace520323c233ce7c96693bb33e4"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -189,8 +189,8 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/047-maps-and-strategy.js",
-    "bytes": 81662,
-    "sha256": "deb82e7b61edb53fe1d20cfab48b0c130223a8258b3e8da6815252b975bf5c56"
+    "bytes": 91301,
+    "sha256": "b221b8b58ead42980019505b5e35410d917ddd7c9c97eab05f6d34489c2e03de"
   },
   {
     "path": "ui/055-market-and-trade.js",
@@ -239,8 +239,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/056-party-guild-and-rebirth.js",
-    "bytes": 120948,
-    "sha256": "03f3487d854a8d195a0d469cf6371981bd0707300e18a41ba954a9ee6c829072"
+    "bytes": 121777,
+    "sha256": "3357bfc7a5cf4a6a932680ae8ca8be8d9772bdab45fd2f2ea5d460c2fe197cfa"
   },
   {
     "path": "audio/023-action-and-impact-sounds.js",
@@ -265,8 +265,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1968121);
-  assert.equal(hash(bytes), '8aa607ce81a91f729700769a0b74c5d4ec8c0fe89ed75edadf84037a0c0c59fa');
+  assert.equal(bytes.length, 1978711);
+  assert.equal(hash(bytes), 'fde234ece716f4c4924756d3febdef12cead0238b20421b4c2832bf46ba5087c');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

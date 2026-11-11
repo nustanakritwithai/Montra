@@ -62,6 +62,7 @@ const purchaseIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_ope
 const activeHauls = "state IN ('pending','open','carrying')";
 const activeContracts = "state IN ('open','carrying')";
 const neutralSourceColumn = "INTEGER NOT NULL DEFAULT 0 CHECK(sourceNeutral IN (0,1))";
+const tradeReportPeriod = 7 * 24 * 60 * 60 * 1_000;
 const activeSupplies = "state IN ('held','repair_pending')";
 const supplySpace = CITY_SUPPLY_MATERIALS.reduce((total, material) => total + material.amount, 0);
 const marketItemColumn = `TEXT NOT NULL DEFAULT '${CITY_PRODUCT}' CHECK(item IN ('${CITY_PRODUCT}','${CITY_MINING_PRODUCT}'))`;
@@ -113,6 +114,7 @@ export class CityProduction {
         seq INTEGER PRIMARY KEY, guild TEXT NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL,
         gold INTEGER NOT NULL CHECK(gold>=0));
       CREATE INDEX IF NOT EXISTS city_treasury_recent ON city_treasury_events(guild,seq DESC);
+      CREATE INDEX IF NOT EXISTS city_contract_payout_time ON city_treasury_events(at) WHERE kind='contract_paid';
       CREATE TABLE IF NOT EXISTS city_missions (
         id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
         audience TEXT NOT NULL CHECK(audience IN ('guild','public')),
@@ -183,6 +185,7 @@ export class CityProduction {
         request TEXT NOT NULL, offer TEXT NOT NULL REFERENCES city_neutral_market_offers(id), buyer TEXT NOT NULL,
         at INTEGER NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), total INTEGER NOT NULL CHECK(total>0),
         PRIMARY KEY(request,offer));
+      CREATE INDEX IF NOT EXISTS city_neutral_sales_time ON city_neutral_market_sales(at);
       CREATE TABLE IF NOT EXISTS city_disband_assets (
         guild TEXT NOT NULL REFERENCES city_guild_closures(guild), item TEXT NOT NULL,
         awarded INTEGER NOT NULL CHECK(awarded>0),
@@ -191,6 +194,7 @@ export class CityProduction {
     for (const site of CITY_SITES) factorySite.run(site);
     this.migrateWarehouseProjects();
     this.migrateLocalMarkets();
+    db.exec("CREATE INDEX IF NOT EXISTS city_local_market_sales_time ON city_local_market_trades(site,item,at)");
     if (!db.prepare("PRAGMA table_info(city_trade_contracts)").all().some(column => column.name === "sourceNeutral"))
       db.exec(`ALTER TABLE city_trade_contracts ADD COLUMN sourceNeutral ${neutralSourceColumn};`);
     const columns = new Set(db.prepare("PRAGMA table_info(city_jobs)").all().map(column => column.name));
@@ -428,6 +432,23 @@ export class CityProduction {
       .all(actor, item);
   }
 
+  tradeRouteReport(now: number) {
+    const since = now - tradeReportPeriod;
+    const purchases = this.db.prepare(`WITH purchases AS (
+        SELECT at, amount, total, 0 AS neutral, seq AS orderId FROM city_local_market_trades WHERE site=? AND item=? AND at BETWEEN ? AND ?
+        UNION ALL
+        SELECT max(at), sum(amount), sum(total), 1, max(rowid) FROM city_neutral_market_sales WHERE at BETWEEN ? AND ? GROUP BY request
+      )
+      SELECT count(*) OVER () AS deals, sum(amount) OVER () AS units, sum(total) OVER () AS gold,
+        at, amount, total FROM purchases ORDER BY at DESC, neutral DESC, orderId DESC LIMIT 1`)
+      .get(CITY_PRODUCTION_SITE, CITY_PRODUCT, since, now, since, now);
+    const delivered = this.db.prepare(`SELECT count(*) AS count FROM city_treasury_events
+      WHERE kind='contract_paid' AND at BETWEEN ? AND ?`).get(since, now);
+    return {since, deals:Number(purchases?.deals ?? 0), units:Number(purchases?.units ?? 0),
+      gold:Number(purchases?.gold ?? 0), delivered:Number(delivered?.count ?? 0),
+      lastPurchase:purchases ? {at:Number(purchases.at), amount:Number(purchases.amount), total:Number(purchases.total)} : null};
+  }
+
   configureLocalMarket(member: CityMember, order: Exclude<CityMarketOrder, {action: "local_market_trade"}>,
     ownership: CityOwnership, now: number) {
     this.requireCity(member, order.epoch, ownership, order.site);
@@ -587,6 +608,8 @@ export class CityProduction {
     const contract = epoch === undefined ? undefined : this.contractFor(epoch);
     const paused = this.haulPaused(cities);
     const commander = member?.commander && member.id === destination.active?.guild && !this.closureActor(member.id);
+    const gold = commander ? this.marketGold(member.id) : 0;
+    const free = commander && epoch !== undefined ? this.capacity(CITY_MINING_SITE) - this.used(epoch) : 0;
     const quote = enabled && contract?.state === "open" && !paused ?
       (contract.sourceNeutral ? this.neutralMarketView(actor, source, enabled)?.prices ?? [] :
         this.localMarketView(CITY_PRODUCTION_SITE, CITY_PRODUCT, source, undefined, enabled).prices) : [];
@@ -594,8 +617,7 @@ export class CityProduction {
       enabled, paused, atCity, atMarket, source: CITY_PRODUCTION_SITE, destination: CITY_MINING_SITE,
       manage: commander && epoch !== undefined ? {
         epoch, canOpen: enabled && !contract && !paused && (!!source.active || source.neutralEpoch !== undefined),
-        maxAmount: Math.min(CITY_MARKET_QUANTITY, this.capacity(CITY_MINING_SITE) - this.used(epoch)),
-        maxGold: Math.min(CITY_MISSION_MAX_REWARD, this.marketGold(member.id)),
+        gold, free, maxAmount: Math.min(CITY_MARKET_QUANTITY, free), maxGold: Math.min(CITY_MISSION_MAX_REWARD, gold),
       } : null,
       job: contract ? {
         id: contract.id, name: contract.name, amount: contract.amount, gold: contract.gold, expires: contract.expires,

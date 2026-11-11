@@ -263,11 +263,13 @@
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
   let cityPurchase=null, cityMission=null, cityGovernance=null, cityMarkets=null;
+  let cityTradePin=null, cityTradeClock=null;
   let cityReplyTimer=0, cityJobTimer=0;
   const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
     cityState=null;cityWorkshop=null;cityPurchase=null;cityMission=null;cityGovernance=null;cityMarkets=null;
+    cityTradePin=null;cityTradeClock=null;
     cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
@@ -296,6 +298,7 @@
   }
   function cityReceiveMission(data){
     if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.missions))return;
+    cityTrackTradeContract(data.tradeContracts,data.serverNow);
     cityMission=data;renderCityProduction();
   }
   function cityReceiveGovernance(data){
@@ -305,8 +308,20 @@
   function cityReceiveMarkets(data){
     if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.markets) || !Array.isArray(data.history))return;
     cityMarkets=data;
-    if(drawerActive==="strategy")updateAtlasCityMarket();
+    cityTrackTradeContract(data.tradeRoute?.contracts,data.serverNow);
+    if(drawerActive==="strategy"){updateAtlasCityMarket();renderAtlasTradeRoute();}
     renderCityProduction();
+  }
+  function cityTrackTradeContract(contracts,serverNow){
+    cityTradeClock={serverNow,receivedAt:performance.now()};
+    if(!cityTradePin?.contractId)return;
+    const job=contracts?.job;
+    if(job?.id!==cityTradePin.contractId || job.carrying && !job.yours){cityTradePin=null;return;}
+    cityTradePin.site=job.yours?contracts.destination:contracts.source;
+    cityTradePin.expires=job.expires;
+  }
+  function cityTradeNow(){
+    return cityTradeClock ? cityTradeClock.serverNow+Math.max(0,performance.now()-cityTradeClock.receivedAt) : NaN;
   }
   function cityReceiveClaims(data){
     if(!Array.isArray(data?.assets))return;
@@ -522,7 +537,7 @@
     const {site,epoch,item}=market;
     return {site,epoch,...(item===cityReturnProduct?{item}:{})};
   }
-  function cityMarketSummary(market){
+  function cityMarketSummary(market,showTime=true){
     const label=market.neutral?"ราคาฝากขาย":cityMarketPlayerBuys(market)?"ราคาขายของเมือง":"ราคารับซื้อของเมือง";
     if(!market.prices.length){
       const status=market.neutral && market.status==="empty"?"ไม่มีแร่จากผู้ฝากรายอื่น":cityMarketStatuses[market.status] || "ตลาดปิด";
@@ -530,8 +545,8 @@
       return latest?label+" · "+status+" · รายการล่าสุดเฉลี่ย "+(latest.total/latest.amount).toLocaleString("th-TH",
         {maximumFractionDigits:2})+" ทอง/ชิ้น · "+new Date(latest.at).toLocaleString("th-TH"):label+" · "+status;
     }
-    return label+" "+market.prices[0]+" ทอง/ชิ้น · ซื้อขายได้ "+market.prices.length+" ชิ้น · อัปเดต "+
-      new Date(cityMarkets.serverNow).toLocaleTimeString("th-TH");
+    return label+" "+market.prices[0]+" ทอง/ชิ้น · ซื้อขายได้ "+market.prices.length+" ชิ้น"+
+      (showTime?" · อัปเดต "+new Date(cityMarkets.serverNow).toLocaleTimeString("th-TH"):"");
   }
   function cityMarketRouteQuote(origin,markets){
     if(!cityMarketPlayerBuys(origin) || !origin.prices.length)return "";

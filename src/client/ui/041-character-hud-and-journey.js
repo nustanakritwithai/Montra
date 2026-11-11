@@ -488,6 +488,7 @@
     const map = worldDefinitions?.[activeMapId], hero = getLocalAvatar(), kills = hudKills[activeMapId] || 0;
     const nearestOf = list => { let best = null, d = Infinity; for (const p of list) { const k = Math.hypot(p.x - hero.x, p.z - hero.z); if (k < d) { d = k; best = p; } } return best; };
     if (!hero) return null;
+    const trade=cityTradeHudGuide();if(trade)return trade;
     if(gearGuides?.journey?.shrine && journeyNotesForPlayer().shrine && !territoryState?.local?.inField){
       const shrine=shrineDirection(gearGuides.journey,ownServerCharacter());if(shrine)return shrine;
     }
