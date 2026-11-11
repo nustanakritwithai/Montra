@@ -54,9 +54,10 @@ const client = () => new Client("http://127.0.0.1:"+port);
 const ownerOptions = options(), rooms = new Set();
 const legacy = {instanceId:randomUUID(),name:"ผีในหม้อเดิม",level:7};
 function observe(room) {
-  const info = {room,states:[],rejections:[]};
+  const info = {room,states:[],combat:[],rejections:[]};
   rooms.add(room);
   room.onMessage("ghost_pot_state",value=>info.states.push(value));
+  room.onMessage("ghost_combat_state",value=>info.combat.push(value));
   room.onMessage("command_rejected",value=>info.rejections.push(value.reason));
   room.onMessage("*",()=>{});
   return info;
@@ -69,6 +70,16 @@ async function command(info,action,args={},status) {
   const response=await until(()=>info.states.length>count && last(info),action+" reply");
   if(status) assert.equal(response.status,status,JSON.stringify(info.rejections));
   return response;
+}
+async function combatCommand(info,action,args,status) {
+  const count=info.combat.length;
+  send(info,action,args);
+  return until(()=>info.combat.slice(count).find(event=>event.status===status),status);
+}
+async function rejected(info,action,args,reason) {
+  const count=info.rejections.length;
+  send(info,action,args);
+  await until(()=>info.rejections.slice(count).includes(reason),reason);
 }
 
 try {
@@ -125,14 +136,81 @@ try {
   const selected=await command(a,"select",{slot:1,revision:summoned.pool.revision},"selected");
   assert.equal(selected.activeInstanceId,legacy.instanceId,"selection is separate from switching");
   await wait(700);
+  const targetId=fixture.prepareTarget();
+  const prey=fixture.state.monster;
+  prey.hp=prey.maxHp;
+  await combatCommand(a,"attack",{combatId:summoned.combatId,targetId},"ordered");
+  await until(()=>a.combat.some(event=>event.status==="hit" && event.combatId===summoned.combatId),"first ghost hit");
+  assert.ok(prey.hp>0,"target survives to test switching while the order is active");
+  const hitsBeforeSwitch=prey.hitSeq;
   const switched=await command(a,"switch",{},"switched");
   assert.equal(switched.activeInstanceId,reserved.instanceId);
+  assert.notEqual(switched.combatId,summoned.combatId);
   assert.equal(b.room.state.summons.size,1);
+  await wait(1600);
+  assert.equal(prey.hitSeq,hitsBeforeSwitch,"switch cancels the old order after cooldown");
+  fixture.prepareTarget();
+  const order={combatId:switched.combatId,targetId};
+  const victim=fixture.state.players.get(b.room.sessionId);
+  await rejected(b,"attack",order,"ghost_combat_inactive");
+  await wait(700);
+  await rejected(a,"attack",{...order,combatId:summoned.combatId},"ghost_combat_inactive");
+  await wait(700);
+  assert.equal(fixture.state.monster.hp,1,"captured ghost waits for a valid order");
+  assert.equal((await combatCommand(a,"attack",order,"ordered")).targetId,targetId);
+  const monsterHit=await until(()=>a.combat.find(event=>event.status==="hit" && event.targetId===targetId &&
+    event.combatId===switched.combatId),"confirmed monster hit");
+  assert.equal(monsterHit.damage,1);
+  assert.equal(monsterHit.hp,0);
+  await until(()=>!b.room.state.monster.alive,"PvE defeat replicated");
+  await until(()=>a.combat.some(event=>event.status==="ended" && event.targetId===targetId),"defeated target cleared");
+
+  const pvp={combatId:switched.combatId,targetId:b.room.sessionId};
+  victim.mapId="forbidden_forest";
+  await rejected(a,"attack",pvp,"ghost_combat_target");
+  await wait(700);
+  victim.mapId="ritual_village";
+  Object.assign(victim,{x:0,z:24});
+  await rejected(a,"attack",pvp,"ghost_combat_target");
+  await wait(700);
+  const owner=fixture.state.players.get(a.room.sessionId);
+  const guardian=fixture.state.summons.get(a.room.sessionId);
+  Object.assign(owner,{x:0,z:7});
+  Object.assign(guardian,{x:0,z:7});
+  Object.assign(victim,{x:0,z:5.9});
+  const beforePvP=victim.hp;
+  await rejected(a,"attack",pvp,"ghost_combat_target");
+  await wait(700);
+  assert.equal(victim.hp,beforePvP,"protected opponent takes no damage");
+  Object.assign(owner,{x:0,z:14});
+  Object.assign(guardian,{x:0,z:14});
+  Object.assign(victim,{x:0,z:15});
+  await combatCommand(a,"attack",pvp,"ordered");
+  const pvpHit=await until(()=>a.combat.find(event=>event.status==="hit" && event.targetId===b.room.sessionId),"confirmed player hit");
+  assert.ok(pvpHit.damage>0 && pvpHit.hp<beforePvP);
+  await until(()=>b.room.state.players.get(b.room.sessionId).hitSeq>0,"PvP hit replicated");
+  await combatCommand(a,"follow",{combatId:switched.combatId},"following");
+  await until(()=>b.room.state.summons.get(a.room.sessionId)?.targetId==="","follow clears replicated target");
+  const hitsAfterFollow=victim.hitSeq;
+  await wait(1600);
+  assert.equal(victim.hitSeq,hitsAfterFollow,"cancelled order stays cancelled after cooldown");
+
+  let invitation, party;
+  b.room.onMessage("party_invitation",value=>invitation=value);
+  a.room.onMessage("party_state",value=>party=value);
+  a.room.send("party_invite",{targetId:b.room.sessionId});
+  await until(()=>invitation?.inviteId,"party invitation");
+  b.room.send("party_accept",{inviteId:invitation.inviteId});
+  await until(()=>party?.members.length===2,"party accepted");
+  await rejected(a,"attack",pvp,"ghost_combat_target");
+  assert.equal(victim.hitSeq,hitsAfterFollow,"party member takes no damage");
+
   await wait(700);
   await command(a,"reserve",{instanceId:reserved.instanceId,revision:switched.pool.revision},"active_locked");
   await wait(700);
   await command(a,"recall",{},"recalled");
   await until(()=>!b.room.state.summons.has(a.room.sessionId),"recall replicated");
+  await rejected(a,"attack",pvp,"ghost_combat_inactive");
   await wait(700);
   const stored=await command(a,"reserve",{instanceId:reserved.instanceId,revision:switched.pool.revision},"placed");
   assert.equal(stored.pool.slots[1],null);
@@ -162,7 +240,7 @@ try {
   assert.equal(disabled.room.state.ghostPotAvailable,false);
   send(disabled,"read");
   await until(()=>disabled.rejections.includes("ghost_pot_unavailable"),"worker disabled");
-  console.log("PASS ghost pool: legacy save, capture race, reserve, slots, original C# summon/switch/recall, reconnect and full pool");
+  console.log("PASS ghost pool and combat: legacy save, capture race, C# summon/switch/recall, PvE defeat, PvP hit, follow, ownership, stale orders, range, safe area, cross-map, party, reconnect and full pool");
 } catch(error) {
   console.error(error);
   process.exitCode=1;

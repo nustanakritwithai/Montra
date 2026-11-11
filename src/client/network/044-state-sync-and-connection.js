@@ -450,6 +450,9 @@
         if (room !== joined || !payload || typeof payload.active !== "boolean") return;
         receiveGhostPot(payload);
       });
+      joined.onMessage("ghost_combat_state", payload => {
+        if (room === joined) receiveGhostCombat(payload);
+      });
       joined.onMessage("chat_message", message => {
         if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
             typeof message.text !== "string" || typeof message.name !== "string" ||
@@ -1682,7 +1685,8 @@
           syncGhostPoolUi();
           const ghostErrors = {ghost_pot_busy:"รอสักครู่ก่อนใช้หม้ออาคม",ghost_pot_occupied:"เก็บผีที่เรียกอยู่ก่อนจับตัวถัดไป",
             ghost_pot_empty:"เลือกผีในช่องเรียกก่อน",ghost_target_unavailable:"จับผีตัวนี้ไม่ได้หรืออยู่นอกระยะ",
-            ghost_pot_unavailable:"หม้ออาคมยังใช้ไม่ได้",invalid_ghost_pot:"คำสั่งหม้ออาคมไม่ถูกต้อง"};
+            ghost_pot_unavailable:"หม้ออาคมยังใช้ไม่ได้",invalid_ghost_pot:"คำสั่งหม้ออาคมไม่ถูกต้อง",
+            ghost_combat_inactive:"ผีที่เรียกไว้เปลี่ยนแล้ว",ghost_combat_target:"ผีโจมตีเป้าหมายนี้ไม่ได้ในตอนนี้"};
           toast(ghostErrors[info.reason] || "ใช้หม้ออาคมไม่สำเร็จ");
         }
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const read = path => readFileSync(path, 'utf8');
 const html = read('index.html');
 const bar = html.slice(html.indexOf('class="skill-bar learned-bar"'), html.indexOf('id="fishingPanel"'));
-for (const id of ['fly', 'ghostPotButton', 'ghostSummonButton', 'ghostPoolButton']) {
+for (const id of ['fly', 'ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostPoolButton']) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
   assert.match(bar, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
 }
@@ -28,7 +28,7 @@ function node() {
     append(child){this.children.push(child);},replaceChildren(...children){this.children=children;},
     setAttribute(name,value){this[name]=value;},focus(){document.activeElement=this;}};
 }
-const document = {createElement:node,activeElement:null};
+const document = {createElement:node,activeElement:null,addEventListener:(event,listener)=>{handlers[event]=listener;}};
 function get(id) {
   if (!nodes.has(id)) {
     const value=node();
@@ -51,7 +51,8 @@ const context = vm.createContext({
   $: get, document, ui:{drawerBody}, drawerActive:null,
   openDrawer(name){context.drawerActive=name;},closeDrawer(){context.drawerActive=null;},
   setTimeout:()=>1,clearTimeout(){},
-  mode: 'live', room: joined, joined, selectedForestTarget: null,
+  mode: 'live', room: joined, joined, selectedForestTarget: null, targetedSkill:null,
+  setTargetedSkill(skill){context.targetedSkill=skill;context.syncGhostPoolUi();},
   hudTarget: { until: 0 }, performance: { now: () => 100 },
   toast: notice => notices.push(notice), syncState() {},
 });
@@ -123,4 +124,35 @@ handlers.ghost_pot_state({active:true,ghost:ghosts[1],activeInstanceId:"ghost-1"
 assert.equal(get("ghostSummonButton").textContent,"สลับ");
 handlers["ghostSummonButton:click"]();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
-console.log("PASS legacy controls, compact pool, detail actions, command confirmation and switch");
+assert.equal(get("ghostAttackButton").hidden,true,"legacy server has no combat control");
+handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
+  pool:{...updated,selectedSlot:0,revision:7},status:"switched"});
+handlers["ghostAttackButton:click"]();
+assert.equal(context.targetedSkill,"ghostAttack");
+assert.equal(get("ghostAttackButton")["aria-pressed"],"true");
+assert.match(get("ghostFieldStatus").textContent,/แตะมอนสเตอร์/);
+handlers.keydown({key:"Escape"});
+assert.equal(get("ghostAttackButton")["aria-pressed"],"false");
+handlers["ghostAttackButton:click"]();
+context.orderGhostAttack("opponent");
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"attack","combatId":"current","targetId":"opponent"}']);
+assert.match(get("ghostFieldStatus").textContent,/กำลังส่ง/);
+const confirmed={combatId:"current",targetId:"opponent",targetName:"คู่ต่อสู้"};
+handlers.ghost_combat_state({...confirmed,combatId:"previous",status:"ordered"});
+assert.equal(get("ghostFollowButton").hidden,true);
+handlers.ghost_combat_state({...confirmed,status:"ordered"});
+assert.equal(get("ghostFollowButton").hidden,false);
+assert.match(get("ghostFieldStatus").textContent,/คู่ต่อสู้/);
+const openPool = drawerBody.children[0];
+handlers.ghost_combat_state({...confirmed,status:"hit",damage:8,hp:12});
+assert.match(get("ghostFieldStatus").textContent,/โดน 8/);
+assert.ok(openPool);
+assert.equal(drawerBody.children[0],openPool,"hit updates the HUD without rebuilding the open pool");
+handlers["ghostFollowButton:click"]();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"follow","combatId":"current"}']);
+handlers.ghost_combat_state({...confirmed,status:"hit",damage:3,hp:9});
+assert.match(get("ghostFieldStatus").textContent,/กำลังเรียก/);
+handlers.ghost_combat_state({combatId:"current",status:"following"});
+assert.equal(get("ghostFollowButton").hidden,true);
+assert.match(get("ghostFieldStatus").textContent,/กลับมาตาม/);
+console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits and follow");

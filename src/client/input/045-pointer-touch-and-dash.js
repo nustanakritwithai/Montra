@@ -87,6 +87,12 @@
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
     ));
+    if (targetedSkill === "ghostAttack") {
+      const mesh = picked?.hit && picked.pickedMesh;
+      const targetId = mesh === enemy ? MONSTER_ID : mesh?.metadata?.monsterId || mesh?.metadata?.pkPlayerId;
+      orderGhostAttack(targetId);
+      return;
+    }
     if (!picked?.hit) {steerSailingAt(px,py);return;}
     cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;

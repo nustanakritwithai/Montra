@@ -67,10 +67,12 @@
   $("mountButton").onclick=toggleFieldMount;
   $("menuMount").onclick=()=>{closeDrawer();toggleFieldMount();};
   let ghostPotState = null;
+  let ghostCombatTarget = null, ghostCombatResult = null;
   let ghostPoolPending = null, ghostPoolFocus = null, ghostPoolTab = "carry";
   let ghostPoolFocusKey = null;
   const ghostPendingLabels = {capture:"กำลังจับ…",summon:"กำลังเรียก…",recall:"กำลังเก็บ…",switch:"กำลังสลับ…",
-    select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…"};
+    select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…",
+    attack:"กำลังส่งคำสั่งโจมตี…",follow:"กำลังเรียกให้ตาม…"};
 
   function ghostPoolView(state) {
     const pool = state?.pool;
@@ -93,24 +95,27 @@
   }
   function resetGhostPotUi() {
     ghostPotState = null;
+    ghostCombatTarget = null;
+    ghostCombatResult = null;
     ghostPoolFocus = null;
     ghostPoolFocusKey = null;
     clearGhostPoolPending();
+    if (targetedSkill === "ghostAttack") setTargetedSkill(null);
     syncGhostPoolUi();
   }
   function sendGhostPoolCommand(action, args = {}) {
     if (mode !== "live" || !room || !ghostPotState || ghostPoolPending) return;
-    const currentRoom = room;
+    const target = room;
     ghostPoolPending = {action, timer:setTimeout(() => {
       clearGhostPoolPending();
       syncGhostPoolUi();
-      if (room !== currentRoom) return;
+      if (room !== target) return;
       toast("ยังไม่ได้รับผลจากหม้ออาคม · กำลังโหลดสถานะ");
-      try { currentRoom.send("ghost_pot", {action:"read"}); }
+      try { target.send("ghost_pot", {action:"read"}); }
       catch (_) { toast("โหลดสถานะหม้ออาคมไม่สำเร็จ"); }
     }, 6500)};
     syncGhostPoolUi();
-    try { currentRoom.send("ghost_pot", {action,...args}); }
+    try { target.send("ghost_pot", {action,...args}); }
     catch (_) {
       clearGhostPoolPending();
       syncGhostPoolUi();
@@ -120,10 +125,11 @@
   function ghostPoolCommandLabel(action) {
     return {summon:"เรียก",recall:"เก็บ",switch:"สลับ"}[action] || "เรียก";
   }
-  function syncGhostPoolUi() {
+  function syncGhostPoolUi(renderPool = true) {
     const group = $("ghostFieldActions"), capture = $("ghostPotButton"), summon = $("ghostSummonButton");
     if (!group || !capture || !summon) return;
     const poolButton = $("ghostPoolButton"), caption = $("ghostFieldStatus");
+    const attack = $("ghostAttackButton"), follow = $("ghostFollowButton");
     const state = ghostPotState, view = ghostPoolView(state), action = view && ghostPoolSummonAction(view);
     group.hidden = !state;
     capture.hidden = !state;
@@ -140,20 +146,37 @@
     summon.title = summon.textContent + (action === "recall" ? view?.active?.name || "ผี" : view?.selected?.name || "ผี");
     summon.setAttribute("aria-label",summon.title);
     summon.disabled = Boolean(ghostPoolPending);
+    const aiming = targetedSkill === "ghostAttack";
+    attack.hidden = !state?.combatId;
+    attack.disabled = Boolean(ghostPoolPending);
+    attack.textContent = aiming ? "ยกเลิก" : "สั่งผี";
+    attack.setAttribute("aria-label",aiming ? "ยกเลิกการเลือกเป้า" : "เลือกเป้าให้ผีโจมตี");
+    attack.setAttribute("aria-pressed",String(aiming));
+    follow.hidden = !state?.combatId || !ghostCombatTarget;
+    follow.disabled = Boolean(ghostPoolPending);
     const pending = ghostPendingLabels[ghostPoolPending?.action];
     const selected = view?.selected ? "ช่อง " + (view.pool.selectedSlot+1) + " · " + view.selected.name : "";
     const active = view?.active ? "ออกมาแล้ว · " + view.active.name : "";
-    const text = pending || [selected, active].filter(Boolean).join(" / ");
+    const result = ghostCombatResult;
+    let combat = ghostCombatTarget ? "ผีไล่โจมตี " + ghostCombatTarget.targetName : "";
+    if (result?.status === "hit") combat = result.targetName + (result.hp === 0 ? " · พ่ายแพ้" : " · โดน " + Math.round(result.damage));
+    else if (result?.status === "following") combat = "ผีกลับมาตามแล้ว";
+    else if (result?.status === "ended") combat = "ผีหยุดโจมตี " + result.targetName;
+    const text = pending || (aiming ? "แตะมอนสเตอร์หรือผู้เล่น" : combat) || [selected, active].filter(Boolean).join(" / ");
     caption.hidden = !text;
     if (caption.textContent !== text) caption.textContent = text;
-    if (drawerActive === "ghostPool") {
+    if (renderPool && drawerActive === "ghostPool") {
       if (view) renderGhostPool(view);
       else closeDrawer();
     }
   }
   function receiveGhostPot(state) {
     clearGhostPoolPending();
+    const changed = ghostPotState?.combatId !== state.combatId;
     ghostPotState = state;
+    if (changed || ghostCombatTarget?.targetId !== state.combatTarget?.targetId) ghostCombatResult = null;
+    ghostCombatTarget = state.combatTarget ?? null;
+    if (changed && targetedSkill === "ghostAttack") setTargetedSkill(null);
     syncGhostPoolUi();
     const captured = ghostPoolView(state)?.byId.get(state.capturedInstanceId) ?? state.ghost;
     const notices = {
@@ -164,6 +187,25 @@
       not_owned:"ไม่พบผีตัวนี้ในคลัง", slot_empty:"ช่องเรียกนี้ยังว่าง", pool_full:"คลังผีเต็มแล้ว",
     };
     if (Object.hasOwn(notices,state.status)) toast(notices[state.status]);
+  }
+  function orderGhostAttack(targetId) {
+    setTargetedSkill(null);
+    const combatId = ghostPotState?.combatId;
+    if (combatId && targetId) sendGhostPoolCommand("attack",{combatId,targetId});
+  }
+  function receiveGhostCombat(state) {
+    if (!ghostPotState?.combatId || state?.combatId !== ghostPotState.combatId) return;
+    if (state.status === "ordered" || state.status === "hit") {
+      if (typeof state.targetId !== "string" || typeof state.targetName !== "string") return;
+      ghostCombatTarget = {targetId:state.targetId,targetName:state.targetName};
+      ghostCombatResult = state.status === "hit" && Number.isFinite(state.damage) ? state : null;
+      if (state.status === "ordered" && ghostPoolPending?.action === "attack") clearGhostPoolPending();
+    } else if (state.status === "following" || state.status === "ended") {
+      ghostCombatTarget = null;
+      if (state.status === "following" || ghostCombatResult?.hp !== 0) ghostCombatResult = state;
+      if (state.status === "following" && ghostPoolPending?.action === "follow") clearGhostPoolPending();
+    } else return;
+    syncGhostPoolUi(state.status === "ordered" || state.status === "following");
   }
   function renderGhostPool(view) {
     const root = document.createElement("div");
@@ -271,6 +313,18 @@
     const view = ghostPoolView(ghostPotState);
     const action = view && ghostPoolSummonAction(view);
     if (action) sendGhostPoolCommand(action);
+  });
+  $("ghostAttackButton")?.addEventListener("click", () => {
+    if (!ghostPotState?.combatId || ghostPoolPending) return;
+    setTargetedSkill(targetedSkill === "ghostAttack" ? null : "ghostAttack");
+  });
+  $("ghostFollowButton")?.addEventListener("click", () => {
+    if (!ghostCombatTarget || !ghostPotState?.combatId) return;
+    if (targetedSkill === "ghostAttack") setTargetedSkill(null);
+    sendGhostPoolCommand("follow",{combatId:ghostPotState.combatId});
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key === "Escape" && targetedSkill === "ghostAttack") setTargetedSkill(null);
   });
   function triggerWarBanner() {
     if (window.MontraBanner?.plantBanner) {

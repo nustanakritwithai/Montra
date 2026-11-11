@@ -22,7 +22,7 @@ import { randomUUID,randomInt } from "node:crypto";
 import {ghostPotConfig, LegacyGhostWorker, POT_CAPTURE_PROFILE, rollPotCapture} from "./LegacyGhostPot.js";
 import {
   addCapturedGhost, findPoolGhost, GHOST_POOL_CAPACITY, makeGhostPool, parseGhostCommand, placePoolGhost,
-  type GhostPool,
+  type GhostCombatCommand, type GhostPool,
 } from "./GhostPool.js";
 import {FISH_BITE_DELAY,FISH_DURATION,advanceFishing,fishItem,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 import {
@@ -277,6 +277,9 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
 const METEOR = {range: 3.5, cooldownMs: 15_000, stamina: 20, maxTargets: 5, power: 1.2} as const;
 const WAR_BANNER = {radius: 12, durationMs: 60_000, cooldownMs: 15_000, defenseBonus: 0.10} as const;
 
+type GhostOrder = {targetId: string; target: Monster | Player; targetName: string};
+type ActiveGhost = {instanceId: string; generation: number; combatId: string; order?: GhostOrder};
+
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
@@ -285,7 +288,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private readonly ghostConfig = ghostPotConfig();
   private ghostWorker?: LegacyGhostWorker;
   private readonly ghostPools = new Map<string, GhostPool>();
-  private readonly activeGhosts = new Map<string, {instanceId: string; generation: number}>();
+  private readonly activeGhosts = new Map<string, ActiveGhost>();
+  private readonly ghostAttackAt = new Map<string, number>();
   private readonly ghostControlPending = new Set<string>();
   private readonly ghostCaptureTargets = new Set<string>();
   private readonly ghostCaptureReadyAt = new Map<string, number>();
@@ -4962,7 +4966,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private sendGhostPot(client: Client, status: string, capturedInstanceId?: string) {
     const id = client.sessionId;
     const pool = this.ghostPools.get(id) ?? makeGhostPool();
-    const activeInstanceId = this.activeGhosts.get(id)?.instanceId ?? null;
+    const active = this.activeGhosts.get(id);
+    const activeInstanceId = active?.instanceId ?? null;
     client.send("ghost_pot_state", {
       ghost: findPoolGhost(pool, activeInstanceId ?? pool.slots[pool.selectedSlot]) ?? null,
       active: activeInstanceId !== null,
@@ -4970,6 +4975,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       pool,
       capacity: GHOST_POOL_CAPACITY,
       activeInstanceId,
+      combatId: active?.combatId ?? null,
+      combatTarget: active?.order ? {targetId: active.order.targetId, targetName: active.order.targetName} : null,
       capturedInstanceId,
     });
   }
@@ -4979,6 +4986,42 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.ghostWorker = undefined;
     worker.close();
     for (const owner of this.activeGhosts.keys()) this.despawnSummon(owner, "ghost_worker_unavailable");
+  }
+
+  private getGhostTarget(id: string, owner: Player, guardian: SummonedGuardian, targetId: string) {
+    if (id === targetId || !this.sameCombatMap(id, targetId) ||
+        this.isProtectedArea(owner.mapId, guardian) || distance3d(owner, guardian) > RULES.summonLeashDistance) return null;
+    const monster = this.getMonster(targetId);
+    const target = monster ?? this.state.players.get(targetId);
+    if (!target?.alive || target.hp <= 0 || this.seerBindings.get(targetId)?.ownerId === id ||
+        (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
+        distance3d(owner, target) > RULES.summonEngageDistance || !this.bodyPathClear(owner.mapId, guardian, target) ||
+        !this.combatSegmentClear(owner.mapId, guardian, target)) return null;
+    return target;
+  }
+
+  private orderGhost(client: Client, owner: Player, input: GhostCombatCommand, active?: ActiveGhost) {
+    const id = client.sessionId, guardian = this.state.summons.get(id);
+    if (!active || active.combatId !== input.combatId || guardian?.kind !== "captured_ghost")
+      return this.reject(client, "ghost_combat_inactive");
+    if (input.action === "follow") {
+      active.order = undefined;
+      guardian.targetId = "";
+      guardian.action = "follow";
+      return client.send("ghost_combat_state", {combatId: active.combatId, status: "following"});
+    }
+    const targetId = input.targetId, target = this.getGhostTarget(id, owner, guardian, targetId);
+    if (!target) return this.reject(client, "ghost_combat_target");
+    const targetName = ("displayName" in target ? target.displayName : target.characterName) || targetId;
+    active.order = {targetId, target, targetName};
+    client.send("ghost_combat_state", {combatId: active.combatId, status: "ordered", targetId, targetName});
+  }
+
+  private endGhostOrder(ownerId: string, active: ActiveGhost, order: GhostOrder) {
+    active.order = undefined;
+    this.clients.find(client => client.sessionId === ownerId)?.send("ghost_combat_state", {
+      combatId: active.combatId, status: "ended", targetId: order.targetId, targetName: order.targetName,
+    });
   }
 
   private async handleGhostPot(client: Client, message: unknown) {
@@ -4993,8 +5036,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) return this.reject(client, "ghost_pot_busy");
 
-    const pool = this.ghostPools.get(id) ?? makeGhostPool();
     const current = this.activeGhosts.get(id);
+    if (input.action === "attack" || input.action === "follow") return this.orderGhost(client, owner, input, current);
+    const pool = this.ghostPools.get(id) ?? makeGhostPool();
     if ("revision" in input) {
       const placement = placePoolGhost(pool, input, current?.instanceId);
       if (placement.pool === pool) return this.sendGhostPot(client, placement.status);
@@ -5095,7 +5139,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         else await worker.send({owner: id, disconnect: true});
         return this.sendGhostPot(client, "unavailable");
       }
-      this.activeGhosts.set(id, {instanceId: ghost.instanceId, generation: active.generation});
+      this.activeGhosts.set(id, {instanceId: ghost.instanceId, generation: active.generation, combatId: randomUUID()});
       this.state.summons.set(id, new SummonedGuardian({
         ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
       }));
@@ -6726,8 +6770,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
 
       const distanceToOwner = distance3d(guardian, owner);
-      const candidate = guardian.kind !== "captured_ghost" && distanceToOwner <= RULES.summonLeashDistance
+      const captured = guardian.kind === "captured_ghost";
+      const active = captured ? this.activeGhosts.get(ownerId) : undefined;
+      const order = active?.order;
+      if (active && this.ghostControlPending.has(ownerId)) continue;
+      let candidate = !captured && distanceToOwner <= RULES.summonLeashDistance
         ? this.findSummonTarget(ownerId, owner, guardian) : null;
+      if (active && order) {
+        const target = this.getGhostTarget(ownerId, owner, guardian, order.targetId);
+        if (target === order.target) candidate = order;
+        else this.endGhostOrder(ownerId, active, order);
+      }
 
       if (candidate) {
         const { targetId, target } = candidate;
@@ -6739,13 +6792,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
         if (distance <= RULES.summonAttackRange) {
           guardian.action = "attack";
-          this.trySummonAttack(ownerId, guardian, targetId);
+          this.trySummonAttack(ownerId, guardian, targetId, active);
         } else {
           guardian.action = "chase";
           if(guardian.kind==="pot_spirit" && owner.pathId==="seer" && onMapGround(owner))this.moveSeerSpirit(ownerId,owner,guardian,target,dt,"chase:"+targetId);
           else {const next = step3d(
             guardian, target, RULES.summonMoveSpeed * dt
           );
+          if (active && order && this.isProtectedArea(owner.mapId, next.point)) {
+            this.endGhostOrder(ownerId, active, order);
+            continue;
+          }
           guardian.x = clampToMap(next.point.x, getWorldMap(owner.mapId)!.bounds, "x");
           guardian.y = Math.max(next.point.y,groundAt(owner.mapId,next.point.x,next.point.z));
           guardian.z = clampToMap(next.point.z, getWorldMap(owner.mapId)!.bounds, "z");
@@ -6784,7 +6841,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
-  private trySummonAttack(ownerId: string, guardian: SummonedGuardian, targetId: string) {
+  private trySummonAttack(ownerId: string, guardian: SummonedGuardian, targetId: string, active?: ActiveGhost) {
     const owner = this.state.players.get(ownerId);
     const sameGuardian = this.state.summons.get(ownerId) === guardian;
     if (!owner || !owner.alive || !sameGuardian) return;
@@ -6796,11 +6853,21 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (distance3d(owner, target) > RULES.summonEngageDistance) return;
     if (distance3d(guardian, target) > RULES.summonAttackRange + 0.00001 || !this.combatSegmentClear(owner.mapId,guardian,target)) return;
 
-    const last = this.lastSummonAttackAt.get(ownerId) ?? -Infinity;
+    const attackClock = active ? this.ghostAttackAt : this.lastSummonAttackAt;
+    const last = attackClock.get(ownerId) ?? -Infinity;
     if (this.simulatedMs - last < RULES.summonAttackCooldownMs) return;
-    this.lastSummonAttackAt.set(ownerId, this.simulatedMs);
+    attackClock.set(ownerId, this.simulatedMs);
     this.recordCombat(ownerId, targetId);
     guardian.hitSeq += 1;
+    const before = target.hp;
+    const order = active?.order;
+    const publishGhostHit = () => {
+      if (!active || !order) return;
+      this.clients.find(client => client.sessionId === ownerId)?.send("ghost_combat_state", {
+        combatId: active.combatId, status: "hit", targetId, targetName: order.targetName,
+        damage: before - target.hp, hp: target.hp,
+      });
+    };
 
     if (monster) {
       const order=this.occultSpiritOrders.get(ownerId);
@@ -6815,6 +6882,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         else if (owner.pathId==="mender") this.recordOccultTraining(ownerId,"mender",["spirit"]);
       }
       this.applyMonsterHit(ownerId,monster,damage,()=>{
+        publishGhostHit();
         if (empowered && order.skillId==="seer_spirit_bind" && monster.hp>0) this.interruptMuayTarget(monster,700);
         this.broadcast("summon_hit", {
           ownerId, summonId: ownerId, targetId,
@@ -6825,11 +6893,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return;
     }
 
-    // Summon can help in Free PK only when its owner selected or was attacked
-    // by this opponent. Damage/kill attribution belongs to the owner.
+    // Damage and kill attribution belong to the owner.
     const victim = target as Player;
     const damage = this.directGuardDamage(targetId,guardian,calculateDamage(RULES.summonAttackDamage*(1+masteryBonuses(this.rebirthStates.get(ownerId),"pvp").magicAtk), this.masteryPower(victim,"pvp","magicDef"), victim.level),0,ownerId);
     if(!this.applyPlayerHit(owner,targetId,victim,damage,()=>{
+      publishGhostHit();
       this.broadcast("pvp_hit", {
         attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
         targetId, damage,
@@ -8132,6 +8200,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.inventories.delete(id);
       this.ghostPools.delete(id);
       this.activeGhosts.delete(id);
+      this.ghostAttackAt.delete(id);
       this.ghostCaptureReadyAt.delete(id);
       this.itemUseReadyAt.delete(id);
       this.lastInventoryReadMs.delete(id);
@@ -8233,6 +8302,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.monsterNavigator.clear();
     this.lastSummonAt.clear();
     this.lastSummonAttackAt.clear();
+    this.ghostAttackAt.clear();
     this.state.summons.clear();
     this.climbs.clear();
     this.flightTransitions.clear();

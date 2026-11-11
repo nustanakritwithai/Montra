@@ -11,7 +11,7 @@ const sailing = core.slice(0,core.indexOf("  // Cooldown labels"));
 const picking = pointer.slice(0,pointer.indexOf('  ui.world.addEventListener("pointercancel"'));
 
 function fixture() {
-  const canvasEvents = {}, windowEvents = {}, packets = [], buttons = new Map();
+  const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
   const marker = {enabled:false,position:{set(x,y,z){Object.assign(this,{x,y,z});}},
     setEnabled(enabled){this.enabled=enabled;}};
   const player = {boatId:"boat",alive:true,x:0,z:51};
@@ -39,6 +39,7 @@ function fixture() {
     room:{state:{boatsAvailable:true,boats:new Map([["boat",boat]])},send:(type,payload)=>packets.push({type,...payload})},
     ownServerCharacter:()=>player,performance:{now:()=>now},toast(){},cancelQuestNavigation(){},
     fishingSelect:false,resourcePickers:new Map(),forestMonsters:new Map(),fortRoot:{isEnabled:()=>false},enemy,
+    targetedSkill:null,MONSTER_ID:"possessed-1",orderGhostAttack:id=>ghostOrders.push(id),
     requestMonsterAttack:()=>attacks++,pointMove:()=>walks++,marker:{clone:()=>marker},
     camera:{},scene,B:{Matrix:{Identity:()=>({})},MeshBuilder:{CreateBox:()=>({position:{}})}},
     longTailBoat:(x,z,heading)=>({position:{x,z},rotation:{y:heading},scaling:{set(){}},dispose(){}}),
@@ -53,7 +54,8 @@ function fixture() {
   const tap = (type,x,z,hit=ground) => {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
-  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,stats:()=>({rayCalls,attacks,walks})};
+  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,
+    aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
 
 test("mouse clicks sail toward water, turn, and stop at the marker",()=>{
@@ -94,6 +96,16 @@ test("taps on land and attack targets stay distinct from sailing",()=>{
   f.tick(100);
   f.tap("mouse",6,48);
   assert.equal(f.stats().walks,1);
+});
+
+test("aiming a ghost order redirects taps on monsters and players to the ghost",()=>{
+  const f = fixture();
+  const player = {isEnabled:()=>true,metadata:{pkPlayerId:"opponent"}};
+  f.aimGhost();
+  f.tap("touch",9,54,f.enemy);
+  f.tap("mouse",9,54,player);
+  assert.deepEqual(f.ghostOrders,["possessed-1","opponent"]);
+  assert.deepEqual(f.stats(),{rayCalls:0,attacks:0,walks:0});
 });
 
 test("pinching does not set a course and manual steering can take over",()=>{

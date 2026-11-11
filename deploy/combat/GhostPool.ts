@@ -14,7 +14,11 @@ type Placement =
   | {action: "select"; slot: number; revision: number}
   | {action: "assign"; slot: number; instanceId: string; revision: number}
   | {action: "reserve"; instanceId: string; revision: number};
+export type GhostCombatCommand =
+  | {action: "attack"; combatId: string; targetId: string}
+  | {action: "follow"; combatId: string};
 export type GhostCommand = Placement
+  | GhostCombatCommand
   | {action: "read" | "summon" | "recall" | "switch"}
   | {action: "capture"; targetId: string};
 
@@ -27,6 +31,9 @@ function isRevision(value: unknown): value is number {
 function isInstanceId(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f-]{36}$/.test(value);
 }
+function isTargetId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 96;
+}
 
 export function parseGhostCommand(message: unknown): GhostCommand | null {
   if (!message || typeof message !== "object" || Array.isArray(message)) return null;
@@ -36,8 +43,12 @@ export function parseGhostCommand(message: unknown): GhostCommand | null {
     case "read": case "summon": case "recall": case "switch":
       return count === 1 ? {action: input.action} : null;
     case "capture":
-      return count === 2 && typeof input.targetId === "string" && input.targetId.length > 0 && input.targetId.length <= 96
-        ? {action: "capture", targetId: input.targetId} : null;
+      return count === 2 && isTargetId(input.targetId) ? {action: "capture", targetId: input.targetId} : null;
+    case "attack":
+      return count === 3 && isInstanceId(input.combatId) && isTargetId(input.targetId)
+        ? {action: "attack", combatId: input.combatId, targetId: input.targetId} : null;
+    case "follow":
+      return count === 2 && isInstanceId(input.combatId) ? {action: "follow", combatId: input.combatId} : null;
     case "select":
       return count === 3 && isSlot(input.slot) && isRevision(input.revision)
         ? {action: "select", slot: input.slot, revision: input.revision} : null;

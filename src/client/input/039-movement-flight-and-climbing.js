@@ -45,7 +45,9 @@
     return mode === "live" && room && Number.isFinite(Number(room.state?.fortification?.height));
   }
   function setTargetedSkill(skill) {
+    const wasGhostAttack = targetedSkill === "ghostAttack";
     targetedSkill = skill;
+    if (wasGhostAttack || skill === "ghostAttack") syncGhostPoolUi();
   }
   function monsterForSpell(id) {
     return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);

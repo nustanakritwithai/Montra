@@ -326,6 +326,7 @@
     "forge_result",
     "gear_guides",
     "gear_salvaged",
+    "ghost_combat_state",
     "ghost_pot_state",
     "guild_directory",
     "guild_error",
@@ -487,6 +488,7 @@
     "forge_result",
     "gear_guides",
     "gear_salvaged",
+    "ghost_combat_state",
     "ghost_pot_state",
     "guild_directory",
     "guild_error",
@@ -587,7 +589,7 @@
   "dynamicServerSends": 5,
   "protectedSources": {
     "MyRoomState.ts": "574048026149fa7ce16fae624c09b60d0854c5f58ad79a497a596e648a98b6f2",
-    "CharacterStore.ts": "9c1a548ccbc2c9e6cb3bafba928b6d6783ba29672f2b0c24d3def97344562d21",
+    "CharacterStore.ts": "84906066c1dd17b0cddc84ee23192141a226debe8b084f7fdc0b0db62a199046",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
     "EconomyStore.ts": "24c3ba0c55ac83ec90e4b5a1d9ed8621c03b7fc11f90832ef2f41f0b87a00de4"
   }
