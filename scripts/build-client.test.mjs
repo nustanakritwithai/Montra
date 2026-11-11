@@ -103,8 +103,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 41591,
-  "sha256": "d1f69f0d4086bbe5792fdc8785708875265aace520323c233ce7c96693bb33e4"
+  "bytes": 41603,
+  "sha256": "0c900bc0062935b5f8a76f3d2bcdce49bd6ee826462ebf26bb27ea303f3997ee"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 161845,
-  "sha256": "81b6e0cbebbc80359715d4c2d9d6ed8cf534d1f6d08730c0d1eac02e3d54b192"
+  "bytes": 161914,
+  "sha256": "bd4d7e2c8842f5c8e370623ba060f4ba0ca3789eba8dbdee36c628c559a3ea5e"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -261,6 +261,11 @@ const reviewedReleaseFragments = new Map([
     "path": "audio/002-voice-guidance.js",
     "bytes": 24559,
     "sha256": "1ced3146dae9b43231bb418a5e5947e7a56be4826140a381a5fa2d3f382316b1"
+  },
+  {
+    "path": "core/028-session-and-economy-state.js",
+    "bytes": 2780,
+    "sha256": "ac74277be75f972e4568a38e44d12389c4014aae291125c181bad8b4f211cdaa"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -269,8 +274,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1983255);
-  assert.equal(hash(bytes), '0a9f69a636203e7f78e4b58cf4fe116685f120ee914b4bb23df713dcb6804ce3');
+  assert.equal(bytes.length, 1983374);
+  assert.equal(hash(bytes), '88a3269d2bb21a4bfb52fd120aad41b9016ae371e6bd761c23b86d997f8ed7f5');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

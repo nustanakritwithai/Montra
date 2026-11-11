@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import path from "node:path";
+import {INVENTORY_SLOT_COUNT} from "./ItemRules.js";
 import {EconomyStore} from "./EconomyStore.js";
 import {FISH_PERIOD,advanceFishing,fishItem,fishNeedle,fishingWater,isFishingWater,pullFish,validateFishingPosition,type FishingSession} from "./Fishing.js";
 
@@ -51,7 +52,7 @@ test("a catch in a full inventory survives restart and can be claimed exactly on
   const dir=mkdtempSync(path.join(tmpdir(),"montra-fishing-pending-")),file=path.join(dir,"economy.sqlite");
   let db=new EconomyStore(file);const actor="b".repeat(64),id="fish_"+"b".repeat(32);
   try{
-    db.register(actor,{version:1,slots:Array.from({length:12},()=>({itemId:"mat_fish_common" as const,quantity:99})),equippedWeaponSlot:null});
+    db.register(actor,{version:1,slots:Array.from({length:INVENTORY_SLOT_COUNT},()=>({itemId:"mat_fish_common" as const,quantity:99})),equippedWeaponSlot:null});
     assert.equal(db.catchFish(actor,id,"mat_fish_spirit").pending,true);assert.equal(db.pendingFish(actor),"mat_fish_spirit");
     assert.throws(()=>db.claimFish(actor),/inventory_full/);db.close();db=new EconomyStore(file);
     assert.equal(db.pendingFish(actor),"mat_fish_spirit");

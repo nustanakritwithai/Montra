@@ -9,7 +9,8 @@
   let guildDirectory = null, guildRecruitment = {pending:null,applications:[]};
   let territoryState=null,territoryReceivedAt=0;
   // Inventory is never stored in localStorage: LIVE comes from VPS each join.
-  const INVENTORY_SLOTS = 12;
+  const LEGACY_INVENTORY_SLOTS = 12;
+  const INVENTORY_SLOTS = 108;
   const POTION_ITEM_ID = "health_potion";
   const SHRINE_SHARD = "shrine_shard";
   const shardName = "เศษตราผู้พิทักษ์";

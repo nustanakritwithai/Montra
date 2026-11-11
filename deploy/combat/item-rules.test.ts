@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { parseAuctionCreate, parseForge, parseMarketCreate, parseSellMaterial, parseTradeOffer } from "./EconomyRules.js";
+import { parseCityOrder } from "./CityProductionRules.js";
 import {
   INVENTORY_SLOT_COUNT, INVENTORY_STACK_LIMIT, POTION_HEAL,
   POTION_ID, STARTER_POTION_COUNT, makeStarterInventory,
@@ -9,11 +11,11 @@ import {
   equippedWeaponId, weaponBonuses,
 } from "./ItemRules.js";
 
-test("Inventory: exactly 12 slots, 3 potions and permanent starter weapon kit", () => {
+test("Inventory: 108 slots, 3 potions and permanent starter weapon kit", () => {
   const stock = makeStarterInventory();
-  assert.equal(INVENTORY_SLOT_COUNT, 12);
+  assert.equal(INVENTORY_SLOT_COUNT, 108);
   assert.equal(stock.version, 1);
-  assert.equal(stock.slots.length, 12);
+  assert.equal(stock.slots.length, INVENTORY_SLOT_COUNT);
   assert.deepEqual(stock.slots[0], {
     itemId: POTION_ID, quantity: STARTER_POTION_COUNT,
   });
@@ -23,6 +25,31 @@ test("Inventory: exactly 12 slots, 3 potions and permanent starter weapon kit", 
   assert.equal(stock.equippedWeaponSlot,1);
   assert.deepEqual(validateInventory(stock), stock);
   assert.notEqual(makeStarterInventory(), stock);
+});
+
+test("Inventory: legacy slots retain their items and the expanded last slot accepts commands", () => {
+  const stock = makeStarterInventory();
+  const legacy = {...stock, slots: stock.slots.slice(0, 12)};
+  legacy.slots[11] = {itemId: POTION_ID, quantity: 2};
+  const expanded = validateInventory(legacy);
+  assert.deepEqual(expanded.slots.slice(0, 12), legacy.slots);
+  assert.equal(expanded.equippedWeaponSlot, legacy.equippedWeaponSlot);
+  assert.equal(expanded.slots.length, 108);
+  assert.ok(expanded.slots.slice(12).every(slot => slot === null));
+  assert.equal(legacy.slots.length, 12);
+
+  expanded.slots[106] = expanded.slots[1];
+  expanded.slots[1] = null;
+  expanded.equippedWeaponSlot = null;
+  expanded.slots[107] = {itemId: POTION_ID, quantity: 2};
+  assert.deepEqual(parseEquipWeaponCommand({slot: 106}), {slot: 106});
+  const equipped = equipInventoryWeapon(expanded, 106);
+  assert.equal(equipped.ok, true);
+  if (!equipped.ok) return;
+  assert.equal(equipped.inventory.equippedWeaponSlot, 106);
+  const used = useInventoryItem(equipped.inventory, 107, 50, 100, true);
+  assert.equal(used.ok, true);
+  if (used.ok) assert.equal(used.inventory.slots[107]?.quantity, 1);
 });
 
 test("Inventory: rejects counterfeits, unknown items, corrupt quantities and bad structures", () => {
@@ -51,8 +78,9 @@ test("Inventory: rejects counterfeits, unknown items, corrupt quantities and bad
 test("Inventory: only exact server-assigned slot index is accepted", () => {
   assert.equal(parseUseItemCommand({slot:0}),0);
   assert.equal(parseUseItemCommand({slot:11}),11);
+  assert.equal(parseUseItemCommand({slot:107}),107);
   for (const payload of [
-    null, {}, [], "0", {slot:12}, {slot:-1}, {slot:0.5},
+    null, {}, [], "0", {slot:108}, {slot:-1}, {slot:0.5},
     {slot:"0"}, {slot:null}, {slot:NaN}, {slot:0,quantity:9999},
     {slot:0,itemId:POTION_ID}, {slot:0,heal:999},
   ]) assert.equal(parseUseItemCommand(payload),null);
@@ -149,7 +177,7 @@ test("Weapon loadout: validate strict equip command and reject forged damage/sta
   assert.deepEqual(parseEquipWeaponCommand({slot:2}),{slot:2});
   assert.deepEqual(parseEquipWeaponCommand({slot:null}),{slot:null});
   for(const bad of [
-    null,{},[],{slot:12},{slot:-1},{slot:0.3},{slot:"3"},
+    null,{},[],{slot:108},{slot:-1},{slot:0.3},{slot:"3"},
     {slot:2,damage:999},{slot:2,quantity:100},{weaponId:ARCANE_SWORD_ID},
   ])assert.equal(parseEquipWeaponCommand(bad),null);
   const base=makeStarterInventory();
@@ -214,4 +242,26 @@ test("Gear look: boss accessories without a numeric suffix are sent", () => {
 test("Gear look: every wearable piece has a look in every slot it fits", () => {
   for (const [id, def] of Object.entries(PERSONAL_ITEMS))
     for (const slot of lookSlots[def.kind] ?? []) assert.match(wornLook(slot, id), /^[a-zA-Z]+=[a-zA-Z_]+:\d+$/, `${id} in ${slot}`);
+});
+
+test("Economy commands share the expanded inventory limit", () => {
+  const requestId = "inventory_capacity_001";
+  const tradeId = "cafebeef-0dab-4436-85f3-deadbeef0001";
+  const commands = [
+    [parseMarketCreate, {requestId, amount:1, price:10}],
+    [parseAuctionCreate, {requestId, amount:1, opening:10, durationHours:1}],
+    [parseTradeOffer, {tradeId, amount:1, gold:0}],
+    [parseForge, {requestId, stamp:"gear", action:"reroll"}],
+    [parseSellMaterial, {requestId, expected:"mat_fish_common", quantity:1}],
+  ] as const;
+  for (const [parse, data] of commands) {
+    assert.ok(parse({...data, slot:107}));
+    assert.equal(parse({...data, slot:108}), null);
+  }
+  const forge = {requestId, slot:106, stamp:"gear", action:"enhance", copies:1};
+  assert.ok(parseForge({...forge, donor:{slot:107, stamp:"donor"}}));
+  assert.equal(parseForge({...forge, donor:{slot:108, stamp:"donor"}}), null);
+  const deposit = {action:"deposit",requestId,epoch:1,item:"mat_raw_wood_1",amount:1};
+  assert.ok(parseCityOrder({...deposit,slot:107}));
+  assert.equal(parseCityOrder({...deposit,slot:108}), null);
 });

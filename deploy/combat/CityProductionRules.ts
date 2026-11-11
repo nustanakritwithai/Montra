@@ -1,3 +1,4 @@
+import {INVENTORY_SLOT_COUNT} from "./ItemRules.js";
 import {RIVER_CITY} from "./RiverCity.js";
 
 export const CITY_PRODUCTION_SITE = RIVER_CITY;
@@ -265,7 +266,7 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     return keys("contractId", "total") && uuid(order.contractId) &&
       integer(order.total, 1, CITY_MARKET_BUDGET) ? order as CityOrder : null;
   if (order.action === "purchase_fill")
-    return keys("orderId", "slot", "amount") && uuid(order.orderId) && integer(order.slot, 0, 11) &&
+    return keys("orderId", "slot", "amount") && uuid(order.orderId) && integer(order.slot, 0, INVENTORY_SLOT_COUNT - 1) &&
       integer(order.amount, 1, CITY_POLICY_PURCHASE_AMOUNT) ? order as CityOrder : null;
   if (order.action === "disband")
     return keys("guildId") && uuid(order.guildId) ? order as CityOrder : null;
@@ -276,7 +277,7 @@ export function parseCityOrder(input: unknown): CityOrder | null {
   if (order.action === "neutral_market_withdraw")
     return keys("offerId") && uuid(order.offerId) ? order as CityOrder : null;
   if (order.action === "neutral_market_list")
-    return keys("epoch", "slot", "amount", "unitPrice") && integer(order.epoch, 0) && integer(order.slot, 0, 11) &&
+    return keys("epoch", "slot", "amount", "unitPrice") && integer(order.epoch, 0) && integer(order.slot, 0, INVENTORY_SLOT_COUNT - 1) &&
       integer(order.amount, 1, CITY_MARKET_QUANTITY) && integer(order.unitPrice, 1, CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
   if (order.action === "neutral_market_buy")
     return keys("epoch", "amount", "total") && integer(order.epoch, 0) && integer(order.amount, 1, CITY_MARKET_QUANTITY) &&
@@ -333,15 +334,15 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       return keys("epoch", "amount", "unitPrice") && integer(order.amount, 1, CITY_POLICY_PURCHASE_AMOUNT) &&
         integer(order.unitPrice, 1, CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
     case "workshop_start":
-      return keys("epoch", "woodSlot", "stoneSlot") && integer(order.woodSlot, 0, 11) &&
-        integer(order.stoneSlot, 0, 11) && order.woodSlot !== order.stoneSlot ? order as CityOrder : null;
+      return keys("epoch", "woodSlot", "stoneSlot") && integer(order.woodSlot, 0, INVENTORY_SLOT_COUNT - 1) &&
+        integer(order.stoneSlot, 0, INVENTORY_SLOT_COUNT - 1) && order.woodSlot !== order.stoneSlot ? order as CityOrder : null;
     case "build":
     case "start":
     case "start_fast":
     case "warehouse_start":
       return keys("epoch") ? order as CityOrder : null;
     case "deposit":
-      return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
+      return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, INVENTORY_SLOT_COUNT - 1) &&
         (CITY_RAW_ITEMS.some(item => item === order.item) || order.item === CITY_PRODUCT || order.item === CITY_MINING_ORE) &&
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "list":
@@ -353,7 +354,7 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       return keys("epoch", "item", "amount") && CITY_ITEMS.some(item => item === order.item) &&
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "warehouse_contribute":
-      return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
+      return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, INVENTORY_SLOT_COUNT - 1) &&
         [...CITY_WAREHOUSE_MATERIALS, ...CITY_MINING_WAREHOUSE_MATERIALS].some(({item}) => item === order.item) &&
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     default:

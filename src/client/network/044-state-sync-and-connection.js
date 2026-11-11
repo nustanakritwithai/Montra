@@ -369,7 +369,7 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1,inventoryVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
@@ -1468,7 +1468,7 @@
       joined.onMessage("inventory_state", payload => {
         if (room !== joined || payload?.version !== 1 ||
             !Array.isArray(payload.slots) ||
-            payload.slots.length !== INVENTORY_SLOTS) return;
+            (payload.slots.length !== INVENTORY_SLOTS && payload.slots.length !== LEGACY_INVENTORY_SLOTS)) return;
         if(payload.personalItems && typeof payload.personalItems==="object") {
           Object.assign(personalItems,payload.personalItems);catalogRevision++;
         }
@@ -1493,7 +1493,7 @@
         const selected = payload.equippedWeaponSlot;
         const equippedWeaponSlot = selected === null ? null :
           Number.isSafeInteger(selected) && selected >= 0 &&
-            selected < INVENTORY_SLOTS && bagMeta(slots[selected]?.itemId)?.kind==="mainHand"
+            selected < slots.length && bagMeta(slots[selected]?.itemId)?.kind==="mainHand"
             ? selected : undefined;
         const equipment=Object.fromEntries(Object.entries(payload.equipment||{}).filter(([position,id])=>wearPositions(personalItems[id]?.kind).includes(position)));
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
