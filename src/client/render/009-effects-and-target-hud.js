@@ -200,52 +200,28 @@
   }
 
   let comboStreak = 0, lastComboHitAt = 0;
-  let comboHudEl = null, comboHitsEl = null, comboLabelEl = null, comboGradeEl = null;
+  let comboHudEl = null, comboHitsEl = null;
 
   function ensureComboHud() {
     if (comboHudEl) return;
     comboHudEl = document.createElement("div");
     comboHudEl.className = "combo-streak-hud";
-    comboHudEl.hidden = true;
     comboHitsEl = document.createElement("div");
     comboHitsEl.className = "combo-streak-hits";
-    comboLabelEl = document.createElement("div");
-    comboLabelEl.className = "combo-streak-label";
-    comboGradeEl = document.createElement("div");
-    comboGradeEl.className = "combo-streak-grade grade-c";
-    comboHudEl.append(comboHitsEl, comboLabelEl, comboGradeEl);
+    comboHudEl.append(comboHitsEl);
     document.getElementById("game")?.append(comboHudEl);
   }
 
   function registerComboHit() {
     const now = performance.now();
     if (now - lastComboHitAt > 3500) comboStreak = 0;
-    comboStreak++;
     lastComboHitAt = now;
+    comboStreak++;
+    if (comboStreak < 3) return;
     ensureComboHud();
-    if (comboStreak >= 3) {
-      if (comboStreak === 3) triggerVoiceGuidance("combo");
-      comboHudEl.hidden = false;
-      comboHitsEl.textContent = String(comboStreak);
-      let grade = "C", label = "วิชาคล่องแคล่ว", cls = "grade-c";
-      if (comboStreak >= 25) {
-        grade = "S"; label = "ปรมาจารย์ยุทธ์!"; cls = "grade-s";
-        if (comboStreak === 25) triggerCombatCallout("combo_rank_s");
-      }
-      else if (comboStreak >= 15) { grade = "A"; label = "ยอดฝีมือเพลงยุทธ์!"; cls = "grade-a"; }
-      else if (comboStreak >= 7) { grade = "B"; label = "ชำนาญการต่อสู้"; cls = "grade-b"; }
-      comboLabelEl.textContent = label;
-      comboGradeEl.textContent = grade;
-      comboGradeEl.className = "combo-streak-grade " + cls;
-      // Web Animations restart: re-triggering the CSS animation needed a forced page layout every hit.
-      if (comboStreak === 3 || comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
-        comboHitsEl.animate([{ transform: "scale(1.25)" }, { transform: "scale(1)" }], { duration: 150, easing: "ease-out" });
-      }
-      if (comboStreak === 7 || comboStreak === 15 || comboStreak === 25) {
-        SFX("coin", { intensity: 0.8 });
-        floatAtPlayer(localId, grade + " RANK!", "combo", { big: true, drift: 0 });
-      }
-    }
+    if (comboStreak === 3) triggerVoiceGuidance("combo");
+    comboHudEl.hidden = false;
+    comboHitsEl.textContent = String(comboStreak);
   }
 
   function updateComboHud(now) {
