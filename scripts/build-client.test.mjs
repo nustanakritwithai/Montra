@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 150437,
-  "sha256": "57f0a5fcd262a85c883f7fdc8b5def43c02aae91c1c97a89ac930c99ae9c043b"
+  "bytes": 163457,
+  "sha256": "b8c78e2cefe835f31249d177ca6f363f2e1992c0186ba564117e854b879841ef"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -164,13 +164,13 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/048-class-books-and-hotbars.js",
-    "bytes": 71724,
-    "sha256": "885124b84de656a367e9f8c0fd636a2c955ce57ca3d8e477f9fcdb4aeff1c67d"
+    "bytes": 72694,
+    "sha256": "b87b3eb7e5188fec48756d7fb661f5efcf513d1001337f9d467b205e3061bb5b"
   },
   {
     "path": "ui/049-skill-graph-and-details.js",
-    "bytes": 63090,
-    "sha256": "03bbfd115a7ed48a976d1a10086842d4a1ed58f5108bea921785d742e8bf71a6"
+    "bytes": 63308,
+    "sha256": "739dbdaca175f1fd9cb47bda561e4b7841d0d4d02f8872ef33e0a0ab871cfbb2"
   },
   {
     "path": "input/058-field-control-bindings.js",
@@ -184,8 +184,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 33712,
-  "sha256": "d2397a6acf7758f2fb20c8f8700bfc56c1cafe1636c7303bce299628ea4a69f0"
+  "bytes": 34000,
+  "sha256": "bc1de96d343100dc838a34757ba05feabb2716283c0f5b166957bdaa196bb99d"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
@@ -249,8 +249,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1842688);
-  assert.equal(hash(bytes), '8e27c65e8a8266664a3b8254f4ff73b6058cf5e2124f6a52fc4fd07af0059c14');
+  assert.equal(bytes.length, 1857184);
+  assert.equal(hash(bytes), '8122204451b2dcbbb6cffc59bcc0ea2dcf0d5a32513badc0529afe05e575e428');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

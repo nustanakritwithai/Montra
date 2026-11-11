@@ -2,7 +2,7 @@
 
 The standard room enables the eight skill replacements only when the server
 starts with MONTRA_REPLACEMENT_SKILLS=1. Use the switch on isolated staging
-while the released client is being integrated. Battlefield rooms use their
+while the client candidate is being verified. Battlefield rooms use their
 legacy skill rules. Clients without either opt-in version may join as before.
 
 A capable client sends both prototypeProtocolVersion: 1 and
@@ -28,7 +28,7 @@ the same commands through the standard room, including mixed admissions.
 
 The gameplay room offers a per-connection nonce in the ready response. Each participant sends an exact confirm_gameplay message with that nonce and waits for the confirmed response. In the strict fixture every observer must also confirm. The nonce is single-use and connection-local.
 
-Confirmed test clients can request the current same-map Shadow marks with the exact shadow_state action. The snapshot includes the server simulation time. Mark, return and cleared notifications share the actor and mark sequence. Expiry and invalidation clear the mark before sending a terminal notice, and a snapshot can recover after a missed notice. The released client still needs presentation for these events.
+Confirmed test clients can request the current same-map Shadow marks with the exact shadow_state action. The snapshot includes the server simulation time. Mark, return and cleared notifications share the actor and mark sequence. Expiry and invalidation clear the mark before sending a terminal notice, and a snapshot can recover after a missed notice. The client uses the mark to show and clear the return action on the same slot.
 
 Confirmed gameplay test clients can send exactly `{seq: positive safe integer, action: "firm_guard"}`. The room reuses the existing Sentinel learned skill, equipped slot, mana cost and cooldown. The `braced` notice follows the cast, and `protected` follows a successful PvE monster hit against the caster or an eligible party member. Legacy clients keep the existing Sentinel skill command.
 

@@ -140,6 +140,177 @@
     if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
+
+  const REPLACEMENT_SKILLS = Object.freeze({
+    flowing_blades: {target: true, description: "ฟันหนึ่งครั้ง กดช่องเดิมเมื่อขึ้นว่าฟันต่อ ถ้าไม่กดจะตั้งรับด้านหน้า"},
+    chaiya_advanced_counter: {target: true, description: "สวนเป้าหมายที่เพิ่งรับการโจมตีได้ และทิ้งรอยบนมอนสเตอร์ทั่วไป"},
+    shadow_cut: {target: true, description: "ฟันและจำตำแหน่งเดิม กดช่องเดิมเพื่อย้อนกลับภายใน 3 วินาที"},
+    firm_guard: {target: false, description: "ตั้งรับด้านหน้าเพื่อคุ้มกันตนเองหรือสมาชิกปาร์ตี้ที่อยู่ด้านหลัง การเดินหรือหมุนตัวจะยกเลิกท่า"},
+    seer_ash_rice: {target: true, description: "วางกับดักข้าวสารใต้เป้าหมาย กับดักทำงานเมื่อมอนสเตอร์เคลื่อนผ่านหลังพร้อมทำงาน"},
+    seer_spirit_rain: {target: true, description: "ใช้ตราบนเป้าหมาย แล้วโจมตีต่อระหว่างมอนสเตอร์ใกล้กันได้สูงสุด 3 ตัว"},
+    mender_deep_heal: {target: true, description: "วางยันต์ให้ตนเองหรือสมาชิกปาร์ตี้ ฟื้นพลังชีวิตหลังรับดาเมจจนเลือดต่ำหรือเมื่อยันต์หมดเวลา"},
+    mender_deep_circle: {target: false, description: "สร้างวงฮีลเคลื่อนตามผู้ร่าย ฟื้นพลังชีวิตเป็นจังหวะให้คนในปาร์ตี้ที่เลือดต่ำก่อน"},
+  });
+  let replacementSkillSession = null;
+  function createReplacementSkillSession(joined, {currentActor, target, redraw, notify, feedback}) {
+    let nonce, confirmed = false, closed = false, sequence = 0;
+    let shadow, flow, refreshTimer, nextFollowup = 0;
+    const now = () => performance.now();
+    const deadline = (expiry, serverNow) => {
+      if (!Number.isFinite(expiry) || !Number.isFinite(serverNow) || expiry <= serverNow) return 0;
+      return now() + Math.min(3000, expiry - serverNow);
+    };
+    function validContinuation(state, actor, time) {
+      return state && actor?.alive && !actor.stunned && state.path === actor.pathId &&
+        state.map === (actor.mapId || "ritual_village") && state.until > time;
+    }
+    function continuation(id) {
+      const actor = currentActor(), time = now();
+      if (id === "shadow_cut" && validContinuation(shadow, actor, time)) return "ย้อนเงา";
+      if (id === "flowing_blades" && validContinuation(flow, actor, time) &&
+        flow.readyAt <= time && target(flow.targetId)?.alive) return "ฟันต่อ";
+    }
+    function redrawAtBoundary() {
+      clearTimeout(refreshTimer);
+      if (closed) return;
+      const actor = currentActor(), time = now();
+      if (!validContinuation(shadow, actor, time)) shadow = undefined;
+      if (!validContinuation(flow, actor, time)) flow = undefined;
+      redraw();
+      const next = Math.min(...[shadow?.until, flow?.readyAt, flow?.until].filter(value => value > time));
+      if (Number.isFinite(next)) refreshTimer = setTimeout(redrawAtBoundary, Math.ceil(next - time) + 1);
+    }
+    function send(action, targetId) {
+      joined.send("prototype_protocol_v1", {
+        action, seq: ++sequence, ...(targetId === undefined ? {} : {targetId}),
+      });
+    }
+    joined.onMessage("prototype_protocol_v1_ready", data => {
+      if (closed || nonce || data?.version !== 1 || data.gameplayEnabled !== true ||
+        typeof data.nonce !== "string" || !data.nonce || data.nonce.length > 128) return;
+      nonce = data.nonce;
+      joined.send("prototype_protocol_v1", {action: "confirm_gameplay", nonce});
+    });
+    joined.onMessage("prototype_protocol_v1_confirmed", data => {
+      if (closed || !nonce || confirmed || data?.version !== 1) return;
+      confirmed = true;
+      joined.send("prototype_protocol_v1", {action: "shadow_state"});
+      redraw();
+    });
+    joined.onMessage("prototype_shadow_v1_state", data => {
+      if (closed || !confirmed || data?.version !== 1 || !Array.isArray(data.marks)) return;
+      const actor = currentActor(), map = actor?.mapId || "ritual_village";
+      const mark = data.marks.find(entry => entry?.playerId === joined.sessionId && entry.origin?.mapId === map);
+      const until = deadline(mark?.expiresAtServerMs, data.serverNowMs);
+      shadow = until ? {path:"blade", map, until, markSeq:mark.markSeq} : undefined;
+      redrawAtBoundary();
+    });
+    joined.onMessage("prototype_skill_v1", data => {
+      if (closed || !confirmed || data?.version !== 1 || !Object.hasOwn(REPLACEMENT_SKILLS, data.skillId)) return;
+      const actor = currentActor();
+      if (!actor) return;
+      if (data.playerId === joined.sessionId && data.skillId === "shadow_cut") {
+        if (data.phase === "marked") {
+          const until = deadline(data.expiresAtServerMs, data.serverNowMs);
+          if (until) shadow = {path:"blade", map:data.origin?.mapId, until, markSeq:data.markSeq};
+        } else if ((data.phase === "return" || data.phase === "cleared") && shadow?.markSeq === data.markSeq) {
+          shadow = undefined;
+        }
+        redrawAtBoundary();
+      }
+      if (data.playerId === joined.sessionId && data.skillId === "flowing_blades") {
+        if (data.phase === "first" && typeof data.targetId === "string" && data.targetId) {
+          const time = now();
+          flow = {path:"phutthaisawan", map:actor.mapId || "ritual_village", targetId:data.targetId,
+            readyAt:time+300, until:time+1200};
+        } else if (data.phase === "followup") {
+          flow = undefined;
+        }
+        redrawAtBoundary();
+      }
+      feedback(data);
+    });
+    return {
+      room: joined,
+      continuation,
+      description: id => confirmed && Object.hasOwn(REPLACEMENT_SKILLS, id) ? REPLACEMENT_SKILLS[id].description : undefined,
+      cast(id, targetId) {
+        if (closed || !nonce || !Object.hasOwn(REPLACEMENT_SKILLS, id)) return false;
+        if (!confirmed) {
+          notify("กำลังเชื่อมสกิลกับเซิร์ฟเวอร์");
+          return true;
+        }
+        const needsTarget = REPLACEMENT_SKILLS[id].target;
+        if (needsTarget && (typeof targetId !== "string" || !targetId || targetId.length > 256)) {
+          notify("เลือกเป้าหมายก่อนใช้สกิล");
+          return true;
+        }
+        send(id, needsTarget ? targetId : undefined);
+        return true;
+      },
+      continueSkill(id) {
+        if (closed || !confirmed || !continuation(id)) return false;
+        const time = now();
+        if (time < nextFollowup) return true;
+        nextFollowup = time + 250;
+        if (id === "shadow_cut") send("shadow_cut_return");
+        else send(id, flow.targetId);
+        return true;
+      },
+      close() {
+        closed = true;
+        confirmed = false;
+        shadow = flow = undefined;
+        clearTimeout(refreshTimer);
+      },
+    };
+  }
+  function replacementSkillDescription(id) {
+    if (replacementSkillSession?.room === room) return replacementSkillSession.description(id);
+  }
+  function replacementSkillContinuation(id) {
+    if (replacementSkillSession?.room === room) return replacementSkillSession.continuation(id);
+  }
+  function tryReplacementSkillCast(id, targetId) {
+    return replacementSkillSession?.room === room && replacementSkillSession.cast(id, targetId);
+  }
+  function tryReplacementSkillContinue(id) {
+    return replacementSkillSession?.room === room && replacementSkillSession.continueSkill(id);
+  }
+  function playReplacementSkillFeedback(data, joined) {
+    const caster = joined.state?.players?.get?.(data.playerId);
+    if (!caster || (caster.mapId || "ritual_village") !== activeMapId) return;
+    const actions = {first:"slash", followup:"slash", counter:"counter", return:"lunge",
+      braced:"guard", protected:"guard", placed:"cast", chained:"cast"};
+    if (Object.hasOwn(actions, data.phase)) playAction(avatars.get(data.playerId), actions[data.phase]);
+    // Shadow's initial hit already plays through blade_skill_used.
+    if (["first","followup","counter","braced","placed","chained"].includes(data.phase)) {
+      if (data.phase !== "followup") recordPracticeCast(data);
+      SFX(data.skillId, {x:caster.x, z:caster.z});
+    }
+    if (data.skillId === "seer_ash_rice" && data.phase === "placed" && data.origin) {
+      eventFx("bolt", data.origin, {color:"orange"});
+    }
+    if (["triggered","chained","pulse"].includes(data.phase) || (data.phase === "expired" && data.amount > 0)) {
+      const ids = Array.isArray(data.targetIds) && data.targetIds.length ? data.targetIds : [data.targetId];
+      const color = data.skillId.startsWith("mender_") ? "cyan" : "gold";
+      for (const id of ids) {
+        const target = skillVfxTarget(id);
+        if (target) eventFx("bolt", target, {color, y:target.y + 1});
+      }
+    }
+    if (data.playerId !== localId && data.targetId !== localId && !data.targetIds?.includes?.(localId)) return;
+    const notes = {first:"กดช่องเดิมเมื่อขึ้นว่าฟันต่อ", followup:"ฟันต่อสำเร็จ", counter:"สวนผู้โจมตีสำเร็จ",
+      marked:"กดช่องเดิมเพื่อย้อนเงา", return:"ย้อนกลับสู่จุดเงา", braced:"ตั้งรับด้านหน้า", protected:"รับการโจมตีสำเร็จ",
+      pulse:"วงยันต์ฟื้นพลังชีวิต", triggered:data.skillId === "seer_ash_rice" ? "กับดักข้าวสารทำงาน" : "ยันต์ฟื้นพลังชีวิต",
+      chained:"ข้าวสารโจมตีต่อ "+(Array.isArray(data.targetIds)?data.targetIds.length:1)+" เป้าหมาย"};
+    const placed = {seer_ash_rice:"วางกับดักข้าวสารแล้ว", mender_deep_heal:"วางยันต์ประคองชีพแล้ว",
+      mender_deep_circle:"วงยันต์เคลื่อนตามผู้ร่าย"};
+    const message = data.phase === "placed" ? placed[data.skillId] : Object.hasOwn(notes,data.phase) ? notes[data.phase] : undefined;
+    if (message) toast(message);
+    else if (data.phase === "expired" && data.skillId === "mender_deep_heal" && data.amount > 0) toast("ยันต์ฟื้นพลังชีวิตเมื่อหมดเวลา");
+  }
+
   let connectionPending = false;
   let refreshCharacterSlotCards = null;
   async function verifyJoinedSlot(joined, desiredSlot) {
@@ -198,13 +369,29 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      const skillSession = createReplacementSkillSession(joined, {
+        currentActor: () => room === joined ? ownServerCharacter() : null,
+        target: skillVfxTarget,
+        redraw: () => {
+          if (room !== joined) return;
+          syncAdvancedSkillUI();
+          const actor = ownServerCharacter();
+          if (actor?.pathId === "blade" && !mixedSkillData()) syncBladeUI(actor);
+        },
+        notify: text => { if (room === joined) toast(text); },
+        feedback: data => { if (room === joined) playReplacementSkillFeedback(data, joined); },
+      });
+      joined.onLeave(() => {
+        skillSession.close();
+        if (replacementSkillSession === skillSession) replacementSkillSession = null;
+      });
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
@@ -214,6 +401,7 @@
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       clearCombatVfx();
       room = joined;
+      replacementSkillSession = skillSession;
       resetHomeClient();
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
@@ -1426,6 +1614,15 @@
         const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         Object.assign(buildReasons,{use_learned_skill:"เรียนและจัดวิชาในช่องลัดก่อน",invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"จัดช่อง เปลี่ยนสำนัก หรือคืนแต้มที่ลานพักกลางหมู่บ้าน บนพื้นใกล้จุดเกิด หลังพ้นการต่อสู้ 5 วินาที",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         Object.assign(buildReasons,{seer_binding_immune:"เป้าหมายต้านยันต์สะกด หรือถูกสะกดอยู่แล้ว",seer_poison_busy:"เป้าหมายติดพิษของนักเวทคนอื่นอยู่",seer_casting:"กำลังร่ายควายธนู"});
+        Object.assign(buildReasons, {
+          prototype_protocol_required: "กำลังเชื่อมสกิลกับเซิร์ฟเวอร์",
+          prototype_unavailable: "ยังใช้ท่านี้ในตำแหน่งหรือสถานะปัจจุบันไม่ได้",
+          prototype_shadow_active: "กดช่องเดิมเพื่อย้อนเงา",
+          prototype_return_unavailable: "จุดย้อนเงาใช้ไม่ได้หรือหมดเวลา",
+          too_early: "รอให้ปุ่มขึ้นว่าฟันต่อ",
+          wrong_target: "ท่าฟันต่อต้องใช้กับเป้าหมายเดิม",
+          guard_active: "กำลังตั้งรับหลังเพลงดาบ",
+        });
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }

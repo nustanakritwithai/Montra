@@ -4,8 +4,9 @@ The eight replacements are wired into the standard room. Its
 MONTRA_REPLACEMENT_SKILLS setting defaults to off. When enabled, a confirmed
 client uses the replacement under its existing skill ID. Clients that do not
 opt in can still join the same room and use the existing commands. Battlefield
-rooms retain their existing behavior. The public client still needs controls
-and feedback before activation for players.
+rooms retain their existing behavior. The client candidate reuses the learned
+skill slots, their number keys, and the existing target picker for these moves.
+Flowing Blades and Shadow Cut show their follow-up on the same slot.
 
 The provisional rules retain the existing IDs: `flowing_blades`,
 `chaiya_advanced_counter`, `shadow_cut`, `firm_guard`, `seer_ash_rice`,
