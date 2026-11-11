@@ -8,7 +8,7 @@ const calls=[],elements={},children=[];
 const element=()=>({textContent:'',className:'',onclick:null,type:''});
 const context={serviceNpcUi,document:{createElement:()=>element()},ui:{drawerBody:{append:e=>children.push(e)}},
   $:id=>elements[id],openDrawer:()=>{elements.serviceNpcSpeech=element();elements.serviceNpcAction=element();children.length=0;},
-  ownServerCharacter:()=>({pathId:context.path}),activeMapId:'moon_pass',territoryState:{local:{site:'moon_pass'}},toast:message=>calls.push(message)};
+  ownServerCharacter:()=>({pathId:context.path}),room:null,citySiteNames:{},activeMapId:'moon_pass',territoryState:{local:{site:'moon_pass'}},toast:message=>calls.push(message)};
 for(const name of ['openBag','openSmith','openEconomy','openGuild','openParty','openMap','openStrategicMap','openHelp','openWarPanel','openMuayBook','openSwordTree','openBladeBook','openSentinelBook','openOccultBook','openRebirth','openNpcGuide'])context[name]=()=>calls.push(name);
 const open=vm.runInNewContext(`(${source.slice(fnStart,fnEnd)})`,context);
 for(const [role,expected] of Object.entries({smith:'openSmith',market:'openEconomy',guild:'openGuild',party:'openParty',travel:'openMap',strategy:'openStrategicMap',guide:'openHelp'})){
