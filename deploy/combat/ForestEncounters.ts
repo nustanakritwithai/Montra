@@ -24,13 +24,14 @@ export type ForestTraceEvent = Readonly<{
 export type ForestTraceBatch = Readonly<{events:readonly ForestTraceEvent[];overflow:boolean;incomplete:boolean}>;
 const FOREST_TRACE_LIMIT=1024;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
-type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
+type Point = {x:number;z:number};
+type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; retreat?:Point; nav:MonsterRRTNavigator};
 type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
-function inSpecialArea(monster:Monster, origin:{x:number;z:number}, player:Player, attack:HimmapanPhase):boolean {
+function inSpecialArea(monster:Monster, origin:Point, player:Player, attack:HimmapanPhase, rear=false):boolean {
   const dx=player.x-origin.x, dz=player.z-origin.z;
   const distance=Math.hypot(dx,dz);
   const sin=Math.sin(monster.facing), cos=Math.cos(monster.facing);
-  const forward=-dx*sin-dz*cos;
+  const forward=(-dx*sin-dz*cos)*(rear?-1:1);
   if (attack.halfAngle) return distance<=attack.range && forward>=distance*Math.cos(attack.halfAngle);
   if (!attack.halfWidth) return distance>=(attack.innerRange??0) && distance<=attack.range;
   const lateral=dx*cos-dz*sin;
@@ -42,22 +43,27 @@ function canPlaceSpecial(life:Life, to:{x:number;y:number;z:number}):boolean {
     isMonsterSegmentClear(actor,to,obstacles,MONSTER_NAV.radius,map.bounds) &&
     (!map.terrain || isWorldSegmentClear(map.id,actor,to));
 }
-function specialOrigin(life:Life, phase:HimmapanPhase):{x:number;z:number} {
+function safeSpecialPoint(life:Life, point:Point):Point {
+  const m=life.actor;
+  for(const scale of [1,.75,.5,.25]){
+    const x=m.x+(point.x-m.x)*scale,z=m.z+(point.z-m.z)*scale;
+    if(canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))return {x,z};
+  }
+  return {x:m.x,z:m.z};
+}
+function specialOrigin(life:Life, phase:HimmapanPhase):Point {
   const m=life.actor;
   const forward=phase.forward??0, lateral=phase.lateral??0;
   if(forward || lateral){
     const sin=Math.sin(m.facing),cos=Math.cos(m.facing);
-    for(const scale of [1,.75,.5,.25]){
-      const x=m.x+(lateral*cos-forward*sin)*scale,z=m.z-(lateral*sin+forward*cos)*scale;
-      if(canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))return {x,z};
-    }
+    return safeSpecialPoint(life,{x:m.x+lateral*cos-forward*sin,z:m.z-lateral*sin-forward*cos});
   }
   return {x:m.x,z:m.z};
 }
-function startSpecialPhase(life:Life, phase:HimmapanPhase, stage:number, now:number):void {
+function startSpecialPhase(life:Life, phase:HimmapanPhase, stage:number, now:number, destination?:Point):void {
   const m=life.actor, offset=(stage-1)*3;
   const origin=stage>0 && m.specialMarks.length>offset
-    ? {x:m.specialMarks[offset],z:m.specialMarks[offset+1]} : specialOrigin(life,phase);
+    ? {x:m.specialMarks[offset],z:m.specialMarks[offset+1]} : destination??specialOrigin(life,phase);
   m.specialRange=phase.range;m.specialHalfWidth=phase.halfWidth;
   m.specialInnerRange=phase.innerRange??0;m.specialHalfAngle=phase.halfAngle??0;
   m.specialStage=stage;
@@ -143,6 +149,11 @@ export class ForestEncounters {
     }
   }
   profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
+  provoke(id:string,attackerId:string):void {
+    const life=this.lives.get(id),monster=this.monsters.get(id);
+    if(!life?.special?.defensive || !monster?.alive || monster.targetId || life.retreat || life.windupUntil)return;
+    monster.targetId=attackerId;
+  }
   interrupt(id:string,now:number,durationMs:number,immunityMs:number):"applied"|"immune"|"resisted"|"unavailable" {
     const life=this.lives.get(id),monster=this.monsters.get(id);
     if(!life || !monster?.alive)return "unavailable";
@@ -159,7 +170,7 @@ export class ForestEncounters {
   taunt(id:string,owner:string,now:number,durationMs:number,immunityMs:number):"applied"|"immune"|"resisted"|"unavailable" {
     const life=this.lives.get(id),monster=this.monsters.get(id);
     if(!life || !monster?.alive || life.returning || planarDistance(monster,life)>=9)return "unavailable";
-    if(life.profile.tier!=="normal")return "immune";
+    if(life.profile.tier!=="normal" || life.special?.defensive)return "immune";
     if(now<life.tauntResistUntil)return "resisted";
     life.tauntOwner=owner;life.tauntUntil=now+durationMs;life.tauntResistUntil=now+immunityMs;
     monster.targetId=owner;life.nav.clear();return "applied";
@@ -177,7 +188,7 @@ export class ForestEncounters {
       if(player.alive && player.mapId===m.mapId && !blocked?.has(playerId) && !isRestArea(player.mapId,player) && planarDistance(player,m)<=MONSTER_CONFIG.populationRadius) nearby++;
     }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
-    cancelSpecial(life);life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
+    cancelSpecial(life);life.retreat=undefined;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     // A siege can have more hunters than a world room; use the same minimum delay.
     const boss=id===TITAN_BOSS.id?TITAN_BOSS:life.zone.map.boss??life.zone.map.guardian;
     life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();
@@ -204,7 +215,7 @@ export class ForestEncounters {
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
       // Withdraw first, then add. Room-owned life clocks survive the last player leaving.
       for(const [id,life] of this.lives)if(this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
-        life.actor.targetId="";cancelSpecial(life);life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
+        life.actor.targetId="";cancelSpecial(life);life.retreat=undefined;life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
         if(this.traceEnabled)this.traceEvent({kind:"withdrawn",now,monsterId:id,mapId:life.actor.mapId,from:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});
       }
       for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id)){
@@ -241,7 +252,7 @@ export class ForestEncounters {
           const phase=special.followups?.[stage-2]??special;
           const x=m.specialOriginX,z=m.specialOriginZ;
           const origin=stage?{x,y:groundAt(map.id,x,z),z}:m;
-          const validOrigin=!(phase.forward || phase.lateral) || canPlaceSpecial(life,origin);
+          const validOrigin=!(phase.forward || phase.lateral || phase.leap) || canPlaceSpecial(life,origin);
           const next=stage?special.followups?.[stage-1]:undefined;
           const force=phase.force??1.25;
           life.windupUntil=0;life.lastAttack=now;m.aiState="special_recovery";
@@ -253,7 +264,7 @@ export class ForestEncounters {
           }
           if(validOrigin && !phase.cueOnly)for(const [pid,player] of players){
             if(!m.alive || m.aiState!=="special_recovery")break;
-            if(eligible(pid,player) && inSpecialArea(m,origin,player,phase) && clear(player,origin)){
+            if(eligible(pid,player) && inSpecialArea(m,origin,player,phase,special.defensive) && clear(player,origin)){
               if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:pid,force,to:{x:origin.x,y:origin.y,z:origin.z}});
               hit(pid,m,force,now);
             }
@@ -283,44 +294,68 @@ export class ForestEncounters {
         m.specialStage=0;
         if(m.specialMarks.length)m.specialMarks.clear();
       }
-      if(planarDistance(m,life)>=9)life.returning=true;
-      let target=m.targetId?players.get(m.targetId):undefined;
-      if(!eligible(m.targetId,target)||planarDistance(m,target)>11){target=undefined;m.targetId="";}
-      const forced=life.tauntUntil>now ? players.get(life.tauntOwner) : undefined;
-      if(!life.returning && eligible(life.tauntOwner,forced) && planarDistance(m,forced)<=11){target=forced;m.targetId=life.tauntOwner;}
-      else if(life.tauntUntil<=now || !eligible(life.tauntOwner,forced)){life.tauntOwner="";life.tauntUntil=0;}
-      if(!life.returning&&!target){let closest=6;for(const [pid,p] of players){
-        if(!eligible(pid,p))continue;const d=planarDistance(m,p);if(d<closest){closest=d;target=p;m.targetId=pid;}
-      }}
-      let destination:{x:number;z:number},speed:number;
-      if(life.returning){m.targetId="";m.aiState="return";destination=life;speed=2.4;
-        if(planarDistance(m,life)<.2){life.returning=false;m.hp=m.maxHp;}}
-      else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
-        if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 &&
-          planarDistance(m,target)<=(special.triggerRange??special.range) && clear(target)){
-          if(special.markFollowups){
-            for(const phase of [special,...(special.followups??[])]){
-              const origin=specialOrigin(life,phase);
-              m.specialMarks.push(origin.x,origin.z,phase.range);
-            }
+      let destination:Point,speed:number;
+      if(special?.defensive){
+        const threat=players.get(m.targetId);
+        if(!life.retreat && eligible(m.targetId,threat)){
+          m.facing=facingTo(m.x-threat.x,m.z-threat.z);
+          const away={x:m.x-Math.sin(m.facing)*3.4,z:m.z-Math.cos(m.facing)*3.4};
+          life.retreat=safeSpecialPoint(life,stepTowards(life,away,7));
+          if(now>=life.nextChargeAt && planarDistance(m,threat)<=special.range && clear(threat)){
+            life.nextChargeAt=now+3300;
+            startSpecialPhase(life,special,0,now);
+            continue;
           }
-          startSpecialPhase(life,special,special.followups?1:0,now);
-          life.nextChargeAt=now+8000;
+        }
+        m.targetId="";
+        const retreat=life.retreat;
+        if(!retreat || planarDistance(m,retreat)<=.16 ||
+          !canPlaceSpecial(life,{...retreat,y:groundAt(map.id,retreat.x,retreat.z)})){
+          life.retreat=undefined;
+          m.aiState="grazing";
           continue;
         }
-        if(distance3d(m,target)<=1.65){m.aiState="attack";
-          if(now-life.lastAttack>=1500&&clear(target)){
-            if(boss?.id===id && now>=life.nextChargeAt) {
-              m.aiState="windup";
-              life.windupUntil=now+1400;
-              life.nextChargeAt=now+8000;
-            } else {
-              life.lastAttack=now;if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:m.targetId,force:1,to:{x:m.x,y:m.y,z:m.z}});hit(m.targetId,m,undefined,now);
+        destination=retreat;speed=3.8;m.aiState="retreat";
+      }else{
+        if(planarDistance(m,life)>=9)life.returning=true;
+        let target=m.targetId?players.get(m.targetId):undefined;
+        if(!eligible(m.targetId,target)||planarDistance(m,target)>11){target=undefined;m.targetId="";}
+        const forced=life.tauntUntil>now ? players.get(life.tauntOwner) : undefined;
+        if(!life.returning && eligible(life.tauntOwner,forced) && planarDistance(m,forced)<=11){target=forced;m.targetId=life.tauntOwner;}
+        else if(life.tauntUntil<=now || !eligible(life.tauntOwner,forced)){life.tauntOwner="";life.tauntUntil=0;}
+        if(!life.returning&&!target){let closest=6;for(const [pid,p] of players){
+          if(!eligible(pid,p))continue;const d=planarDistance(m,p);if(d<closest){closest=d;target=p;m.targetId=pid;}
+        }}
+        if(life.returning){m.targetId="";m.aiState="return";destination=life;speed=2.4;
+          if(planarDistance(m,life)<.2){life.returning=false;m.hp=m.maxHp;}}
+        else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
+          if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 &&
+            planarDistance(m,target)<=(special.triggerRange??special.range) && clear(target)){
+            if(special.markFollowups){
+              for(const phase of [special,...(special.followups??[])]){
+                const origin=specialOrigin(life,phase);
+                m.specialMarks.push(origin.x,origin.z,phase.range);
+              }
             }
-          }continue;
-        }m.aiState="chase";destination=target;speed=1.9;
-      }else{m.aiState="patrol";const phase=now/3000+life.x;
-        destination={x:life.x+Math.cos(phase)*1.1,z:life.z+Math.sin(phase)*1.1};speed=.65;}
+            const landing=special.aimAtTarget?safeSpecialPoint(life,target):undefined;
+            startSpecialPhase(life,special,special.followups || landing?1:0,now,landing);
+            life.nextChargeAt=now+8000;
+            continue;
+          }
+          if(distance3d(m,target)<=1.65){m.aiState="attack";
+            if(now-life.lastAttack>=1500&&clear(target)){
+              if(boss?.id===id && now>=life.nextChargeAt) {
+                m.aiState="windup";
+                life.windupUntil=now+1400;
+                life.nextChargeAt=now+8000;
+              } else {
+                life.lastAttack=now;if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:m.targetId,force:1,to:{x:m.x,y:m.y,z:m.z}});hit(m.targetId,m,undefined,now);
+              }
+            }continue;
+          }m.aiState="chase";destination=target;speed=1.9;
+        }else{m.aiState="patrol";const phase=now/3000+life.x;
+          destination={x:life.x+Math.cos(phase)*1.1,z:life.z+Math.sin(phase)*1.1};speed=.65;}
+      }
       const waypoint=life.nav.nextWaypoint(m,destination,now,m.aiState+":"+m.targetId);
       if(!waypoint)continue;
       const next=stepTowards(m,waypoint,speed*dt);

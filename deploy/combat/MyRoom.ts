@@ -6286,7 +6286,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!monster.alive || monster.hp<=0 || this.getMonster(monster.id)!==monster)return;
     monster.hp=Math.max(0,monster.hp-damage);
     monster.hitSeq++;
-    if(monster.hp>0){publish();return;}
+    if(monster.hp>0){
+      if(damage>0)this.forest.provoke(monster.id,winnerId);
+      publish();
+      return;
+    }
     const prey=Object.freeze({id:monster.id,mapId:monster.mapId,level:monster.level,x:monster.x,y:monster.y,z:monster.z});
     const defeat=Object.freeze({winnerId,monster,prey,hitSeq:monster.hitSeq});
     this.pendingMonsterDefeats.add(defeat);

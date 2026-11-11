@@ -213,6 +213,7 @@ export type HimmapanPhase = {
 };
 export type HimmapanAttack = HimmapanPhase & {
   triggerRange?:number; followups?:readonly HimmapanPhase[]; recoveryMs?:number; markFollowups?:boolean;
+  aimAtTarget?:boolean; defensive?:boolean;
 };
 export const HIMMAPAN_SPAWNS = ([
   { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
@@ -243,6 +244,15 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"spirit", special:{ range:1.4, halfWidth:0, windupMs:950, triggerRange:5.2, forward:1.6, force:1, markFollowups:true,
       followups:[{range:1.4,halfWidth:0,windupMs:850,forward:3.25,lateral:1.2,force:1},
         {range:1.55,halfWidth:0,windupMs:850,forward:4.9,lateral:-1,force:1.15}] } },
+  { id:"himmapan_karin_paksa", replaces:"atlas_hex_ridge_3_2", name:"กรินทรปักษา", mapId:"hex_ridge", x:50, z:-57, level:45, tier:"normal",
+    theme:"guard", special:{range:2.35,halfWidth:0,windupMs:1650,triggerRange:4.8,aimAtTarget:true,leap:true,recoveryMs:1150,force:1.35} },
+  { id:"himmapan_tinna_siha", replaces:"atlas_bamboo_frontier_2_2", name:"ติณสีหะ", mapId:"bamboo_frontier", x:16, z:-11, level:31, tier:"normal",
+    theme:"grove", special:{range:2.9,halfWidth:0,halfAngle:Math.PI/3,windupMs:880,defensive:true,recoveryMs:360,force:1} },
+  { id:"himmapan_hera", replaces:"atlas_naga_cavern_4_2", name:"เหรา", mapId:"naga_cavern", x:-75, z:-7, level:52, tier:"normal",
+    theme:"hunter", special:{range:1.25,halfWidth:0,windupMs:460,triggerRange:4.8,cueOnly:true,
+      followups:[{range:4.8,halfWidth:.95,windupMs:870,force:1.2}],recoveryMs:850} },
+  { id:"himmapan_thanthi_ma", replaces:"atlas_moon_cemetery_3_2", name:"นกทัณฑิมา", mapId:"moon_cemetery", x:24, z:-44, level:32, tier:"normal",
+    theme:"guard", special:{range:3.75,halfWidth:0,halfAngle:Math.PI/2,windupMs:1250,recoveryMs:1150,force:1.2} },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);
 export const HIMMAPAN_REPLACEMENTS:ReadonlyMap<string,string>=new Map(HIMMAPAN_SPAWNS.flatMap(s=>
   "replaces" in s?[[s.id,s.replaces] as const]:[]));

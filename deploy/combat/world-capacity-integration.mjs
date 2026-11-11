@@ -73,10 +73,12 @@ try{
     "himmapan_matcha_naga", "himmapan_stone_yaksha", "himmapan_kochasri", "himmapan_hemaraj",
     "himmapan_durong_paksin", "himmapan_kunchon_wari", "himmapan_karavek",
     "himmapan_phayak_nathi", "himmapan_kraisorn", "himmapan_kilen",
+    "himmapan_karin_paksa", "himmapan_tinna_siha", "himmapan_hera", "himmapan_thanthi_ma",
   ];
   for (const {state} of travelers) {
     for (const id of himmapanIds) assert.ok(state.monsters.get(id)?.specialRange>0,id);
-    for (const id of ["atlas_drowned_marsh_3_2","atlas_asura_peak_4_2","atlas_bamboo_frontier_4_2"]) {
+    for (const id of ["atlas_drowned_marsh_3_2","atlas_asura_peak_4_2","atlas_bamboo_frontier_4_2",
+      "atlas_hex_ridge_3_2","atlas_bamboo_frontier_2_2","atlas_naga_cavern_4_2","atlas_moon_cemetery_3_2"]) {
       assert.ok(!state.monsters.has(id),id+" was replaced");
     }
     assert.equal(state.monsters.get("himmapan_matcha_naga")?.specialRange,4);
@@ -87,7 +89,7 @@ try{
   for(const room of travelers)room.send("summon",{});
   await until(()=>travelers.every(r=>r.state.summons.size===10),"ten summons across the occupied world");
   await closeAll();
-  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and ten Himmapan spawns");
+  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and fourteen Himmapan spawns");
 
   const tigerId="himmapan_phayak_nathi";
   const marsh=await join(await seed("drowned_marsh",-73,-56.4));
