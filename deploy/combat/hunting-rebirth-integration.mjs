@@ -67,7 +67,7 @@ try{
     assert.equal((await api("rebirth",request,session)).data.error,"rebirth_shrine_required");
     seed(revision,{x:0,z:0});active=await enter(session);
     assert.equal(active.guide.training.points,11);assert.equal(active.guide.journey.practice.level,100);
-    assert.deepEqual(active.guide.journey.bosses.map(b=>b.camp.id).sort(),["atlas_rift_warden","boss_asura_peak"]);
+    assert.deepEqual(active.guide.journey.bosses.map(b=>b.camp.id).sort(),["atlas_rift_warden","boss_asura_peak","boss_wessuwan_titan"]);
     assert.equal((await api("rebirth",request,session)).data.error,"character_online");
     await exitRoom(active);
     assert.equal((await api("rebirth",{...request,confirmed:false},session)).status,400);

@@ -284,7 +284,6 @@
     playVoiceGuidance(item);
   }
 
-  let voiceGuidanceHud = null, voiceHudTitle = null, voiceHudText = null, voiceHudTimer = null, voiceGuidanceAvatar = null, voiceHudRetry = null;
   let voiceGuidancePlayback = null;
   const attemptedVoiceGuidance = new Set();
 
@@ -299,88 +298,17 @@
       const active = voiceGuidancePlayback.active;
       voiceGuidancePlayback = null;
       if (active) window.MontraAudio?.stopSpeech?.();
-      hideVoiceGuidanceHud();
     }
-  }
-  function ensureVoiceGuidanceHud() {
-    if (voiceGuidanceHud) return;
-    voiceGuidanceHud = document.createElement("div");
-    voiceGuidanceHud.className = "voice-guidance-hud";
-    voiceGuidanceHud.hidden = true;
-    voiceGuidanceAvatar = document.createElement("div");
-    voiceGuidanceAvatar.className = "voice-guidance-avatar";
-    voiceGuidanceAvatar.textContent = "🧙‍♂️";
-    const content = document.createElement("div");
-    content.className = "voice-guidance-content";
-    const header = document.createElement("div");
-    header.className = "voice-guidance-header";
-    voiceHudTitle = document.createElement("span");
-    voiceHudTitle.className = "voice-guidance-title";
-    const badge = document.createElement("span");
-    badge.className = "voice-guidance-badge";
-    badge.textContent = "TYPHOON AI";
-    header.append(voiceHudTitle, badge);
-    voiceHudText = document.createElement("p");
-    voiceHudText.className = "voice-guidance-text";
-    voiceHudRetry = document.createElement("button");
-    voiceHudRetry.type = "button";
-    voiceHudRetry.className = "secondary";
-    voiceHudRetry.textContent = "🔊 ลองฟังอีกครั้ง";
-    voiceHudRetry.hidden = true;
-    voiceHudRetry.onclick = () => {
-      const current = voiceGuidancePlayback;
-      if (current && isVoiceGuidanceEnabled()) playVoiceGuidance(current.item, current.playedKey, current.speechOptions);
-    };
-    content.append(header, voiceHudText, voiceHudRetry);
-    const skipBtn = document.createElement("button");
-    skipBtn.type = "button";
-    skipBtn.className = "voice-guidance-skip";
-    skipBtn.textContent = "ข้าม ✕";
-    skipBtn.onclick = () => {
-      // An explicit skip dismisses this milestone, unlike a playback failure.
-      if (voiceGuidancePlayback?.playedKey) {
-        try { localStorage.setItem(voiceGuidancePlayback.playedKey, "1"); } catch (_) {}
-      }
-      const active = voiceGuidancePlayback?.active;
-      voiceGuidancePlayback = null;
-      if (active) window.MontraAudio?.stopSpeech?.();
-      hideVoiceGuidanceHud();
-    };
-    voiceGuidanceHud.append(voiceGuidanceAvatar, content, skipBtn);
-    document.getElementById("game")?.append(voiceGuidanceHud);
-  }
-  function hideVoiceGuidanceHud() {
-    if (voiceGuidanceHud) {
-      voiceGuidanceHud.hidden = true;
-      voiceGuidanceHud.classList.remove("combat-alert", "spirit-whisper");
-    }
-    clearTimeout(voiceHudTimer);
   }
   function playVoiceGuidance(item, playedKey = null, speechOptions = {}) {
     const personaId = speechOptions.persona || getVoicePersona();
     const persona = VOICE_PERSONAS[personaId] || VOICE_PERSONAS.elder;
-    ensureVoiceGuidanceHud();
     // Replace the owner before speak() cancels the old session synchronously.
     const playback = voiceGuidancePlayback = { item, playedKey, speechOptions, active: true };
-    voiceHudTitle.textContent = item.title;
-    voiceHudText.textContent = item.subtitle;
-    voiceGuidanceAvatar.textContent = item.icon || persona.icon;
-    voiceGuidanceHud.classList.remove("spirit-whisper");
-    if (speechOptions.whisper) voiceGuidanceHud.classList.add("spirit-whisper");
-    voiceGuidanceHud.classList.toggle("combat-alert", Boolean(item.alert));
-    voiceHudRetry.hidden = true;
-    voiceGuidanceHud.hidden = false;
-    clearTimeout(voiceHudTimer);
-    voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), Math.max(12000, item.text.length * 110));
-    const failed = event => {
+    // Guidance is audio-only. Recovery remains in Sound settings (replay).
+    const failed = () => {
       if (voiceGuidancePlayback !== playback) return;
       playback.active = false;
-      voiceHudText.textContent = item.subtitle + (event?.error === "muted"
-        ? " · เปิดเสียงและเพิ่มความดังรวมกับเสียงพูด แล้วลองฟังอีกครั้ง"
-        : " · เล่นเสียงไม่ได้ ลองกดฟังอีกครั้ง");
-      voiceHudRetry.hidden = false;
-      clearTimeout(voiceHudTimer);
-      voiceHudTimer = setTimeout(() => hideVoiceGuidanceHud(), 15000);
     };
     try {
       if (!window.MontraAudio?.speak) { failed(); return; }
@@ -396,7 +324,6 @@
         onEnd: () => {
           if (voiceGuidancePlayback !== playback) return;
           voiceGuidancePlayback = null;
-          hideVoiceGuidanceHud();
         },
         onError: failed
       });
@@ -408,7 +335,7 @@
     if (!item) return;
     const key = "montra_vg_played_" + stepKey;
     try { if (localStorage.getItem(key)) return; } catch (_) {}
-    // Do not retry from repeated game events. Recovery is an explicit tap, or
+    // Do not retry from repeated game events. Recovery is an explicit settings replay, or
     // a later page visit if playback never started.
     attemptedVoiceGuidance.add(stepKey);
     playVoiceGuidance(item, key);

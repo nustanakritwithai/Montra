@@ -51,7 +51,7 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
 const skillFixture = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accepted skill voice fixture</title>
 <button id="cast" style="min-height:48px">Cast then receive acceptance</button>
 <script src="/audio.js"></script><script>const localId='me';${skillVoiceHelper}
-document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('phuttha_core','me'),80);</script>`;
+window.__skillAccepts=0;document.querySelector('#cast').onclick=()=>setTimeout(()=>{playSkillVoiceShout('phuttha_core','me');window.__skillAccepts++;},80);</script>`;
 (async () => {
   const out = path.join(root, 'speech-browser-evidence'); fs.mkdirSync(out, { recursive: true });
   const report = { cases: [], errors: [], blockedOrigins: [], limits: 'Synthetic media fixture; no full game, physical device, native Thai voice, or Google service verification.' };
@@ -156,41 +156,53 @@ document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('
       // not just the generic speech button used by NPCs.
       mode = 'network'; await page.goto(origin + '/guidance');
       await tap('#move');
-      const retry = page.locator('.voice-guidance-content button');
-      await retry.waitFor({ state: 'visible' });
+      await page.waitForFunction(() => !MontraAudio.isSpeaking());
+      const noPanel = async () => assert.equal(await page.locator('[class*="voice-guidance-"]').count(), 0, 'no voice information overlay exists');
+      await noPanel();
       assert.equal(await page.evaluate(() => localStorage.getItem('montra_vg_played_move')), null);
       const beforeRepeat = requests; await tap('#move');
       assert.equal(requests, beforeRepeat, 'failed guidance does not auto-retry on repeated game events');
-      await page.screenshot({ path: path.join(out, `${name}-guidance-retry.png`), fullPage: true });
-      mode = 'tone'; await tap('.voice-guidance-content button');
-      await page.waitForFunction(() => localStorage.getItem('montra_vg_played_move') === '1');
-      assert.equal(await retry.isVisible(), false);
+      await page.screenshot({ path: path.join(out, `${name}-guidance-failure-no-panel.png`), fullPage: true });
+      mode = 'tone'; toneSeconds = 15;
+      await tap('#replayVoiceGuidanceBtn');
+      await page.waitForFunction(() => localStorage.getItem('montra_vg_played_move') === '1' && window.__mediaEvents.includes('playing'));
+      await noPanel();
+      const beforeTarget = await page.evaluate(() => window.__mediaDetails.length);
       await tap('#target');
-      await page.waitForFunction(() => localStorage.getItem('montra_vg_played_target') === '1');
-      assert.equal(await page.locator('.voice-guidance-hud').isVisible(), true, 'old cancellation does not hide new guidance');
-      assert.match(await page.locator('.voice-guidance-title').textContent(), /กำหนดจิต/);
-      await page.locator('.voice-guidance-hud').waitFor({ state: 'hidden' });
+      await page.waitForFunction(count => localStorage.getItem('montra_vg_played_target') === '1' && window.__mediaDetails.length > count, beforeTarget);
+      assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), true, 'replacement guidance actually plays');
+      await noPanel();
       await page.evaluate(() => localStorage.setItem('montra-disposable-save-sentinel', 'unchanged'));
-      toneSeconds = 15; // Keep real playback active while screenshots/assertions precede skip.
       await tap('#replayVoiceGuidanceBtn');
       await page.waitForFunction(() => localStorage.getItem('montra_vg_played_move') === '1');
       assert.equal(await page.evaluate(() => localStorage.getItem('montra_vg_played_target')), null);
       assert.equal(await page.evaluate(() => localStorage.getItem('montra-disposable-save-sentinel')), 'unchanged');
-      await page.screenshot({ path: path.join(out, `${name}-guidance-replaying.png`), fullPage: true });
+      await page.screenshot({ path: path.join(out, `${name}-guidance-replaying-no-panel.png`), fullPage: true });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'guidance and settings do not overflow');
-      await tap('.voice-guidance-skip');
-      assert.equal(await page.locator('.voice-guidance-hud').isVisible(), false);
+      await tap('#toggleVoiceGuidance');
+      assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false, 'settings disable stops active guidance');
+      assert.equal(await page.locator('#replayVoiceGuidanceBtn').isDisabled(), true);
+      await tap('#toggleVoiceGuidance');
+      assert.equal(await page.locator('#replayVoiceGuidanceBtn').isDisabled(), false);
+      assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false, 'enable does not auto-play');
       toneSeconds = 2;
+      const beforeRecovery = await page.evaluate(() => window.__mediaDetails.length);
+      await tap('#replayVoiceGuidanceBtn');
+      await page.waitForFunction(count => window.__mediaDetails.length > count, beforeRecovery);
+      await page.waitForFunction(() => !MontraAudio.isSpeaking());
+      const beforePersona = await page.evaluate(() => window.__mediaDetails.length);
       await page.locator('#voicePersonaSelect').selectOption('spirit');
-      await page.waitForFunction(() => document.querySelector('.voice-guidance-hud').classList.contains('spirit-whisper'));
-      await page.locator('.voice-guidance-hud').waitFor({ state: 'hidden' });
+      await page.waitForFunction(count => window.__mediaDetails.length > count, beforePersona);
+      assert.equal(await page.evaluate(() => window.__mediaDetails.at(-1).rate), .92, 'persona whisper actually plays');
+      await noPanel();
+      await page.waitForFunction(() => !MontraAudio.isSpeaking());
       await tap('#testVoiceBtn');
       await page.waitForFunction(() => document.querySelector('#testVoiceBtn').textContent === '⏹ หยุดเสียงพูด');
       assert.equal(await page.evaluate(() => localStorage.getItem('montra_voice_persona')), 'spirit');
       assert.equal(await page.evaluate(() => window.__mediaDetails.at(-1).rate), .92, 'test button uses selected spirit playback rate without reopening settings');
       await page.screenshot({ path: path.join(out, `${name}-selected-persona.png`), fullPage: true });
       await page.waitForFunction(() => document.querySelector('#testVoiceBtn').textContent !== '⏹ หยุดเสียงพูด');
-      report.cases.push({ name: `${name}-guidance`, failedNotConsumed: true, explicitRetryStarted: true, repeatedEventsBounded: true, newerHudRetained: true, replayPreservesOtherStorage: true, skip: true, currentPersonaPreview: true });
+      report.cases.push({ name: `${name}-guidance`, failedNotConsumed: true, settingsReplayStarted: true, repeatedEventsBounded: true, replacementSpeechPlaying: true, noInformationPanel: true, replayPreservesOtherStorage: true, disableEnableRecovery: true, currentPersonaPreview: true });
       // The newly authoritative path is asynchronous, unlike an NPC listen tap.
       // Chromium decoding is real; rejected playback is injected, not OS-policy proof.
       mode = 'tone'; toneSeconds = 2; await page.goto(origin + '/skills');
@@ -200,8 +212,12 @@ document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('
       assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false);
       await page.evaluate(() => { window.__rejectedSkillPlays = 0; HTMLMediaElement.prototype.play = function () { window.__rejectedSkillPlays++; return Promise.reject(new DOMException('Test async policy rejection', 'NotAllowedError')); }; });
       await tap('#cast');
+      await page.waitForFunction(() => window.__skillAccepts === 2);
+      assert.equal(await page.evaluate(() => window.__rejectedSkillPlays), 0, 'rapid repeated skill stays within the production voice cooldown');
+      await page.waitForFunction(() => performance.now() - lastSkillVoiceAt >= 8100);
+      await tap('#cast');
       await page.waitForFunction(() => window.__rejectedSkillPlays === 1 && !MontraAudio.isSpeaking());
-      report.cases.push({ name: `${name}-accepted-skill`, delayedMediaPlayingAndEnded: true, injectedAutoplayRejectionSettled: true });
+      report.cases.push({ name: `${name}-accepted-skill`, delayedMediaPlayingAndEnded: true, repeatVoiceCooldown: true, injectedAutoplayRejectionSettled: true });
       await context.close();
     }
     assert.deepEqual(report.errors, []); assert.deepEqual(report.blockedOrigins, []);

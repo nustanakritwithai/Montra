@@ -46,3 +46,9 @@
   color: transparent !important;
 }
 
+
+/* Unknown/new catalog IDs still get visible artwork until a dedicated mapping is added.
+   Zero specificity keeps every named technique's artwork authoritative. */
+:where(.glyph[data-skill-glyph], .skill-book-icon[data-skill-glyph], .skill-modal-glyph[data-skill-glyph], .kg-glyph[data-skill-glyph]) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='28' fill='%23272930' stroke='%23d4af37' stroke-width='2'/%3E%3Cpath d='M32 9 38 26 55 32 38 38 32 55 26 38 9 32 26 26Z' fill='%23f4d781' stroke='%23fff0bd' stroke-width='2'/%3E%3Ccircle cx='32' cy='32' r='5' fill='%23846b3e'/%3E%3C/svg%3E") !important;
+}

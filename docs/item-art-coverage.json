@@ -1,7 +1,7 @@
 {
-  "livePersonalItemCount": 1193,
+  "livePersonalItemCount": 1195,
   "coveredPersonalItems": 1072,
-  "uncoveredPersonalItems": 121,
+  "uncoveredPersonalItems": 123,
   "coveredLegacyIds": [
     "health_potion",
     "ritual_dagger",
@@ -137,7 +137,9 @@
     "mat_boss_sam_lan_estuary",
     "mat_boss_naga_cavern",
     "mat_boss_fallen_city",
-    "mat_boss_tri_wiang_castle"
+    "mat_boss_tri_wiang_castle",
+    "mat_boss_wessuwan_titan",
+    "acc_boss_wessuwan_titan"
   ],
   "coveredIdToArtKey": {
     "mat_fish_silver": "mat_fish_silver",

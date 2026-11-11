@@ -113,10 +113,18 @@ async function main(){
    report.cases.push({width,height,job,command:sent.command});
   }
   if(width===390){
+   const unknown=await page.evaluate(()=>{const g=document.createElement('span');g.className='glyph';g.dataset.skillGlyph='future_skill';g.textContent='✦';const button=document.createElement('button');button.className='field-slot';button.dataset.skillId='future_skill';button.append(g);document.querySelector('#swordHotbar').append(button);const image=getComputedStyle(g).backgroundImage;button.remove();return image;});
+   assert.match(decodeURIComponent(unknown),/32 9 38 26 55 32/,'unknown skill cannot become a blank hidden glyph');
    const catalogs=require('./class-skills-advanced-fixture.cjs').catalogs;
    for(const job of classes){const c=catalogs[job],nodes=c.nodes||c.skills||c.lessons,bar='#'+barIds[job];
     for(const [id,node] of Object.entries(nodes)){if(node.effect==='passive'||(node.path&&node.path!==job))continue;
-     await page.evaluate(({job,id})=>fixture.technique(job,id),{job,id});await page.locator(bar+' [data-skill-id="'+id+'"]').click();if(await page.locator('#advancedTargetList').isVisible())await page.locator('#advancedTargetList button').first().click();
+     await page.evaluate(({job,id})=>fixture.technique(job,id),{job,id});
+     const glyph=page.locator(bar+' [data-skill-id="'+id+'"] .glyph');
+     const artwork=await glyph.evaluate(e=>({image:getComputedStyle(e).backgroundImage,width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height}));
+     assert.match(artwork.image,/data:image\/svg\+xml,/,job+' '+id+' has actual hotbar image');
+     assert(artwork.width>0&&artwork.height>0,job+' '+id+' image is visible');
+     const decoded=decodeURIComponent(artwork.image);assert(!decoded.includes("32 9 38 26 55 32"),job+' '+id+' uses concrete art, not generic fallback');
+     await page.locator(bar+' [data-skill-id="'+id+'"]').click();if(await page.locator('#advancedTargetList').isVisible())await page.locator('#advancedTargetList button').first().click();
      const sent=await page.evaluate(()=>fixture.wire.at(-1));assert.equal(sent?.command,commands[job],job+' '+id+' advanced routing');assert.equal(sent.payload.skillId,id);report.catalogRoutes.push({job,id,command:sent.command});
     }
     await page.evaluate(({job,id})=>fixture.setup(job,id),{job,id:examples[job]});

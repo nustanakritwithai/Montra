@@ -6,14 +6,10 @@ console.log('[TEST] Verifying Typhoon Voice Guidance System for New Players...')
 const mainSrc = fs.readFileSync('main.js', 'utf8');
 const cssSrc = fs.readFileSync('styles.css', 'utf8');
 
-// 1. Verify CSS styles for Subtitle HUD Banner
-assert(cssSrc.includes('.voice-guidance-hud'), 'styles.css defines .voice-guidance-hud');
-assert(cssSrc.includes('.voice-guidance-avatar'), 'styles.css defines .voice-guidance-avatar');
-assert(cssSrc.includes('.voice-guidance-title'), 'styles.css defines .voice-guidance-title');
-assert(cssSrc.includes('.voice-guidance-badge'), 'styles.css defines .voice-guidance-badge');
-assert(cssSrc.includes('.voice-guidance-text'), 'styles.css defines .voice-guidance-text');
-assert(cssSrc.includes('.voice-guidance-skip'), 'styles.css defines .voice-guidance-skip');
-assert(cssSrc.includes('@keyframes pulseAvatar'), 'styles.css defines @keyframes pulseAvatar');
+// 1. Guidance no longer creates or styles a floating information panel.
+assert(!mainSrc.includes('function ensureVoiceGuidanceHud('), 'no guidance overlay factory');
+assert(!mainSrc.includes('TYPHOON AI'), 'no Typhoon information badge');
+assert(!cssSrc.includes('.voice-guidance-'), 'no obsolete overlay styles');
 
 // 2. Verify Typhoon Voice Guidance 6 Milestones
 assert(mainSrc.includes('const TYPHOON_VOICE_GUIDANCE = {'), 'defines TYPHOON_VOICE_GUIDANCE table');
@@ -27,8 +23,6 @@ assert(mainSrc.includes('เขตแดนป่าต้องห้าม'), 
 // 3. Verify Voice Guidance Engine & Persistence
 assert(mainSrc.includes('function isVoiceGuidanceEnabled()'), 'defines isVoiceGuidanceEnabled');
 assert(mainSrc.includes('function setVoiceGuidanceEnabled(enabled)'), 'defines setVoiceGuidanceEnabled');
-assert(mainSrc.includes('function ensureVoiceGuidanceHud()'), 'defines ensureVoiceGuidanceHud');
-assert(mainSrc.includes('function hideVoiceGuidanceHud()'), 'defines hideVoiceGuidanceHud');
 assert(mainSrc.includes('function triggerVoiceGuidance(stepKey)'), 'defines triggerVoiceGuidance');
 assert(mainSrc.includes('montra_vg_played_'), 'uses localStorage to guard against repeated plays');
 

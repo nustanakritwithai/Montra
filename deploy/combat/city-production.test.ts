@@ -1320,9 +1320,13 @@ test("neutral return sales match the highest funded price then oldest and remain
   assert.equal(f.view(member,f.now+1,false)?.epoch,null);
   assert.equal(f.economy.getAccount(member).gold,before+40);
   assert.throws(()=>f.act(leader,{...sell,amount:1,total:40},f.now+1),/city_neutral_return_closed/);
-  assert.equal(f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1).amount,1);
+  const firstClaim=f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1);
+  assert.ok("amount" in firstClaim);
+  assert.equal(firstClaim.amount,1);
   assert.equal(f.view(member,f.now+1,false)?.orders[0].pending,1);
-  assert.equal(f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1).amount,1);
+  const secondClaim=f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1);
+  assert.ok("amount" in secondClaim);
+  assert.equal(secondClaim.amount,1);
   assert.equal(f.view(member,f.now+1,false),null);
   assert.equal(f.economy.getAccount(member).inventory.slots.find(stack=>stack?.itemId===CITY_MINING_PRODUCT)?.quantity,2);
 });
@@ -1332,7 +1336,9 @@ test("neutral return refunds survive cancellation, expiry, pending inventory rew
   const start=f.economy.getAccount(member).gold;
   const cancelled=f.open(member,2,31);
   assert.ok("orderId" in cancelled);
-  assert.equal(f.recovery(member,"neutral_return_cancel",cancelled.orderId,f.now).gold,62);
+  const refund=f.recovery(member,"neutral_return_cancel",cancelled.orderId,f.now);
+  assert.ok("gold" in refund);
+  assert.equal(refund.gold,62);
   assert.equal(f.economy.getAccount(member).gold,start);
   assert.throws(()=>f.recovery(member,"neutral_return_cancel",cancelled.orderId,f.now),/city_neutral_return_missing/);
   f.open(member,3,30);

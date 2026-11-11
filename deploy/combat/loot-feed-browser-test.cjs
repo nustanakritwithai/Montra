@@ -40,7 +40,22 @@ async function main(){
    assert(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=width&&bounds.y+bounds.height<=height,'feed stays in viewport: '+JSON.stringify(layout));
    for(const [selector,b]of Object.entries(controls)){if(b)assert(bounds.x+bounds.width<=b.x||b.x+b.width<=bounds.x||bounds.y+bounds.height<=b.y||b.y+b.height<=bounds.y,'feed does not overlap '+selector+' at '+width+'x'+height+': '+JSON.stringify(layout));}
    assert.equal(await page.locator('#lootFeed').evaluate(el=>getComputedStyle(el).pointerEvents),'none');
-   const art=await page.locator('#lootFeed .bag-symbol').evaluateAll(nodes=>Promise.all(nodes.map(el=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(image.naturalWidth===256);image.onerror=()=>resolve(false);image.src=getComputedStyle(el).backgroundImage.slice(5,-2);})))) ;assert.equal(art.length,3,'all fixture artwork is present');assert(art.every(Boolean),'canonical images decode');
+   const art=await page.locator('#lootFeed .bag-symbol').evaluateAll(nodes=>Promise.all(nodes.map(async el=>{
+    const itemArt=el.closest('[data-item-art]')?.getAttribute('data-item-art');
+    const background=getComputedStyle(el).backgroundImage;
+    const match=/^url\((?:"([^"]+)"|'([^']+)'|([^\s)]+))\)$/.exec(background);
+    const url=match?.[1]??match?.[2]??match?.[3];
+    if(!url)return {itemArt,background,error:'missing single artwork URL'};
+    const image=new Image();
+    image.src=url;
+    try{await image.decode();}
+    catch(error){return {itemArt,url,error:String(error)};}
+    return {itemArt,url,width:image.naturalWidth,height:image.naturalHeight};
+   })));
+   layout.artwork=art;
+   assert.equal(art.length,3,'all fixture artwork is present');
+   assert(art.every(image=>!image.error&&image.width===256),
+    'canonical images decode at '+width+'x'+height+': '+JSON.stringify(art));
    assert.match(await page.locator('#lootFeed').textContent(),/คลังช่าง/);
    await page.locator('#bag').click();await page.locator('#drawer').waitFor({state:'visible'});assert.equal(await page.locator('#lootFeed').isVisible(),false);await page.locator('.loot-history summary').click();
    assert.equal(await page.locator('#lootHistoryList .loot-row').count(),3);assert.match(await page.locator('#lootHistoryList').textContent(),/\+3/);assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);

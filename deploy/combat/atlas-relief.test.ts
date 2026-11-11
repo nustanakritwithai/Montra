@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {ATLAS_MAPS,ATLAS_SPAWNS} from "./WorldAtlas.js";
+import {ATLAS_MAPS,ATLAS_SPAWNS,HIMMAPAN_SPAWNS,HIMMAPAN_REPLACED_TARGETS} from "./WorldAtlas.js";
 import {WORLD_MAPS,isSafeWorldPoint,groundAt,provinceShotClear} from "./WorldMaps.js";
 import {groundSample} from "./GroundTerrain.js";
 import {ForestEncounters} from "./ForestEncounters.js";
@@ -28,19 +28,36 @@ test("nine existing hunts keep the same walkable routes, wet crossings and flat 
     for(const w of map.water??[])assert.equal(groundAt(map.id,w.x+w.width/2,w.z+w.length/2),0,map.id+" water");
   }
 });
-test("old hunting monsters spawn, chase on raised ground and respawn on the same surface",()=>{
-  const state=new MyRoomState(),enc=new ForestEncounters(state.monsters);enc.initialize();
+for(const includeWorldEncounters of [true,false])test(`${includeWorldEncounters?"world":"siege"} hunting monsters spawn, chase on raised ground and respawn on the same surface`,()=>{
+  const state=new MyRoomState(),enc=new ForestEncounters(state.monsters);enc.initialize(includeWorldEncounters);
   for(const map of Object.values(ATLAS_MAPS))state.players.set(map.id,new Player({...map.spawn,mapId:map.id,alive:true}));
   enc.update(0,.05,state.players,new Set(),()=>{},()=>{});
   for(const s of ATLAS_SPAWNS){
-    const m=state.monsters.get(s.id)!;
+    if(includeWorldEncounters && HIMMAPAN_REPLACED_TARGETS.has(s.id)){
+      assert.equal(state.monsters.has(s.id),false,s.id+" replaced in world encounters");
+      continue;
+    }
+    const m=state.monsters.get(s.id);
+    assert.ok(m,s.id+" active atlas spawn");
+    assert.ok(Math.abs(m.y-groundAt(s.mapId,m.x,m.z))<.02,s.id);
+  }
+  for(const s of HIMMAPAN_SPAWNS.filter(s=>Object.hasOwn(ATLAS_MAPS,s.mapId))){
+    if(!includeWorldEncounters){
+      assert.equal(state.monsters.has(s.id),false,s.id+" excluded from siege encounters");
+      continue;
+    }
+    const m=state.monsters.get(s.id);
+    assert.ok(m,s.id+" active Himmapan spawn");
     assert.ok(Math.abs(m.y-groundAt(s.mapId,m.x,m.z))<.02,s.id);
   }
   const m=state.monsters.get("atlas_hex_ridge_5_1")!,p=state.players.get("hex_ridge")!;
+  const start={x:m.x,z:m.z};
   p.x=m.x+3;p.z=m.z;p.y=groundAt(m.mapId,p.x,p.z);
   for(let i=1;i<14;i++)enc.update(i*100,.1,state.players,new Set(),()=>{},()=>{});
+  assert.ok(Math.hypot(m.x-start.x,m.z-start.z)>0,"monster chases on raised ground");
   assert.equal(m.targetId,"hex_ridge");assert.ok(m.y>2);assert.ok(Math.abs(m.y-groundAt(m.mapId,m.x,m.z))<.02);
-  enc.kill(m.id,2000);enc.update(202000,.05,state.players,new Set(),()=>{},()=>{});
+  assert.equal(enc.kill(m.id,2000),true);assert.equal(m.alive,false);
+  enc.update(202000,.05,state.players,new Set(),()=>{},()=>{});
   assert.ok(m.alive);assert.ok(Math.abs(m.y-groundAt(m.mapId,m.x,m.z))<.02);
 });
 test("a hill between two old hunting camps occludes a ray",()=>{
