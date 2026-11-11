@@ -437,7 +437,8 @@ test("the atlas compares exact contract quantities and follows the pinned delive
     ownServerCharacter:()=>({characterId:"merchant"}),openStrategicMap:site=>visited.push(site),updateAtlasCityMarket(){},
     worldDefinitions:{[camp]:{name:"ค่าย",portals:[gate]},[river]:{name:"สามลาน",portals:[nextGate]},
       [moon]:{name:"จันทรา",portals:[],serviceNpcs:[broker]}},
-    $:id=>id==="atlasTradeDeadline"?panel.children.find(child=>child.id===id):f.$(id)});
+    $:id=>[panel,...panel.children.flatMap(function walk(el){return [el,...el.children.flatMap(walk)];})]
+      .find(child=>child.id===id)??f.$(id)});
   vm.runInNewContext(journey.slice(journey.indexOf("  function travelRoute("),journey.indexOf("  function currentItemHunt("))+
     atlas.slice(atlas.indexOf("  function currentCityTradePin("),atlas.indexOf("  function openStrategicMap(")),f.ctx);
   const origin={site:river,item:metal,side:"sell",status:"open",prices:[12,12,14]};
@@ -476,6 +477,16 @@ test("the atlas compares exact contract quantities and follows the pinned delive
   assert.match(text(),/สัญญาถึงกำหนดแล้ว/);
   assert.equal(f.ctx.cityTradeHudGuide(),null);
   assert.equal(f.wire.at(-1).command,"get_city_markets");
+  const item="mat_metal_2",reverse={site:river,item,side:"buy",epoch:0,neutralReturn:true,status:"open",prices:[45,40]};
+  f.ctx.cityReceiveMarkets({...state,returnMarkets:[reverse,{site:moon,item,side:"sell",status:"open",prices:[37,37]}],
+    neutralReturnMarket:reverse});
+  const quantity=f.ctx.$("atlasReturnAmount");
+  quantity.value="2";quantity.oninput();
+  assert.match(panel.children.find(el=>el.tag==="section").children.find(el=>el.tag==="p" && el.textContent.includes("ส่วนต่าง"))
+    .textContent,/ซื้อ 74 ทอง · ขายประมาณ 85 ทอง · ส่วนต่าง \+11 ทอง/);
+  f.ctx.cityReceiveMarkets({...state,returnMarkets:[reverse,{site:moon,item,side:"sell",status:"open",prices:[37,37]}],
+    neutralReturnMarket:reverse});
+  assert.equal(f.ctx.$("atlasReturnAmount").value,"2");
 });
 
 test("the market requires an on-site member, a valid amount and confirmation before funding the guild", () => {
@@ -526,6 +537,37 @@ test("the return quote uses tier-two quantities and the disabled market can rele
   f.submit("คืนงบรับซื้อ",40);
   assert.equal(f.wire.at(-1).payload.item,item);
   assert.equal(f.wire.at(-1).payload.amount,-40);
+});
+
+test("neutral return orders show wallet escrow, accept a quoted sale and support off-site partial claims", () => {
+  const f=fixture({marketSupported:true,member:false}), river="sam_lan_estuary", item="mat_metal_2";
+  f.ctx.openCityMarket();
+  const city={site:river,item,side:"buy",status:"unowned",prices:[]};
+  const reverse={...city,epoch:0,neutralReturn:true,status:"open",enabled:true,prices:[45,40],
+    orders:[],maxAmount:12,maxPrice:1_000_000};
+  const state={atMarket:river,markets:[],returnMarkets:[city],neutralReturnMarket:reverse,
+    serverNow:1_000_000,history:[],wallet:100,walletSpace:100,itemCount:0,bagSpace:2,
+    returnInventory:{itemCount:2,bagSpace:1}};
+  f.ctx.cityReceiveMarkets(state);
+  f.submit("เปิดใบสั่งซื้อที่สามลาน",3,40);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.submit("เปิดใบสั่งซื้อที่สามลาน",2,40);
+  const bid=f.wire.at(-1).payload;
+  assert.deepEqual(bid,{requestId:bid.requestId,action:"neutral_return_open",epoch:0,amount:2,unitPrice:40});
+  f.ctx.cityReceiveResult({...bid,held:80});
+  f.submit("ยืนยันขายแร่",2);
+  const sell=f.wire.at(-1).payload;
+  assert.deepEqual(sell,{requestId:sell.requestId,action:"neutral_return_sell",epoch:0,amount:2,total:85});
+  f.ctx.cityReceiveResult({...sell,total:85});
+  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralReturnMarket:{...reverse,epoch:null,enabled:false,prices:[],
+    orders:[{id:"old-order",state:"cancelled",unitPrice:40,pending:2,remaining:1,held:0}]}});
+  assert.equal(f.button("เปิดใบสั่งซื้อที่สามลาน"),undefined);
+  assert.equal(f.button("ยกเลิกใบสั่งซื้อ"),undefined);
+  f.submit("รับแร่จากใบสั่งซื้อ",2);
+  assert.equal(f.wire.at(-1).payload.action,"neutral_return_sell");
+  f.submit("รับแร่จากใบสั่งซื้อ",1);
+  const claim=f.wire.at(-1).payload;
+  assert.deepEqual(claim,{requestId:claim.requestId,action:"neutral_return_claim",orderId:"old-order",amount:1});
 });
 
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
