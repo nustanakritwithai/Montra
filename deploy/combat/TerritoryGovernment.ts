@@ -1,5 +1,6 @@
 import type {DatabaseSync} from "node:sqlite";
-import {CITY_PRODUCTION_SITE, CITY_SITES, type CityOwnership, type CitySite, type CityTenure} from "./CityProductionRules.js";
+import {CITY_MINING_SITE, CITY_NEUTRAL_MARKET_ENABLED, CITY_PRODUCTION_SITE, CITY_SITES,
+  type CityOwnership, type CitySite, type CitySupplyRepair, type CityTenure} from "./CityProductionRules.js";
 
 // An income tick is 1/3,600,000 of a guild coin. No fractional income is lost on collection or conquest.
 const HOUR=3_600_000;
@@ -46,7 +47,8 @@ export class TerritoryGovernment {
       CREATE TABLE IF NOT EXISTS guild_treasury_entries(seq INTEGER PRIMARY KEY,
         guild TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE, site TEXT NOT NULL, at INTEGER NOT NULL,
         reason TEXT NOT NULL, delta INTEGER NOT NULL);
-      CREATE INDEX IF NOT EXISTS guild_treasury_history ON guild_treasury_entries(guild,seq);`);
+      CREATE INDEX IF NOT EXISTS guild_treasury_history ON guild_treasury_entries(guild,seq);
+      CREATE TABLE IF NOT EXISTS city_supply_repair_receipts(id TEXT PRIMARY KEY);`);
     const columns=db.prepare("PRAGMA table_info(territory_estates)").all();
     if(!columns.some(c=>c.name==="focus"))
       db.exec("ALTER TABLE territory_estates ADD COLUMN focus TEXT NOT NULL DEFAULT 'balanced'");
@@ -95,10 +97,16 @@ export class TerritoryGovernment {
     const active = this.db.prepare("SELECT id,guild FROM city_tenures WHERE site=? AND ended IS NULL").get(site) as CityTenure | undefined;
     const ended = previous === null || active?.id === previous ? undefined :
       this.db.prepare("SELECT guild,ended FROM city_tenures WHERE id=? AND site=?").get(previous, site);
-    const siege = this.db.prepare("SELECT started FROM territory_battles WHERE site=? AND ended IS NULL")
-      .get(site);
+    const battle = this.db.prepare(`SELECT seq,started,ended,incumbent,winner
+      FROM territory_battles WHERE site=? ORDER BY seq DESC LIMIT 1`).get(site);
     const ownership: CityOwnership = {active: active ?? null, previous: null};
-    if (typeof siege?.started === "number") ownership.siegeStarted = siege.started;
+    if (CITY_NEUTRAL_MARKET_ENABLED && site === CITY_PRODUCTION_SITE && !active) {
+      const last = this.db.prepare("SELECT id FROM city_tenures WHERE site=? ORDER BY id DESC LIMIT 1").get(site);
+      ownership.neutralEpoch = Number(last?.id ?? 0);
+    }
+    if (battle?.ended === null) ownership.siegeStarted = Number(battle.started);
+    else if (site === CITY_MINING_SITE && active && battle?.incumbent === active.guild && battle.winner === active.guild)
+      ownership.defense = {seq: Number(battle.seq), started: Number(battle.started), damaged: !!this.estate(site)?.damaged};
     if (typeof ended?.guild === "string" && typeof ended.ended === "number") {
       const capture = this.db.prepare(`SELECT started FROM territory_battles
         WHERE site=? AND incumbent=? AND ended=? AND winner IS NOT NULL AND winner<>incumbent
@@ -108,6 +116,30 @@ export class TerritoryGovernment {
     }
     return ownership;
   }
+  repairWithCitySupply(repair: CitySupplyRepair, now: number): boolean {
+    this.db.exec("SAVEPOINT city_supply_repair");
+    try {
+      const repaired = this.applyCitySupplyRepair(repair, now);
+      this.db.exec("RELEASE city_supply_repair");
+      return repaired;
+    } catch (error) {
+      this.db.exec("ROLLBACK TO city_supply_repair; RELEASE city_supply_repair");
+      throw error;
+    }
+  }
+
+  private applyCitySupplyRepair(repair: CitySupplyRepair, now: number): boolean {
+    if (this.db.prepare("SELECT 1 FROM city_supply_repair_receipts WHERE id=?").get(repair.id)) return true;
+    const ownership = this.cityOwnership(repair.epoch, CITY_MINING_SITE);
+    if (ownership.active?.id !== repair.epoch || ownership.active.guild !== repair.guild ||
+        ownership.defense?.seq !== repair.battle || !ownership.defense.damaged) return false;
+    const estate = this.estate(CITY_MINING_SITE)!;
+    this.db.prepare("UPDATE territory_estates SET damaged=0,settled=?,ticks=?,revision=revision+1 WHERE site=?")
+      .run(Math.max(estate.settled, now), earned(estate, now), CITY_MINING_SITE);
+    this.db.prepare("INSERT INTO city_supply_repair_receipts(id) VALUES(?)").run(repair.id);
+    return true;
+  }
+
   beginBattle(site:string,owner:string|null,now:number){
     this.db.prepare("INSERT OR IGNORE INTO territory_estates(site,owner,settled) VALUES(?,?,?)").run(site,owner,now);
   }

@@ -13,8 +13,8 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const reviewedReleaseFragments = new Map([
 {
   "path": "render/037-ghost-animation.js",
-  "bytes": 4693,
-  "sha256": "9200462f98f8f3ae03662100bb51471151532b810780217ddec3fda08020f409"
+  "bytes": 4716,
+  "sha256": "f4e1f68398fcb35c5d768b225c251a78a63c0ded7deab7a5e172959ec5ba3344"
 },
 {
   "path": "ui/003-toast-and-mode.js",
@@ -33,8 +33,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/057-npcs-and-objectives.js",
-  "bytes": 38771,
-  "sha256": "d5cfc584ef8169b68e867a2dfb8c3f71d24049545d9ebc5beb506a69229b71be"
+  "bytes": 39150,
+  "sha256": "11e4fbf7cf1b86109139d22eafc217bbbf0ed41267d8ca60ad3f242622d73cec"
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
@@ -43,18 +43,18 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/007-world-effects.js",
-  "bytes": 12559,
-  "sha256": "d9eb4a92bec1bb3470a42f9d3a277d761e1973bdf1ce47dd48c983b4fe6db7ab"
+  "bytes": 12548,
+  "sha256": "52a88f1a6b29fa532b8d74341f932aa6522189f540c86e8981fcdd89c92df049"
 },
 {
   "path": "render/009-effects-and-target-hud.js",
-  "bytes": 21009,
-  "sha256": "0322ecbd8698c9e4c7734a205b78dc49e942a3a0fd3720a08365e8bc1722e807"
+  "bytes": 20380,
+  "sha256": "b6a73050c5842a10cbbb245d4d9b098313d991c16061450cef1291113081ba1b"
 },
 {
   "path": "combat/005-floating-feedback.js",
-  "bytes": 4484,
-  "sha256": "e20bdd0428d9a967732d3c35884e40680e2e121f66e592ca301539dbc9f01684"
+  "bytes": 4539,
+  "sha256": "bff23bf5f6cb2d2402fe999f2a40175de517e3eb698fd5b3763b5393abd93c3c"
 },
 {
   "path": "render/004-scene-camera-lights.js",
@@ -68,8 +68,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/019-state-and-portals.js",
-  "bytes": 21230,
-  "sha256": "0979585db0352a27b2ef638adb0a5f5aaeebccb4ac3d4192e20538e8804e48cb"
+  "bytes": 22959,
+  "sha256": "ae7a427a8f8d2250552f5ae3539cd0ec0354c0c0f481e28038fb29d1c8c81301"
 },
 {
   "path": "world/018-region-dressing.js",
@@ -108,8 +108,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
-  "bytes": 19357,
-  "sha256": "39c7d5b8344623c1d2ad90e0486db741f4389ecb4b55f3d38e00cca4cb448f8c"
+  "bytes": 19382,
+  "sha256": "2688cd6d37e94e967ddd6337393f69264717e33cb6ee254d184fc62bc793001f"
 },
 {
   "path": "render/025-horse-and-avatar-animation.js",
@@ -133,21 +133,21 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 150437,
-  "sha256": "57f0a5fcd262a85c883f7fdc8b5def43c02aae91c1c97a89ac930c99ae9c043b"
+  "bytes": 161980,
+  "sha256": "8f52b9c28951f02174cebd96f608d1c9de56ad5d6ed820f423f7b430609c0e1e"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 30562,
-  "sha256": "81048f83e4b38bd4c65cd05721cfb0515cf2aab651ee39f89b9d6a03611450c6"
+  "bytes": 30078,
+  "sha256": "2c85d8e8cdd211254b6b35746e8ca78c0a013af398595c95ec7daa820da31ba6"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
-    "bytes": 45220,
-    "sha256": "2cfa7b0ccd52ccc59f72759e91bd187b9eb67e1ea71ed85f03d3f569a6bec0e6"
+    "bytes": 45429,
+    "sha256": "c3dc11522e51a1372e9988c11f0be0a2b9e83a111899c95ab19c467ae177b6f9"
   },
   {
-    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 66271, "sha256": "54b9cc64d9a62436596f07e563da0cece3c982ed08f854de6214174208df1b6f"
+    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 71891, "sha256": "64e1a6e8dabe88f83631b81ede20ba2b337a57a5b7f47c5230d79ce4f5d85325"
   },
   {
     "path": "ui/052-help-and-inventory.js", "bytes": 41496, "sha256": "a92bbc3a3e55c928a8ad3e163af07778ec9694ed356713daedbe6a593eb6779f"
@@ -164,48 +164,48 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/048-class-books-and-hotbars.js",
-    "bytes": 71724,
-    "sha256": "885124b84de656a367e9f8c0fd636a2c955ce57ca3d8e477f9fcdb4aeff1c67d"
+    "bytes": 72694,
+    "sha256": "b87b3eb7e5188fec48756d7fb661f5efcf513d1001337f9d467b205e3061bb5b"
   },
   {
     "path": "ui/049-skill-graph-and-details.js",
-    "bytes": 63090,
-    "sha256": "03bbfd115a7ed48a976d1a10086842d4a1ed58f5108bea921785d742e8bf71a6"
+    "bytes": 63308,
+    "sha256": "739dbdaca175f1fd9cb47bda561e4b7841d0d4d02f8872ef33e0a0ab871cfbb2"
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 7498,
-    "sha256": "25e65f93d9da9c033d3c72e9d866e22cd5b584807190097ef669c78c7a1aa447"
+    "bytes": 7606,
+    "sha256": "55694904ef426e2edb1b2715575757d0c856848e0fba9d231ad696600aceb0c0"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
-    "bytes": 49803,
-    "sha256": "afe577ae7154216c90705bc74a4c0f1d4bc656bd982f17b230c341c08c934685"
+    "bytes": 54808,
+    "sha256": "85764d369a6dad8916ea8e0c7c42a92fa61304f51ba5d186dfbfb884a00eb5de"
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 33712,
-  "sha256": "d2397a6acf7758f2fb20c8f8700bfc56c1cafe1636c7303bce299628ea4a69f0"
+  "bytes": 34000,
+  "sha256": "bc1de96d343100dc838a34757ba05feabb2716283c0f5b166957bdaa196bb99d"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
-    "bytes": 80472,
-    "sha256": "5b4992c9eb9b35712f799c7b3b524395dea15be17d2aaf6471e88906e177b586"
+    "bytes": 81662,
+    "sha256": "deb82e7b61edb53fe1d20cfab48b0c130223a8258b3e8da6815252b975bf5c56"
   },
   {
     "path": "ui/055-market-and-trade.js",
-    "bytes": 58554,
-    "sha256": "c85a66ebf0e19e61820dd93513b71136b7874f1bbefbefe29f0eb50aaaa0b349"
+    "bytes": 68666,
+    "sha256": "ed39282c4fb75e5899e1d552b143c6ca9d701a43702a6f92ba098897e0174281"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
-    "bytes": 9828,
-    "sha256": "01ed1a822470a5af32a7dc3500dbb561d006fa933be0bfaed817f3ec8f791f17"
+    "bytes": 10014,
+    "sha256": "0943bd3981a4d7b91d72276450d446deb00d9af50e5a28c30b04a0546964a355"
   },
   {
     "path": "combat/038-demo-and-monster-state.js",
-    "bytes": 7618,
-    "sha256": "08b6bee69c971c6160947b6d1a75cb274ad8a4facd3293a4c293c6ae2cdecd54"
+    "bytes": 7685,
+    "sha256": "d94b9be0f79dead974e58d501ee99e8ddaa2449aefafac07146fc3585cd6a822"
   },
   {
     "path": "combat/040-spell-visuals.js",
@@ -214,13 +214,13 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "render/035-ghost-instantiation.js",
-    "bytes": 15358,
-    "sha256": "a5f4fa4b9478bc9ee2c0fef80ffd522099141ba3a1257079868fa9380513cabc"
+    "bytes": 28525,
+    "sha256": "c0571ac131b114232a3f18621be3aaba4e7d8bc853cc020853db115c28fd667a"
   },
   {
     "path": "render/032-ghost-primitives.js",
-    "bytes": 33439,
-    "sha256": "a59f7e1682b391500e45734972348c53c7549107d9f85fcb3f1ffc4ff8087617"
+    "bytes": 85535,
+    "sha256": "bbebc507c4aee6bcb6ae96c87db5c9222fa73e62fddb80ebd14ef3e6026f4da5"
   },
   {
     "path": "render/033-ghost-materials-and-surfaces.js",
@@ -239,8 +239,23 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/056-party-guild-and-rebirth.js",
-    "bytes": 70551,
-    "sha256": "e51b694d56986edb078cffcd6b0c7c7e5d5e2f95150cab47e15c389f7f0bd0bf"
+    "bytes": 120948,
+    "sha256": "03f3487d854a8d195a0d469cf6371981bd0707300e18a41ba954a9ee6c829072"
+  },
+  {
+    "path": "audio/023-action-and-impact-sounds.js",
+    "bytes": 3921,
+    "sha256": "4b33d31077b752d030b96a6af5813596877af596e4e366121d229de3e9c2b64e"
+  },
+  {
+    "path": "combat/024-action-and-skill-motion.js",
+    "bytes": 5477,
+    "sha256": "3844d087bd78522073e8f67b1e4624cae3e696a569616b214903b28e51e13503"
+  },
+  {
+    "path": "audio/036-ghost-voices.js",
+    "bytes": 3278,
+    "sha256": "2d884bbafadaa0ae11bd0c4c8957b5df60f8ec56d0a184ef98265e353f63a0c7"
   }
 , {"path":"audio/002-voice-guidance.js","bytes":22456,"sha256":"48db11a5e02c570e15435503dd9e0a0717415ccbc6b28143cc90c104ba0792db"}].map(entry => [entry.path, entry]));
 
@@ -249,8 +264,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1819187);
-  assert.equal(hash(bytes), '275b9095217fef1ae82738cdcdb3d9894dd6a3b074926e205d76e6dfe4be396b');
+  assert.equal(bytes.length, 1970642);
+  assert.equal(hash(bytes), '70be0890ec628fab995b4a8c42529158012d5cb37a0786aa6776c2c3935a0a4d');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

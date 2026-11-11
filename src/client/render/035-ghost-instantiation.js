@@ -18,8 +18,32 @@
   // name is kept for designs that already match it.
   const GHOST_NAMES = { nangmai: "นางไม้", krasue: "ผีกระสือ", krahang: "ผีกระหัง", preta: "ผีเปรต", phiphong: "ผีโพง", kongkoi: "ผีกองกอย", takhian: "ผีนางตะเคียน",
     maenak: "ผีแม่นาค", phipop: "ผีปอบ", dancer: "ผีนางรำ", headless: "ผีหัวขาด", phitakhon: "ผีตาโขน", unaware: "ผีตายโหง", childghost: "ผีเด็ก", elephant: "ผีช้าง" };
+  const HIMMAPAN_VISUALS = new Map([
+    ["himmapan_matcha_naga", { kind: "matchaNaga", height: 1.9, width: 1.45, warningColor: "#77e4ff", warningText: "คลื่นน้ำ · หลบด้านข้าง" }],
+    ["himmapan_garuda_scout", { kind: "garudaScout", height: 2.5, width: 2.25, warningColor: "#ffdb76", warningText: "เงาโฉบ · หลบด้านข้าง" }],
+    ["himmapan_stone_yaksha", { kind: "stoneYaksha", height: 2.65, width: 1.7, warningColor: "#ff883b", warningText: "กระบองกระแทก · ถอยออกจากวง" }],
+    ["himmapan_kochasri", { kind: "kochasri", height: 2.95, width: 2.3, depth: 3.65, warningColor: "#ffac55", warningText: "พุ่งชน · หลบออกจากพื้นที่เตือน", warningFill: true }],
+    ["himmapan_hemaraj", { kind: "hemaraj", height: 2.35, width: 1.5, depth: 2.85, warningColor: "#ffe787", warningText: "ตะปบ · หลบออกจากด้านหน้า" }],
+    ["himmapan_durong_paksin", { kind: "durongPaksin", height: 3.0, width: 2.7, depth: 3.65, warningColor: "#ffce5f", warningText: "โผพุ่ง · หลบด้านข้าง", warningFill: true }],
+    ["himmapan_kunchon_wari", { kind: "kunchonWari", height: 2.8, width: 2.3, depth: 3.7, warningColor: "#78e2ff", warningText: "ตวัดหาง · ถอยออกจากวงน้ำ", innerWarningText: "ตวัดหาง · เข้ากลางวงหรือออกนอกขอบน้ำ", warningFill: true, impactTint: "cyan" }],
+    ["himmapan_karavek", { kind: "karavek", height: 2.55, width: 2.5, depth: 2.9, warningColor: "#ffd792", warningText: "คลื่นเสียง · ถอยออกจากวงนอกสุด", warningFill: true, warningBands: [.33, .66], impactTint: "gold" }],
+    ["himmapan_phayak_nathi", { kind: "phayakNathi", height: 2.68, width: 1.8, depth: 3.25, warningFill: true, leap: true,
+      stages: [{ color: "#6fe9ff", text: "ระลอกน้ำ · เตรียมหลบจุดลง", bands: [.26,.49,.75], fill: false, impact: "cyan" },
+        { color: "#ff6853", text: "กระโจนตะปบ · ออกจากวงลงพื้น", claws: true, impact: "red", effect: "claws" }] }],
+    ["himmapan_hatsadiling", { kind: "hatsadiling", height: 3.25, width: 2.65, depth: 3.4, warningFill: true,
+      warningColor: "#a8dbff", warningBands: [.28,.53,.77], warningText: "ลมรูปพัด · หลบออกด้านข้าง",
+      counterText: "ลงเกาะแล้ว · สวนได้", counterColor: "#ffc17b", impactTint: "white", effect: "wind" }],
+    ["himmapan_kraisorn", { kind: "kraisorn", height: 2.78, width: 1.9, depth: 3.3, warningFill: true,
+      stages: [{ color: "#ffb950", text: "ตะปบครั้งแรก · หลบแนวหน้า", bands: [.55], impact: "orange", effect: "sweep" },
+        { color: "#ff5f56", text: "ตะปบครั้งที่สอง · หลบออกจากรูปพัด", bands: [.55], impact: "red", effect: "sweep" }],
+      counterText: "จบสองจังหวะแล้ว · สวนได้", counterColor: "#91e68b" }],
+    ["himmapan_kilen", { kind: "kilen", height: 3.38, width: 1.55, depth: 3.15, warningFill: true,
+      stages: [{ color: "#ffd365", text: "ตราที่ 1 · ออกจากวง", seal: 1, impact: "gold", effect: "seal" },
+        { color: "#dc9eff", text: "ตราที่ 2 · ออกจากวง", seal: 2, impact: "violet", effect: "seal" },
+        { color: "#ff6966", text: "ตราที่ 3 · ออกจากวง", seal: 3, impact: "red", effect: "seal" }] }],
+  ]);
   function monsterName(monster, id) {
-    if (!monster || monster.tier === "boss" || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
+    if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
     const kind = forestMonsters.get(id)?.metadata?.ghost?.design?.kind || ghostDesign(monster, String(id || monster.id || "")).kind;
     return GHOST_NAMES[kind] || monster.displayName;
   }
@@ -48,6 +72,8 @@
       { kind: "unaware", fallback: "corpse" }, { kind: "statue", fallback: "corpse", lead: true }],
   };
   function ghostDesign(monster, id) {
+    const himmapan = HIMMAPAN_VISUALS.get(id);
+    if (himmapan) return { ...himmapan, himmapan: true, scale: 1, eye: gm.eyeAmber };
     const level = Number(monster.level) || 1;
     const atlas = ATLAS_GHOSTS[monster.mapId];
     if (atlas) {
@@ -113,6 +139,163 @@
     }
     return k => { seal.rotation.y = Math.sin(k.t * .45) * .12; };
   }
+  function himmapanSealLines(point, range, order) {
+    const lines = [.79,.94].map(r => Array.from({length:33},(_,i)=>{
+      const a = i * Math.PI / 16;
+      return point(Math.cos(a)*range*r,Math.sin(a)*range*r);
+    }));
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const petal = (angle,r)=>point(Math.cos(angle)*range*r,Math.sin(angle)*range*r);
+      lines.push([petal(a,.22),petal(a-.29,.46),petal(a,.74),petal(a+.29,.46),petal(a,.22)]);
+    }
+    for (let i = 0; i < order; i++) {
+      const x = (i - (order-1)/2)*range*.106;
+      lines.push([point(x,-range*.14),point(x,range*.14)]);
+    }
+    return lines;
+  }
+  function playHimmapanImpact({tint,x,y,z,inner,range,facing,terrain,effect}) {
+    if (!tint) return;
+    if (effect === "wind" || effect === "sweep") {
+      const wind = effect === "wind";
+      for (const [i,t] of (wind ? [.30,.50,.69] : [.47,.62]).entries()) {
+        const px=x-Math.sin(facing)*range*t,pz=z-Math.cos(facing)*range*t;
+        const height=terrain?terrainHeight(terrain,px,pz):y;
+        spawnFx("arc",tint,px,height+(wind?.41:.31),pz,
+          {orient:"flat",yaw:facing,life:310,delay:i*(wind?53:24),s0:range*.48,s1:range*(wind?.67:.86),a0:.92});
+      }
+      return;
+    }
+    spawnFx("ring",tint,x,y+.14,z,{orient:"ground",life:420,s0:2*(inner||.35),s1:2*range,a0:.75,a1:0});
+    if (effect === "seal") {
+      spawnFx("yantra",tint,x,y+.20,z,{orient:"ground",life:380,s0:range*1.73,s1:range*1.91,a0:.95});
+      spawnFx("star",tint,x,y+.50,z,{life:300,s0:range*.64,s1:range*1.55,a0:.9});
+    }
+    if (effect === "claws") {
+      for (const side of [-1,0,1]) {
+        const shift=side*range*.25;
+        spawnFx("slash",tint,x+shift*Math.cos(facing),y+.24,z-shift*Math.sin(facing),
+          {orient:"flat",yaw:facing,life:370,delay:(side+1)*25,s0:range*.64,s1:range*1.31,a0:.96});
+      }
+    }
+  }
+  function updateHimmapanWarning(mesh, monster) {
+    const metadata = mesh.metadata, design = metadata.ghost.design;
+    const counter = monster.alive && monster.aiState === "special_recovery" && design.counterText;
+    if (counter && !metadata.specialCounter) {
+      const ring = B.MeshBuilder.CreateTorus("himmapan counter opening", { diameter: 2.15, thickness: .055, tessellation: 36 }, scene);
+      const paint = new B.StandardMaterial("himmapan counter opening", scene);
+      paint.emissiveColor = B.Color3.FromHexString(design.counterColor);
+      paint.disableLighting = true;
+      ring.material = paint; ring.isPickable = false; ring.parent = mesh;
+      ring.position.y = -metadata.ghost.tall / 2 + .12;
+      const glyph = B.MeshBuilder.CreateLineSystem("himmapan counter mark",{lines:[[-1,1].map(x=>new B.Vector3(x*.27,.035,x*.31)),
+        [-1,1].map(x=>new B.Vector3(x*.27,.035,-x*.31))]},scene);
+      glyph.color = paint.emissiveColor; glyph.parent = ring; glyph.isPickable = false;
+      ring.setEnabled(false); metadata.specialCounter = ring;
+    }
+    if (counter && !metadata.specialCounter.isEnabled() && monster.targetId === room?.sessionId) {
+      toast(monsterName(monster, metadata.monsterId) + " · " + design.counterText);
+    }
+    metadata.specialCounter?.setEnabled(Boolean(counter));
+    const range = Number(monster.specialRange), halfWidth = Number(monster.specialHalfWidth);
+    const inner = Number(monster.specialInnerRange) || 0, halfAngle = Number(monster.specialHalfAngle) || 0;
+    if (!monster.alive || monster.aiState !== "windup" || !(range > 0)) {
+      metadata.specialWarning?.setEnabled(false);
+      metadata.specialWarningFill?.setEnabled(false);
+      for (const mark of metadata.specialPending ?? []) mark.setEnabled(false);
+      return;
+    }
+    const stage = Number(monster.specialStage) || 0;
+    if (metadata.specialWarning?.isEnabled() && metadata.warningStage === stage) return;
+    if (metadata.specialWarning && metadata.warningStage !== stage) {
+      metadata.specialWarning.dispose(); metadata.specialWarning = undefined;
+    }
+    for (const mark of metadata.specialPending ?? []) mark.dispose();
+    metadata.specialPending = [];
+    metadata.warningStage = stage;
+    const style = design.stages?.[stage - 1];
+    const terrain = worldDefinitions?.[monster.mapId]?.terrain;
+    const facing = Number(monster.facing) || 0, sin = Math.sin(facing), cos = Math.cos(facing);
+    const centerX = stage ? monster.specialOriginX : monster.x, centerZ = stage ? monster.specialOriginZ : monster.z;
+    const groundPoint = (x,z) => {
+      return new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z);
+    };
+    const point = (side,forward) => groundPoint(centerX+side*cos-forward*sin,centerZ-side*sin-forward*cos);
+    const rect = halfWidth > 0, fullCircle = !rect && !halfAngle;
+    const arcAngle = halfAngle || Math.PI;
+    const columns = rect ? 6 : 40;
+    const rowAt = distance => Array.from({ length: columns + 1 }, (_, i) => {
+      if (rect) return point(-halfWidth + 2 * halfWidth * i / columns, distance);
+      const angle = -arcAngle + 2 * arcAngle * i / columns;
+      return point(Math.sin(angle) * distance, Math.cos(angle) * distance);
+    });
+    const rows = Array.from({ length: 9 }, (_, i) => rowAt(inner + (range - inner) * i / 8));
+    const lines = [rows.at(-1)];
+    if (fullCircle) {
+      if (inner > 0) lines.push(rows[0]);
+      if (style?.seal) lines.push(...himmapanSealLines(point,range,style.seal));
+      if (style?.claws) for (let i=-1;i<=1;i++) {
+        const x=i*range*.23;
+        lines.push([point(x-range*.24,-range*.36),point(x,-range*.07),point(x+range*.21,range*.37)]);
+      }
+    } else {
+      lines.push(rows.map(row => row[0]), rows.map(row => row.at(-1)));
+      if (rect) lines.push(rows[0]);
+    }
+    for (const band of style?.bands || design.warningBands || []) lines.push(rowAt(range * band));
+    if (style?.seal) {
+      const marks = monster.specialMarks;
+      for (let i = stage*3; marks && i+2 < marks.length; i+=3) {
+        const x = marks[i], z = marks[i+1], radius = marks[i+2], order=i/3+1;
+        const draw = (side,forward)=>groundPoint(x+side*cos-forward*sin,z-side*sin-forward*cos);
+        const pending = B.MeshBuilder.CreateLineSystem("himmapan pending seal",{lines:himmapanSealLines(draw,radius,order)},scene);
+        pending.color = B.Color3.FromHexString(design.stages[order-1].color);
+        pending.alpha = .52; pending.isPickable = false; metadata.specialPending.push(pending);
+      }
+    }
+    const warning = B.MeshBuilder.CreateLineSystem("himmapan strike boundary", { lines, updatable: true, instance: metadata.specialWarning }, scene);
+    warning.color = B.Color3.FromHexString(style?.color || design.warningColor);
+    warning.isPickable = false;
+    warning.setEnabled(true);
+    metadata.specialWarning = warning;
+    if (style?.fill === false) metadata.specialWarningFill?.setEnabled(false);
+    else if (design.warningFill) {
+      if (!metadata.specialWarningFill) {
+        const fill = new B.Mesh("himmapan strike area", scene);
+        const paint = new B.StandardMaterial("himmapan strike area", scene);
+        paint.emissiveColor = warning.color;
+        paint.disableLighting = true;
+        paint.backFaceCulling = false;
+        paint.alpha = .19;
+        fill.material = paint;
+        fill.isPickable = false;
+        metadata.specialWarningFill = fill;
+      }
+      const fill = metadata.specialWarningFill;
+      fill.material.emissiveColor = warning.color;
+      const positions = rows.flatMap(row => row.flatMap(p => [p.x, p.y - .025, p.z]));
+      const indices = [], normals = [];
+      for (let row = 0; row < rows.length - 1; row++) {
+        for (let col = 0; col < columns; col++) {
+          const i = row * (columns + 1) + col, next = i + columns + 1;
+          indices.push(i, next, i + 1, i + 1, next, next + 1);
+        }
+      }
+      B.VertexData.ComputeNormals(positions, indices, normals);
+      const data = new B.VertexData();
+      data.positions = Float32Array.from(positions);
+      data.indices = Uint16Array.from(indices);
+      data.normals = Float32Array.from(normals);
+      data.applyToMesh(fill);
+      fill.setEnabled(true);
+    }
+    if (monster.targetId === room?.sessionId) {
+      const hint = style?.text || (inner > 0 && design.innerWarningText ? design.innerWarningText : design.warningText);
+      toast(monsterName(monster, mesh.metadata.monsterId) + " · " + hint);
+    }
+  }
   const soulMeshes = [];
   // Builds the pickable root plus the visual rig for one monster.
   function makeGhostMonster(monster, id, design = ghostDesign(monster, id)) {
@@ -121,9 +304,9 @@
     // only the visual proxy changes, never server collision or strike radius.
     const bossHeight = { bell: 4.5, boatman: 3.1, moonspirit: 3.9, statue: 4.3, stump: 3.1,
       krahang: 3.7, waterspirit: 3.9, phipop: 3.1, headless: 3.1, phitakhon: 4.2, preta: 4.4 };
-    const tall = (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
+    const tall = design.height ?? (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
     const pickHeight = design.boss ? tall * design.scale : tall;
-    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.boss ? 2.1 : 1.3, height: pickHeight, depth: design.boss ? 2.1 : 1.3 }, scene);
+    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.width ?? (design.boss ? 2.1 : 1.3), height: pickHeight, depth: design.depth ?? (design.boss ? 2.1 : 1.3) }, scene);
     if (design.boss) root.bakeTransformIntoVertices(B.Matrix.Translation(0, (pickHeight - tall) / 2, 0));
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
@@ -137,24 +320,39 @@
     const fallback = GHOST_KINDS[design.kind] || GHOST_KINDS[design.fallback || "corpse"];
     const visualRoot = design.boss ? new B.TransformNode("boss model", scene) : rig;
     if (design.boss) visualRoot.parent = rig;
-    const bossMaterials = new Set();
-    const releaseBossMaterials = () => {
+    const modelMaterials = new Set();
+    const releaseModelMaterials = () => {
       // mergedSegment owns these wrappers, but their submaterials are shared.
-      for (const material of bossMaterials) material.dispose(false, false, false);
-      bossMaterials.clear();
+      for (const material of modelMaterials) material.dispose(false, false, false);
+      modelMaterials.clear();
     };
-    if (design.boss) root.onDisposeObservable.add(releaseBossMaterials);
+    if (design.boss || design.himmapan) root.onDisposeObservable.add(releaseModelMaterials);
+    if (design.himmapan) root.onDisposeObservable.add(() => {
+      root.metadata.specialWarning?.dispose();
+      root.metadata.specialWarningFill?.dispose(false, true);
+      for (const mark of root.metadata.specialPending ?? []) mark.dispose();
+      root.metadata.specialCounter?.material.dispose();
+    });
     const build = () => {
       if (design.boss) {
-        releaseBossMaterials();
+        releaseModelMaterials();
         for (const child of visualRoot.getChildren()) child.dispose();
         rig.metadata?.skeletons?.forEach(s => s.dispose());
         rig.metadata = null; visualRoot.metadata = null;
       }
+      if(design.kind==="titan"){
+        const titan=createThaoWessuwanBossMesh(0,0,0);
+        titan.root.parent=visualRoot;
+        update=k=>{
+          titan.rightArmPivot.rotation.x=k.g.windup?-1.4:-.5*k.atk;
+          titan.bodyPivot.rotation.x=.15*k.atk;
+        };
+        return;
+      }
       const pose = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(visualRoot, design) : fallback(visualRoot, design);
       if (design.boss) rig.metadata = visualRoot.metadata;
       const seal = design.boss ? bossRoyalSeal(visualRoot, design) : null;
-      if (design.boss) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) bossMaterials.add(mesh.material);
+      if (design.boss || design.himmapan) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) modelMaterials.add(mesh.material);
       update = seal ? k => { pose(k); seal(k); } : pose;
     };
     if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) {
@@ -164,7 +362,7 @@
     } else build();
     root.metadata = { monsterId: id, ghost: { tier: monster.tier, update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
     if (design.elite || design.boss) {
-      const radius = design.boss ? (worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2) : (worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
+      const radius = design.kind==="titan" ? (worldCombatFeatures.titanStrikeRadius || 5) : design.boss ? (worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2) : (worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
       const warning = B.MeshBuilder.CreateTorus("keeper strike boundary", { diameter: 2 * radius, thickness: .12, tessellation: 40 }, scene);
       warning.parent = root; warning.position.y = -tall / 2 + .11; warning.isPickable = false; warning.material = strikeMat; warning.setEnabled(false);
       root.metadata.warning = warning;

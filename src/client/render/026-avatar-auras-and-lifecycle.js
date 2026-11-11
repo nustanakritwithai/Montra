@@ -92,7 +92,7 @@
       spawnFx("ring", "red", mesh.position.x, y, mesh.position.z, { orient: "ground", life: 800, s0: 2, s1: (g.tall || 2) * 1.8, a0: 0.6, a1: 0 });
     }
     // Phase 6: Boss / Elite Enrage Phase (<30% HP)
-    const isBossOrElite = g.design?.elite || (g.tall || 2) >= 2.2 || mesh.metadata?.monsterId === MONSTER_ID;
+    const isBossOrElite = !g.design?.himmapan && (g.design?.elite || (g.tall || 2) >= 2.2 || mesh.metadata?.monsterId === MONSTER_ID);
     if (isBossOrElite) {
       let curHp = 100, curMax = 100;
       if (mode === "live") {

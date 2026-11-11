@@ -103,16 +103,20 @@
     if(renderMixedSkillHotbar(me,bar))return;
     if(data.core){syncBladeCoreUI(me,data,bar);return;}
     const ids=learnedSlots(data.book.slots,data.book.learned,data.lessons),times=ids.map(id=>id ? Math.max(0,Math.ceil(((data.book.cooldowns[id]||0)-Date.now())/1000)) : 0);
-    const key=JSON.stringify([ids,times,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
+    const continuations=ids.map(replacementSkillContinuation);
+    const key=JSON.stringify([ids,times,continuations,me.alive,affordKey(ids,data.lessons,me)]);bar.hidden=false;if(key===bladeHotbarKey)return;bladeHotbarKey=key;bar.replaceChildren();
     ids.forEach((id,index)=>{const node=id && data.lessons[id],slot=document.createElement("button");slot.type="button";slot.className="sword-hotkey";
-      slot.textContent=node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง";slot.disabled=!node || !me.alive || Boolean(times[index]);
+      const continuation=continuations[index];
+      slot.textContent=continuation || (node ? node.name+(times[index]?" "+times[index]+" วิ":"") : "ช่องว่าง");
+      slot.disabled=!node || !me.alive || Boolean(times[index] && !continuation);
       slot.onclick=()=>{
+        if(!node || slot.disabled || tryReplacementSkillContinue(id))return;
         if(["approach","strike","consume","windup","counter"].includes(node.effect)){
           selectedBladeSkill=id;setTargetedSkill("blade");const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
           if(targetId && target?.alive && (target.mapId || "ritual_village")===activeMapId)castAtTarget(targetId);
           else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         }else room.send("blade_skill",{skillId:id});
-      };if(node && !times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
+      };if(node && !times[index] && !continuation)staminaCost(slot,node.stamina,me);bar.append(slot);
     });
     arrangeFieldSlots(bar,ids,data.lessons,openBladeBook);
     positionSwordToast();
@@ -221,7 +225,7 @@
           else toast(node.name+" · แตะมอนสเตอร์เพื่อเริ่มตี แล้วกดวิชานี้");
         } else if (["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect)) {
           chooseOccultAlly(id,node.name);
-        } else room.send("occult_skill",{skillId:id});
+        } else if(!tryReplacementSkillCast(id))room.send("occult_skill",{skillId:id});
       };
       if(node && !times[index])staminaCost(slot,node.stamina,me);
       bar.append(slot);
@@ -268,8 +272,12 @@
     arrangeFieldSlots(bar,ids,skills,openOccultBook);positionSwordToast();
   }
   function chooseOccultAlly(skillId,name,command="occult_skill") {
-    const members=partyState?.members || [];
-    if (members.length<2) {room.send(command,{skillId,targetId:localId});return;}
+    const members=partyState?.members || [], origin=room, map=activeMapId;
+    const send=targetId=>{
+      if(room!==origin || activeMapId!==map)return;
+      if(command!=="occult_skill" || !tryReplacementSkillCast(skillId,targetId))room.send(command,{skillId,targetId});
+    };
+    if (members.length<2) {send(localId);return;}
     openDrawer("occultTarget","เลือกผู้รับ "+name,'<div id="occultTargetList"></div>');
     const list=$("occultTargetList");
     for (const member of members) {
@@ -277,7 +285,7 @@
       if (!player?.alive || (player.mapId || "ritual_village")!==activeMapId) continue;
       const button=document.createElement("button");button.type="button";button.className="secondary";
       button.textContent=(member.name || "ผู้เล่น")+(member.sessionId===localId?" · คุณ":"");
-      button.onclick=()=>{closeDrawer();room.send(command,{skillId,targetId:member.sessionId});};
+      button.onclick=()=>{if(drawerActive!=="occultTarget")return;closeDrawer();send(member.sessionId);};
       list.append(button);
     }
   }
@@ -511,6 +519,7 @@
     const data=swordData(), node=data?.catalog?.nodes?.[id];
     if (!data || !node || !data.tree.learned.includes(id)) return;
     if (weaponModelFor(data.me.equippedWeaponId,data.me.pathId)!=="thai_dual") { toast("สวมดาบคู่ก่อนใช้วิชาดาบ"); return; }
+    if (tryReplacementSkillContinue(id)) return;
     if ((data.tree.cooldowns[id]||0)>Date.now()) { toast("วิชาดาบกำลังฟื้น"); return; }
     if (node.effect==="guard" || node.effect==="support") { room.send("sword_skill",{skillId:id}); return; }
     selectedSwordSkill=id;
@@ -630,7 +639,9 @@
       skills[id]={...node,stamina:node.stamina+(s.kind==="core"?Number(core.ranks[id]||0)*core.manaPerRank:0)};
       const summoned=id==="seer_pot" && room?.state?.summons?.has(localId),release=id==="seer_binding" && seerBoundTarget;
       const follow=id==="lopburi" && performance.now()<muayCoreFollowupUntil,finish=id==="grapple" && muayGrabTarget && performance.now()<muayGrabUntil;
-      special.push(Boolean(summoned || release || follow || finish));
+      const continuation=s.kind==="advanced" ? replacementSkillContinuation(id) : undefined;
+      special.push(Boolean(summoned || release || follow || finish || continuation));
+      if(continuation){skills[id].name=continuation;skills[id].stamina=0;}
       if(summoned || release){skills[id].name=summoned?"คืนผี":"คลายยันต์";skills[id].stamina=0;}
       if(follow)skills[id].name="ฉากซ้ำ";if(finish)skills[id].name="ทุ่ม";
       times.push(Math.max(0,Math.ceil(((advanced.cooldowns[id]||0)-Date.now())/1000)));
@@ -743,6 +754,7 @@
     const button=Array.from(mixedSkillBar()?.querySelectorAll("button") || []).find(b=>b.dataset.skillId===id);
     if(!node || !button || button.disabled || !me.alive || me.stunned)return;
     if(kind==="sword")return useSwordSkill(id);
+    if(tryReplacementSkillContinue(id))return;
     if(kind==="muay"){
       if(weaponModelFor(me.equippedWeaponId,me.pathId)!=="muay_wraps")return toast("สวมผ้าคาดเชือกก่อนใช้วิชามวย");
       if(id==="grapple" && muayGrabTarget && performance.now()<muayGrabUntil){room.send("muay_skill",{skillId:id,targetId:muayGrabTarget});return;}
@@ -752,7 +764,11 @@
       if(!["approach","strike","consume","windup","counter"].includes(node.effect)){room.send("blade_skill",{skillId:id});return;}selectedBladeSkill=id;
     }else if(kind==="sentinel"){
       if(["ward","intercept"].includes(node.effect))return chooseAdvancedAlly(id,node,"sentinel_skill",owner,node.effect==="intercept");
-      if(!["stun","slam","counter","step"].includes(node.effect)){room.send("sentinel_skill",{skillId:id});return;}selectedSentinelSkill=id;
+      if(!["stun","slam","counter","step"].includes(node.effect)){
+        if(!tryReplacementSkillCast(id))room.send("sentinel_skill",{skillId:id});
+        return;
+      }
+      selectedSentinelSkill=id;
     }else if(kind==="occult"){
       if(["spirit","spirit_bind","spirit_heal","spirit_ward","trance"].includes(node.effect)){
         if(node.effect!=="trance" && me.possessionActive){room.send("possess",{});return toast("ออกจากการเข้าทรง · กดวิชาอีกครั้งเพื่อเรียกผี");}
@@ -760,7 +776,11 @@
         if(node.effect==="trance" && !me.possessionActive){room.send("possess",{});return toast("เข้าทรงใช้ 15 มานา · กดวิชาอีกครั้งเมื่อเข้าทรงแล้ว");}
       }
       if(["heal","spirit_heal","ward","cleanse","spirit_ward"].includes(node.effect))return chooseAdvancedAlly(id,node,"occult_skill",owner);
-      if(!["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)){room.send("occult_skill",{skillId:id});return;}selectedOccultSkill=id;
+      if(!["mark","rice","rice_area","detonate","interrupt","curse","curse_burst","spirit","spirit_bind","pve_rice"].includes(node.effect)){
+        if(!tryReplacementSkillCast(id))room.send("occult_skill",{skillId:id});
+        return;
+      }
+      selectedOccultSkill=id;
     }
     setTargetedSkill(kind);
     const targetId=spellTargetId || me.targetId,target=monsterForSpell(targetId) || room?.state?.players?.get?.(targetId);
@@ -771,7 +791,10 @@
     const ids=[...new Set([localId,...(partyState?.members || []).map(m=>m.sessionId)])];
     const allies=ids.map(id=>[id,room?.state?.players?.get?.(id)]).filter(([id,p])=>p?.alive && (!otherOnly || id!==localId) && (p.mapId || "ritual_village")===activeMapId && Math.hypot(data.me.x-p.x,data.me.y-p.y,data.me.z-p.z)<=node.range);
     if(!allies.length)return toast("ต้องมีเพื่อนร่วมปาร์ตี้ในระยะ "+node.range+" หน่วย");
-    const send=targetId=>{if(!mixedSlotStillCurrent("advanced",id,owner,school))return;room.send(command==="sentinel_skill"?"sentinel_skill":"occult_skill",{skillId:id,targetId});};
+    const send=targetId=>{
+      if(!mixedSlotStillCurrent("advanced",id,owner,school) || tryReplacementSkillCast(id,targetId))return;
+      room.send(command==="sentinel_skill"?"sentinel_skill":"occult_skill",{skillId:id,targetId});
+    };
     if(allies.length===1 && allies[0][0]===localId)return send(localId);
     openDrawer("advancedTarget","เลือกผู้รับ "+node.name,'<div id="advancedTargetList"></div>');
     for(const [targetId,p] of allies){const b=document.createElement("button");b.type="button";b.className="secondary";b.textContent=(p.characterName || "ผู้เล่น")+(targetId===localId?" · คุณ":"");b.onclick=()=>{if(drawerActive!=="advancedTarget")return;closeDrawer();send(targetId);};$("advancedTargetList").append(b);}

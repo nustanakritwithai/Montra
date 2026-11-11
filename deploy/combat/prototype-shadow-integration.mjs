@@ -3,6 +3,7 @@ import {assertTestChildRunning,stopTestChild,leaveTestRoom,joinTestRoom,armTestD
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';import {createHash,randomBytes} from 'node:crypto';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {Client} from '@colyseus/sdk';
 armTestDeadline();
+const standardRoom=process.argv.includes("--standard-room");
 const delay=ms=>new Promise(r=>setTimeout(r,ms));const until=async(fn,label,ms=10000)=>{const end=Date.now()+ms;while(Date.now()<end){const x=fn();if(x)return x;await delay(20);}throw Error('timeout: '+label);};
 const home=await mkdtemp(path.join(os.tmpdir(),'montra-prototype-shadow-'));const chars=path.join(home,'characters');await mkdir(chars);
 const token='mt1_'+randomBytes(32).toString('hex'),id=createHash('sha256').update(token).digest('hex');
@@ -17,7 +18,7 @@ async function seedDuelist(name,build,x,hp,weapon,skills) {
 }
 const bladeOptions=await seedDuelist('Duel blade',{path:'blade',ancestry:'woodland'},-12,1,'ritual_dagger',{bladeBook:book});
 const swordOptions=await seedDuelist('Duel sword',{path:'phutthaisawan',ancestry:'woodland'},-13,500,'arcane_sword',{});
-const env={NODE_ENV:'test',HOME:home,TMPDIR:home,MONTRA_TEST_SANDBOX:home,MONTRA_CHARACTER_DIR:chars,MONTRA_ACCOUNTS_REQUIRED:'0',MONTRA_ECONOMY_ENABLED:'0',MONTRA_WORLD_EXPANSION:'0',MONTRA_HUNT_EVENTS:'0',MONTRA_DIRECTOR_ENABLED:'0',MONTRA_DIRECTOR_PERSIST:'0',MONTRA_ISOLATED_STAGING:'1',MONTRA_PROTOTYPE_PROTOCOL_V1:'1',MONTRA_PROTOTYPE_GAMEPLAY:'1'};
+const env={NODE_ENV:'test',HOME:home,TMPDIR:home,MONTRA_TEST_SANDBOX:home,MONTRA_CHARACTER_DIR:chars,MONTRA_ACCOUNTS_REQUIRED:'0',MONTRA_ECONOMY_ENABLED:'0',MONTRA_WORLD_EXPANSION:'0',MONTRA_HUNT_EVENTS:'0',MONTRA_DIRECTOR_ENABLED:'0',MONTRA_DIRECTOR_PERSIST:'0',MONTRA_ISOLATED_STAGING:'1',MONTRA_PROTOTYPE_PROTOCOL_V1:'1',MONTRA_PROTOTYPE_GAMEPLAY:'1',...(standardRoom?{MONTRA_REPLACEMENT_SKILLS:'1'}:{})};
 const entry=fileURLToPath(new URL('./src/rooms/prototype-gameplay-test-server.ts',import.meta.url));let output='';const child=spawn(process.execPath,['--import',import.meta.resolve('tsx'),entry],{cwd:home,env,stdio:['ignore','pipe','pipe']});child.stdout.on('data',d=>output+=d);child.stderr.on('data',d=>output+=d);let spawnError;child.on('error',error=>{spawnError=error;});let room,bladeRoom,swordRoom;
 try{
  const port=await until(()=>{assertTestChildRunning(child,spawnError,output);return output.match(/PROTOTYPE_TEST_PORT=(\d+)/)?.[1];},'server',20000);const sdk=new Client('http://127.0.0.1:'+port);

@@ -40,6 +40,7 @@
   function classSkillGraphModel(kind) {
     const me = ownServerCharacter(); if (!me) return null;
     const lv = skillLearningLevel(me);
+    const description = (id, fallback) => typeof replacementSkillDescription === "function" ? replacementSkillDescription(id) ?? fallback : fallback;
     if (kind === "sword") {
       const data = swordData(); if (!data) return null; const { tree, catalog } = data;
       const points = 1 + Math.floor((Math.min(lv, 100) - 1) / 2) - tree.learned.length - sgSpent(tree.ranks), slots = tree.loadouts?.[tree.school] || [null, null, null];
@@ -52,7 +53,7 @@
         if (n.training) checks.push({ ok: tr >= n.training.count, label: (trainingNames[n.training.id] || n.training.id) + " " + tr + "/" + n.training.count });
         if (n.school !== "common") checks.push({ ok: schoolOk, label: "ใช้สำนัก" + (catalog.schools[n.school]?.name || "") });
         return { id, name: n.name, group: n.school, level: n.level, requires: n.requires, learned, passive: n.effect === "passive", effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
-          description: n.description, checks, canEquip: learned && schoolOk && n.effect !== "passive", slot: slots.indexOf(id), rankBlocked: !schoolOk, ...sgRank(id, learned, tree.ranks, catalog, swordDone) };
+          description: description(id, n.description), checks, canEquip: learned && schoolOk && n.effect !== "passive", slot: slots.indexOf(id), rankBlocked: !schoolOk, ...sgRank(id, learned, tree.ranks, catalog, swordDone) };
       });
       return { kind, title: "วิชาดาบ", upgrade: id => room.send("sword_tree_upgrade", { skillId: id }), points, slotCount: 3, groups, nodes,
         summary: ["ฝึกฟัน " + tree.training.strikes, "รับ " + tree.training.blocks, "คอมโบครบ " + tree.training.finishes],
@@ -81,7 +82,7 @@
           if(!foundation) checks.push({ ok: sel, label: "ใช้สำนัก" + (catalog.schools[lesson.school]?.name || "") });
         }
         return { id, name: n.name, group: foundation ? "basic" : lesson.school, level: lesson?.level || 1, requires: lesson?.requires || [], learned, row: foundation ? basicRow++ >> 1 : undefined, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
-          description: lesson?.description || "วิชาพื้นฐาน ใช้ได้ทันที", checks, canEquip: learned && sel, slot: book.slots.indexOf(id), rankBlocked: !sel, ...sgRank(id, learned, book.ranks, catalog, muayDone) };
+          description: description(id, lesson?.description || "วิชาพื้นฐาน ใช้ได้ทันที"), checks, canEquip: learned && sel, slot: book.slots.indexOf(id), rankBlocked: !sel, ...sgRank(id, learned, book.ranks, catalog, muayDone) };
       });
       const combo = (catalog.combos?.[book.school] || []).map(m => muayMoveLabels[m] || m).join(" → ");
       return { kind, title: "ตำรามวยไทย", upgrade: id => room.send("muay_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups, nodes,
@@ -100,7 +101,7 @@
         const checks = [{ ok: lv >= n.level, label: "เลเวล " + n.level }, ...n.requires.map(r => ({ ok: learnedIds.includes(r), label: "เรียน " + (data.lessons[r]?.name || r) })),
           ...Object.entries(n.practice || {}).map(([p, c]) => ({ ok: (practice[p] || 0) >= c, label: (data.practiceLabels?.[p] || p) + " " + (practice[p] || 0) + "/" + c }))];
         return { id, name: n.name, group: n.branch, level: n.level, requires: n.requires, learned, passive: n.effect === "passive", effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
-          description: n.description, checks, canEquip: learned && n.effect !== "passive", slot: data.book.slots.indexOf(id), ...sgRank(id, learned, data.book.ranks, data, practiceDone) };
+          description: description(id, n.description), checks, canEquip: learned && n.effect !== "passive", slot: data.book.slots.indexOf(id), ...sgRank(id, learned, data.book.ranks, data, practiceDone) };
       });
       const msg = kind === "blade" ? "blade_book" : "sentinel_book";
       return { kind, title: kind === "blade" ? "ตำราคมดาบ" : "ตำราผู้พิทักษ์", upgrade: id => room.send(msg, { action: "upgrade", skillId: id }), points, slotCount: 4, groups: seen.map(b => ({ id: b, name: branchNames[b] || b })), nodes,
@@ -119,7 +120,7 @@
         if (n.training) checks.push({ ok: training >= n.training, label: "ฝึกรวม " + training + "/" + n.training });
         for (const [c, cnt] of Object.entries(mastery)) checks.push({ ok: (progress[c] || 0) >= cnt, label: (labels[c] || c) + " " + (progress[c] || 0) + "/" + cnt });
         return { id, name: n.name, group: path, level: n.level, requires: n.requires, learned, effect: n.effect, power: n.power, range: n.range, stamina: n.stamina, cooldownMs: n.cooldownMs,
-          description: n.description, checks, canEquip: learned, slot: data.book.loadouts[path].indexOf(id), ...sgRank(id, learned, data.book.ranks, data, training) };
+          description: description(id, n.description), checks, canEquip: learned, slot: data.book.loadouts[path].indexOf(id), ...sgRank(id, learned, data.book.ranks, data, training) };
       });
       return { kind, title: path === "seer" ? "ตำราผู้ร่ายเวท" : "ตำราพระ", upgrade: id => room.send("occult_book", { action: "upgrade", skillId: id }), points, slotCount: 4, groups: [{ id: path, name: path === "seer" ? "สายผู้ร่ายเวท" : "สายพระ" }], nodes,
         summary: ["ผลฝึกรวม " + training, ...Object.entries(labels).map(([c, l]) => l + " " + (progress[c] || 0))],

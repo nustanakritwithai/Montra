@@ -4,6 +4,7 @@
  * The browser is allowed to request destinations or target IDs only.
  * It NEVER supplies positions, HP, damage, speed, cooldowns or facing.
  */
+import { TITAN_BOSS } from "./RegionalBosses.js";
 import { ATLAS_TARGETS } from "./WorldAtlas.js";
 import { TEMPLE_TARGETS } from "./TempleMap.js";
 import { SHRINE_GUARDIAN,getWorldMap } from "./WorldMaps.js";
@@ -86,6 +87,7 @@ export function parseMoveCommand(message: unknown, bounds: MapBounds = DEFAULT_B
 export function parseAttackCommand(message: unknown): AttackCommand | null {
   if (!hasExactKeys(message, ["targetId"]) || typeof message.targetId!=="string")return null;
   const {targetId}=message;
+  if(targetId===TITAN_BOSS.id)return getWorldMap(TITAN_BOSS.mapId)?{targetId}:null;
   if(targetId.startsWith("boss_"))return getWorldMap(targetId.slice(5))?.boss?.id===targetId?{targetId}:null;
   return targetId===RULES.monsterId || targetId===SHRINE_GUARDIAN.id || TEMPLE_TARGETS.has(targetId) || ATLAS_TARGETS.has(targetId) ||
     /^forest_(?:west|east|deep_west|deep_east)_[1-4]$/.test(targetId)?{targetId}:null;

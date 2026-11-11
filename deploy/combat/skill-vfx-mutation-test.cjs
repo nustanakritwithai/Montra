@@ -11,7 +11,7 @@ const mutants=[
  ['missing Mender dispatch',net,s=>replace(s,'        triggerSkillVfx(data.skillId, caster, target, data.targetId);\n        if(target)eventFx','        if(target)eventFx')],
  ['schema facing ignored',spell,s=>replace(s,'Number.isFinite(caster.heading) ? caster.heading : (caster.facing || 0)','caster.heading || 0')],
  ['local schema identity ignored',spell,s=>replace(s,' || caster === ownServerCharacter()','')],
- ['late combat map guard',net,s=>replace(s,'        if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;','')],
+ ['combat map guard missing',net,s=>replace(s,'        if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;','')],
  ['buffalo map guard missing',net,s=>replace(s,'        if(!caster || (caster.mapId || "ritual_village")!==activeMapId || !skillVfxTarget(data?.targetId))return;','')],
  ['effect owner map ignored',fx,s=>replace(s,'f.mapId !== activeMapId || ','')],
  ['effect owner room ignored',fx,s=>replace(s,'f.room !== room || ','')],
@@ -23,7 +23,7 @@ try {
  fs.cpSync(path.join(root,'src/client'),path.join(temp,'src/client'),{recursive:true});
  fs.mkdirSync(path.join(temp,'deploy/combat'),{recursive:true});
  for(const file of ['skill-vfx-test.cjs','SkillCatalog.ts','MuayRules.ts','BladeRules.ts','SentinelRules.ts','OccultRules.ts'])fs.copyFileSync(path.join(__dirname,file),path.join(temp,'deploy/combat',file));
- const run=()=>spawnSync(process.execPath,['deploy/combat/skill-vfx-test.cjs'],{cwd:temp,encoding:'utf8',timeout:15000});
+ const run=()=>spawnSync(process.execPath,['--test','--test-reporter=tap','deploy/combat/skill-vfx-test.cjs'],{cwd:temp,encoding:'utf8',timeout:15000});
  const baseline=run();assert.equal(baseline.status,0,baseline.stdout+baseline.stderr);
  for(const [name,file,mutate] of mutants) {
   const target=path.join(temp,file),original=fs.readFileSync(target,'utf8'),changed=mutate(original);assert.notEqual(original,changed,name);

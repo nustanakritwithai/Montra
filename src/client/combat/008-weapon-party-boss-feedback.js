@@ -429,11 +429,27 @@
 
   // Phase 15: Guild Alliance & Shamanic War Banner 3D (ธงชัยอาคมประจำตัวและกิลด์)
   const activeWarBanners = new Map();
-  let warBannerIdCounter = 0;
-  let lastBannerPlantTime = 0;
-  const BANNER_RADIUS = 12.0;
-  const BANNER_DURATION = 60000;
-  const BANNER_COOLDOWN = 15000;
+  let worldCombatFeatures={}, warBannerState=null, warBannerPendingUntil=0;
+  const BANNER_RADIUS = 12;
+  function resetCombatFeatures(features={}) {
+    worldCombatFeatures=features;
+    warBannerState=null;
+    warBannerPendingUntil=0;meteorPendingUntil=0;
+    for(const id of activeWarBanners.keys()) removeWarBanner(id);
+  }
+  function requestWarBanner() {
+    if(mode==="live" && room && worldCombatFeatures.warBanner===true)try{room.send("get_war_banner",{});}catch(error){console.error("MONTRA banner state",error);}
+  }
+  function applyWarBannerState(message) {
+    if(typeof message?.canPlant!=="boolean" || typeof message.buffed!=="boolean")return;
+    const b=message.banner;
+    if(b && (typeof b.id!=="string" || typeof b.mapId!=="string" || ![b.x,b.y,b.z,b.radius,b.remainingMs].every(Number.isFinite)))return;
+    const same=b && b.id===warBannerState?.banner?.id;
+    warBannerState={canPlant:message.canPlant,buffed:message.buffed,banner:b,
+      until:b?Math.min(same?warBannerState.until:Infinity,performance.now()+b.remainingMs):0};
+    warBannerPendingUntil=0;
+    updateBanners();
+  }
 
   let bannerPoleMat = null, bannerGoldMat = null, bannerClothMat = null, bannerStoneMat = null;
   function ensureBannerMaterials() {
@@ -552,10 +568,17 @@
     return { root, cloth, auraRing, pedestal, pole, yardarm, finial, orb };
   }
 
-  function plantWarBanner(options = {}) {
-    // No server-owned banner ability exists yet. Fail closed for hotkeys and API calls too.
-    toast("ธงชัยอาคม: เร็ว ๆ นี้ · ยังไม่มีผลป้องกัน");
-    return null;
+  function plantWarBanner() {
+    if(mode!=="live" || !room || worldCombatFeatures.warBanner!==true) {
+      toast("ธงชัยอาคม · เร็ว ๆ นี้");
+      return null;
+    }
+    if(!warBannerState?.canPlant) return toast("หัวหน้าปาร์ตี้ที่สังกัดกิลด์เท่านั้นที่ปักธงได้");
+    if(warBannerState.banner || performance.now()<warBannerPendingUntil)return null;
+    try{room.send("plant_war_banner",{});}catch(error){console.error("MONTRA banner",error);return null;}
+    warBannerPendingUntil=performance.now()+1500;
+    updateBanners();
+    return true;
   }
 
   function removeWarBanner(id) {
@@ -563,9 +586,6 @@
     if (!banner) return false;
     if (banner.mesh?.root) {
       banner.mesh.root.dispose();
-    }
-    if (typeof sparks === "function") {
-      sparks("gold", banner.x, banner.y + 1, banner.z, 10, { speed: 2, up: 2, life: 400 });
     }
     activeWarBanners.delete(id);
     if (activeWarBanners.size === 0) {
@@ -584,13 +604,33 @@
     return result;
   }
 
-  function getBannerDefenseBuff(hero = getLocalAvatar()) {
-    return { active: false, defBonus: 0, resilience: 0, bannerId: null, distance: Infinity, text: "" };
+  function getBannerDefenseBuff() {
+    const banner=warBannerState?.banner;
+    const active=mode==="live" && !!banner && banner.mapId===activeMapId &&
+      warBannerState.buffed && performance.now()<warBannerState.until;
+    return {active,defBonus:active ? .1 : 0,resilience:active ? .1 : 0,bannerId:active?banner.id:null,distance:Infinity,text:active?"ธงชัยอาคม":""};
   }
 
-  function updateBanners(dt, elapsed) {
-    const badge = $("warBannerBuffBadge");
-    if (badge) { badge.hidden = true; badge.textContent = ""; }
+  function updateBanners() {
+    const supported=mode==="live" && !!room && worldCombatFeatures.warBanner===true;
+    const banner=supported && warBannerState?.until>performance.now() && warBannerState.banner?.mapId===activeMapId
+      ?warBannerState.banner:null;
+    for(const id of activeWarBanners.keys()) if(id!==banner?.id) removeWarBanner(id);
+    if(banner && !activeWarBanners.has(banner.id)){
+      const mesh=createWarBannerMesh(banner.id,banner.x,banner.y,banner.z);
+      if(mesh)activeWarBanners.set(banner.id,{...banner,mesh});
+    }
+    const badge=$("warBannerBuffBadge");
+    const buff=getBannerDefenseBuff();
+    if(badge){badge.hidden=!buff.active;badge.textContent=buff.text;}
+    const button=$("bannerButton");
+    if(button){
+      button.disabled=!supported || !warBannerState?.canPlant || !!banner || performance.now()<warBannerPendingUntil;
+      button.setAttribute("aria-pressed",String(!!banner));
+      button.title=!supported?"ธงชัยอาคมยังไม่เปิดใช้งาน":"หัวหน้าปาร์ตี้ที่สังกัดกิลด์ปักธงได้";
+      const label=button.querySelector?.("i");
+      if(label)label.textContent=banner?"ปักธงแล้ว":supported?"ธงชัย":"ธงชัย · เร็ว ๆ นี้";
+    }
   }
 
   window.MontraBanner = {
@@ -602,7 +642,7 @@
     getActiveBanners: () => Array.from(activeWarBanners.values()),
     updateBanners,
     clearAllBanners: () => { for (const id of activeWarBanners.keys()) removeWarBanner(id); },
-    getCooldownRemaining: () => Math.max(0, BANNER_COOLDOWN - (performance.now() - lastBannerPlantTime))
+    getCooldownRemaining: () => Math.max(0, warBannerPendingUntil - performance.now())
   };
 
   // Phase 16: Shamanic Spirit Pet & Talisman Familiar 3D (สัตว์เลี้ยงภูติมนตรา กุมารทอง/พญาครุฑน้อย)
@@ -917,11 +957,47 @@
     return toggleFlight();
   }
 
+  const METEOR_LEADER_REQUIRED_TEXT="หัวหน้าปาร์ตี้ที่สังกัดกิลด์เท่านั้นที่ใช้ท่าทุบธรณีได้";
+  let meteorPendingUntil=0;
+  function isGuildPartyLeader() {
+    return Boolean(guildState && partyState && partyState.leaderId===localId);
+  }
   function meteorSlamAttack() {
-    // There is no authoritative meteor skill in the current protocol.
-    // Do not show damage, spend resources or mutate a local combat simulation.
-    toast("ท่าทุบธรณียังไม่เปิดใช้งาน · กดบินอีกครั้งเพื่อลงจอด");
-    return false;
+    if(mode!=="live" || !room || worldCombatFeatures.meteor!==true) {
+      toast("ท่าทุบธรณียังไม่เปิดใช้งาน");
+      return false;
+    }
+    if(!isGuildPartyLeader()) {
+      toast(METEOR_LEADER_REQUIRED_TEXT);
+      return false;
+    }
+    const player=ownServerCharacter();
+    if(!player?.alive || !player.flying || !["seer","mender"].includes(player.pathId) ||
+      ["ascending","descending"].includes(player.combatState) || performance.now()<meteorPendingUntil)return false;
+    try{room.send("meteor_slam",{});}catch(error){console.error("MONTRA meteor",error);return false;}
+    meteorPendingUntil=performance.now()+1500;
+    return true;
+  }
+  function showMeteorImpact(event) {
+    if(mode!=="live" || event?.mapId!==activeMapId || ![event.x,event.y,event.z].every(Number.isFinite))return;
+    if(event.ownerId===localId)meteorPendingUntil=0;
+    sparks("gold",event.x,event.y+.1,event.z,8,{speed:4,up:2,life:320});
+  }
+  function showCombatFeatureError(reason) {
+    const labels={
+      war_banner_leader_required:"หัวหน้าปาร์ตี้ที่สังกัดกิลด์เท่านั้นที่ปักธงได้",
+      war_banner_unavailable:"ปักธงที่ตำแหน่งนี้ไม่ได้",
+      war_banner_active:"ปาร์ตี้มีธงชัยอยู่แล้ว",
+      war_banner_cooldown:"ธงชัยกำลังพักใช้งาน",
+      meteor_leader_required:METEOR_LEADER_REQUIRED_TEXT,
+      meteor_unavailable:"ใช้ท่าทุบธรณีจากกลางอากาศนอกเขตพัก",
+      meteor_cooldown:"ท่าทุบธรณีกำลังพักใช้งาน",
+    };
+    if(!Object.hasOwn(labels,reason))return false;
+    if(reason.startsWith("war_banner"))warBannerPendingUntil=0;
+    else meteorPendingUntil=0;
+    toast(labels[reason]);
+    return true;
   }
 
   function toggleCelestialFlight() {
@@ -930,8 +1006,13 @@
 
   function updateFlight(dt, elapsed) {
     const hero = getLocalAvatar();
-    if (!hero?.node || hero.node.isDisposed?.()) return;
     const state = celestialFlightState(hero);
+    const meteor=$("meteorButton");
+    if(meteor){
+      meteor.hidden=!(mode==="live" && worldCombatFeatures.meteor===true && state.active && isGuildPartyLeader());
+      meteor.disabled=state.changing || performance.now()<meteorPendingUntil;
+    }
+    if (!hero?.node || hero.node.isDisposed?.()) return;
     let wings = hero.celestialWings;
     if (wings?.root?.isDisposed?.()) wings = hero.celestialWings = null;
     const wasActive = wings?.active === true;
@@ -998,7 +1079,7 @@
   const BOSS_SLAM_COOLDOWN = 12000;
   const BOSS_TELEGRAPH_DURATION = 1800;
 
-  let bossSkinMat = null, bossGoldMat = null, bossRedMat = null, bossEyeMat = null, bossClubMat = null, bossTelegraphMat = null;
+  let bossSkinMat = null, bossGoldMat = null, bossRedMat = null, bossEyeMat = null, bossClubMat = null;
   function ensureBossMaterials() {
     if (bossSkinMat) return;
     if (typeof mat !== "function") return;
@@ -1007,7 +1088,6 @@
     bossRedMat = mat("boss titan red", "#d32f2f", "#b71c1c");
     bossEyeMat = mat("boss titan eye", "#ff1744", "#ff5252");
     bossClubMat = mat("boss titan club", "#4e342e", "#ffd700");
-    bossTelegraphMat = mat("boss telegraph ground", "#ff1744", "#d50000");
   }
 
   function createThaoWessuwanBossMesh(x = 1.1, y = 0, z = 10.4) {
@@ -1027,7 +1107,7 @@
     torso.position.set(0, 1.6, 0);
     torso.scaling.set(1.1, 1.0, 0.85);
     if (bossSkinMat) torso.material = bossSkinMat;
-    torso.isPickable = true;
+    torso.isPickable = false;
 
     // Golden waist belt
     const belt = B.MeshBuilder.CreateCylinder("boss-belt", { diameter: 1.35, height: 0.28, tessellation: 8 }, scene);
@@ -1134,16 +1214,7 @@
     if (bossGoldMat) maceHead.material = bossGoldMat;
     maceHead.isPickable = false;
 
-    // Telegraph Ground Decal / Ring (วงแหวนเตือนภัย)
-    const telegraphRing = B.MeshBuilder.CreateDisc("boss-telegraph-ring", { radius: 4.5, tessellation: 32 }, scene);
-    telegraphRing.parent = root;
-    telegraphRing.position.set(0, 0.04, 0);
-    telegraphRing.rotation.x = Math.PI / 2;
-    if (bossTelegraphMat) telegraphRing.material = bossTelegraphMat;
-    telegraphRing.isPickable = false;
-    telegraphRing.setEnabled(false);
-
-    return { root, bodyPivot, torso, head, rightArmPivot, leftArmPivot, macePivot, telegraphRing, eyeL, eyeR };
+    return { root, bodyPivot, torso, head, rightArmPivot, leftArmPivot, macePivot, eyeL, eyeR };
   }
 
   function spawnThaoWessuwanBoss(x = 1.1, z = 10.4) {
@@ -1173,11 +1244,27 @@
   }
 
   function toggleThaoWessuwanBoss() {
-    return bossTitanState.active ? removeThaoWessuwanBoss() : spawnThaoWessuwanBoss();
+    updateThaoWessuwanBoss();
+    if(!bossTitanState.active)return spawnThaoWessuwanBoss();
+    requestForestAttack("boss_wessuwan_titan");
+    return true;
   }
 
   function updateThaoWessuwanBoss(dt, elapsed) {
-    // No simulated combat feedback while this encounter is unavailable.
+    const titan=mode==="live"?room?.state?.monsters?.get?.("boss_wessuwan_titan"):null;
+    const available=!!titan && titan.mapId===activeMapId;
+    bossTitanState.available=available;
+    bossTitanState.active=available && titan.alive;
+    bossTitanState.hp=available?titan.hp:null;
+    bossTitanState.maxHp=available?titan.maxHp:null;
+    const button=$("bossEncounterButton");
+    if(button){
+      button.hidden=!available;
+      button.disabled=!bossTitanState.active;
+      button.title="เลือกท้าวเวสสุวรรณ Titan";
+      const label=button.querySelector?.("i");
+      if(label)label.textContent=bossTitanState.active?"Titan":"Titan · รอเกิด";
+    }
   }
 
   window.MontraBoss = {

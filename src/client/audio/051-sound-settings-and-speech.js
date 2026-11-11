@@ -34,9 +34,14 @@
   // A click may only select a target or be rejected. Announce a local skill
   // only after its authoritative success event, and never interrupt a warning,
   // NPC answer, or voice preview. These are the same fixed public skill lines.
+  let lastSkillVoiceAt = -Infinity;
   function playSkillVoiceShout(skillId, playerId) {
-    if (playerId !== localId || !SKILL_VOICE_SHOUTS[skillId] || window.MontraAudio?.isSpeaking?.()) return;
-    window.MontraAudio?.speak?.(SKILL_VOICE_SHOUTS[skillId], { persona: "warrior", rate: 1.15 });
+    const audio = window.MontraAudio;
+    if (playerId !== localId || !Object.hasOwn(SKILL_VOICE_SHOUTS, skillId) || !audio?.speak || audio.isSpeaking?.()) return;
+    const now = performance.now();
+    if (now - lastSkillVoiceAt < 8000) return;
+    lastSkillVoiceAt = now;
+    audio.speak(SKILL_VOICE_SHOUTS[skillId], { persona: "warrior", rate: 1.15 });
   }
   function soundSettingsHtml() {
     const a = window.MontraAudio?.settings; if (!a) return "";

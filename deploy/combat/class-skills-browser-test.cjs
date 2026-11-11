@@ -29,6 +29,9 @@ function fixture() {
   const bindings = read('src/client/input/058-field-control-bindings.js');
   const quickBinding = between(bindings, '$("quickSkills").onclick=', '$("mapButton").onclick=');
   const drawers = between(read('src/client/ui/046-drawers-and-chat.js'), '  function gateFieldInput', '  const journalOrigins');
+  // Include the shipped optional replacement-skill dependency. This fixture has
+  // no negotiated session, so the actual helpers exercise legacy fallback.
+  const replacementSkills = between(read('src/client/network/044-state-sync-and-connection.js'), '  const REPLACEMENT_SKILLS', '  let connectionPending');
   const drawerKeys = between(read('src/client/ui/046-drawers-and-chat.js'), '  document.addEventListener("keydown",event=>{', '  function updateChatBadge');
   const script = `
 const $=id=>document.getElementById(id), wire=[], notices=[];
@@ -44,6 +47,7 @@ const SFX=()=>{}, toast=message=>notices.push(message), cancelForgeAnimation=()=
 const setTargetedSkill=value=>{targetedSkill=value;};
 const handleForgePickerKey=()=>false, handleItemDetailKey=()=>false;
 ${drawers}
+${replacementSkills}
 ${read('src/client/ui/048-class-books-and-hotbars.js')}
 ${read('src/client/ui/049-skill-graph-and-details.js')}
 ${quickBinding}

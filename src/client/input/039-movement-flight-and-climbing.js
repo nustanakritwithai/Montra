@@ -66,7 +66,9 @@
       const core=bladeBookState?.core?.[selectedBladeSkill],node=core || bladeBookState?.lessons?.[selectedBladeSkill],monster=monsterForSpell(id),opponent=!monster && room?.state?.players?.get?.(id),target=monster || opponent;
       if(!node || !id || id===localId || !target?.alive || (target.mapId || "ritual_village")!==activeMapId) {toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;}
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
-      spellTargetId=id;room.send(core?"blade_core_skill":"blade_skill",{skillId:selectedBladeSkill,targetId:id});return;
+      spellTargetId=id;
+      if(core || !tryReplacementSkillCast(selectedBladeSkill,id))room.send(core?"blade_core_skill":"blade_skill",{skillId:selectedBladeSkill,targetId:id});
+      return;
     }
     if (picked === "occult") {
       if(occultBookState?.path==="seer" && occultBookState?.core?.[selectedOccultSkill]){
@@ -82,7 +84,7 @@
         toast("เลือกเป้าหมายที่ใช้วิชานี้ได้");return;
       }
       spellTargetId=id;
-      room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
+      if(!tryReplacementSkillCast(selectedOccultSkill,id))room.send("occult_skill",{skillId:selectedOccultSkill,targetId:id});
       return;
     }
     if (picked === "muay") {
@@ -93,7 +95,8 @@
       spellTargetId=id;
       selectedPkTargetId=opponent ? id : null;
       syncPKHud();
-      room.send(muayBookData()?.catalog?.core?.[selectedMuaySkill]?"muay_core_skill":"muay_skill",{skillId:selectedMuaySkill,targetId:id});
+      const core=muayBookData()?.catalog?.core?.[selectedMuaySkill];
+      if(core || !tryReplacementSkillCast(selectedMuaySkill,id))room.send(core?"muay_core_skill":"muay_skill",{skillId:selectedMuaySkill,targetId:id});
       return;
     }
     if (picked === "sword") {
@@ -102,7 +105,8 @@
       if(opponent && partyState?.members?.some(member=>member.sessionId===id)){toast("โจมตีสมาชิกปาร์ตี้ไม่ได้");return;}
       spellTargetId=id;
       selectedPkTargetId=opponent ? id : null;syncPKHud();
-      room.send(swordData()?.catalog?.core?.[selectedSwordSkill]?"sword_core_skill":"sword_skill",{skillId:selectedSwordSkill,targetId:id});
+      const core=swordData()?.catalog?.core?.[selectedSwordSkill];
+      if(core || !tryReplacementSkillCast(selectedSwordSkill,id))room.send(core?"sword_core_skill":"sword_skill",{skillId:selectedSwordSkill,targetId:id});
       return;
     }
   }

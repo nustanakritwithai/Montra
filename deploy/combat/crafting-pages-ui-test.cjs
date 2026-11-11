@@ -71,12 +71,12 @@ function fixture(){
     slice('  function bagMeta(','  function wornGearAt(')+
     slice('  function wearPositions(','  function gearDestination(')+
     slice('  const benchTrail=[];','  function gearStamp(')+
-    slice('  function openCraftingPage(','  function openForgePage(')+
+    slice('  let craftBatchMax=','  function openForgePage(')+
     slice('  function renderBag()','  const gearCoreSkills=')+
     slice('  let economyPendingRequest=','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()'));
   run(slice('      joined.onMessage("economy_state",','      joined.onMessage("market_state",')+
-    slice('      joined.onMessage("craft_result",','      joined.onMessage("card_socket_result",')+
+    slice('      joined.onMessage("craft_queue",','      joined.onMessage("card_socket_result",')+
     slice('      joined.onMessage("inventory_state",','      joined.onMessage("weapon_equipped",')+
     slice('      joined.onMessage("item_catalog_page",','      joined.onMessage("gear_guides",')+
     slice('      joined.onMessage("economy_error",','      joined.onMessage("trade_update",'));
@@ -89,6 +89,29 @@ function fixture(){
 }
 
 if(require.main===module){
+test('supported server previews batch requirements and acknowledges a queued craft',()=>{
+  const f=fixture();
+  f.run('openCraftingPage()');
+  f.callbacks.economy_state({gold:1000,craftBatchMax:10,craftQueueMax:3});
+  assert(f.wire.some(msg=>msg.command==='get_craft_queue'));
+  const now=Date.now();
+  f.callbacks.craft_queue({serverNow:now,jobs:[]});
+  f.choose('all','mat_charcoal_1');
+  f.$('benchQuantity').value='2';
+  f.$('benchQuantity').oninput();
+  assert.match(f.$('benchIngredients').children[0].children[2].textContent,/5 \/ 4/);
+  f.$('benchQueue').click();
+  const order=f.wire.find(msg=>msg.command==='craft_enqueue');
+  assert.equal(order.payload.quantity,2);
+  f.callbacks.craft_queue({serverNow:now,requestId:order.payload.requestId,jobs:[
+    {id:'job-ready',recipeId:'mat_charcoal_1',quantity:2,startsAt:now-12000,readyAt:now-1000},
+  ]});
+  assert.equal(f.ctx.economyPending,false);
+  const claim=f.$('craftQueueJobs').children[0].children[1];
+  assert.equal(claim.disabled,false);claim.click();
+  assert.equal(f.wire.find(msg=>msg.command==='craft_claim').payload.jobId,'job-ready');
+});
+
 test('smith routes to dedicated crafting page and back, with a fresh economy read',()=>{
   const f=fixture();f.run('openSmith()');f.$('smithCraft').click();
   assert.equal(f.ctx.drawerActive,'crafting');assert.match(f.ctx.title,/สร้างของ/);assert.equal(f.$('personalBench').hidden,false);
@@ -287,7 +310,7 @@ test('bag/profile contain no duplicate crafting panels; live HUD and shared refr
   assert.match(slice('  function updateHud(now)','  async function connectOnline('),/\["bag","character","forge","crafting"\]\.includes\(drawerActive\)\) renderBag\(\)/);
   assert.match(source,/smith:"character",forge:"character",crafting:"character"/);
   assert.equal([...source.matchAll(/function submitCraft\(/g)].length,1);
-  assert.equal([...source.matchAll(/economySend\("craft_weapon"/g)].length,1,'all routes share one mutation sender');
+  assert.equal([...source.matchAll(/sendCraftMutation\(queued\?"craft_enqueue":"craft_weapon"/g)].length,1,'both crafting actions use the shared mutation sender');
   assert.equal([...(source+index).matchAll(/id="personalBench"/g)].length,1);assert.equal([...(source+index).matchAll(/id="craftGlaive"/g)].length,1);
 });
 console.log(`PASS dedicated crafting page: ${assertions} focused regression groups`);

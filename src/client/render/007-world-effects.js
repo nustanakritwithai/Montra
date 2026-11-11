@@ -71,7 +71,7 @@
     else { m.disableDepthWrite = true; m.zOffset = -2; }
     fxMatCache.set(key, m); return m;
   }
-  const worldFx = [], worldFxPool = [], FX_MAX = 140, FX_WARNING_RESERVE = 24;
+  const worldFx = [], worldFxPool = [], FX_MAX = 140, FX_COSMETIC_LIMIT = 48;
   // Warm the combat effects while the player is idle after loading: painting an effect texture and
   // compiling its shader the first time it appears stalled the first hits (badly on phones).
   const FX_WARM = ["star:white", "ring:white", "ring:gold", "yantra:gold", "star:gold", "ring:violet", "streak:violet", "star:violet",
@@ -127,7 +127,7 @@
   function spawnFx(shape, color, x, y, z, o = {}) {
     // Cosmetic bursts may not consume the warning reserve. Critical warnings
     // can also replace an older cosmetic at the hard cap, never another warning.
-    if (!o.critical && worldFx.length >= FX_MAX - FX_WARNING_RESERVE) return null;
+    if (!o.critical && worldFx.length >= FX_COSMETIC_LIMIT) return null;
     if (worldFx.length >= FX_MAX) {
       const expendable = worldFx.findIndex(effect => !effect.critical);
       if (!o.critical || expendable < 0) return null;

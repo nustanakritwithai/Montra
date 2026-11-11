@@ -12,7 +12,7 @@
     if (g.windup && !g.wasWindup) {
       ghostVoice(g, mesh, "attack"); g.criedAt = now;
       { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 45) windupTelegraph(mesh, g); }
-      { const hero = getLocalAvatar(); if (hero && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 32) {
+      { const hero = getLocalAvatar(); if (hero && (g.tier === "boss" || g.tier === "elite") && Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z) < 32) {
         const cries = GHOST_CRIES[g.design?.kind] || ["แฮ่!"]; // Push the cry to the ghost's outer side on screen so it never sits on the hero's shout bubble.
         const r = camera.getDirection(B.Axis.X), away = (mesh.position.x - hero.x) * r.x + (mesh.position.z - hero.z) * r.z >= 0 ? 1 : -1;
         floatText(mesh.position.x, mesh.position.y + (g.tall || 1.8) * .6, mesh.position.z, cries[Math.random() * cries.length | 0], "cry", { side: 52 * away, drift: 12 * away, rise: 20, life: 1000, lift: 14 }); } }

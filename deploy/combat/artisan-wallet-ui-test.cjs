@@ -39,7 +39,7 @@ function fixture(drawer='crafting'){
   vm.createContext(ctx);
   vm.runInContext(slice('  function finishEconomyPending(','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()')+
-    slice('  function renderCraftingPage()','  function submitCraft(')+
+    'function renderCraftQueue(){} function applyCraftCapabilities(){} function showCombatFeatureError(){return false;}\n'+slice('  function renderCraftingPage()','  function submitCraft(')+
     slice('  function renderForgePage()','  function submitForge(')+
     slice('      joined.onMessage("economy_state",','      joined.onMessage("market_state",')+
     slice('      joined.onMessage("command_rejected",','      joined.onMessage("warp_complete",')+

@@ -31,6 +31,6 @@ assert(mainSrc.includes('triggerCombatCallout("boss_telegraph")'), 'wired to bos
 assert(mainSrc.includes('triggerCombatCallout("boss_enrage")'), 'wired to boss enrage event');
 assert(mainSrc.includes('triggerCombatCallout("low_hp")'), 'wired to low HP threshold in HUD update');
 assert(mainSrc.includes('triggerCombatCallout("combo_rank_s")'), 'wired to combo rank S milestone');
-assert(mainSrc.includes('triggerCombatCallout("execute_finisher")'), 'wired to lethal execute finisher');
+assert(mainSrc.includes('if (struckState.tier === "boss") triggerCombatCallout("execute_finisher")'), 'execute callout is limited to boss defeats');
 
 console.log('PASS All Typhoon Tactical Combat Callouts verified successfully!');

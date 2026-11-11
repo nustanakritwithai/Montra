@@ -47,6 +47,7 @@ function fixture({central=true}={}){
     slice('  let economyPendingRequest=','  function updatePartyBadge()'));
   ctx.room={state:{economyAvailable:true,players:new Map([['me',player],['near',{persistent:true,alive:true,characterName:'เพื่อน',mapId:'village',x:2,y:0,z:0}]])},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
   ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>callbacks[name]=handler;
+  ctx.applyCraftCapabilities=()=>{};
   run(slice('      joined.onMessage("economy_state",','      joined.onMessage("craft_result",')+
     slice('      joined.onMessage("market_result",','      let resourcePage=null;')+
     slice('      joined.onMessage("economy_error",','      joined.onMessage("combat_hit",'));
@@ -299,3 +300,19 @@ test('market loading, empty, offline, timeout and rejection messages stay Thai',
 });
 
 console.log(`PASS marketplace catalog: ${groups} regression groups`);
+
+test('advanced market sends base-stat filters and ignores a superseded history reply',()=>{
+  const f=fixture();
+  f.callbacks.market_features({version:1,history:true,baseStatFilter:true,favoriteLimit:50});
+  f.callbacks.market_favorites({items:['wood']});
+  f.$('wmBaseStat').value='atk';f.$('wmBaseValue').value='5';f.$('wmFavoritesOnly').checked=true;
+  f.$('wmFilterForm').onsubmit({preventDefault(){}});
+  assert.deepEqual(f.lastBrowse().payload.minStat,{stat:'atk',value:5});
+  assert.equal(f.lastBrowse().payload.favoritesOnly,true);
+  f.run('requestMarketHistory("wood");requestMarketHistory("weapon");');
+  const requests=f.wire.filter(msg=>msg.command==='market_history');
+  f.callbacks.market_history({itemId:'wood',tag:requests[0].payload.tag,sales:[]});
+  assert.equal(f.run('marketPriceState.sales'),null);
+  f.callbacks.market_history({itemId:'weapon',tag:requests[1].payload.tag,sales:[]});
+  assert.equal(f.run('marketPriceState.sales.length'),0);
+});

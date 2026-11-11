@@ -3,6 +3,7 @@ import {assertTestChildRunning,stopTestChild,leaveTestRoom,joinTestRoom,armTestD
 import assert from 'node:assert/strict';
 import {spawn} from 'node:child_process';import {mkdtemp,mkdir,rm,writeFile} from 'node:fs/promises';import {createHash,randomBytes} from 'node:crypto';import os from 'node:os';import path from 'node:path';import {fileURLToPath} from 'node:url';import {Client} from '@colyseus/sdk';
 armTestDeadline();
+const standardRoom=process.argv.includes("--standard-room");
 const delay=ms=>new Promise(r=>setTimeout(r,ms));const until=async(fn,label,ms=10000)=>{const end=Date.now()+ms;while(Date.now()<end){const x=fn();if(x)return x;await delay(20);}throw Error('timeout: '+label);};
 const home=await mkdtemp(path.join(os.tmpdir(),'montra-prototype-gameplay-'));const chars=path.join(home,'characters');await mkdir(chars);
 const token='mt1_'+randomBytes(32).toString('hex'),id=createHash('sha256').update(token).digest('hex');
@@ -30,6 +31,13 @@ const menderBook={learned:{seer:[],mender:['mender_heal','mender_deep_heal']},
 await writeFile(path.join(chars,menderId+'.json'),JSON.stringify({version:1,id:menderId,name:'Prototype Mender',
  level:40,experience:0,pkKills:0,pkDeaths:0,x:1.1,y:0,z:11.6,hp:100,mapId:'ritual_village',
  build:{path:'mender',ancestry:'woodland'},occultBook:menderBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
+const legacyMenderToken='mt1_'+randomBytes(32).toString('hex');
+if(standardRoom){
+ const legacyId=createHash('sha256').update(legacyMenderToken).digest('hex');
+ await writeFile(path.join(chars,legacyId+'.json'),JSON.stringify({version:1,id:legacyId,name:'Legacy Mender',
+   level:40,experience:0,pkKills:0,pkDeaths:0,x:1.1,y:0,z:8.5,hp:100,mapId:'ritual_village',
+   build:{path:'mender',ancestry:'woodland'},occultBook:menderBook,updatedAt:new Date().toISOString()}),{flag:'wx'});
+}
 const circleToken='mt1_'+randomBytes(32).toString('hex'),circleId=createHash('sha256').update(circleToken).digest('hex');
 const circleBook={learned:{seer:[],mender:['mender_heal','mender_ward','mender_area','mender_shelter','mender_deep_circle']},
  loadouts:{seer:[null,null,null,null],mender:['mender_deep_circle',null,null,null]},training:{seer:0,mender:100},cooldowns:{}};
@@ -46,32 +54,50 @@ await writeFile(path.join(chars,chaiyaId+'.json'),JSON.stringify({version:1,id:c
  build:{path:'muay_boran',ancestry:'woodland'},muayBook:chaiyaBook,
  inventory:{version:1,slots:[{itemId:'muay_wraps',quantity:1},...new Array(11).fill(null)],equippedWeaponSlot:0},
  updatedAt:new Date().toISOString()}),{flag:'wx'});
-const env={NODE_ENV:'test',HOME:home,TMPDIR:home,MONTRA_TEST_SANDBOX:home,MONTRA_CHARACTER_DIR:chars,MONTRA_ACCOUNTS_REQUIRED:'0',MONTRA_ECONOMY_ENABLED:'0',MONTRA_WORLD_EXPANSION:'0',MONTRA_HUNT_EVENTS:'0',MONTRA_DIRECTOR_ENABLED:'0',MONTRA_DIRECTOR_PERSIST:'0',MONTRA_ISOLATED_STAGING:'1',MONTRA_PROTOTYPE_PROTOCOL_V1:'1',MONTRA_PROTOTYPE_GAMEPLAY:'1'};
+const env={NODE_ENV:'test',HOME:home,TMPDIR:home,MONTRA_TEST_SANDBOX:home,MONTRA_CHARACTER_DIR:chars,MONTRA_ACCOUNTS_REQUIRED:'0',MONTRA_ECONOMY_ENABLED:'0',MONTRA_WORLD_EXPANSION:'0',MONTRA_HUNT_EVENTS:'0',MONTRA_DIRECTOR_ENABLED:'0',MONTRA_DIRECTOR_PERSIST:'0',MONTRA_ISOLATED_STAGING:'1',MONTRA_PROTOTYPE_PROTOCOL_V1:'1',MONTRA_PROTOTYPE_GAMEPLAY:'1',...(standardRoom?{MONTRA_REPLACEMENT_SKILLS:'1'}:{})};
 const entry=fileURLToPath(new URL('./src/rooms/prototype-gameplay-test-server.ts',import.meta.url));let output='';const child=spawn(process.execPath,['--import',import.meta.resolve('tsx'),entry],{cwd:home,env,stdio:['ignore','pipe','pipe']});child.stdout.on('data',d=>output+=d);child.stderr.on('data',d=>output+=d);let spawnError;child.on('error',error=>{spawnError=error;});let room,observer;
 try{
  const port=await until(()=>{assertTestChildRunning(child,spawnError,output);return output.match(/PROTOTYPE_TEST_PORT=(\d+)/)?.[1];},'server',20000);const sdk=new Client('http://127.0.0.1:'+port);
  room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:token,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));room.reconnection.enabled=false;
  const events=[];room.onMessage('*',(type,data)=>events.push({type,data}));
  const ready=(await until(()=>events.find(e=>e.type==='prototype_protocol_v1_ready'),'ready')).data;assert.equal(ready.gameplayEnabled,true);
+ await until(()=>room.state?.players?.get(room.sessionId)?.persistent,'player');
+ const player=()=>room.state.players.get(room.sessionId),monster=()=>room.state.monster;
+ if(standardRoom){
+   room.send('sword_skill',{skillId:'flowing_blades',targetId:monster().id});
+   await until(()=>events.find(e=>e.type==='command_rejected'&&e.data.reason==='prototype_protocol_required'),'offered session cannot use old effect');
+ }
  room.send('prototype_protocol_v1',{action:'confirm_gameplay',nonce:ready.nonce});
  await until(()=>events.find(e=>e.type==='prototype_protocol_v1_confirmed'),'confirmed');
- await until(()=>room.state?.players?.get(room.sessionId)?.persistent,'player');const player=()=>room.state.players.get(room.sessionId),monster=()=>room.state.monster;
- observer=await joinTestRoom(()=>sdk.joinById(room.roomId,{prototypeProtocolVersion:1,prototypeGameplayVersion:1}));observer.reconnection.enabled=false;
+ observer=await joinTestRoom(()=>sdk.joinById(room.roomId,standardRoom?{}:{prototypeProtocolVersion:1,prototypeGameplayVersion:1}));
+ observer.reconnection.enabled=false;
  const observed=[];observer.onMessage('*',(type,data)=>observed.push({type,data}));
- const observerReady=(await until(()=>observed.find(e=>e.type==='prototype_protocol_v1_ready'),'observer ready')).data;
- const waitingMana=player().mana, waitingHp=monster().hp;
- room.send('prototype_protocol_v1',{seq:1,action:'flowing_blades',targetId:monster().id});await delay(150);
- assert.equal(player().mana,waitingMana);assert.equal(monster().hp,waitingHp);assert.ok(!events.some(e=>e.type==='prototype_skill_v1'));
- observer.send('prototype_protocol_v1',{action:'confirm_gameplay',nonce:observerReady.nonce});
- await until(()=>observed.find(e=>e.type==='prototype_protocol_v1_confirmed'),'observer confirmed');
- await delay(1100); // Refill the command bucket after the denied cast.
+ if(standardRoom){
+   await until(()=>observer.state?.players?.get(observer.sessionId)?.alive,'legacy observer admitted');
+   observer.send('prototype_protocol_v1',{seq:1,action:'probe'});
+   room.send('prototype_protocol_v1',{action:'shadow_state'});
+   room.send('prototype_protocol_v1',{action:'occult_state'});
+   await until(()=>events.some(e=>e.type==='prototype_shadow_v1_state') && events.some(e=>e.type==='prototype_occult_v1_state'),'both initial snapshots');
+ }else{
+   const observerReady=(await until(()=>observed.find(e=>e.type==='prototype_protocol_v1_ready'),'observer ready')).data;
+   const waitingMana=player().mana, waitingHp=monster().hp;
+   room.send('prototype_protocol_v1',{seq:1,action:'flowing_blades',targetId:monster().id});await delay(150);
+   assert.equal(player().mana,waitingMana);assert.equal(monster().hp,waitingHp);assert.ok(!events.some(e=>e.type==='prototype_skill_v1'));
+   observer.send('prototype_protocol_v1',{action:'confirm_gameplay',nonce:observerReady.nonce});
+   await until(()=>observed.find(e=>e.type==='prototype_protocol_v1_confirmed'),'observer confirmed');
+   await delay(1100);
+ }
  assert.equal(player().equippedWeaponId,'arcane_sword');const before=player().mana;
  room.send('prototype_protocol_v1',{seq:1,action:'flowing_blades',targetId:monster().id});await until(()=>events.find(e=>e.type==='prototype_skill_v1'&&e.data.phase==='first'),'first strike');
  assert.ok(player().mana>=before-24-1e-4 && player().mana<=before-23,'one 24-mana charge with bounded regeneration');const hp=monster().hp,cd=JSON.parse(player().swordTreeData).cooldowns.flowing_blades;assert.ok(cd>Date.now());
- await assert.rejects(joinTestRoom(()=>sdk.joinById(room.roomId,{})),isPrototypeAdmissionRejection);
+ if(!standardRoom)await assert.rejects(joinTestRoom(()=>sdk.joinById(room.roomId,{})),isPrototypeAdmissionRejection);
  await delay(400);room.send('prototype_protocol_v1',{seq:1,action:'flowing_blades',targetId:monster().id});await delay(100);assert.equal(monster().hp,hp,'duplicate has no damage');
  const manaBeforeFollowup=player().mana;room.send('prototype_protocol_v1',{seq:2,action:'flowing_blades',targetId:monster().id});await until(()=>events.find(e=>e.type==='prototype_skill_v1'&&e.data.phase==='followup'),'followup');assert.ok(monster().hp<hp);assert.ok(player().mana>=manaBeforeFollowup-0.1,'follow-up does not spend mana');assert.equal(JSON.parse(player().swordTreeData).cooldowns.flowing_blades,cd);
- console.log('PASS: isolated admission, observer confirmation, replay, two strikes and one charge');
+ if(standardRoom){
+   await until(()=>observer.state?.monster?.hp===monster().hp,'legacy observer received the same authoritative HP');
+   assert.ok(!observed.some(e=>e.type.startsWith('prototype_')),'legacy observer receives no experimental messages');
+   console.log('PASS: standard room mixed admission, legacy observer, replay, two strikes and one charge');
+ }else console.log('PASS: isolated admission, observer confirmation, replay, two strikes and one charge');
 
  await leaveTestRoom(observer);observer=undefined;
  await leaveTestRoom(room);room=undefined;
@@ -207,6 +233,19 @@ await leaveTestRoom(room);room=undefined;
  assert.equal(circleEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='mender_deep_circle'&&e.data.phase==='placed').length,1);
  assert.ok(circleEvents.filter(e=>e.type==='prototype_skill_v1'&&e.data.skillId==='mender_deep_circle'&&e.data.phase==='pulse').length<=3);
  console.log('PASS: moving Deep Circle replaces the legacy cast, follows the caster and expires once');
+ if(standardRoom){
+   observer=await joinTestRoom(()=>sdk.joinById(room.roomId,{guestToken:legacyMenderToken}));
+   observer.reconnection.enabled=false;
+   const legacyEvents=[];observer.onMessage('*',(type,data)=>legacyEvents.push({type,data}));
+   const legacyPlayer=await until(()=>observer.state?.players?.get(observer.sessionId)?.persistent&&observer.state.players.get(observer.sessionId),'legacy Mender loaded');
+   const hp=legacyPlayer.hp;
+   observer.send('occult_skill',{skillId:'mender_deep_heal',targetId:observer.sessionId});
+   await until(()=>legacyEvents.find(e=>e.type==='occult_skill_used'&&e.data.skillId==='mender_deep_heal'),'old Mender command');
+   assert.ok(legacyPlayer.hp>hp,'legacy Mender gets the original immediate heal');
+   assert.ok(!legacyEvents.some(e=>e.type.startsWith('prototype_')));
+   await leaveTestRoom(observer);observer=undefined;
+   console.log('PASS: legacy Mender can use the previous effect in the same room');
+ }
 
  await leaveTestRoom(room);room=undefined;
  room=await joinTestRoom(()=>sdk.create('my_room',{guestToken:chaiyaToken,prototypeProtocolVersion:1,prototypeGameplayVersion:1}));

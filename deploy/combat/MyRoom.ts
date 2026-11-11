@@ -1,3 +1,4 @@
+import { TITAN_BOSS } from "./RegionalBosses.js";
 import {newShadowCutState,markShadowCut,returnShadowCut,clearShadowCut,SHADOW_CUT_TRIAL,type ShadowCutState,type ShadowMark,type ShadowPoint} from "./ShadowCutPrototype.js";
 import {newFlowingState,useFlowing,advanceFlowing,clearFlowing,consumeFlowingGuard,type FlowingState} from "./FlowingBladesPrototype.js";
 import {newCounterCursor,recordChaiyaBlock,validChaiyaOpportunity,grantChaiyaDebuff,consumeChaiyaDebuff,activeChaiyaDebuff,type CounterCursor,type CounterOpportunity,type ChaiyaDebuff} from "./ChaiyaCounterPrototype.js";
@@ -83,13 +84,20 @@ import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
-import { parseSellMaterial, parseSalvage, parseCraft, parseHomeAction, parseEconomyRequest, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { CRAFT_QUEUE_LIMIT, CRAFT_QUEUE_MS_PER_ITEM, MARKET_FAVORITE_LIMIT, MAX_CRAFT_QUANTITY } from "./EconomyStore.js";
+import { parseMarketHistory, parseMarketFavorite, parseSellMaterial, parseSalvage, parseCraft, parseCraftClaim, parseHomeAction, parseEconomyRequest, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
-  CITY_PURCHASE_ENABLED, CITY_SITES, CITY_WORKSHOP_ENABLED, isCityPurchaseOrder, isWarehouseOrder, parseCityOrder,
-  type CityOrder, type CityPurchaseOrder, type CitySite,
+  CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_PRODUCT, CITY_MINING_SITE,
+  CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
+  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MISSIONS_ENABLED, CITY_NEUTRAL_MARKET_ENABLED, CITY_PURCHASE_ENABLED,
+  CITY_RETURN_MARKET_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_TRADE_CONTRACTS_ENABLED, CITY_WORKSHOP_ENABLED,
+  isCityContractOrder, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityNeutralMarketOrder, isCityPurchaseOrder, isCitySupplyOrder,
+  isWarehouseOrder, parseCityOrder,
+  type CityContractOrder, type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityNeutralMarketOrder,
+  type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
+  type CitySite, type CitySupplyOrder,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -145,24 +153,54 @@ type PrototypeOccultView = Readonly<{
   rescues:readonly Pick<RescueTalisman,"castId"|"ownerId"|"targetId"|"mapId"|"expiresAt">[];
   circles:readonly PrototypeCircleView[];
 }>;
+type PrototypeSkillNotice = Readonly<{
+  version: 1;
+  phase: string;
+  playerId: string;
+  targetId: string;
+  skillId: string;
+  seq?: number;
+  markSeq?: number;
+  castId?: string;
+  amount?: number;
+  targetIds?: readonly string[];
+  reason?: PrototypeShadowEndReason;
+  origin?: ShadowPoint;
+  destination?: ShadowPoint;
+  serverNowMs?: number;
+  startedAtServerMs?: number;
+  armedAtServerMs?: number;
+  expiresAtServerMs?: number;
+  durationMs?: number;
+}>;
 export type PrototypeRoomTransport = Readonly<{
   ready(client:Client, nonce:string|undefined):void;
   confirmed(client:Client):void;
   probeResult(client:Client, seq:number):void;
   shadowState(client:Client, state:Readonly<{version:1;serverNowMs:number;marks:readonly PrototypeShadowView[]}>):void;
   occultState(client:Client,state:PrototypeOccultView & Readonly<{version:1;serverNowMs:number}>):void;
-  skill(notice:Readonly<{version:1;phase:string;playerId:string;targetId:string;skillId:string;
-    seq?:number;markSeq?:number;castId?:string;amount?:number;targetIds?:readonly string[];reason?:PrototypeShadowEndReason;origin?:ShadowPoint;destination?:ShadowPoint;serverNowMs?:number;startedAtServerMs?:number;armedAtServerMs?:number;
-    expiresAtServerMs?:number;durationMs?:number}>):void;
+  skill(notice:PrototypeSkillNotice):void;
 }>;
 
 const mapsWithServices=Object.fromEntries(Object.entries(mapsWithServiceNpcs()).map(([id,map])=>[
   id, BOAT_SHORES[id] ? {...map, boatDock:{...BOAT_SHORES[id],range:BOAT_LAUNCH_RANGE,deck:BOAT_DECK}} : map,
 ]));
-const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
+const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,combatFeatures:{warBanner:true,meteor:true,titanStrikeRadius:TITAN_BOSS.strikeRadius},homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
 const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_PURCHASE_ENABLED;
+const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
+const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
+const cityMarketIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_LOCAL_MARKET_ENABLED;
+const cityReturnMarketIntake = cityMarketIntake && CITY_RETURN_MARKET_ENABLED;
+const cityNeutralMarketIntake = cityMarketIntake && CITY_NEUTRAL_MARKET_ENABLED;
+const cityContractIntake = cityMarketIntake && cityMissionIntake && CITY_TRADE_CONTRACTS_ENABLED;
+function cityBrokerAt(site: CitySite | null, x: number, z: number): CitySite | null {
+  return site && serviceNpcsFor(site).some(npc => npc.role === "market" &&
+    Math.hypot(x - npc.x, z - npc.z) <= npc.radius) ? site : null;
+}
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
+  if (site === CITY_MINING_SITE)
+    store.finishCitySupplyRepairs(repair => guilds.war.government.repairWithCitySupply(repair, now));
   const pending = guilds.pendingCityDisbands();
   for (const disband of pending) guilds.settleCityDisband(store, disband);
   if (pending.length) notifyGuilds();
@@ -175,7 +213,7 @@ function sweepCityProduction(now: number): void {
   }
 }
 function encodeBattleWorld(maps:Readonly<Record<string,unknown>>):string {
-  return JSON.stringify({version:1,maps},(key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value);
+  return JSON.stringify({version:1,maps,combatFeatures:{warBanner:true}},(key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value);
 }
 const battlefieldWorldDefinition=WORLD_EXPANSION?encodeBattleWorld(WORLD_MAPS):"";
 const isolatedBattleWorldDefinitions=new Map<string,string>();
@@ -227,6 +265,9 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
  *   room type "my_room"; monster id "possessed-1";
  *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
  */
+const METEOR = {range: 3.5, cooldownMs: 15_000, stamina: 20, maxTargets: 5, power: 1.2} as const;
+const WAR_BANNER = {radius: 12, durationMs: 60_000, cooldownMs: 15_000, defenseBonus: 0.10} as const;
+
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
@@ -261,8 +302,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastDashMs = new Map<string, number>();
   private attackTargets = new Map<string, string>();
   private mountHitSequence = new Map<string, number>();
-  // Transport-only experiment. The flag is deliberately insufficient on its own:
-  // it must also be an explicitly designated non-production isolated staging process.
+  private readonly replacementSkillsEnabled = process.env.MONTRA_REPLACEMENT_SKILLS === "1";
+  private readonly replacementSkillNotices: Array<{notice: PrototypeSkillNotice; mapId: string}> = [];
   private prototypeSessions = new Map<string, PrototypeCommandGate>();
   private prototypeBuckets = new Map<string, CommandBucket>();
   private prototypeGameplaySessions = new Set<string>();
@@ -275,19 +316,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterHitSequence = 0;
   private pendingDefaultMonsterHits = new WeakSet<DefaultMonsterHit>();
   private pendingMonsterDefeats = new WeakSet<MonsterDefeat>();
-  private lastForestHitAt = new WeakMap<Monster,number>();
+  private forestStrikeHits = new WeakMap<Monster,{at:number;targets:Set<string>}>();
   private prototypeCounters = new Map<string,CounterCursor>();
   private prototypeOpportunities = new Map<string,CounterOpportunity>();
   private prototypeDebuffs = new Map<string,ChaiyaDebuff>();
   protected prototypeGameplayEnabled(): boolean {
-    // HARD BLOCK: staged gameplay cannot be enabled until authoritative damage
-    // event identity and complete integration/visibility review are approved.
-    // Only a dedicated room in the verification project overrides this block.
+    return this.replacementSkillsEnabled && !this.field;
+  }
+  protected requireAllPrototypeClients(): boolean {
     return false;
   }
   private prototypeGameplayAllowed(id:string):boolean {
     return this.prototypeGameplayEnabled() && this.prototypeGameplaySessions.has(id) &&
-      this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId));
+      (!this.requireAllPrototypeClients() || this.clients.every(peer=>this.prototypeGameplaySessions.has(peer.sessionId)));
   }
   private clearPrototypeTransient(id:string):void {
     if(this.occultHealingFields.get(id)?.kind==="moving")this.clearOccultHealingField(id);
@@ -485,7 +526,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private protectMonsterHit(sequence:number,targetId:string,target:Player,monster:Monster):{id:string;factor:number}|undefined {
-    if(!this.prototypeFirmGuards.size || !this.prototypeGameplayAllowed(targetId))return;
+    if(!this.prototypeFirmGuards.size)return;
     const ally:GuardActor={id:targetId,point:target,alive:target.alive,
       eligible:!target.flying && onMapGround(target) && !this.pendingItemUses.has(targetId) &&
         !this.pendingRewards.has(targetId) && !this.pendingCharacterLeaves.has(targetId)};
@@ -523,8 +564,36 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private prototypeNotice(phase:string,playerId:string,targetId:string,skillId:string):void {
     this.prototypeTransport()?.skill({version:1,phase,playerId,targetId,skillId});
   }
+  protected readonly replacementSkillTransport: PrototypeRoomTransport = {
+    ready: (client, nonce) => client.send("prototype_protocol_v1_ready", {
+      version: 1, gameplayEnabled: nonce !== undefined, ...(nonce ? {nonce} : {}),
+    }),
+    confirmed: client => client.send("prototype_protocol_v1_confirmed", {version: 1}),
+    probeResult: (client, seq) => client.send("prototype_protocol_v1_result", {version: 1, seq, status: "reserved_no_effect"}),
+    shadowState: (client, state) => client.send("prototype_shadow_v1_state", state),
+    occultState: (client, state) => client.send("prototype_occult_v1_state", state),
+    skill: notice => this.publishReplacementSkill(notice),
+  };
+  protected publishReplacementSkill(notice: PrototypeSkillNotice): void {
+    const mapId = notice.origin?.mapId ?? this.state.players.get(notice.playerId)?.mapId;
+    if (mapId) this.replacementSkillNotices.push({notice, mapId});
+  }
+  override broadcastPatch(): boolean {
+    const patched = super.broadcastPatch();
+    if (!this.replacementSkillNotices.length) return patched;
+    // Colyseus flushes per-client patch messages before room-wide hit events.
+    // Deliver skill results after the state and hit events, to confirmed viewers only.
+    for (const {notice, mapId} of this.replacementSkillNotices.splice(0)) {
+      for (const client of this.clients) {
+        if (!this.prototypeGameplaySessions.has(client.sessionId) || this.state.players.get(client.sessionId)?.mapId !== mapId) continue;
+        try { client.send("prototype_skill_v1", notice); }
+        catch { /* Combat is committed. A disconnected observer can request current state on rejoin. */ }
+      }
+    }
+    return patched;
+  }
   protected prototypeTransport(): PrototypeRoomTransport | undefined {
-    return undefined;
+    return this.prototypeGameplayEnabled() ? this.replacementSkillTransport : undefined;
   }
   private acknowledgePrototypeProtocol(client: Client, fields: Record<string, unknown>): void {
     const transport=this.prototypeTransport();
@@ -565,6 +634,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       try {transport.confirmed(client);}catch{return;}
       this.prototypeGameplayChallenges.delete(id);
       this.prototypeGameplaySessions.add(id);
+      // Admission and initial snapshots leave room for the first cast and its follow-up.
+      this.prototypeBuckets.set(id, new CommandBucket(6, 1, this.simulatedMs));
       return;
     }
     if(action.value==="occult_state"){
@@ -601,7 +672,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const skillId=(message as {skillId?:unknown}|null)?.skillId;
     const replacement=replacementSkillFamily(skillId)===family;
     if(sequence===undefined){
-      if(replacement && this.prototypeGameplayEnabled())return this.reject(client,"prototype_protocol_required");
+      const id = client.sessionId;
+      if (replacement && this.prototypeGameplayEnabled() &&
+        (this.requireAllPrototypeClients() || this.prototypeGameplaySessions.has(id) || this.prototypeGameplayChallenges.has(id)))
+        return this.reject(client, "prototype_protocol_required");
     } else if(!replacement || !this.prototypeGameplayAllowed(client.sessionId))return;
     if(this.blockMounted(client) || !this.hotbarCastAllowed(client,message,"advanced"))return;
     switch(family){
@@ -812,6 +886,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayWrapGranted = new Set<string>();
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
+  private readonly sessionGuilds = new Map<string, string>();
+  private readonly warBanners = new Map<string, {
+    id: string; ownerId: string; guildId: string; mapId: string;
+    x: number; y: number; z: number; expiresAt: number; viewers: Map<string, boolean>;
+  }>();
+  private readonly lastBannerAt = new Map<string, number>();
   private guildSubscriptions = new Map<string,()=>void>();
   private guildInvites = new Map<string,{from:string;to:string;guildId:string;expires:number}>();
 
@@ -827,7 +907,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
   private climbs = new Map<string, WorldPoint>();
-  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
+  private flightTransitions = new Map<string, {targetY: number; landing: boolean; meteor?: boolean}>();
+  private readonly lastMeteorAt = new Map<string, number>();
   private readonly needs = new Map<string, {hungryAt: number; thirstyAt: number}>();
   private readonly homeClients = new Set<string>();
   private readonly homeWalls = new Map<string, {cell:number;rotation:0|1}[]>();
@@ -4062,8 +4143,92 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private sendGuild(client:Client,character:string):void {
-    client.send("guild_state",guildStore().view(character,guildOnline));
+    const view = guildStore().view(character,guildOnline), id = client.sessionId;
+    if (this.sessionGuilds.get(id) !== view?.id) {
+      if (view) this.sessionGuilds.set(id, view.id);
+      else this.sessionGuilds.delete(id);
+      this.updateWarBanners();
+    }
+    client.send("guild_state",view);
     client.send("guild_recruitment",{pending:guildStore().pending(character) ?? null,applications:guildStore().applications(character)});
+  }
+
+  private isGuildPartyLeader(id: string): boolean {
+    return this.sessionGuilds.has(id) && this.parties.get(id)?.leader === id;
+  }
+
+  private plantWarBanner(client: Client): void {
+    const id = client.sessionId, player = this.state.players.get(id);
+    const party = this.parties.get(id), guildId = this.sessionGuilds.get(id);
+    if (party?.leader !== id || !guildId) return this.reject(client, "war_banner_leader_required");
+    if (!player?.alive || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+        player.flying || player.mounted || !onMapGround(player) ||
+        (this.field && !this.warSeats.has(id))) return this.reject(client, "war_banner_unavailable");
+    if (this.warBanners.has(party.id)) return this.reject(client, "war_banner_active");
+    if (this.simulatedMs - (this.lastBannerAt.get(id) ?? -Infinity) < WAR_BANNER.cooldownMs) {
+      return this.reject(client, "war_banner_cooldown");
+    }
+    this.lastBannerAt.set(id, this.simulatedMs);
+    this.warBanners.set(party.id, {
+      id: randomUUID(), ownerId: id, guildId, mapId: player.mapId, x: player.x, y: player.y, z: player.z,
+      expiresAt: this.simulatedMs + WAR_BANNER.durationMs, viewers: new Map(),
+    });
+    this.updateWarBanners();
+  }
+
+  private sendWarBanner(client: Client): void {
+    const id = client.sessionId, party = this.parties.get(id);
+    const banner = party && this.warBanners.get(party.id);
+    const visible = banner?.viewers.has(id) ? banner : undefined;
+    const canPlant = party?.leader === id && this.sessionGuilds.has(id);
+    try {
+      client.send("war_banner_state", {canPlant, buffed: visible?.viewers.get(id) ?? false,
+        banner: visible ? {id: visible.id, ownerId: visible.ownerId, mapId: visible.mapId,
+          x: visible.x, y: visible.y, z: visible.z, radius: WAR_BANNER.radius,
+          remainingMs: Math.max(0, visible.expiresAt - this.simulatedMs)} : null});
+    } catch { /* disconnected */ }
+  }
+
+  private updateWarBanners(): void {
+    for (const [partyId, banner] of this.warBanners) {
+      const party = this.parties.get(banner.ownerId), owner = this.state.players.get(banner.ownerId);
+      const ownerSide = this.warSeats.get(banner.ownerId)?.side;
+      const valid = party?.id === partyId && party.leader === banner.ownerId && owner?.alive &&
+        owner.mapId === banner.mapId && this.sessionGuilds.get(banner.ownerId) === banner.guildId &&
+        !this.pendingWarps.has(banner.ownerId) && !this.pendingCharacterLeaves.has(banner.ownerId) &&
+        (!this.field || ownerSide) && this.simulatedMs < banner.expiresAt;
+      const next = new Map<string, boolean>();
+      if (valid) for (const id of party.members) {
+        const player = this.state.players.get(id);
+        if (!player?.alive || player.mapId !== banner.mapId || this.sessionGuilds.get(id) !== banner.guildId ||
+            this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+            (this.field && this.warSeats.get(id)?.side !== ownerSide)) continue;
+        const effects = this.effects.modifiers(id);
+        const active = effects.some(effect => effect.id === "war_banner" && effect.sourceId === banner.id);
+        const buffed = distance3d(banner, player) <= WAR_BANNER.radius &&
+          (active || effects.length < STACKING_RULES.maxModifiers);
+        if (buffed && !active) {
+          this.effects.grant(id, {id: "war_banner", sourceId: banner.id, group: "war_banner",
+            bonuses: {def: WAR_BANNER.defenseBonus, magicDef: WAR_BANNER.defenseBonus}}, banner.expiresAt);
+          this.applyStats(id, player, this.statAllocations.get(id) ?? emptyAllocations());
+        }
+        next.set(id, buffed);
+      }
+
+      const previous = banner.viewers;
+      banner.viewers = next;
+      if (!valid) this.warBanners.delete(partyId);
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (previous.get(id) && !next.get(id) && this.effects.remove(id, "war_banner", banner.id)) {
+          const player = this.state.players.get(id);
+          if (player) this.applyStats(id, player, this.statAllocations.get(id) ?? emptyAllocations());
+        }
+        if (previous.get(id) !== next.get(id)) {
+          const client = this.clients.find(peer => peer.sessionId === id);
+          if (client) this.sendWarBanner(client);
+        }
+      }
+    }
   }
 
   private partyAction(client:Client, action:()=>void): void {
@@ -4089,6 +4254,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const client=this.clients.find(c=>c.sessionId===id);
     try { client?.send("party_state",{partyId:null,leaderId:null,members:[]}); } catch { /* disconnected */ }
     if (result.current) this.sendPartyState(result.current);
+    this.updateWarBanners();
   }
   private parsePartyInvitation(message:unknown):string|null {
     if (!message || typeof message!=="object" || Array.isArray(message)) return null;
@@ -4106,7 +4272,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","cooking_level_required","cooking_kitchen_required",
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","craft_queue_full","craft_job_unavailable","craft_job_not_ready","market_favorite_limit","cooking_level_required","cooking_kitchen_required",
         "home_level_unavailable","home_required","home_unavailable","home_village_required","home_build_location","home_wall_blocked","home_cell_invalid","home_cell_occupied","home_furniture_unavailable",
         "garden_plot_invalid","garden_occupied","garden_water_unavailable","garden_not_ready",
         "needs_full","water_unavailable","water_cooldown","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level","starter_supply_limit","invalid_auction_duration","auction_limit","auction_bid_limit","auction_unavailable","cannot_bid_own_auction","auction_bid_too_low","auction_claim_unavailable","auction_cancel_unavailable","auction_credit_unavailable"];
@@ -4118,14 +4284,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder>, claimsOnly = false): void {
+  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder |
+    CityHaulOrder | CitySupplyOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder>, claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
     const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim" && order.action !== "workshop_claim";
     const construction = order && isWarehouseOrder(order);
     if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
-    if (construction && !CITY_CONSTRUCTION_ENABLED) return fail("city_construction_unavailable");
     if (order?.action === "workshop_start" && !CITY_WORKSHOP_ENABLED) return fail("city_workshop_disabled");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -4133,11 +4299,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id)!;
     const miningAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED;
     const site = miningAvailable && player.mapId === CITY_MINING_SITE ? CITY_MINING_SITE : CITY_PRODUCTION_SITE;
+    const moonConstruction = site === CITY_MINING_SITE;
+    const constructionEnabled = moonConstruction ? CITY_MINING_CONSTRUCTION_ENABLED : CITY_CONSTRUCTION_ENABLED;
+    if (construction && !constructionEnabled) return fail("city_construction_unavailable");
     const grounded = !player.flying && !this.climbs.has(id) && onMapGround(player);
     const atCity = player.mapId === site && grounded;
     const atRiverCity = player.mapId === CITY_PRODUCTION_SITE && grounded;
     const plot = RIVER_WAREHOUSE_PLOT;
-    const atPlot = atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
+    const atPlot = moonConstruction ? atCity : atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
     if (needsCity && !atCity) return fail("city_location");
     if (order?.action === "workshop_start" && !atRiverCity) return fail("city_workshop_location");
     if (construction && !atPlot) return fail("city_construction_location");
@@ -4191,11 +4360,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (!member) return;
       const view = store.viewCity(member, ownership, site);
-      const constructionOpen = site === CITY_PRODUCTION_SITE && CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
+      const constructionOpen = constructionEnabled && this.state.cityProductionAvailable;
       client.send("city_production_state", {site, atCity, guildId: member.id, serverNow: now,
         cityName: WORLD_MAPS[site].name, miningSite: miningAvailable ? CITY_MINING_SITE : null,
         canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id),
-        ...view, construction: constructionOpen ? {...view.construction, plot: plot.name, atPlot} : null});
+        ...view, construction: constructionOpen ? {...view.construction,
+          plot: moonConstruction ? "ด่านผนึกจันทรา" : plot.name, atPlot} : null});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
@@ -4207,37 +4377,153 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       fail(reason);
     }
   }
-  private cityPurchaseAction(client: Client, order?: CityPurchaseOrder): void {
+  private cityBoardAction(client: Client, board: "purchase" | "mission",
+    order?: CityPurchaseOrder | CityMissionOrder | CityHaulOrder | CityContractOrder): void {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
-    if (!this.state.cityPurchaseSupported) return fail("city_purchase_disabled");
-    if (order && order.action !== "purchase_cancel" && !cityPurchaseIntake) return fail("city_purchase_disabled");
+    const purchase = board === "purchase", enabled = purchase ? cityPurchaseIntake : cityMissionIntake;
+    const supported = purchase ? this.state.cityPurchaseSupported : this.state.cityMissionSupported;
+    const haulOrder = order && isCityHaulOrder(order);
+    const contractOrder = order && isCityContractOrder(order);
+    const cleanup = order?.action === "purchase_cancel" || order?.action === "mission_cancel" || order?.action === "mission_abandon" ||
+      order?.action === "haul_cancel" || order?.action === "haul_decline" || order?.action === "haul_abandon" ||
+      order?.action === "contract_cancel" || order?.action === "contract_abandon" || order?.action === "contract_deliver";
+    if (!supported || (order && !cleanup && !(contractOrder ? cityContractIntake : haulOrder ? cityHaulIntake : enabled)))
+      return fail(contractOrder ? "city_contract_disabled" : haulOrder ? "city_haul_disabled" :
+        purchase ? "city_purchase_disabled" : "city_mission_disabled");
+    const id = client.sessionId;
+    if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
+    const actor = this.economyId(client, fail);
+    if (!actor) return;
+    const player = this.state.players.get(id)!;
+    const site = CITY_SITES.find(city => city === player.mapId);
+    const atCity = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
+    const atMarket = cityBrokerAt(atCity, player.x, player.z);
+    const atMoon = atCity === CITY_MINING_SITE;
+    if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
+    if (order?.action === "mission_open" && !atMoon) return fail("city_mission_location");
+    if (order?.action === "mission_open" && order.purpose === "warehouse" && !CITY_MINING_CONSTRUCTION_ENABLED)
+      return fail("city_construction_unavailable");
+    try {
+      const now = Date.now(), store = characterStore.economy;
+      const ownership = syncCityProduction(now, CITY_MINING_SITE);
+      const withHauls = !purchase && (cityHaulIntake || haulOrder || store.hasOpenCityHaul());
+      const withContracts = !purchase && (cityContractIntake || contractOrder || store.hasOpenTradeContract());
+      const cities = withHauls || withContracts ? {
+        [CITY_MINING_SITE]: ownership, [CITY_PRODUCTION_SITE]: syncCityProduction(now, CITY_PRODUCTION_SITE),
+      } : null;
+      const member = guildStore().war.member(actor);
+      if (order) {
+        let result;
+        if (isCityPurchaseOrder(order)) result = store.cityPurchaseOrder(actor, member, order, ownership, now);
+        else if (isCityMissionOrder(order)) result = store.cityMissionOrder(actor, member, order, ownership, now);
+        else if (cities && isCityHaulOrder(order)) result = store.cityHaulOrder(actor, member, order, cities, atCity, now);
+        else if (cities && isCityContractOrder(order)) result = store.tradeContractOrder(actor, member, order, cities, atCity, atMarket, now);
+        else return fail("city_mission_disabled");
+        if (order.action === "purchase_fill" || order.action === "mission_submit" || order.action === "haul_deliver" ||
+            order.action === "contract_accept" || order.action === "contract_deliver")
+          this.syncEconomy(client, actor);
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      }
+      const location = {enabled, atMoon, serverNow: now};
+      if (purchase) client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership), ...location});
+      else client.send("city_mission_state", {...store.viewCityMissions(actor, member, ownership),
+        ...location, warehouseMissions: CITY_MINING_CONSTRUCTION_ENABLED,
+        hauls: cities && withHauls ? {...store.viewCityHauls(actor, member, cities, atCity), enabled: cityHaulIntake} : null,
+        tradeContracts: cities && withContracts ? store.viewTradeContracts(actor, member, cities, atCity, atMarket, cityContractIntake) : null});
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
+        "request_id_conflict", "invalid_request_id", "insufficient_gold", "inventory_full"];
+      if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
+        console.error("MONTRA city board action failed", board, error);
+        return fail("city_unavailable");
+      }
+      fail(reason);
+    }
+  }
+  private cityMarketAction(client: Client, order?: CityMarketOrder | CityNeutralMarketOrder): void {
+    const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
+    const cleanup = order?.action === "neutral_market_withdraw" || (order?.action === "local_market_config" ? !order.open :
+      (order?.action === "local_market_stock" || order?.action === "local_market_budget") && order.amount < 0);
+    const intake = !order ? cityMarketIntake : isCityNeutralMarketOrder(order) ? cityNeutralMarketIntake :
+      order.item === CITY_MINING_PRODUCT ? cityReturnMarketIntake : cityMarketIntake;
+    if (!this.state.cityMarketSupported || (order && !cleanup && !intake)) return fail("city_market_disabled");
+    const id = client.sessionId;
+    if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
+    const actor = this.economyId(client, fail);
+    if (!actor) return;
+    const player = this.state.players.get(id)!;
+    const site = CITY_SITES.find(city => city === player.mapId);
+    const atSite = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
+    const atMarket = cityBrokerAt(atSite, player.x, player.z);
+    try {
+      const now = Date.now(), store = characterStore.economy, member = guildStore().war.member(actor);
+      const cities = {[CITY_PRODUCTION_SITE]: syncCityProduction(now), [CITY_MINING_SITE]: syncCityProduction(now, CITY_MINING_SITE)};
+      if (order) {
+        try {
+          let result;
+          if (isCityNeutralMarketOrder(order)) {
+            result = store.neutralMarketOrder(actor, order, cities[CITY_PRODUCTION_SITE], atMarket, now);
+            this.syncEconomy(client, actor);
+          } else {
+            const trade = order.action === "local_market_trade";
+            if (order.site !== (trade ? atMarket : atSite)) throw Error("city_market_location");
+            result = store.cityMarketOrder(actor, member, order, cities[order.site], now);
+            if (trade) this.syncEconomy(client, actor);
+          }
+          client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : "";
+          if (reason !== "city_ownership_unavailable" && (reason.startsWith("city_") ||
+              ["request_id_conflict", "insufficient_gold", "inventory_full", "item_unavailable", "item_bound",
+                "invalid_amount", "invalid_slot"].includes(reason))) fail(reason);
+          else throw error;
+        }
+      }
+      client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake, cityReturnMarketIntake, cityNeutralMarketIntake),
+        atSite, atMarket, enabled: cityMarketIntake, serverNow: now});
+    } catch (error) {
+      console.error("MONTRA city market action failed", error);
+      fail("city_unavailable");
+    }
+  }
+  private cityGovernanceAction(client: Client, order?: CityPolicyOrder | CitySupplyOrder): void {
+    const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
+    if (!this.state.cityGovernanceAvailable) return fail("city_policy_disabled");
+    if (order && isCitySupplyOrder(order) && order.action !== "supply_cancel" && !CITY_SUPPLY_ENABLED)
+      return fail("city_supply_disabled");
     const id = client.sessionId;
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
     const atMoon = player.mapId === CITY_MINING_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
-    if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
+    if (order && !atMoon) return fail(order.action === "policy_set" ? "city_policy_location" : "city_supply_location");
     try {
-      const now = Date.now(), store = characterStore.economy;
-      const ownership = syncCityProduction(now, CITY_MINING_SITE);
       const member = guildStore().war.member(actor);
-      if (order) {
-        const result = store.cityPurchaseOrder(actor, member, order, ownership, now);
-        if (order.action === "purchase_fill") this.syncEconomy(client, actor);
+      if (!member) return fail("city_not_member");
+      const now = Date.now(), store = characterStore.economy;
+      let ownership = syncCityProduction(now, CITY_MINING_SITE);
+      if (order?.action === "policy_set") {
+        const result = store.setCityPolicy(actor, member, order, ownership, now);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      } else if (order) {
+        const result = store.citySupplyOrder(actor, member, order, ownership, now);
+        let repaired: boolean | undefined;
+        if (order.action === "supply_repair") {
+          ownership = syncCityProduction(now, CITY_MINING_SITE);
+          repaired = store.citySupplyRepairSucceeded(order.supplyId);
+        }
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result, repaired});
       }
-      client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership),
-        enabled: cityPurchaseIntake, atMoon, serverNow: now});
+      client.send("city_governance_state", {...store.viewCityGovernance(member, ownership),
+        atMoon, serverNow: now, supplyEnabled: CITY_SUPPLY_ENABLED});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
-      const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
-        "request_id_conflict", "invalid_request_id"];
-      if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
-        console.error("MONTRA city purchase action failed", error);
-        return fail("city_unavailable");
-      }
-      fail(reason);
+      if (reason !== "city_ownership_unavailable" &&
+          (reason.startsWith("city_") || reason === "request_id_conflict" || reason === "invalid_request_id")) return fail(reason);
+      console.error("MONTRA city governance action failed", error);
+      fail("city_unavailable");
     }
   }
   private sendResourceMap(client:Client,view:ReturnType<typeof characterStore.economy.resourceMap>){
@@ -4269,7 +4555,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.inventories.set(client.sessionId,account.inventory);
     player.equippedWeaponId=equippedWeaponId(account.inventory) ?? "";
     this.applyStats(client.sessionId,player,this.statAllocations.get(client.sessionId) ?? emptyAllocations());
-    try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
+    try {
+      client.send("inventory_state", account.inventory);
+      client.send("economy_state", {gold: account.gold, craftBatchMax: MAX_CRAFT_QUANTITY,
+        craftQueueMax: CRAFT_QUEUE_LIMIT, craftQueueMsPerItem: CRAFT_QUEUE_MS_PER_ITEM});
+    } catch { /* disconnect does not roll back committed assets */ }
   }
   private tradeFor(client: Client, tradeId:string): TradeSession | null {
     const trade=this.trades.get(tradeId);
@@ -4800,6 +5090,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   messages = {
+    prototype_protocol_v1: (client: Client, message: unknown) => this.handlePrototypeProtocol(client, message),
     boat_intent: (client: Client, message: unknown) => this.boatIntent(client,message),
     ghost_pot: (client: Client, message: unknown) => this.handleGhostPot(client, message),
     // A distinct message type does not alter the existing commands or their payloads.
@@ -4848,12 +5139,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (parseEmptyCommand(message)) this.cityProductionAction(client, undefined, true);
     },
     get_city_purchase_orders:(client:Client,message:unknown)=>{
-      if (parseEmptyCommand(message)) this.cityPurchaseAction(client);
+      if (parseEmptyCommand(message)) this.cityBoardAction(client, "purchase");
+    },
+    get_city_missions:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityBoardAction(client, "mission");
+    },
+    get_city_governance:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityGovernanceAction(client);
+    },
+    get_city_markets:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityMarketAction(client);
     },
     city_production:(client:Client,message:unknown)=>{
       const order = parseCityOrder(message);
       if (!order) return client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
-      if (isCityPurchaseOrder(order)) this.cityPurchaseAction(client, order);
+      if (isCityPurchaseOrder(order)) this.cityBoardAction(client, "purchase", order);
+      else if (isCityMissionOrder(order) || isCityHaulOrder(order) || isCityContractOrder(order)) this.cityBoardAction(client, "mission", order);
+      else if (isCityMarketOrder(order) || isCityNeutralMarketOrder(order)) this.cityMarketAction(client, order);
+      else if (order.action === "policy_set" || isCitySupplyOrder(order)) this.cityGovernanceAction(client, order);
       else this.cityProductionAction(client, order);
     },
     get_territories:(client:Client,message:unknown)=>{
@@ -5000,6 +5303,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
          (value.action!=="kick" && value.action!=="transfer"))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>{guildStore().manage(character,value.memberId as string,value.action as "kick"|"transfer");notifyGuilds();});
     },
+    get_war_banner: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_war_banner");
+      this.partyAction(client, () => this.sendWarBanner(client));
+    },
+    plant_war_banner: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_war_banner");
+      this.partyAction(client, () => this.plantWarBanner(client));
+    },
     get_party: (client:Client,message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"party_invalid_request");
       this.partyAction(client,()=>{const party=this.parties.get(client.sessionId);if(party)this.sendPartyState(party);else client.send("party_state",{partyId:null,leaderId:null,members:[]});});
@@ -5023,6 +5334,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const party=this.parties.accept(client.sessionId,inviteId,this.simulatedMs);
         if(this.bladeCloaks.size)this.syncPlayerViews();
         this.sendPartyState(party);
+        this.updateWarBanners();
       });
     },
     party_decline: (client:Client,message:unknown) => {
@@ -5035,7 +5347,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     get_economy: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,id=>{this.syncEconomy(client,id);client.send("market_features",{version:1});});
+      this.economyAction(client,id=>{this.syncEconomy(client,id);client.send("market_features",{version:1,history:true,favoriteLimit:MARKET_FAVORITE_LIMIT,baseStatFilter:true});});
     },
     market_overview: (client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
@@ -5048,8 +5360,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order=parseMarketBrowse(message);if(!order)return this.reject(client,"invalid_economy_request");
       this.economyAction(client,id=>{
         const store=characterStore.economy;
-        const page=order.market==="fixed"?store.browseMarket(id,order.query,order.category,order.before,order.ownOnly):store.browseAuctions(id,order.query,order.category,order.before);
+        const page=order.market==="fixed"?store.browseMarket(id,order.query,order.category,order.before,order.ownOnly,order.filters):store.browseAuctions(id,order.query,order.category,order.before,order.filters);
         client.send("market_page",{market:order.market,tag:order.tag,...page});
+      });
+    },
+    market_history: (client: Client, message: unknown) => {
+      const order = parseMarketHistory(message);
+      if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,() => client.send("market_history",{
+        ...order, sales: characterStore.economy.marketHistory(order.itemId),
+      }));
+    },
+    market_favorites: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id => client.send("market_favorites",{items: characterStore.economy.marketFavorites(id)}));
+    },
+    market_favorite_set: (client: Client, message: unknown) => {
+      const order = parseMarketFavorite(message);
+      if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id => {
+        const store = characterStore.economy;
+        store.setMarketFavorite(id,order.requestId,order.itemId,order.favorite);
+        client.send("market_favorites",{items: store.marketFavorites(id), requestId: order.requestId});
       });
     },
     auction_create: (client:Client,message:unknown)=>{
@@ -5199,12 +5531,41 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
     },
     collect_water: (client: Client, message: unknown) => this.collectWater(client, message),
+    get_craft_queue: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => client.send("craft_queue", characterStore.economy.craftQueue(id)));
+    },
+    craft_enqueue: (client: Client, message: unknown) => {
+      const order = parseCraft(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const store = characterStore.economy;
+        const level = this.state.players.get(client.sessionId)!.level;
+        this.requireHomeRecipe(client.sessionId,id,order.recipeId);
+        const {jobId} = store.enqueueCraft(id, order.requestId, order.recipeId, level, order.quantity);
+        this.syncEconomy(client, id);
+        client.send("craft_queue", {...store.craftQueue(id), requestId: order.requestId, jobId});
+      });
+    },
+    craft_claim: (client: Client, message: unknown) => {
+      const order = parseCraftClaim(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const store = characterStore.economy;
+        const claimed = store.claimCraft(id, order.requestId, order.jobId);
+        this.syncEconomy(client, id);
+        client.send("craft_queue", {...store.craftQueue(id), requestId: order.requestId, claimed});
+      });
+    },
     craft_weapon: (client: Client, message: unknown) => {
       const order = parseCraft(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
+        const store = characterStore.economy;
         this.requireHomeRecipe(client.sessionId,id,order.recipeId);
-        const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId,this.state.players.get(client.sessionId)!.level);
+        const result = order.recipeId === SHRINE_GLAIVE
+          ? store.craftShrineGlaive(id, order.requestId, order.quantity)
+          : store.craftPersonal(id, order.requestId, order.recipeId, this.state.players.get(client.sessionId)!.level, order.quantity);
         this.syncEconomy(client, id);
         client.send("craft_result", {requestId: order.requestId, ...result});
       });
@@ -5545,6 +5906,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.destinations.delete(id);this.crestTurns.delete(id);player.targetId="";player.combatState="idle";
       player.mounted=true;this.mountHitSequence.set(id,player.hitSeq);this.lastMountMs.set(id,this.simulatedMs);
       this.broadcast("mount_changed",{playerId:id,mounted:true},{afterNextPatch:true});
+    },
+    meteor_slam: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_meteor");
+      const id = client.sessionId, player = this.state.players.get(id);
+      if (!this.isGuildPartyLeader(id)) return this.reject(client, "meteor_leader_required");
+      if (!player?.alive || !player.flying || !isOccultPath(player.pathId) || this.field ||
+          this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+          this.flightTransitions.has(id) || isRestArea(player.mapId, player)) return this.reject(client, "meteor_unavailable");
+      if (player.stamina < METEOR.stamina) return this.reject(client, "insufficient_stamina");
+      if (this.simulatedMs - (this.lastMeteorAt.get(id) ?? -Infinity) < METEOR.cooldownMs) {
+        return this.reject(client, "meteor_cooldown");
+      }
+      this.messages.fly(client, {});
+      const transition = this.flightTransitions.get(id);
+      if (!transition?.landing) return;
+      transition.meteor = true;
+      player.stamina -= METEOR.stamina;
+      this.lastMeteorAt.set(id, this.simulatedMs);
     },
     fly: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
@@ -5895,9 +6274,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try{publish();}finally{this.killMonster(defeat);}
   }
 
-  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay") {
+  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay" | "meteor") {
     this.applyMonsterHit(id,target,damage,()=>this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
       maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true}));
+  }
+
+  private resolveMeteor(id: string, player: Player) {
+    const targets = [this.state.monster, ...this.state.monsters.values()]
+      .filter(target => target.alive && this.sameCombatMap(id,target.id) && distance3d(player,target) <= METEOR.range &&
+        this.bodyPathClear(player.mapId,player,target))
+      .sort((a,b) => distance3d(player,a)-distance3d(player,b)).slice(0,METEOR.maxTargets);
+    const power = this.masteryPower(player,"pve","magicAtk") * METEOR.power;
+    for (const target of targets) {
+      this.recordCombat(id,target.id);
+      this.hitMonsterWithSpell(id,target,calculateDamage(power,target.defense,target.level),"meteor");
+    }
+    this.broadcast("meteor_impact",{ownerId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,
+      targets:targets.map(target=>target.id)},{afterNextPatch:true});
   }
 
   private commitWarp(client: Client, portal: WorldPortal) {
@@ -6478,6 +6871,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.cityWorkshopSupported = this.state.cityRecoveryAvailable;
     this.state.cityPurchaseSupported = this.state.cityRecoveryAvailable &&
       (cityPurchaseIntake || characterStore.economy.hasOpenCityPurchase());
+    this.state.cityMissionSupported = this.state.cityRecoveryAvailable &&
+      (cityMissionIntake || characterStore.economy.hasOpenCityMission() || characterStore.economy.hasOpenCityHaul() ||
+        characterStore.economy.hasOpenTradeContract());
+    this.state.cityMarketSupported = this.state.cityRecoveryAvailable &&
+      (cityMarketIntake || characterStore.economy.hasCityMarketAssets());
+    this.state.cityGovernanceAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED && CITY_GOVERNANCE_ENABLED;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
     if(!this.field || !isolatedBattleWorldDefinitions.has(this.field.site))this.forest.initialize(!this.field);
@@ -6559,6 +6958,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateFlights(dt);
     if (this.state.boatsAvailable) this.updateBoats(dt);
     this.updatePlayerMovement(dt);
+    this.updateWarBanners();
     const trapStep=this.prototypeAshTraps.size?{movements:[] as TrapMovement[],attacks:[] as Array<()=>void>}:undefined;
     const walk=trapStep?(monster:Monster,previous:Position)=>{
       if(trapStep.movements.length<=1024)trapStep.movements.push({previousAt:this.simulatedMs-Math.round(dt*1000),
@@ -6669,6 +7069,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.flightTransitions.delete(id);
       player.flying = !transition.landing;
       player.combatState = "idle";
+      if (transition.meteor && this.isGuildPartyLeader(id)) this.resolveMeteor(id, player);
       this.broadcast("flight_finished", {
         playerId: id, altitude: player.y, flying: player.flying,
       }, { afterNextPatch: true });
@@ -6963,6 +7364,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.hp = 0;
     this.hpRegenRemainder.delete(id);
     victim.alive = false;
+    this.updateWarBanners();
     victim.combatState = "dead";
     victim.targetId = "";
     this.climbs.delete(id);
@@ -7181,13 +7583,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private resolveForestMonsterHit(id:string,monster:Monster,force:number,attackAt:number):void {
-    // ForestEncounters schedules at most one attack per monster per tick.
-    // Commit that occurrence before guard, counters, interception or damage.
+    // A single strike can overlap several players. Commit each target once
+    // before guard, counters, interception or damage.
     if(attackAt!==this.simulatedMs || this.state.monsters.get(monster.id)!==monster ||
-      (this.lastForestHitAt.get(monster)??-Infinity)>=attackAt)return;
-    this.lastForestHitAt.set(monster,attackAt);
+      !monster.alive)return;
+    let strike=this.forestStrikeHits.get(monster);
+    if(strike?.at!==attackAt){
+      strike={at:attackAt,targets:new Set()};
+      this.forestStrikeHits.set(monster,strike);
+    }
+    if(strike.targets.has(id))return;
+    strike.targets.add(id);
     const player=this.state.players.get(id);
-    if(!monster.alive || !player?.alive || this.priestProtected(id) || !this.sameCombatMap(id,monster.id))return;
+    if(!player?.alive || this.priestProtected(id) || !this.sameCombatMap(id,monster.id))return;
     const profile=this.forest.profile(monster.id);if(!profile)return;
     const rawDamage=this.prototypeMonsterDamage(monster,calculateDamage(profile.attack*force,
       this.masteryPower(player,"pve","def",equipmentRatings(this.inventories.get(id)).guard),player.level));
@@ -7342,7 +7750,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const required = process.env.MONTRA_ACCOUNTS_REQUIRED !== "0";
     const fields = options && typeof options === "object" && !Array.isArray(options) ? options as Record<string,unknown> : {};
     if(!this.prototypeGameplayEnabled())this.clearAllPrototypeEffects();
-    if(this.prototypeGameplayEnabled() && (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");
+    if(this.prototypeGameplayEnabled() && this.requireAllPrototypeClients() &&
+      (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");
     const identity = required ? accounts().resolve(fields.accountSession) : null;
     if (required && !identity) throw new Error("login_required");
     const token = required ? null : getGuestToken(options);
@@ -7571,10 +7980,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.restApproachClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
+    this.sessionGuilds.delete(id);
+    this.lastBannerAt.delete(id);
     this.needs.delete(id);
     this.homeClients.delete(id);
     const homeOwner = this.persistentCharacters.get(id);
     if (homeOwner) this.homeWalls.delete(homeMapId(homeOwner));
+    this.lastMeteorAt.delete(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
     for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
@@ -7673,6 +8085,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const worker = this.ghostWorker;
     this.ghostWorker = undefined;
     worker?.close();
+    this.replacementSkillNotices.length = 0;
     this.prototypeSessions.clear(); this.prototypeBuckets.clear();this.prototypeGameplayChallenges.clear();this.prototypeGameplaySessions.clear();this.prototypeFirmGuards.clear();this.prototypeAshTraps.clear();this.prototypeRescues.clear();this.prototypeShadows.clear();this.prototypeFlowing.clear();this.prototypeCounters.clear();this.prototypeOpportunities.clear();this.prototypeDebuffs.clear();
     huntEventDirector.forget(this.roomId);
     if(this.field)battleRooms.delete(this.field.seq);
@@ -7680,9 +8093,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.effects.clear();
     this.trades.clear();
     this.parties.clear();
+    this.warBanners.clear();
+    this.sessionGuilds.clear();
+    this.lastBannerAt.clear();
     this.needs.clear();
     this.homeClients.clear();
     this.homeWalls.clear();
+    this.lastMeteorAt.clear();
     this.guildInvites.clear();
     for(const unsubscribe of this.guildSubscriptions.values())unsubscribe();
     this.guildSubscriptions.clear();

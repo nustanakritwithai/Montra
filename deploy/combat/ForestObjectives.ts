@@ -1,4 +1,4 @@
-import { ATLAS_MAPS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
+import { ATLAS_MAPS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS, RIFT_WARDEN } from "./WorldAtlas.js";
 import { TEMPLE_CAMPS, TEMPLE_ID } from "./TempleMap.js";
 import { getWorldMap, groundAt, isSafeWorldPoint, isWorldSegmentClear, SHRINE_GUARDIAN, FOREST_CAMPS } from "./WorldMaps.js";
 import { REGIONAL_BOSSES } from "./RegionalBosses.js";
@@ -73,7 +73,7 @@ for(const [from,to] of [
     goal:5,prefix:local.prefix,kind:"delivery",destinationMapId:to,destinationName:destination,rewardLevel:Number(local.levels.match(/\d+/)?.[0] ?? 1)};
 }
 forestObjectives.elite_forest_shrine={name:`ปราบ${SHRINE_GUARDIAN.name}`,camp:"ศาลร้างในป่าต้องห้าม",levels:"Lv.12",mapId:forest,goal:1,kind:"elite",targetId:SHRINE_GUARDIAN.id};
-for(const boss of REGIONAL_BOSSES)forestObjectives[`elite_${boss.mapId}`]={name:`ปราบ${boss.name}`,camp:boss.name,levels:`Lv.${boss.level}`,mapId:boss.mapId,goal:1,kind:"elite",targetId:boss.id};
+for(const boss of REGIONAL_BOSSES)if(!forestObjectives[`elite_${boss.mapId}`])forestObjectives[`elite_${boss.mapId}`]={name:`ปราบ${boss.name}`,camp:boss.name,levels:`Lv.${boss.level}`,mapId:boss.mapId,goal:1,kind:"elite",targetId:boss.id};
 forestObjectives.elite_spirit_rift={name:`ปราบ${RIFT_WARDEN.name}`,camp:RIFT_WARDEN.name,levels:`Lv.${RIFT_WARDEN.level}`,mapId:"spirit_rift",goal:1,kind:"elite",targetId:RIFT_WARDEN.id};
 export const FOREST_OBJECTIVES:Readonly<Record<string,Definition>>=Object.freeze(forestObjectives);
 export const FOREST_RANGER = Object.freeze({mapId:forest,x:3,y:0,z:12,radius:3,name:"นายพรานเฝ้าป่า"});
@@ -141,7 +141,8 @@ export function advanceForestObjective(active:ForestObjective|null,monsterId:str
     ? {active:null,completed:objective.id} : {active:objective,completed:null};
   if(definition.kind==="delivery" && objective.progress>=definition.goal-1)return {active:objective,completed:null};
   const prefix=definition.stages?.[objective.progress]?.prefix ?? definition.prefix;
-  if(mapId!==definition.mapId || !prefix || !monsterId.startsWith(prefix) || !/^[1-4]$/.test(monsterId.slice(prefix.length)))return {active:objective,completed:null};
+  const campMonster=HIMMAPAN_REPLACEMENTS.get(monsterId)??monsterId;
+  if(mapId!==definition.mapId || !prefix || !campMonster.startsWith(prefix) || !/^[1-4]$/.test(campMonster.slice(prefix.length)))return {active:objective,completed:null};
   const progress=objective.progress+1;
   return progress>=definition.goal && definition.kind!=="delivery" ? {active:null,completed:objective.id} : {active:{...objective,progress},completed:null};
 }

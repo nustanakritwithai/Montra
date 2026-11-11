@@ -90,6 +90,8 @@ export class GuildStore {
     });
   }
   settleCityDisband(economy: EconomyStore, disband: CityDisband): void {
+    // Resolve accepted repairs before collecting the former guild's remaining materials.
+    economy.finishCitySupplyRepairs(pending => this.war.government.repairWithCitySupply(pending, disband.requested));
     // The market seal is idempotent by guild ID. Keep the intent if either database fails.
     economy.closeCityGuild(disband, (previous, site) => this.war.government.cityOwnership(previous, site));
     this.transaction(() => {

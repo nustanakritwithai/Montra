@@ -26,9 +26,8 @@ assert(mainSrc.includes('spawnFx("cross", "red"'), 'windupTelegraph spawns layer
 assert(mainSrc.includes('!g.windup && g.wasWindup'), 'detects windup completion to land strike impact');
 assert(mainSrc.includes('hitBurst(mesh.position.x, mesh.position.z, "red", true, y, true);'), 'strike lands heavy ground slam burst');
 
-// 5. Verify Execute Finisher Feedback
-assert(mainSrc.includes('วิชาประหารสิ้นสูญ! (EXECUTE)'), 'triggers decisive execute finisher float text');
-assert(mainSrc.includes('shakeCamera(0.68, 420);'), 'triggers heavy impact camera shake on fatal finisher');
-assert(mainSrc.includes('SFX("bell", { intensity: 1.2 });'), 'triggers resounding ceremonial bell SFX on finisher');
+// 5. Death still has the monster's own visual and audible cues.
+assert(mainSrc.includes('ghostVoice(ghost,mesh,"die")'), 'monster death keeps its own sound');
+assert(mainSrc.includes('eventFx("ghost_die",mesh'), 'monster death keeps its own visual cue');
 
 console.log('PASS All Phase 6 Boss & Execute Encounter mechanics verified successfully!');

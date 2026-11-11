@@ -4,10 +4,10 @@ import {mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import {DatabaseSync} from "node:sqlite";
-import {EconomyStore,STARTER_SUPPLIES} from "./EconomyStore.js";
+import {EconomyStore,MARKET_FAVORITE_LIMIT,STARTER_SUPPLIES} from "./EconomyStore.js";
 import {makeClassInventory} from "./ItemRules.js";
-import {personalItem} from "./PersonalItems.js";
-import {parseAuctionBid,parseMarketBrowse,parseStarterSupply} from "./EconomyRules.js";
+import {PERSONAL_ITEMS,personalItem} from "./PersonalItems.js";
+import {parseAuctionBid,parseMarketBrowse,parseMarketFavorite,parseMarketHistory,parseStarterSupply} from "./EconomyRules.js";
 
 const a="a".repeat(64),b="b".repeat(64),c="c".repeat(64),req=(n:number)=>"market_test_"+String(n).padStart(16,"0");
 
@@ -141,6 +141,92 @@ test("central listing search supports Thai names and cursor pagination",()=>{
     assert.equal(parseAuctionBid({requestId:req(1),auctionId:"invalid",amount:1}),null);
     assert.equal(parseStarterSupply({requestId:req(1),item:"arcane_sword",quantity:1}),null);
   }finally{store.close();}
+});
+
+test("market history records only committed fixed and auction sales, once each across restart", () => {
+  const dir = mkdtempSync(join(tmpdir(), "montra-market-history-")), file = join(dir, "economy.sqlite");
+  let store = new EconomyStore(file);
+  try {
+    const seller = makeClassInventory("seer");
+    seller.slots[0] = {itemId: "health_potion", quantity: 10};
+    store.register(a, seller);
+    store.register(b, makeClassInventory("seer"));
+    const itemId = "health_potion";
+    const listed = store.listItem(a, req(200), 0, 2, 100);
+    const cancelled = store.listItem(a, req(201), 0, 1, 5000);
+    assert.throws(() => store.buy(b, req(202), cancelled.listingId), /insufficient_gold/);
+    store.cancel(a, req(203), cancelled.listingId);
+    const now = Date.now();
+    const auction = store.createAuction(a, req(204), 0, 3, 150, 1, undefined, now);
+    store.createAuction(a, req(205), 0, 1, 150, 1, undefined, now);
+    store.bidAuction(b, req(206), auction.auctionId, 160, now);
+    assert.deepEqual(store.marketHistory(itemId), []);
+    store.buy(b, req(207), listed.listingId);
+    assert.equal(store.settleExpiredAuctions(auction.endsAt), 2);
+    store.close();
+    store = new EconomyStore(file);
+    store.buy(b, req(207), listed.listingId);
+    assert.equal(store.settleExpiredAuctions(auction.endsAt), 0);
+    const history = store.marketHistory(itemId);
+    assert.deepEqual(history.map(({soldAt, ...sale}) => sale), [
+      {market: "auction", quantity: 3, total: 160},
+      {market: "fixed", quantity: 2, total: 100},
+    ]);
+    assert.equal(history[0].soldAt, auction.endsAt);
+    assert(history[1].soldAt >= now);
+    assert.deepEqual(store.marketHistory("mat_herb_1"), []);
+    assert.equal(parseMarketHistory({itemId: "__proto__", tag: 1}), null);
+  } finally {
+    store.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test("private favorites persist, stay bounded, and filter listings together with catalog stats", () => {
+  const dir = mkdtempSync(join(tmpdir(), "montra-market-favorites-")), file = join(dir, "economy.sqlite");
+  let store = new EconomyStore(file);
+  try {
+    const gear = "arm_cloth_chest_1", magicDef = personalItem(gear)?.stats.magicDef ?? 0;
+    assert(magicDef > 0);
+    const bag = makeClassInventory("seer");
+    bag.slots[2] = {itemId: gear, quantity: 1};
+    store.register(a, bag);
+    store.register(b, makeClassInventory("seer"));
+    const listing = store.listItem(a, req(300), 2, 1, 100);
+    store.listItem(a, req(301), 0, 1, 100);
+    const order = {itemId: gear, favorite: true, requestId: req(302)};
+    assert.deepEqual(parseMarketFavorite(order), order);
+    store.setMarketFavorite(b, order.requestId, gear, true);
+    store.close();
+    store = new EconomyStore(file);
+    assert.deepEqual(store.marketFavorites(a), []);
+    assert.deepEqual(store.marketFavorites(b), [gear]);
+    const browse = {market: "fixed", query: "", category: "all", before: null, ownOnly: false, tag: 1};
+    const filters = {favoritesOnly: true, minStat: {stat: "magicDef" as const, value: magicDef}};
+    assert.deepEqual(parseMarketBrowse({...browse, ...filters})?.filters, filters);
+    assert.equal(parseMarketBrowse({...browse,minStat:{stat:"__proto__",value:1}}), null);
+    assert.equal(parseMarketBrowse({...browse,minStat:{stat:"hp",value:0}}), null);
+    assert.equal(parseMarketBrowse({...browse,favoritesOnly:"true"}), null);
+    assert.deepEqual(store.browseMarket(b, "", "all", null, false, filters).listings.map(x => x.id), [listing.listingId]);
+    assert.deepEqual(store.browseMarket(a, "", "all", null, false, filters).listings, []);
+    assert.deepEqual(store.browseMarket(b, "", "all", null, false, {minStat: {stat: "magicDef", value: magicDef + 1}}).listings, []);
+    store.cancel(a, req(303), listing.listingId);
+    const slot = store.getAccount(a).inventory.slots.findIndex(stack => stack?.itemId === gear);
+    const auction = store.createAuction(a, req(304), slot, 1, 100, 1);
+    assert.deepEqual(store.browseAuctions(b, "", "all", null, filters).auctions.map(x => x.id), [auction.auctionId]);
+    assert.deepEqual(store.browseAuctions(a, "", "all", null, filters).auctions, []);
+    const otherItems = Object.keys(PERSONAL_ITEMS).filter(id => id !== gear).slice(0, MARKET_FAVORITE_LIMIT);
+    for (const [index, id] of otherItems.slice(0, -1).entries()) store.setMarketFavorite(b, req(310 + index), id, true);
+    assert.throws(() => store.setMarketFavorite(b, req(399), otherItems.at(-1)!, true), /market_favorite_limit/);
+    assert.equal(store.marketFavorites(b).length, MARKET_FAVORITE_LIMIT);
+    store.setMarketFavorite(b, req(400), gear, false);
+    store.setMarketFavorite(b, order.requestId, gear, true);
+    assert(!store.marketFavorites(b).includes(gear), "replaying an earlier favorite does not undo removal");
+    assert.equal(store.marketFavorites(b).length, MARKET_FAVORITE_LIMIT - 1);
+  } finally {
+    store.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
 });
 
 test("fish gathered by players can be found and traded as material",()=>{
