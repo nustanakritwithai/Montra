@@ -466,7 +466,8 @@
       ctx.restore();
       mapText(ctx, "N", width - 14, 5, 8, "#ffe2a1", 700);
     }
-    const huntPoint=itemHuntGuide()?.to;
+    const objective=warObjectiveGuide(me);
+    const huntPoint=objective?null:itemHuntGuide()?.to;
     if(huntPoint && Number.isFinite(huntPoint.x) && Number.isFinite(huntPoint.z)){
       const x=sx(huntPoint.x),y=sy(huntPoint.z),radius=large?8:4;
       ctx.strokeStyle="#ffe49a";ctx.lineWidth=2;ctx.beginPath();
@@ -477,6 +478,24 @@
     const v = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * .35, width / 2, height / 2, Math.max(width, height) * .72);
     v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
     ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
+    if(objective){
+      const x=sx(objective.to.x),y=sy(objective.to.z),radius=large?12:6;
+      ctx.strokeStyle="#ffdc84";ctx.lineWidth=large?2:1.5;
+      if(me){
+        ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(sx(me.x),sy(me.z));ctx.lineTo(x,y);ctx.stroke();ctx.setLineDash([]);
+      }
+      ctx.beginPath();ctx.arc(x,y,radius,0,2*Math.PI);ctx.stroke();
+      mapDot(ctx,x,y,large?4.5:2.5,"#ffe39c","#352811");
+      if(large)mapText(ctx,objective.title,Math.max(75,Math.min(width-75,x)),y<34?y+23:y-17,12,"#ffe9ab",800);
+    }
+    if(large){
+      const note=$("warMapObjective");
+      if(note){
+        note.hidden=!objective;
+        const label=objective?objective.title+" · "+objective.step:"";
+        if(note.textContent!==label)note.textContent=label;
+      }
+    }
     ctx.restore();
   }
   // Coordinates set the atlas layout. Connectivity and route advice come from live portal pairs.
@@ -513,6 +532,60 @@
   }
   const warPhase=p=>({open:"เปิดให้ท้าชิง",battle:"กำลังรบ",protected:"อยู่ในความคุ้มครอง",finished:"จบศึกแล้ว"})[p] || "กำลังตรวจด่าน";
   const warTime=s=>Math.floor(s/60)+" นาที "+s%60+" วินาที";
+  let warMusterSite=null;
+  function warObjectiveTarget(local,map,position,muster=false){
+    if(!local || !map)return null;
+    const strategic=map.strategic,river=strategic?.riverCity;
+    const flag=local.civic?.flag || strategic?.sites?.find(site=>site.kind==="fort");
+    const target=(point,title,radius,step)=>Number.isFinite(point?.x) && Number.isFinite(point.z)
+      ?{to:point,title,radius,step}:null;
+    if(!local.inField){
+      if(!muster || !local.canStart || local.phase!=="open")return null;
+      return target(river?.nodes?.A || flag,river?"ค่ายใต้ A · จุดเปิดศึก":"จุดเปิดศึก · "+(flag?.name || map.name),
+        5,"เข้าใกล้จุดเปิดศึกบนพื้น แล้วเปิดกระดานศึก");
+    }
+    if(local.phase!=="battle")return null;
+    const nearest=points=>{
+      if(!position)return points[0];
+      const distance=point=>Math.hypot(point.x-position.x,point.z-position.z);
+      return points.reduce((best,point)=>!best || distance(point)<distance(best)?point:best,null);
+    };
+    if(local.pilot && strategic?.objectives?.length){
+      const {pilot,side}=local,throne=pilot.throne,front=throne?.[side];
+      if(local.seconds<=900 && front?.outer>=2 && front.middle>=2 && front.route && !throne.victor &&
+        (!throne.defended || side==="attack")){
+        const point=strategic.objectives.find(point=>point.id===7);
+        if(point)return target(point,"7 "+point.name,7,"ยืนบนพื้นในวงบัลลังก์");
+      }
+      const points=strategic.objectives.filter(point=>point.id<7 && pilot.points.some(state=>state.id===point.id));
+      const unheld=points.filter(point=>!pilot.points.some(state=>state.id===point.id && state.owner===side));
+      const outer=unheld.filter(point=>point.id<=3);
+      const options=throne && local.seconds>2100 && outer.length?outer:unheld.length?unheld:points;
+      const point=nearest(options);
+      if(point)return target(point,point.id+" "+point.name,7,"ยืนบนพื้นในวงจุดยึด · ดูทางผ่านประตูบนแผนที่");
+    }
+    if(river && local.river && !local.river.supplied){
+      const suppliedPost=local.river.posts.some(post=>post.id!=="F" && post.owner===local.side && !post.contested);
+      if(!suppliedPost){
+        const post=nearest(river.posts.filter(post=>post.id==="M" || post.id==="S"));
+        if(post)return target(post,post.id+" "+post.name,4,"ยึดตลาดหรือคลังเสบียงก่อนชิงลานบัญชาการ");
+      }
+      const gates=strategic.rampart?.gates || [],states=local.river.gates;
+      for(const prefix of ["G1","G2"]){
+        const ring=gates.filter(gate=>gate.id.startsWith(prefix) && states?.[gate.id]);
+        if(!ring.length || ring.some(gate=>!states[gate.id].closed))continue;
+        const gate=nearest(ring.map(({id,name,box})=>({id,name,x:box.x+box.width/2,z:box.z+box.length/2})));
+        return target(gate,gate.name || gate.id,3,"เปิดทางผ่านประตูเพื่อให้เสบียงถึงลานบัญชาการ");
+      }
+    }
+    return target(flag,river?"T ลานบัญชาการ":flag?.name || "ธงหลัก",5,"ยืนบนพื้นในวงธงเพื่อยึดจุด");
+  }
+  function warObjectiveGuide(position){
+    const local=territoryState?.local;
+    if(warMusterSite!==activeMapId || local?.inField || !local?.canStart || local.phase!=="open")warMusterSite=null;
+    if(mode!=="live" || local?.site!==activeMapId)return null;
+    return warObjectiveTarget(local,worldDefinitions?.[activeMapId],position,warMusterSite===activeMapId);
+  }
   function syncWarQuartermaster(){
     const local=territoryState?.local,base=local?.cargo?.base,visible=Boolean(mode==="live" && local?.inField && local.site===activeMapId && base);
     quartermasterRoot.setEnabled(visible);if(visible)quartermasterRoot.position.set(base.x+1,base.y || 0,base.z);
@@ -535,6 +608,7 @@
         <p id="warHint" class="note" hidden></p>
         <label class="field" id="castleFrontLabel" for="castleFront" hidden>แนวรวมพลครั้งแรก <select id="castleFront"></select></label>
         <button id="warAction" class="primary" type="button" hidden></button>
+        <button id="warObjectiveMap" class="secondary gx-with-emblem" data-guild-icon="map" type="button" hidden></button>
         <button id="warAtlasLink" class="secondary gx-with-emblem" data-guild-icon="map" type="button" hidden>แผนที่ยุทธศาสตร์</button>
         <button id="castleRepair" class="secondary" type="button" hidden>ซ่อมประตู +10</button>
       </section>
@@ -573,6 +647,11 @@
       $("warBack").onclick=back;
     }
     $("warAtlasLink").onclick=()=>openStrategicMap(activeMapId,back);
+    $("warObjectiveMap").onclick=()=>{
+      const local=territoryState?.local;
+      if(local?.site===activeMapId && local.canStart && !local.inField)warMusterSite=activeMapId;
+      openMap();
+    };
     $("respawnCamp").onchange=e=>room?.send("territory_camp",{action:"select",campId:Number(e.target.value)});
     $("campMarch").onclick=()=>room?.send("territory_camp",{action:"march",campId:Number($("respawnCamp").value)});
     $("castleRepair").onclick=()=>{
@@ -703,6 +782,9 @@
     $("castleFrontLabel").hidden=!(isCastle && !s.inField && actionable);
     if(!(isCastle && battle && s.inField))$("castleRepair").hidden=true;
     $("warAtlasLink").hidden=actionable || !map;
+    const objectiveButton=$("warObjectiveMap");
+    objectiveButton.hidden=!warObjectiveTarget(s,map,null,true);
+    objectiveButton.textContent=battle?"ดูจุดยึดบนแผนที่สนาม":"ดูจุดเปิดศึกบนแผนที่";
     button.hidden=!actionable;
     button.onclick=null;
     hint.textContent=!s?"เลือกด่านสงครามในแผนที่เพื่อดูเส้นทาง":
@@ -1091,8 +1173,10 @@
   function openMap() {
     const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;
     const services=[...(activeMap?.serviceNpcs || [])],keeper=forestObjectiveState?.keeper;
+    const inField=territoryState?.local?.site===activeMapId && territoryState.local.inField;
     const warLegend=services.some(npc=>npc.role==="war")?"<span>จุดแดงอ่อน · นายทหารรับศึก</span>":"";
-    openDrawer("map","แผนที่"+(activeMap?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>● NPC ผู้ให้บริการ</span>${warLegend}<span>วงสีเขียว: เขตพัก</span></div>`);
+    openDrawer("map",(inField?"แผนที่สนาม · ":"แผนที่")+(activeMap?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),
+      `<p id="warMapObjective" class="war-map-objective" hidden></p><canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>● NPC ผู้ให้บริการ</span>${warLegend}<span>วงสีเขียว: เขตพัก</span>${inField?"<span>วงทองและเส้นประ · ทิศไปจุดยึด</span>":""}</div>`);
     if(keeper?.mapId===activeMapId)services.unshift(keeper);
     services.sort((a,b)=>Number(b.role==="war")-Number(a.role==="war"));
     if(services.length){
@@ -1118,7 +1202,7 @@
       if(map.strategic?.relay)note.textContent+=" · "+map.strategic.hint+" · วงทองคือจุดสนับสนุน กรอบสี่เหลี่ยมคือสถานี จุดฟ้าข้างธงคือบันไดกำแพง";
       const button=document.createElement("button");button.type="button";button.className="primary";button.id="openStrategicMap";
       button.textContent="เปิดแผนที่ยุทธศาสตร์ · "+Object.keys(worldDefinitions).length+" พื้นที่";button.onclick=openStrategicMap;
-      $("bigMap").parentElement.prepend(button);
+      if(inField)$("bigMap").after(button);else $("bigMap").parentElement.prepend(button);
       if(map.terrain)showTerrainScale(map.terrain,$("bigMap"));
       if(map.reliefLabels)note.textContent+=" · "+map.reliefLabels.map(p=>p.name+" "+terrainHeight(map.terrain,p.x,p.z).toFixed(1)+" ม.").join(" · ");
       else if(map.terrain)note.textContent+=" · "+map.region.hint;
