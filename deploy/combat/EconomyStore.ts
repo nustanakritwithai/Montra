@@ -9,7 +9,7 @@ import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type FurnitureId, type HomePartId, type ItemStats, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
-import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
+import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
@@ -19,6 +19,10 @@ import {
 } from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
+export const MAX_CRAFT_QUANTITY = 10;
+export const CRAFT_QUEUE_LIMIT = 3;
+export const CRAFT_QUEUE_MS_PER_ITEM = 5_000;
+export const MARKET_FAVORITE_LIMIT = 50;
 const MAX_GOLD = 1_000_000_000;
 const HUNGER_POINT_MS = 240_000;
 const THIRST_POINT_MS = 120_000;
@@ -41,11 +45,19 @@ const legacyMarketItems:Record<string,{name:string;kind:string}>={
   ritual_dagger:{name:"มีดหมอ",kind:"mainHand"},arcane_sword:{name:"กระบี่อาคม",kind:"mainHand"},muay_wraps:{name:"ผ้าคาดเชือก",kind:"mainHand"},
   spirit_staff:{name:"คทาวิญญาณ",kind:"mainHand"},shrine_glaive:{name:"ง้าวจันทร์ผู้พิทักษ์",kind:"mainHand"},
 };
-function marketItemIds(query:string,category:MarketCategory):string[]|null {
-  const word=query.normalize("NFC").trim().toLocaleLowerCase();
-  if(!word && category==="all")return null;
-  const catalog:Record<string,{name:string;kind:string}>={...legacyMarketItems,...PERSONAL_ITEMS};
-  return Object.entries(catalog).filter(([id,item])=>{
+const marketCatalog: Record<string, {name: string; kind: string; stats?: ItemStats}> = {
+  ...legacyMarketItems, ...PERSONAL_ITEMS,
+};
+
+export function isMarketItemId(value: unknown): value is string {
+  return typeof value === "string" && Object.hasOwn(marketCatalog, value);
+}
+
+function marketItemIds(query: string, category: MarketCategory, minStat?: MarketFilters["minStat"]): string[] | null {
+  const word = query.normalize("NFC").trim().toLocaleLowerCase();
+  if (!word && category === "all" && !minStat) return null;
+  return Object.entries(marketCatalog).filter(([id,item])=>{
+    if (minStat && (item.stats?.[minStat.stat] ?? 0) < minStat.value) return false;
     const kind=item.kind==="material" || item.kind==="catalyst"?"material":item.kind==="card"?"card":item.kind==="consumable"?"consumable":"equipment";
     return (category==="all" || kind===category) && (!word || id.toLocaleLowerCase().includes(word) || item.name.normalize("NFC").toLocaleLowerCase().includes(word));
   }).map(([id])=>id);
@@ -107,6 +119,42 @@ function consume(account:Account,item:string,qty:number,missingMaterial="craft_m
   throw Error(missingMaterial);
 }
 
+type CraftOutput = PersonalId | typeof SHRINE_RECIPE.output;
+function craftRecipe(output: CraftOutput) {
+  if (output === SHRINE_RECIPE.output) {
+    return {gold: SHRINE_RECIPE.gold, level: 1, ingredients: [{item: SHRINE_RECIPE.ingredient, qty: SHRINE_RECIPE.quantity}],
+      missingMaterial: "craft_missing_shard"};
+  }
+  const item = personalItem(output);
+  if (!item?.recipe) throw Error("invalid_recipe");
+  return {gold: item.craftGold!, level: item.level ?? 1, ingredients: item.recipe};
+}
+
+function payForCraft(account: Account, recipe: ReturnType<typeof craftRecipe>, quantity: number) {
+  const cost = recipe.gold * quantity;
+  if (account.gold < cost) throw Error("insufficient_gold");
+  for (const ingredient of recipe.ingredients) consume(account, ingredient.item, ingredient.qty * quantity, recipe.missingMaterial);
+  account.gold -= cost;
+  return cost;
+}
+
+function craftItems(output: CraftOutput, quantity: number): InventoryStack[] {
+  return Array.from({length: quantity}, () => {
+    const forge = output === SHRINE_RECIPE.output ? undefined : birthForge(output);
+    return {itemId: output, quantity: 1, ...(forge ? {forge} : {})};
+  });
+}
+
+function deliverCraft(account: Account, items: InventoryStack[]) {
+  let bankedQuantity = 0;
+  for (const item of items) {
+    const received = receiveCraft(account.inventory, item);
+    account.inventory = received.inventory;
+    bankedQuantity += Number(received.banked);
+  }
+  return bankedQuantity;
+}
+
 function receiveCraft(bag:InventorySnapshot,item:InventoryStack){
   const id=item.itemId;
   if(isSocketGear(id) && (gearCounts(bag).get(id)??0)>=(personalItem(id)?.copyLimit??1)){
@@ -148,6 +196,15 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS auction_credits(actor TEXT PRIMARY KEY,amount INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS starter_supply_used(actor TEXT NOT NULL,day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(actor,day,item));
       CREATE TABLE IF NOT EXISTS starter_supply_world(day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(day,item));
+      CREATE TABLE IF NOT EXISTS market_sales(
+        market TEXT NOT NULL, listing TEXT NOT NULL, item TEXT NOT NULL, quantity INTEGER NOT NULL,
+        total INTEGER NOT NULL, sold_at INTEGER NOT NULL, PRIMARY KEY(market,listing));
+      CREATE INDEX IF NOT EXISTS market_sales_item_date ON market_sales(item,sold_at DESC);
+      CREATE TABLE IF NOT EXISTS craft_jobs(
+        id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        recipe TEXT NOT NULL, quantity INTEGER NOT NULL, gold INTEGER NOT NULL, items TEXT NOT NULL,
+        starts_at INTEGER NOT NULL, ready_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS craft_jobs_actor_start ON craft_jobs(actor,starts_at);
       CREATE TABLE IF NOT EXISTS cooking(
         actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, xp INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS needs(
@@ -166,6 +223,8 @@ export class EconomyStore {
         plot INTEGER NOT NULL, ready_at INTEGER, PRIMARY KEY(actor,plot));
       CREATE TABLE IF NOT EXISTS water_supply(
         actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, ready_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS market_favorites(
+        actor TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, item TEXT NOT NULL, PRIMARY KEY(actor,item));
     `);
     this.initListings();
     this.city = new CityProduction(this.db);
@@ -631,17 +690,52 @@ export class EconomyStore {
       price: Number(row.price), state: String(row.state),
     }));
   }
-  browseMarket(id:string,query:string,category:MarketCategory,before:number|null,ownOnly=false){
-    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {listings:[],nextCursor:null};
+  browseMarket(id:string,query:string,category:MarketCategory,before:number|null,ownOnly=false,filters:MarketFilters={}){
+    characterId(id);const ids=marketItemIds(query,category,filters.minStat);if(ids && !ids.length)return {listings:[],nextCursor:null};
     const where=["state='open'"],args:(string|number)[]=[];
     if(before!==null){where.push("rowid<?");args.push(before);}
     if(ownOnly){where.push("seller=?");args.push(id);}
+    if(filters.favoritesOnly){where.push("json_extract(item,'$.itemId') IN (SELECT item FROM market_favorites WHERE actor=?)");args.push(id);}
     if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
     const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,seller_guild,seller_name,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
     const page=rows.slice(0,30);
     return {listings:page.map(row=>({id:String(row.id),seller:typeof row.seller_name==="string"?row.seller_name:String(row.seller).slice(0,12),
       ...(typeof row.seller_guild==="string"?{sellerGuild:row.seller_guild}:{}),
       isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+  }
+
+  marketHistory(itemId: string) {
+    if (!isMarketItemId(itemId)) throw Error("item_unavailable");
+    return this.db.prepare(
+      "SELECT market,quantity,total,sold_at FROM market_sales WHERE item=? ORDER BY sold_at DESC,rowid DESC LIMIT 30",
+    ).all(itemId).map(row => ({
+      market: row.market as "fixed" | "auction", quantity: Number(row.quantity),
+      total: Number(row.total), soldAt: Number(row.sold_at),
+    }));
+  }
+
+  marketFavorites(id: string): string[] {
+    characterId(id);
+    return this.db.prepare("SELECT item FROM market_favorites WHERE actor=? ORDER BY item")
+      .all(id).map(row => String(row.item));
+  }
+
+  setMarketFavorite(id: string, request: string, itemId: string, favorite: boolean) {
+    if (!isMarketItemId(itemId)) throw Error("item_unavailable");
+    return this.once(id, request, "market_favorite", {itemId, favorite}, () => {
+      if (favorite) {
+        this.db.prepare("INSERT OR IGNORE INTO market_favorites(actor,item) VALUES(?,?)").run(id,itemId);
+        if (this.marketFavorites(id).length > MARKET_FAVORITE_LIMIT) throw Error("market_favorite_limit");
+      } else {
+        this.db.prepare("DELETE FROM market_favorites WHERE actor=? AND item=?").run(id,itemId);
+      }
+      return {itemId, favorite};
+    });
+  }
+
+  private recordMarketSale(market: "fixed" | "auction", listingId: string, item: InventoryStack, total: number, soldAt: number) {
+    this.db.prepare("INSERT INTO market_sales(market,listing,item,quantity,total,sold_at) VALUES(?,?,?,?,?,?)")
+      .run(market,listingId,item.itemId,item.quantity,total,soldAt);
   }
 
   /** NPC reserve has both a per-character and a shared daily limit; resets at 00:00 UTC. */
@@ -721,10 +815,14 @@ export class EconomyStore {
   }
   settleExpiredAuctions(now=Date.now()):number {
     return this.transaction(()=>{
-      const rows=this.db.prepare("SELECT id,seller,bidder,bid FROM auctions WHERE state='open' AND ends_at<=? ORDER BY ends_at LIMIT 50").all(now);
+      const rows=this.db.prepare("SELECT id,seller,bidder,bid,item,ends_at FROM auctions WHERE state='open' AND ends_at<=? ORDER BY ends_at LIMIT 50").all(now);
       for(const row of rows){
         const bidder=typeof row.bidder==="string"?row.bidder:null,seller=String(row.seller);
-        if(bidder)this.creditOrHold(seller,Number(row.bid));
+        if (bidder) {
+          const total = Number(row.bid);
+          this.creditOrHold(seller,total);
+          this.recordMarketSale("auction",String(row.id),JSON.parse(String(row.item)) as InventoryStack,total,Number(row.ends_at));
+        }
         this.db.prepare("UPDATE auctions SET state='settled',claimant=? WHERE id=? AND state='open'").run(bidder??seller,String(row.id));
       }
       return rows.length;
@@ -746,10 +844,11 @@ export class EconomyStore {
       this.db.prepare("UPDATE auctions SET state='cancelled',claimed=1 WHERE id=?").run(auctionId);return {auctionId};
     });
   }
-  browseAuctions(id:string,query:string,category:MarketCategory,before:number|null){
-    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {auctions:[],nextCursor:null};
+  browseAuctions(id:string,query:string,category:MarketCategory,before:number|null,filters:MarketFilters={}){
+    characterId(id);const ids=marketItemIds(query,category,filters.minStat);if(ids && !ids.length)return {auctions:[],nextCursor:null};
     const where=["state='open'","ends_at>?"],args:(string|number)[]=[Date.now()];
     if(before!==null){where.push("rowid<?");args.push(before);}
+    if(filters.favoritesOnly){where.push("json_extract(item,'$.itemId') IN (SELECT item FROM market_favorites WHERE actor=?)");args.push(id);}
     if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
     const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,opening,bidder,bid,ends_at FROM auctions WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
     const page=rows.slice(0,30);
@@ -763,44 +862,73 @@ export class EconomyStore {
     const seen=new Set<string>(),rows=[...pending,...history].filter(row=>{const key=String(row.id);if(seen.has(key))return false;seen.add(key);return true;});
     return {auctions:rows.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,isBidder:row.bidder===id,item:JSON.parse(String(row.item)) as InventoryStack,opening:Number(row.opening),bid:Number(row.bid),bidder:typeof row.bidder==="string"?row.bidder.slice(0,12):null,endsAt:Number(row.ends_at),state:String(row.state),canClaim:row.state==="settled" && row.claimant===id && Number(row.claimed)===0})),credit:this.auctionCredit(id)};
   }
-  craftShrineGlaive(id: string, request: string) {
-    const recipe = SHRINE_RECIPE;
-    return this.once(id, request, "craft", {recipe: recipe.id}, () => {
-      const account = this.account(id);
-      if (account.gold < recipe.gold) throw Error("insufficient_gold");
-      let remaining = recipe.quantity;
-      for (const [index, stack] of account.inventory.slots.entries()) {
-        if (stack?.itemId !== recipe.ingredient) continue;
-        const used = Math.min(remaining, stack.quantity);
-        account.inventory = take(account.inventory, index, used).inventory;
-        remaining -= used;
-        if (remaining === 0) break;
-      }
-      if (remaining > 0) throw Error("craft_missing_shard");
-      const received=receiveCraft(account.inventory,{itemId:recipe.output,quantity:1});
-      account.inventory=received.inventory;
-      account.gold -= recipe.gold;
+  craftShrineGlaive(id: string, request: string, quantity = 1) {
+    return this.craft(id, request, SHRINE_RECIPE.output, 1, quantity);
+  }
+
+  craftPersonal(id: string, request: string, output: PersonalId, level = 1, quantity = 1) {
+    return this.craft(id, request, output, level, quantity);
+  }
+
+  private craft(id: string, request: string, output: CraftOutput, level: number, quantity: number) {
+    const recipe = craftRecipe(output);
+    positiveInteger(quantity, MAX_CRAFT_QUANTITY);
+    // Keep the intent and reply identical for requests saved by older server builds.
+    const intent = quantity === 1 ? {recipe: output} : {recipe: output, quantity};
+    return this.once(id, request, "craft", intent, () => {
+      if (level < recipe.level) throw Error("item_level_required");
+      this.checkCooking(id, output);
+      const account = this.account(id), spentGold = payForCraft(account, recipe, quantity);
+      const bankedQuantity = deliverCraft(account, craftItems(output, quantity));
       this.put(id, account);
-      return {itemId: recipe.output, spentGold: recipe.gold,banked:received.banked};
+      this.creditCooking(id, output, quantity);
+      const result = {itemId: output, spentGold, banked: bankedQuantity > 0};
+      return quantity === 1 ? result : {...result, quantity, bankedQuantity};
     });
   }
 
-  craftPersonal(id:string,request:string,output:PersonalId,level=1) {
-    const def=personalItem(output);
-    if(!def?.recipe)throw Error("invalid_recipe");
-    return this.once(id,request,"craft",{recipe:output},()=>{
-      if(level<(def.level??1))throw Error("item_level_required");
+  craftQueue(id: string, now = Date.now()) {
+    characterId(id);
+    const rows = this.db.prepare(
+      "SELECT id,recipe,quantity,gold,starts_at,ready_at FROM craft_jobs WHERE actor=? ORDER BY starts_at,rowid",
+    ).all(id);
+    return {serverNow: now, jobs: rows.map(row => {
+      const startsAt = Number(row.starts_at), readyAt = Number(row.ready_at);
+      const status = now >= readyAt ? "ready" : now >= startsAt ? "crafting" : "queued";
+      return {id: String(row.id), recipeId: String(row.recipe), quantity: Number(row.quantity),
+        spentGold: Number(row.gold), startsAt, readyAt, status};
+    })};
+  }
+
+  enqueueCraft(id: string, request: string, output: CraftOutput, level: number, quantity: number, now = Date.now()) {
+    positiveInteger(quantity, MAX_CRAFT_QUANTITY);
+    return this.once(id, request, "craft_enqueue", {recipe: output, quantity}, () => {
+      const recipe = craftRecipe(output);
+      if (level < recipe.level) throw Error("item_level_required");
       this.checkCooking(id, output);
-      const account=this.account(id),cost=def.craftGold!;
-      if(account.gold<cost)throw Error("insufficient_gold");
-      for(const ingredient of def.recipe!)consume(account,ingredient.item,ingredient.qty);
-      const forge=birthForge(output);
-      const received=receiveCraft(account.inventory,{itemId:output,quantity:1,...(forge?{forge}:{})});
-      account.inventory=received.inventory;
-      account.gold-=cost;
-      this.put(id,account);
-      this.creditCooking(id, output);
-      return {itemId:output,spentGold:cost,banked:received.banked};
+      const pending = this.db.prepare("SELECT COUNT(*) AS total, MAX(ready_at) AS last FROM craft_jobs WHERE actor=?").get(id)!;
+      if (Number(pending.total) >= CRAFT_QUEUE_LIMIT) throw Error("craft_queue_full");
+      const account = this.account(id), spentGold = payForCraft(account, recipe, quantity);
+      const startsAt = Math.max(now, Number(pending.last ?? 0)), readyAt = startsAt + quantity * CRAFT_QUEUE_MS_PER_ITEM;
+      const jobId = randomUUID(), items = craftItems(output, quantity);
+      this.put(id, account);
+      this.db.prepare("INSERT INTO craft_jobs(id,actor,recipe,quantity,gold,items,starts_at,ready_at) VALUES(?,?,?,?,?,?,?,?)")
+        .run(jobId, id, output, quantity, spentGold, JSON.stringify(items), startsAt, readyAt);
+      return {jobId};
+    });
+  }
+
+  claimCraft(id: string, request: string, jobId: string, now = Date.now()) {
+    return this.once(id, request, "craft_claim", {jobId}, () => {
+      const row = this.db.prepare("SELECT recipe,quantity,items,ready_at FROM craft_jobs WHERE id=? AND actor=?").get(jobId, id);
+      if (!row) throw Error("craft_job_unavailable");
+      if (now < Number(row.ready_at)) throw Error("craft_job_not_ready");
+      const account = this.account(id);
+      const bankedQuantity = deliverCraft(account, JSON.parse(String(row.items)) as InventoryStack[]);
+      this.put(id, account);
+      this.creditCooking(id, String(row.recipe), Number(row.quantity));
+      this.db.prepare("DELETE FROM craft_jobs WHERE id=? AND actor=?").run(jobId, id);
+      return {jobId, itemId: String(row.recipe), quantity: Number(row.quantity), bankedQuantity};
     });
   }
 
@@ -820,11 +948,11 @@ export class EconomyStore {
     if (!state.kitchen) throw Error("cooking_kitchen_required");
   }
 
-  private creditCooking(id: string, itemId: string) {
+  private creditCooking(id: string, itemId: string, quantity: number) {
     if (!personalItem(itemId)?.food) return;
     this.db.prepare(
-      "INSERT INTO cooking VALUES(?,1) ON CONFLICT(actor) DO UPDATE SET xp=MIN(15,cooking.xp+1)",
-    ).run(id);
+      "INSERT INTO cooking VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET xp=MIN(15,cooking.xp+excluded.xp)",
+    ).run(id, Math.min(15, quantity));
   }
 
   private needValues(id: string, now: number) {
@@ -1131,7 +1259,8 @@ export class EconomyStore {
       if (row.seller === id) throw new Error("cannot_buy_own_listing");
       const buyer = this.account(id);
       if (buyer.gold < row.price) throw new Error("insufficient_gold");
-      buyer.inventory = add(buyer.inventory, JSON.parse(String(row.item)) as InventoryStack);
+      const item = JSON.parse(String(row.item)) as InventoryStack;
+      buyer.inventory = add(buyer.inventory, item);
       buyer.gold -= row.price;
       this.put(id,buyer);
       if (typeof row.seller === "string") {
@@ -1141,6 +1270,7 @@ export class EconomyStore {
       } else if (typeof row.seller_guild === "string") this.city.creditSale(listingId, row.seller_guild, row.price);
       else throw Error("listing_unavailable");
       this.db.prepare("UPDATE listings SET state='sold' WHERE id=?").run(listingId);
+      this.recordMarketSale("fixed",listingId,item,row.price,Date.now());
       return { listingId };
     });
   }

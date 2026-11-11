@@ -1,3 +1,4 @@
+import { TITAN_BOSS } from "./RegionalBosses.js";
 import {newShadowCutState,markShadowCut,returnShadowCut,clearShadowCut,SHADOW_CUT_TRIAL,type ShadowCutState,type ShadowMark,type ShadowPoint} from "./ShadowCutPrototype.js";
 import {newFlowingState,useFlowing,advanceFlowing,clearFlowing,consumeFlowingGuard,type FlowingState} from "./FlowingBladesPrototype.js";
 import {newCounterCursor,recordChaiyaBlock,validChaiyaOpportunity,grantChaiyaDebuff,consumeChaiyaDebuff,activeChaiyaDebuff,type CounterCursor,type CounterOpportunity,type ChaiyaDebuff} from "./ChaiyaCounterPrototype.js";
@@ -83,7 +84,8 @@ import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
 import {getResourceNode,harvestableFrom,REFINE_INPUT} from "./WorldResources.js";
-import { parseSellMaterial, parseSalvage, parseCraft, parseHomeAction, parseEconomyRequest, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
+import { CRAFT_QUEUE_LIMIT, CRAFT_QUEUE_MS_PER_ITEM, MARKET_FAVORITE_LIMIT, MAX_CRAFT_QUANTITY } from "./EconomyStore.js";
+import { parseMarketHistory, parseMarketFavorite, parseSellMaterial, parseSalvage, parseCraft, parseCraftClaim, parseHomeAction, parseEconomyRequest, parseForge, parseClaimForgeCopy, parseMarketCreate, parseMarketAction, parseMarketBrowse, parseAuctionCreate, parseAuctionBid, parseAuctionAction, parseAuctionCredit, parseStarterSupply, parseTradeRequest, parseTradeId, parseTradeOffer } from "./EconomyRules.js";
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
@@ -179,7 +181,7 @@ export type PrototypeRoomTransport = Readonly<{
 const mapsWithServices=Object.fromEntries(Object.entries(mapsWithServiceNpcs()).map(([id,map])=>[
   id, BOAT_SHORES[id] ? {...map, boatDock:{...BOAT_SHORES[id],range:BOAT_LAUNCH_RANGE,deck:BOAT_DECK}} : map,
 ]));
-const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
+const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,combatFeatures:{warBanner:true,meteor:true,titanStrikeRadius:TITAN_BOSS.strikeRadius},homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
 const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_PURCHASE_ENABLED;
 const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
 const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
@@ -199,7 +201,7 @@ function sweepCityProduction(now: number): void {
   }
 }
 function encodeBattleWorld(maps:Readonly<Record<string,unknown>>):string {
-  return JSON.stringify({version:1,maps},(key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value);
+  return JSON.stringify({version:1,maps,combatFeatures:{warBanner:true}},(key,value)=>key==="boss" && value?.id?.startsWith("boss_")?undefined:value);
 }
 const battlefieldWorldDefinition=WORLD_EXPANSION?encodeBattleWorld(WORLD_MAPS):"";
 const isolatedBattleWorldDefinitions=new Map<string,string>();
@@ -251,6 +253,9 @@ type TradeSession = { id:string; a:string; b:string; expires:number; offers:Reco
  *   room type "my_room"; monster id "possessed-1";
  *   state.players, state.monster; "combat_hit"/"combat_notice"/"monster_respawn".
  */
+const METEOR = {range: 3.5, cooldownMs: 15_000, stamina: 20, maxTargets: 5, power: 1.2} as const;
+const WAR_BANNER = {radius: 12, durationMs: 60_000, cooldownMs: 15_000, defenseBonus: 0.10} as const;
+
 export class MyRoom extends Room<{ state: MyRoomState }> {
   maxClients:number = WORLD_ROOM_CAPACITY;
   state = new MyRoomState();
@@ -869,6 +874,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private muayWrapGranted = new Set<string>();
   private swordCombos = new Map<string, {count:number; until:number}>();
   private swordGuards = new Map<string, {until:number; factor:number; direction:boolean; counterUntil:number}>();
+  private readonly sessionGuilds = new Map<string, string>();
+  private readonly warBanners = new Map<string, {
+    id: string; ownerId: string; guildId: string; mapId: string;
+    x: number; y: number; z: number; expiresAt: number; viewers: Map<string, boolean>;
+  }>();
+  private readonly lastBannerAt = new Map<string, number>();
   private guildSubscriptions = new Map<string,()=>void>();
   private guildInvites = new Map<string,{from:string;to:string;guildId:string;expires:number}>();
 
@@ -884,7 +895,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private lastSummonAt = new Map<string, number>();
   private lastSummonAttackAt = new Map<string, number>();
   private climbs = new Map<string, WorldPoint>();
-  private flightTransitions = new Map<string, { targetY: number; landing: boolean }>();
+  private flightTransitions = new Map<string, {targetY: number; landing: boolean; meteor?: boolean}>();
+  private readonly lastMeteorAt = new Map<string, number>();
   private readonly needs = new Map<string, {hungryAt: number; thirstyAt: number}>();
   private readonly homeClients = new Set<string>();
   private readonly homeWalls = new Map<string, {cell:number;rotation:0|1}[]>();
@@ -4119,8 +4131,88 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
   private sendGuild(client:Client,character:string):void {
-    client.send("guild_state",guildStore().view(character,guildOnline));
+    const view = guildStore().view(character,guildOnline), id = client.sessionId;
+    if (this.sessionGuilds.get(id) !== view?.id) {
+      if (view) this.sessionGuilds.set(id, view.id);
+      else this.sessionGuilds.delete(id);
+      this.updateWarBanners();
+    }
+    client.send("guild_state",view);
     client.send("guild_recruitment",{pending:guildStore().pending(character) ?? null,applications:guildStore().applications(character)});
+  }
+
+  private plantWarBanner(client: Client): void {
+    const id = client.sessionId, player = this.state.players.get(id);
+    const party = this.parties.get(id), guildId = this.sessionGuilds.get(id);
+    if (party?.leader !== id || !guildId) return this.reject(client, "war_banner_leader_required");
+    if (!player?.alive || this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+        player.flying || player.mounted || !onMapGround(player) ||
+        (this.field && !this.warSeats.has(id))) return this.reject(client, "war_banner_unavailable");
+    if (this.warBanners.has(party.id)) return this.reject(client, "war_banner_active");
+    if (this.simulatedMs - (this.lastBannerAt.get(id) ?? -Infinity) < WAR_BANNER.cooldownMs) {
+      return this.reject(client, "war_banner_cooldown");
+    }
+    this.lastBannerAt.set(id, this.simulatedMs);
+    this.warBanners.set(party.id, {
+      id: randomUUID(), ownerId: id, guildId, mapId: player.mapId, x: player.x, y: player.y, z: player.z,
+      expiresAt: this.simulatedMs + WAR_BANNER.durationMs, viewers: new Map(),
+    });
+    this.updateWarBanners();
+  }
+
+  private sendWarBanner(client: Client): void {
+    const id = client.sessionId, party = this.parties.get(id);
+    const banner = party && this.warBanners.get(party.id);
+    const visible = banner?.viewers.has(id) ? banner : undefined;
+    const canPlant = party?.leader === id && this.sessionGuilds.has(id);
+    try {
+      client.send("war_banner_state", {canPlant, buffed: visible?.viewers.get(id) ?? false,
+        banner: visible ? {id: visible.id, ownerId: visible.ownerId, mapId: visible.mapId,
+          x: visible.x, y: visible.y, z: visible.z, radius: WAR_BANNER.radius,
+          remainingMs: Math.max(0, visible.expiresAt - this.simulatedMs)} : null});
+    } catch { /* disconnected */ }
+  }
+
+  private updateWarBanners(): void {
+    for (const [partyId, banner] of this.warBanners) {
+      const party = this.parties.get(banner.ownerId), owner = this.state.players.get(banner.ownerId);
+      const ownerSide = this.warSeats.get(banner.ownerId)?.side;
+      const valid = party?.id === partyId && party.leader === banner.ownerId && owner?.alive &&
+        owner.mapId === banner.mapId && this.sessionGuilds.get(banner.ownerId) === banner.guildId &&
+        !this.pendingWarps.has(banner.ownerId) && !this.pendingCharacterLeaves.has(banner.ownerId) &&
+        (!this.field || ownerSide) && this.simulatedMs < banner.expiresAt;
+      const next = new Map<string, boolean>();
+      if (valid) for (const id of party.members) {
+        const player = this.state.players.get(id);
+        if (!player?.alive || player.mapId !== banner.mapId || this.sessionGuilds.get(id) !== banner.guildId ||
+            this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) ||
+            (this.field && this.warSeats.get(id)?.side !== ownerSide)) continue;
+        const effects = this.effects.modifiers(id);
+        const active = effects.some(effect => effect.id === "war_banner" && effect.sourceId === banner.id);
+        const buffed = distance3d(banner, player) <= WAR_BANNER.radius &&
+          (active || effects.length < STACKING_RULES.maxModifiers);
+        if (buffed && !active) {
+          this.effects.grant(id, {id: "war_banner", sourceId: banner.id, group: "war_banner",
+            bonuses: {def: WAR_BANNER.defenseBonus, magicDef: WAR_BANNER.defenseBonus}}, banner.expiresAt);
+          this.applyStats(id, player, this.statAllocations.get(id) ?? emptyAllocations());
+        }
+        next.set(id, buffed);
+      }
+
+      const previous = banner.viewers;
+      banner.viewers = next;
+      if (!valid) this.warBanners.delete(partyId);
+      for (const id of new Set([...previous.keys(), ...next.keys()])) {
+        if (previous.get(id) && !next.get(id) && this.effects.remove(id, "war_banner", banner.id)) {
+          const player = this.state.players.get(id);
+          if (player) this.applyStats(id, player, this.statAllocations.get(id) ?? emptyAllocations());
+        }
+        if (previous.get(id) !== next.get(id)) {
+          const client = this.clients.find(peer => peer.sessionId === id);
+          if (client) this.sendWarBanner(client);
+        }
+      }
+    }
   }
 
   private partyAction(client:Client, action:()=>void): void {
@@ -4146,6 +4238,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const client=this.clients.find(c=>c.sessionId===id);
     try { client?.send("party_state",{partyId:null,leaderId:null,members:[]}); } catch { /* disconnected */ }
     if (result.current) this.sendPartyState(result.current);
+    this.updateWarBanners();
   }
   private parsePartyInvitation(message:unknown):string|null {
     if (!message || typeof message!=="object" || Array.isArray(message)) return null;
@@ -4163,7 +4256,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.gates.get(client.sessionId)?.economy.consume(this.simulatedMs)) return this.reject(client,"economy_rate_limited");
     const id=this.economyId(client); if (!id) return;
     try { action(id); } catch (error) {
-      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","cooking_level_required","cooking_kitchen_required",
+      const allowed=["invalid_amount","invalid_slot","item_unavailable","item_equipped","inventory_full","duplicate_weapon","accessory_limit","listing_unavailable","listing_limit","cannot_buy_own_listing","insufficient_gold","invalid_trade","invalid_gold","invalid_request_id","request_id_conflict","salvage_changed","forge_max_rank","forge_item_changed","forge_missing_copy","forge_risk_unconfirmed","forge_downgrade_unconfirmed","forge_remove_card","forge_donor_changed","forge_stock_full","forge_stock_changed","craft_missing_shard","craft_missing_material","craft_queue_full","craft_job_unavailable","craft_job_not_ready","market_favorite_limit","cooking_level_required","cooking_kitchen_required",
         "home_level_unavailable","home_required","home_unavailable","home_village_required","home_build_location","home_wall_blocked","home_cell_invalid","home_cell_occupied","home_furniture_unavailable",
         "garden_plot_invalid","garden_occupied","garden_water_unavailable","garden_not_ready",
         "needs_full","water_unavailable","water_cooldown","item_bound","socket_changed","card_unavailable","drill_missing_metal","item_level_required","card_gear_level","starter_supply_limit","invalid_auction_duration","auction_limit","auction_bid_limit","auction_unavailable","cannot_bid_own_auction","auction_bid_too_low","auction_claim_unavailable","auction_cancel_unavailable","auction_credit_unavailable"];
@@ -4390,7 +4483,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.inventories.set(client.sessionId,account.inventory);
     player.equippedWeaponId=equippedWeaponId(account.inventory) ?? "";
     this.applyStats(client.sessionId,player,this.statAllocations.get(client.sessionId) ?? emptyAllocations());
-    try { client.send("inventory_state",account.inventory); client.send("economy_state",{gold:account.gold}); } catch { /* disconnect does not roll back committed assets */ }
+    try {
+      client.send("inventory_state", account.inventory);
+      client.send("economy_state", {gold: account.gold, craftBatchMax: MAX_CRAFT_QUANTITY,
+        craftQueueMax: CRAFT_QUEUE_LIMIT, craftQueueMsPerItem: CRAFT_QUEUE_MS_PER_ITEM});
+    } catch { /* disconnect does not roll back committed assets */ }
   }
   private tradeFor(client: Client, tradeId:string): TradeSession | null {
     const trade=this.trades.get(tradeId);
@@ -5130,6 +5227,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
          (value.action!=="kick" && value.action!=="transfer"))return this.reject(client,"guild_invalid_request");
       this.guildAction(client,character=>{guildStore().manage(character,value.memberId as string,value.action as "kick"|"transfer");notifyGuilds();});
     },
+    get_war_banner: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_war_banner");
+      this.partyAction(client, () => this.sendWarBanner(client));
+    },
+    plant_war_banner: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_war_banner");
+      this.partyAction(client, () => this.plantWarBanner(client));
+    },
     get_party: (client:Client,message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"party_invalid_request");
       this.partyAction(client,()=>{const party=this.parties.get(client.sessionId);if(party)this.sendPartyState(party);else client.send("party_state",{partyId:null,leaderId:null,members:[]});});
@@ -5153,6 +5258,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const party=this.parties.accept(client.sessionId,inviteId,this.simulatedMs);
         if(this.bladeCloaks.size)this.syncPlayerViews();
         this.sendPartyState(party);
+        this.updateWarBanners();
       });
     },
     party_decline: (client:Client,message:unknown) => {
@@ -5165,7 +5271,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     },
     get_economy: (client:Client, message:unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
-      this.economyAction(client,id=>{this.syncEconomy(client,id);client.send("market_features",{version:1});});
+      this.economyAction(client,id=>{this.syncEconomy(client,id);client.send("market_features",{version:1,history:true,favoriteLimit:MARKET_FAVORITE_LIMIT,baseStatFilter:true});});
     },
     market_overview: (client:Client,message:unknown)=>{
       if(!parseEmptyCommand(message))return this.reject(client,"invalid_economy_request");
@@ -5178,8 +5284,28 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order=parseMarketBrowse(message);if(!order)return this.reject(client,"invalid_economy_request");
       this.economyAction(client,id=>{
         const store=characterStore.economy;
-        const page=order.market==="fixed"?store.browseMarket(id,order.query,order.category,order.before,order.ownOnly):store.browseAuctions(id,order.query,order.category,order.before);
+        const page=order.market==="fixed"?store.browseMarket(id,order.query,order.category,order.before,order.ownOnly,order.filters):store.browseAuctions(id,order.query,order.category,order.before,order.filters);
         client.send("market_page",{market:order.market,tag:order.tag,...page});
+      });
+    },
+    market_history: (client: Client, message: unknown) => {
+      const order = parseMarketHistory(message);
+      if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,() => client.send("market_history",{
+        ...order, sales: characterStore.economy.marketHistory(order.itemId),
+      }));
+    },
+    market_favorites: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id => client.send("market_favorites",{items: characterStore.economy.marketFavorites(id)}));
+    },
+    market_favorite_set: (client: Client, message: unknown) => {
+      const order = parseMarketFavorite(message);
+      if (!order) return this.reject(client,"invalid_economy_request");
+      this.economyAction(client,id => {
+        const store = characterStore.economy;
+        store.setMarketFavorite(id,order.requestId,order.itemId,order.favorite);
+        client.send("market_favorites",{items: store.marketFavorites(id), requestId: order.requestId});
       });
     },
     auction_create: (client:Client,message:unknown)=>{
@@ -5329,12 +5455,41 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       });
     },
     collect_water: (client: Client, message: unknown) => this.collectWater(client, message),
+    get_craft_queue: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => client.send("craft_queue", characterStore.economy.craftQueue(id)));
+    },
+    craft_enqueue: (client: Client, message: unknown) => {
+      const order = parseCraft(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const store = characterStore.economy;
+        const level = this.state.players.get(client.sessionId)!.level;
+        this.requireHomeRecipe(client.sessionId,id,order.recipeId);
+        const {jobId} = store.enqueueCraft(id, order.requestId, order.recipeId, level, order.quantity);
+        this.syncEconomy(client, id);
+        client.send("craft_queue", {...store.craftQueue(id), requestId: order.requestId, jobId});
+      });
+    },
+    craft_claim: (client: Client, message: unknown) => {
+      const order = parseCraftClaim(message);
+      if (!order) return this.reject(client, "invalid_economy_request");
+      this.economyAction(client, id => {
+        const store = characterStore.economy;
+        const claimed = store.claimCraft(id, order.requestId, order.jobId);
+        this.syncEconomy(client, id);
+        client.send("craft_queue", {...store.craftQueue(id), requestId: order.requestId, claimed});
+      });
+    },
     craft_weapon: (client: Client, message: unknown) => {
       const order = parseCraft(message);
       if (!order) return this.reject(client, "invalid_economy_request");
       this.economyAction(client, id => {
+        const store = characterStore.economy;
         this.requireHomeRecipe(client.sessionId,id,order.recipeId);
-        const result = order.recipeId===SHRINE_GLAIVE ? characterStore.economy.craftShrineGlaive(id,order.requestId) : characterStore.economy.craftPersonal(id,order.requestId,order.recipeId,this.state.players.get(client.sessionId)!.level);
+        const result = order.recipeId === SHRINE_GLAIVE
+          ? store.craftShrineGlaive(id, order.requestId, order.quantity)
+          : store.craftPersonal(id, order.requestId, order.recipeId, this.state.players.get(client.sessionId)!.level, order.quantity);
         this.syncEconomy(client, id);
         client.send("craft_result", {requestId: order.requestId, ...result});
       });
@@ -5675,6 +5830,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.destinations.delete(id);this.crestTurns.delete(id);player.targetId="";player.combatState="idle";
       player.mounted=true;this.mountHitSequence.set(id,player.hitSeq);this.lastMountMs.set(id,this.simulatedMs);
       this.broadcast("mount_changed",{playerId:id,mounted:true},{afterNextPatch:true});
+    },
+    meteor_slam: (client: Client, message: unknown) => {
+      if (!parseEmptyCommand(message)) return this.reject(client, "invalid_meteor");
+      const id = client.sessionId, player = this.state.players.get(id);
+      if (!player?.alive || !player.flying || !isOccultPath(player.pathId) || this.field ||
+          this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
+          this.flightTransitions.has(id) || isRestArea(player.mapId, player)) return this.reject(client, "meteor_unavailable");
+      if (player.stamina < METEOR.stamina) return this.reject(client, "insufficient_stamina");
+      if (this.simulatedMs - (this.lastMeteorAt.get(id) ?? -Infinity) < METEOR.cooldownMs) {
+        return this.reject(client, "meteor_cooldown");
+      }
+      this.messages.fly(client, {});
+      const transition = this.flightTransitions.get(id);
+      if (!transition?.landing) return;
+      transition.meteor = true;
+      player.stamina -= METEOR.stamina;
+      this.lastMeteorAt.set(id, this.simulatedMs);
     },
     fly: (client: Client, message: unknown) => {
       if(this.blockMounted(client))return;
@@ -6025,9 +6197,23 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try{publish();}finally{this.killMonster(defeat);}
   }
 
-  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay") {
+  private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay" | "meteor") {
     this.applyMonsterHit(id,target,damage,()=>this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
       maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true}));
+  }
+
+  private resolveMeteor(id: string, player: Player) {
+    const targets = [this.state.monster, ...this.state.monsters.values()]
+      .filter(target => target.alive && this.sameCombatMap(id,target.id) && distance3d(player,target) <= METEOR.range &&
+        this.bodyPathClear(player.mapId,player,target))
+      .sort((a,b) => distance3d(player,a)-distance3d(player,b)).slice(0,METEOR.maxTargets);
+    const power = this.masteryPower(player,"pve","magicAtk") * METEOR.power;
+    for (const target of targets) {
+      this.recordCombat(id,target.id);
+      this.hitMonsterWithSpell(id,target,calculateDamage(power,target.defense,target.level),"meteor");
+    }
+    this.broadcast("meteor_impact",{ownerId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,
+      targets:targets.map(target=>target.id)},{afterNextPatch:true});
   }
 
   private commitWarp(client: Client, portal: WorldPortal) {
@@ -6692,6 +6878,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.updateFlights(dt);
     if (this.state.boatsAvailable) this.updateBoats(dt);
     this.updatePlayerMovement(dt);
+    this.updateWarBanners();
     const trapStep=this.prototypeAshTraps.size?{movements:[] as TrapMovement[],attacks:[] as Array<()=>void>}:undefined;
     const walk=trapStep?(monster:Monster,previous:Position)=>{
       if(trapStep.movements.length<=1024)trapStep.movements.push({previousAt:this.simulatedMs-Math.round(dt*1000),
@@ -6802,6 +6989,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.flightTransitions.delete(id);
       player.flying = !transition.landing;
       player.combatState = "idle";
+      if (transition.meteor) this.resolveMeteor(id, player);
       this.broadcast("flight_finished", {
         playerId: id, altitude: player.y, flying: player.flying,
       }, { afterNextPatch: true });
@@ -7096,6 +7284,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     victim.hp = 0;
     this.hpRegenRemainder.delete(id);
     victim.alive = false;
+    this.updateWarBanners();
     victim.combatState = "dead";
     victim.targetId = "";
     this.climbs.delete(id);
@@ -7705,10 +7894,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.restApproachClients.delete(id);
     this.provinceClients.delete(id);
     this.leaveParty(id);
+    this.sessionGuilds.delete(id);
+    this.lastBannerAt.delete(id);
     this.needs.delete(id);
     this.homeClients.delete(id);
     const homeOwner = this.persistentCharacters.get(id);
     if (homeOwner) this.homeWalls.delete(homeMapId(homeOwner));
+    this.lastMeteorAt.delete(id);
     const guildCharacter=this.persistentCharacters.get(id);
     if(guildCharacter){this.guildSubscriptions.get(id)?.();this.guildSubscriptions.delete(id);notifyGuilds();}
     for(const [inviteId,invite] of this.guildInvites)if(invite.from===id || invite.to===id){
@@ -7815,9 +8007,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.effects.clear();
     this.trades.clear();
     this.parties.clear();
+    this.warBanners.clear();
+    this.sessionGuilds.clear();
+    this.lastBannerAt.clear();
     this.needs.clear();
     this.homeClients.clear();
     this.homeWalls.clear();
+    this.lastMeteorAt.clear();
     this.guildInvites.clear();
     for(const unsubscribe of this.guildSubscriptions.values())unsubscribe();
     this.guildSubscriptions.clear();

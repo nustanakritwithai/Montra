@@ -1,6 +1,6 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
 import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, type HimmapanAttack } from "./WorldAtlas.js";
-import {REGIONAL_BOSSES} from "./RegionalBosses.js";
+import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
 import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
@@ -75,7 +75,7 @@ export class ForestEncounters {
     })));
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
     // A full world room can populate every atlas hunting region at once.
-    const bosses=includeWorldEncounters?REGIONAL_BOSSES.filter(b=>getWorldMap(b.mapId)?.boss?.id===b.id):[];
+    const bosses=includeWorldEncounters?REGIONAL_BOSSES.filter(b=>getWorldMap(b.mapId)?.boss?.id===b.id || (b.id===TITAN_BOSS.id && getWorldMap(b.mapId))):[];
     const templeSpawns=[...TEMPLE_SPAWNS,...bosses.filter(b=>b.mapId===TEMPLE_MAP.id)];
     const regionalSpawns=[...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...bosses.filter(b=>b.mapId!==TEMPLE_MAP.id),
       ...(includeWorldEncounters?HIMMAPAN_SPAWNS:[])];
@@ -96,7 +96,7 @@ export class ForestEncounters {
       const {id, x, z, level, name, special} = spawn;
       const tier:MonsterTier = spawn.tier ?? (id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal"));
       const base=monsterProfile(level,tier==="boss"?"normal":tier);
-      const profile:MonsterProfile=tier==="boss" ? {...base,tier,maxHp:Math.round(base.maxHp*3.5),
+      const profile:MonsterProfile=tier==="boss" ? {...base,tier,maxHp:Math.round(base.maxHp*(id===TITAN_BOSS.id?5:3.5)),
         attack:Math.round(base.attack*1.55),defense:Math.round(base.defense*1.3)} : base;
       const actor=new Monster({id,x,y:groundAt(zone.map.id,x,z),z,hp:profile.maxHp,maxHp:profile.maxHp,
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense,
@@ -144,7 +144,7 @@ export class ForestEncounters {
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
     life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     // A siege can have more hunters than a world room; use the same minimum delay.
-    const boss=life.zone.map.boss??life.zone.map.guardian;
+    const boss=id===TITAN_BOSS.id?TITAN_BOSS:life.zone.map.boss??life.zone.map.guardian;
     life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();
     if(this.traceEnabled)this.traceEvent({kind:"died",now,monsterId:id,mapId:m.mapId,to:{x:m.x,y:m.y,z:m.z}});return true;
   }
@@ -196,7 +196,8 @@ export class ForestEncounters {
         !blocked.has(pid)&&(p.boatId || onMapGround(p))&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
       const clear=(target:Player)=>isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) &&
         (!map.terrain || isWorldSegmentClear(map.id,m,target));
-      const boss=map.boss??map.guardian;
+      const titan=id===TITAN_BOSS.id;
+      const boss=titan?TITAN_BOSS:map.boss??map.guardian;
       if (life.windupUntil > 0) {
         if (special) {
           if (now < life.windupUntil) continue;
@@ -210,10 +211,17 @@ export class ForestEncounters {
           continue;
         }
         const target = players.get(m.targetId);
-        if (now < life.windupUntil && eligible(m.targetId,target)) continue;
+        if (now < life.windupUntil && (titan || eligible(m.targetId,target))) continue;
         life.windupUntil = 0;
         life.lastAttack = now;
-        if (boss?.id===id && eligible(m.targetId,target) && distance3d(m,target) <= boss.strikeRadius && clear(target)) {
+        if (titan) {
+          for (const [playerId,player] of players) {
+            if (eligible(playerId,player) && distance3d(m,player)<=TITAN_BOSS.strikeRadius && clear(player)) {
+              if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:playerId,force:1.6,to:{x:m.x,y:m.y,z:m.z}});
+              hit(playerId,m,1.6,now);
+            }
+          }
+        } else if (boss?.id===id && eligible(m.targetId,target) && distance3d(m,target) <= boss.strikeRadius && clear(target)) {
           if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:m.targetId,force:1.6,to:{x:m.x,y:m.y,z:m.z}});hit(m.targetId,m,1.6,now);
         }
         m.aiState="patrol";

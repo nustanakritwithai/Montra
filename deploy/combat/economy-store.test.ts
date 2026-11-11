@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { EconomyStore, STARTER_GOLD } from "./EconomyStore.js";
+import { CRAFT_QUEUE_LIMIT, CRAFT_QUEUE_MS_PER_ITEM, EconomyStore, MAX_CRAFT_QUANTITY, STARTER_GOLD } from "./EconomyStore.js";
 import { BODY_SLOTS, PERSONAL_ITEMS, personalItem, equipPositions, monsterCardDrop, type BodyItemId } from "./PersonalItems.js";
 import { DatabaseSync } from "node:sqlite";
 import { createHash } from "node:crypto";
-import { parseHomeAction } from "./EconomyRules.js";
+import { parseCraft, parseHomeAction } from "./EconomyRules.js";
 import { parseSocketOrder, type SocketOrder } from "./CardSockets.js";
 import { makeClassInventory, makeStarterInventory, equipBody, equippedStats, parseBodyCommand, validateInventory, equipInventoryWeapon, practiceLoot, useInventoryItem } from "./ItemRules.js";
 
@@ -90,6 +90,146 @@ test("practice equipment preserves ownership, recipe costs and receipts", () => 
   } finally {store.close();}
 });
 
+test("craft quantity accepts legacy requests and rejects invalid batch inputs", () => {
+  const order = {recipeId: "mat_charcoal_1", requestId: request(76)};
+  assert.deepEqual(parseCraft(order), {...order, quantity: 1});
+  assert.deepEqual(parseCraft({...order, quantity: MAX_CRAFT_QUANTITY}), {...order, quantity: MAX_CRAFT_QUANTITY});
+  for (const quantity of [undefined, null, 0, -1, 1.5, "2", Infinity, MAX_CRAFT_QUANTITY + 1]) {
+    assert.equal(parseCraft({...order, quantity}), null);
+  }
+  assert.equal(parseCraft({...order, quantity: 2, gold: 0}), null);
+});
+
+test("batch cooking persists one receipt across restart and its output can restore HP", () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), "montra-craft-batch-"));
+  const file = path.join(dir, "economy.sqlite");
+  let store = new EconomyStore(file);
+  try {
+    const bag = makeStarterInventory();
+    bag.slots[5] = {itemId: "mat_fish_common", quantity: 2};
+    bag.slots[6] = {itemId: "mat_herb_1", quantity: 3};
+    store.saveCharacter(a, {inventory: bag}, bag);
+    const soup = "food_herbal_fish_soup";
+    const receipt = store.craftPersonal(a, request(77), soup, 1, 2);
+    assert.deepEqual(receipt, {itemId: soup, quantity: 2, bankedQuantity: 0, banked: false, spentGold: 0});
+    store.close();
+    store = new EconomyStore(file);
+    assert.deepEqual(store.craftPersonal(a, request(77), soup, 1, 2), receipt);
+    assert.throws(() => store.craftPersonal(a, request(77), soup, 1, 1), /request_id_conflict/);
+    const saved = store.getAccount(a);
+    assert.deepEqual(store.getCharacter(a), {inventory: saved.inventory});
+    assert.equal(saved.gold, STARTER_GOLD);
+    assert.equal(saved.inventory.slots.some(s => s?.itemId === "mat_fish_common"), false);
+    assert.equal(saved.inventory.slots.find(s => s?.itemId === "mat_herb_1")?.quantity, 1);
+    const slot = saved.inventory.slots.findIndex(s => s?.itemId === soup);
+    assert.equal(saved.inventory.slots[slot]?.quantity, 2);
+    const consumed = useInventoryItem(saved.inventory, slot, 50, 100, true);
+    assert(consumed.ok);
+    assert.equal(consumed.hp, 75);
+    assert.equal(consumed.inventory.slots[slot]?.quantity, 1);
+  } finally {
+    store.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test("batch crafting preserves legacy receipts and rolls back when the final output has no room", () => {
+  const {store, dir, file} = setup();
+  try {
+    const bag = makeStarterInventory();
+    bag.slots = bag.slots.map(stack => stack ?? {itemId: "mat_raw_stone_1", quantity: 99});
+    bag.slots[5] = {itemId: "mat_raw_wood_1", quantity: 5};
+    bag.slots[6] = {itemId: "mat_charcoal_1", quantity: 98};
+    store.saveCharacter(a, {inventory: bag}, bag);
+    const before = store.getAccount(a);
+    assert.throws(() => store.craftPersonal(a, request(78), "mat_charcoal_1", 1, 2), /inventory_full/);
+    assert.deepEqual(store.getAccount(a), before);
+    assert.deepEqual(store.getCharacter(a), {inventory: before.inventory});
+
+    const recipe = "mat_charcoal_1", receipt = {itemId: recipe, spentGold: 0, banked: false};
+    const db = new DatabaseSync(file);
+    try {
+      const intent = createHash("sha256").update(JSON.stringify({recipe})).digest("hex");
+      db.prepare("INSERT INTO receipts(request_id,actor,kind,intent,result) VALUES(?,?,?,?,?)")
+        .run(request(79), a, "craft", intent, JSON.stringify(receipt));
+    } finally { db.close(); }
+    assert.deepEqual(store.craftPersonal(a, request(79), recipe), receipt);
+    assert.deepEqual(store.getAccount(a), before);
+  } finally {
+    store.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test("timed crafts run in order, charge once, and can be claimed exactly once after a restart", () => {
+  const {dir, file, store: initial} = setup();
+  let store = initial;
+  const now = 1_900_000_000_000, step = CRAFT_QUEUE_MS_PER_ITEM;
+  try {
+    const bag = makeStarterInventory();
+    bag.slots[5] = {itemId: "mat_herb_1", quantity: 12};
+    bag.slots[6] = {itemId: "mat_wood_1", quantity: 6};
+    store.saveCharacter(a, {inventory: bag}, bag);
+    const recipe = "use_herbal_1";
+    const first = store.enqueueCraft(a, request(501), recipe, 1, 2, now);
+    const second = store.enqueueCraft(a, request(502), recipe, 1, 1, now);
+    store.enqueueCraft(a, request(503), recipe, 1, 1, now);
+    assert.throws(() => store.enqueueCraft(a, request(504), recipe, 1, 1, now), /craft_queue_full/);
+    assert.equal(store.craftQueue(a, now).jobs.length, CRAFT_QUEUE_LIMIT);
+    assert.equal(store.getAccount(a).gold, STARTER_GOLD - 12);
+    assert.equal(store.getAccount(a).inventory.slots[5]?.quantity, 4);
+    assert.deepEqual(store.craftQueue(a, now).jobs.slice(0, 2).map(job => [job.id, job.startsAt, job.readyAt, job.status]), [
+      [first.jobId, now, now + 2 * step, "crafting"],
+      [second.jobId, now + 2 * step, now + 3 * step, "queued"],
+    ]);
+    assert.deepEqual(store.craftQueue(b, now).jobs, []);
+    assert.throws(() => store.claimCraft(b, request(505), first.jobId, now + 2 * step), /craft_job_unavailable/);
+    assert.throws(() => store.claimCraft(a, request(506), first.jobId, now + 2 * step - 1), /craft_job_not_ready/);
+    store.close();
+    store = new EconomyStore(file);
+    assert.deepEqual(store.enqueueCraft(a, request(501), recipe, 1, 2, now + step), first);
+    assert.throws(() => store.enqueueCraft(a, request(501), recipe, 1, 1, now + step), /request_id_conflict/);
+    const done = now + 2 * step;
+    assert.equal(store.craftQueue(a, done).jobs[0].status, "ready");
+    const result = store.claimCraft(a, request(506), first.jobId, done);
+    assert.deepEqual(result, {jobId: first.jobId, itemId: recipe, quantity: 2, bankedQuantity: 0});
+    store.close();
+    store = new EconomyStore(file);
+    assert.deepEqual(store.claimCraft(a, request(506), first.jobId, done), result);
+    assert.throws(() => store.claimCraft(a, request(507), first.jobId, done), /craft_job_unavailable/);
+    const account = store.getAccount(a);
+    assert.equal(account.gold, STARTER_GOLD - 12);
+    assert.equal(account.inventory.slots.find(stack => stack?.itemId === recipe)?.quantity, 2);
+    assert.deepEqual(store.getCharacter(a), {inventory: account.inventory});
+    assert.equal(store.craftQueue(a, done).jobs[0].id, second.jobId);
+  } finally {
+    store.close();
+    rmSync(dir, {recursive: true, force: true});
+  }
+});
+
+test("a failed timed craft claim leaves every output waiting until there is enough bag space", () => {
+  const store = new EconomyStore(":memory:");
+  try {
+    const bag = makeStarterInventory();
+    bag.slots = bag.slots.map(stack => stack ?? {itemId: "mat_raw_stone_1", quantity: 99});
+    bag.slots[5] = {itemId: "mat_raw_wood_1", quantity: 5};
+    bag.slots[6] = {itemId: "mat_charcoal_1", quantity: 98};
+    store.register(a, bag);
+    const now = 1_900_000_000_000, ready = now + 2 * CRAFT_QUEUE_MS_PER_ITEM;
+    const {jobId} = store.enqueueCraft(a, request(510), "mat_charcoal_1", 1, 2, now);
+    const before = store.getAccount(a);
+    assert.equal(before.inventory.slots[5]?.quantity, 1);
+    assert.throws(() => store.claimCraft(a, request(511), jobId, ready), /inventory_full/);
+    assert.deepEqual(store.getAccount(a), before);
+    assert.equal(store.craftQueue(a, ready).jobs[0].status, "ready");
+    store.listItem(a, request(512), 7, 99, 1);
+    store.claimCraft(a, request(511), jobId, ready);
+    assert.deepEqual(store.getAccount(a).inventory.slots.filter(s => s?.itemId === "mat_charcoal_1").map(s => s!.quantity), [99, 1]);
+    assert.deepEqual(store.craftQueue(a, ready).jobs, []);
+  } finally { store.close(); }
+});
+
 test("home ownership, kitchen, furniture and watered crops survive restart and keep assets private",()=>{
   const {dir,file,store:initial} = setup();
   let store=initial;
@@ -107,7 +247,7 @@ test("home ownership, kitchen, furniture and watered crops survive restart and k
     };
     assert.throws(()=>home(600,"plant",{plot:0}),/home_required/);
     assert.throws(()=>store.craftPersonal(a,request(601),"food_grilled_fish"),/cooking_level_required/);
-    for (let serving=0; serving<5; serving++) store.craftPersonal(a,request(630+serving),"food_herbal_fish_soup");
+    store.craftPersonal(a,request(602),"food_herbal_fish_soup",1,5);
     assert.equal(store.cookingState(a).level,2);
     assert.throws(()=>store.craftPersonal(a,request(601),"food_grilled_fish"),/cooking_kitchen_required/);
     home(603,"buy");

@@ -30,6 +30,36 @@ stew unlocks at level 3. The advanced recipes require a placed home kitchen.
 Each successful serving grants one cooking XP. Levels 2 and 3 start at 5 and
 15 XP respectively.
 
+## Batch crafting
+
+Choose up to ten items in the recipe dialog. The cost and required
+materials update with the quantity. The server commits all outputs together.
+
+## Timed crafting queue
+
+`economy_state` advertises `craftQueueMax` (3 jobs per character, including
+unclaimed jobs) and `craftQueueMsPerItem` (5000 ms). Jobs run in order, at
+five seconds per item. Time continues while the player is offline.
+
+- Send `get_craft_queue` with an empty object to receive `craft_queue` with
+  `serverNow` and `jobs`. Each job has `id`, `recipeId`, `quantity`,
+  `spentGold`, `startsAt`, `readyAt` and a status of `queued`,
+  `crafting` or `ready`. All times are Unix milliseconds.
+- Send `craft_enqueue` with the same recipe, quantity and request ID fields
+  as `craft_weapon`. The server charges and saves the job together. The reply
+  is `craft_queue` with `requestId` and `jobId`.
+- Send `craft_claim` with `{jobId, requestId}` after the deadline. The
+  `craft_queue` reply includes `requestId` and
+  `claimed: {jobId, itemId, quantity, bankedQuantity}`. An inventory error
+  leaves the whole job ready to retry after freeing space. Reusing the same
+  request ID and payload returns the same job or claim receipt after restart.
+
+Before rolling back to a build without these commands, finish and claim queued
+jobs or retain a build that can deliver them. Paid jobs and inventory live in
+the same SQLite database.
+
+The crafting page shows the queue and enables the claim button when a job finishes.
+
 ## Private home and garden
 
 Send `get_home` with an empty object to receive the active character's

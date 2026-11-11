@@ -1366,6 +1366,7 @@ test("a takeover keeps the factory, refunds unfinished work and preserves the or
     assert.equal(f.economy.getAccount(member).gold, 1000);
     assert.equal(f.economy.getAccount(member).inventory.slots.some(x => x?.itemId === CITY_PRODUCT), false);
     assert.equal(f.economy.list()[0]?.id, listingId);
+    assert.deepEqual(f.economy.marketHistory(CITY_PRODUCT), []);
     fault.exec("DROP TRIGGER reject_credit");
   } finally { fault.close(); }
   f.restart();
@@ -1378,6 +1379,8 @@ test("a takeover keeps the factory, refunds unfinished work and preserves the or
   assert.equal(f.economy.getAccount(leader).gold, 1000);
   assert.equal(f.view(leader, 250_000).marketGold, 70);
   assert.equal(f.view(rival, 250_000).marketGold, 0);
+  assert.deepEqual(f.economy.marketHistory(CITY_PRODUCT).map(({market,quantity,total})=>({market,quantity,total})),
+    [{market:"fixed",quantity:1,total:70}]);
 
   const reclaim = f.request();
   f.order(leader, {action: "reclaim", epoch, item: wood, amount: 9}, 250_000, reclaim);

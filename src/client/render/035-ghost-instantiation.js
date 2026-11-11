@@ -240,6 +240,15 @@
         rig.metadata?.skeletons?.forEach(s => s.dispose());
         rig.metadata = null; visualRoot.metadata = null;
       }
+      if(design.kind==="titan"){
+        const titan=createThaoWessuwanBossMesh(0,0,0);
+        titan.root.parent=visualRoot;
+        update=k=>{
+          titan.rightArmPivot.rotation.x=k.g.windup?-1.4:-.5*k.atk;
+          titan.bodyPivot.rotation.x=.15*k.atk;
+        };
+        return;
+      }
       const pose = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(visualRoot, design) : fallback(visualRoot, design);
       if (design.boss) rig.metadata = visualRoot.metadata;
       const seal = design.boss ? bossRoyalSeal(visualRoot, design) : null;
@@ -253,7 +262,7 @@
     } else build();
     root.metadata = { monsterId: id, ghost: { tier: monster.tier, update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
     if (design.elite || design.boss) {
-      const radius = design.boss ? (worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2) : (worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
+      const radius = design.kind==="titan" ? (worldCombatFeatures.titanStrikeRadius || 5) : design.boss ? (worldDefinitions?.[monster.mapId]?.boss?.strikeRadius ?? 3.2) : (worldDefinitions?.forbidden_forest?.guardian?.strikeRadius ?? 2.8);
       const warning = B.MeshBuilder.CreateTorus("keeper strike boundary", { diameter: 2 * radius, thickness: .12, tessellation: 40 }, scene);
       warning.parent = root; warning.position.y = -tall / 2 + .11; warning.isPickable = false; warning.material = strikeMat; warning.setEnabled(false);
       root.metadata.warning = warning;

@@ -2,9 +2,10 @@
   function syncWorldDefinition(state, mapId=activeMapId) {
     const key=state?.worldDefinition || "";
     if(key!==worldDefinitionKey){
-      let definitions=null, home=null;
+      let definitions=null, home=null, combat={};
       if(key){try{const data=JSON.parse(key);
         if(data.version!==1||!data.maps?.ritual_village||!data.maps?.forbidden_forest)throw Error("unsupported map definition");
+        combat=data.combatFeatures || {};
         if (data.homeMap?.id === "personal_home") home=data.homeMap;
         for(const map of [...Object.values(data.maps), ...(home?[home]:[])]){
           const b=map.bounds;
@@ -12,6 +13,8 @@
         }definitions=data.maps;
       }catch(error){console.error("MONTRA map definition",error);toast("อ่านข้อมูลแผนที่ไม่สำเร็จ");return;}}
       worldDefinitionKey=key;worldDefinitions=definitions;homeMapTemplate=home;expandedMapKey="";
+      resetCombatFeatures(combat);
+      requestWarBanner();
     }
     if (homeMapTemplate && isPrivateHomeMap(mapId) && !Object.hasOwn(worldDefinitions,mapId)) {
       Object.defineProperty(worldDefinitions,mapId,{value:{...homeMapTemplate,id:mapId},configurable:true});
@@ -106,6 +109,7 @@
     }
   }
   function makeForestMonster(monster,id) {
+    if (id==="boss_wessuwan_titan") return makeGhostMonster(monster,id,{kind:"titan",boss:true,scale:1,height:4.5,width:2.6});
     const boss = bossDesign(monster, id);
     if (boss) return makeGhostMonster(monster, id, boss);
     if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]||HIMMAPAN_VISUALS.has(id)))return makeGhostMonster(monster,id);

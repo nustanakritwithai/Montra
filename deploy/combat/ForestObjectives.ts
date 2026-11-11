@@ -73,7 +73,7 @@ for(const [from,to] of [
     goal:5,prefix:local.prefix,kind:"delivery",destinationMapId:to,destinationName:destination,rewardLevel:Number(local.levels.match(/\d+/)?.[0] ?? 1)};
 }
 forestObjectives.elite_forest_shrine={name:`ปราบ${SHRINE_GUARDIAN.name}`,camp:"ศาลร้างในป่าต้องห้าม",levels:"Lv.12",mapId:forest,goal:1,kind:"elite",targetId:SHRINE_GUARDIAN.id};
-for(const boss of REGIONAL_BOSSES)forestObjectives[`elite_${boss.mapId}`]={name:`ปราบ${boss.name}`,camp:boss.name,levels:`Lv.${boss.level}`,mapId:boss.mapId,goal:1,kind:"elite",targetId:boss.id};
+for(const boss of REGIONAL_BOSSES)if(!forestObjectives[`elite_${boss.mapId}`])forestObjectives[`elite_${boss.mapId}`]={name:`ปราบ${boss.name}`,camp:boss.name,levels:`Lv.${boss.level}`,mapId:boss.mapId,goal:1,kind:"elite",targetId:boss.id};
 forestObjectives.elite_spirit_rift={name:`ปราบ${RIFT_WARDEN.name}`,camp:RIFT_WARDEN.name,levels:`Lv.${RIFT_WARDEN.level}`,mapId:"spirit_rift",goal:1,kind:"elite",targetId:RIFT_WARDEN.id};
 export const FOREST_OBJECTIVES:Readonly<Record<string,Definition>>=Object.freeze(forestObjectives);
 export const FOREST_RANGER = Object.freeze({mapId:forest,x:3,y:0,z:12,radius:3,name:"นายพรานเฝ้าป่า"});

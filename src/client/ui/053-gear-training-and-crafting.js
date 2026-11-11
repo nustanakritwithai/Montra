@@ -354,7 +354,9 @@
     $("benchOwned").textContent="";$("benchCost").textContent="…";
     if(!def){$("benchInfo").textContent="ไม่มีสูตรในช่วงนี้ · เปลี่ยนเลเวลหรือประเภทสูตร";button.disabled=true;return;}
     const counts=def.recipe.map(r=>(slots||[]).reduce((n,s)=>n+(s?.itemId===r.item?s.quantity:0),0));
-    const cost=def.craftGold??workbenchGold;
+    const batch=typeof selectedCraftQuantity==="function"?selectedCraftQuantity():1;
+    const multiplier=batch ?? 1;
+    const cost=(def.craftGold??workbenchGold)*multiplier;
     const low=(def.level||1)>level;
     $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"Lv."+(def.level||1),statLine(def.stats),def.healHp?"ฟื้น HP "+def.healHp:"",def.healMana?"ฟื้น MP "+def.healMana:"",def.dropHint?"ล่าได้ที่ "+def.dropHint:"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
     $("benchCost").textContent=cost.toLocaleString()+" ทอง";
@@ -371,10 +373,11 @@
     }
     for(const [i,part] of def.recipe.entries()){
       const row=ingredients.children[i],count=row.children[2];
-      count.textContent=counts[i]+" / "+part.qty;count.setAttribute("aria-label",(counts[i]>=part.qty?"ครบ":"ขาด")+" · "+counts[i]+" / "+part.qty);
-      row.classList.toggle("missing",counts[i]<part.qty);
+      const required=part.qty*multiplier;
+      count.textContent=counts[i]+" / "+required;count.setAttribute("aria-label",(counts[i]>=required?"ครบ":"ขาด")+" · "+counts[i]+" / "+required);
+      row.classList.toggle("missing",counts[i]<required);
     }
-    for(const [ok,label] of [[!low,"ระดับตัวละคร "+level+" / "+(def.level||1)],[Boolean(slots)&&def.recipe.every((r,i)=>counts[i]>=r.qty),"วัสดุในกระเป๋า"],[economyGold!==null&&economyGold>=cost,"ทองเพียงพอ"],[Boolean(player?.alive),"ตัวละครมีชีวิต"]]){
+    for(const [ok,label] of [[!low,"ระดับตัวละคร "+level+" / "+(def.level||1)],[Boolean(slots)&&def.recipe.every((r,i)=>counts[i]>=r.qty*multiplier),"วัสดุในกระเป๋า"],[economyGold!==null&&economyGold>=cost,"ทองเพียงพอ"],[Boolean(player?.alive),"ตัวละครมีชีวิต"]]){
       const row=document.createElement("li");row.className=ok?"met":"missing";row.textContent=(ok?"✓ ":"✕ ")+label;$("craftRequirements").appendChild(row);
     }
     const ore=def.recipe.find((r,i)=>counts[i]<r.qty && /^mat_metal_[1-7]$/.test(r.item));
@@ -384,7 +387,7 @@
     $("benchOwned").textContent="มีแล้ว "+quantity+" ชิ้น"+(gear?" · คลังช่าง "+banked+" / 99":"");
     if(gear && quantity>=limit)$("benchInfo").textContent+=" · คราฟต์ชิ้นซ้ำเข้าคลังช่าง (มี "+banked+"/99)";
     if(def.copyLimit) $("benchInfo").textContent+=" · มี "+quantity+"/"+limit+" ชิ้น รวมที่สวมอยู่";
-    button.disabled=low||economyPending||!slots||owned||!player?.alive||economyGold===null||economyGold<cost||def.recipe.some((r,i)=>counts[i]<r.qty);
+    button.disabled=batch===null||low||economyPending||!slots||owned||!player?.alive||economyGold===null||economyGold<cost||def.recipe.some((r,i)=>counts[i]<r.qty*multiplier);
   }
   function renderCraft(slots) {
     const panel = $("craftPanel");

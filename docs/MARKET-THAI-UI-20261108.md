@@ -38,3 +38,22 @@ Browser fixtures use production renderers and CSS, synthetic data and captured
 sends. No account, live market transaction, player save or production backend is
 used. Mobile tests are Chromium emulation, not physical-device tests. Exact-head
 CI and deployed-byte verification remain publication gates.
+
+## Server contract for history, favorites and stat filtering
+
+`market_features` advertises `history`, `favoriteLimit` and `baseStatFilter`.
+These capabilities can be used by a matching client.
+
+- Send `market_history` with `{itemId, tag}`. The reply echoes both fields and
+  returns up to 30 recent sales in `sales`, each with `market`, `quantity`,
+  `total` (gold for the whole stack) and `soldAt` (Unix milliseconds).
+  Completed fixed-price purchases and auctions with a winning bid are recorded
+  starting with this server build.
+- Send `market_favorites` with an empty object to receive `{items}`. Send
+  `market_favorite_set` with `{itemId, favorite, requestId}` to set the status
+  and receive the current item IDs plus the request ID. Favorites belong to
+  the active character and are limited to 50 distinct items.
+- Both markets accept optional `favoritesOnly` and `minStat: {stat, value}` in
+  `market_browse`. The server applies them before cursor pagination.
+  `stat` accepts `atk`, `def`, `magicAtk`, `magicDef`, `hp`, `stamina`
+  or `mana`. It uses the catalog base value before forge and socket bonuses.

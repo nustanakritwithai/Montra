@@ -60,6 +60,7 @@ async function send(c, name, payload, type, accept = () => true) {
 try {
   if (stage === "write") {
     await seed("c","ritual_village",0,0,[["mat_wood_1",9],["mat_raw_stone_1",3],["mat_herb_1",7],["mat_fish_common",5],["mat_metal_1",1]]);
+    await seed("d","forbidden_forest",-32,-17,[]);
     await seed("e","ritual_village",0,0,[]);
   }
   const artisan = await join("c");
@@ -139,10 +140,19 @@ try {
     assert.equal((await send(other,"get_home",{},"home_state")).furniture.length,0);
 
     await pause(3300); // The second owner just entered and still has a warp cooldown.
+    const fighter = await join("d",artisan.room.roomId);
+    assert.equal(fighter.me().pathId,"seer");
+    assert.equal(fighter.me().mapId,"forbidden_forest");
+    const target = await until(()=>fighter.room.state.monsters.get("forest_west_1"),"nearby monster");
+    const id = fighter.room.sessionId;
+    await send(fighter,"fly",{},"flight_finished",v=>v.playerId===id && v.flying);
+    const impact = await send(fighter,"meteor_slam",{},"meteor_impact",v=>v.ownerId===id);
+    assert(impact.targets.includes(target.id));
+    assert(fighter.events.some(e=>e.type==="combat_hit" && e.data.source==="meteor" && e.data.targetId===target.id));
     const exit=await send(other,"leave_home",{},"warp_complete");
     assert.equal(exit.mapId,"ritual_village");
     await until(()=>other.me()?.mapId===exit.mapId,"exit returns to village");
-    console.log("PASS: private home maps, construction restrictions, cooking and drinking");
+    console.log("PASS: private home maps, construction restrictions, cooking, drinking and Meteor landing");
   } else {
     const home = await send(artisan,"get_home",{},"home_state");
     assert.equal(home.level,1);

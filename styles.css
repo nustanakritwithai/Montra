@@ -5727,7 +5727,8 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .wm-cat-toggle{background:#1d3160;color:#f2d27a;border:1px solid #c9a24a88;border-radius:4px;padding:6px;text-align:left;font-weight:700}
 .wm-cat-list{display:flex;flex-direction:column;gap:2px}
 .wm-cat-list button{background:transparent;color:#cfd8ee;border:0;text-align:left;padding:4px 10px;cursor:pointer}
-.wm-advanced{border:1px solid #2d4373;border-radius:6px;display:flex;flex-direction:column;gap:4px;opacity:.6}
+.wm-advanced{border:1px solid #2d4373;border-radius:6px;display:flex;flex-direction:column;gap:4px}
+.wm-advanced[hidden]{display:none}
 .wm-advanced p{margin:0;font-size:11px}
 .wm-soon-tag{font-style:normal;font-size:10px;background:#6b4f12;color:#ffe9a8;border-radius:8px;padding:1px 6px;margin-left:4px}
 .wm-apply,.wm-buy{background:linear-gradient(#f5d77a,#c9962e);color:#2a1d00;border:1px solid #8a6416;border-radius:6px;font-weight:700;padding:7px 16px;cursor:pointer}

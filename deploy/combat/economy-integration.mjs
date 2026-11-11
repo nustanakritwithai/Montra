@@ -8,7 +8,15 @@ const token=(ch)=>"mt1_"+ch.repeat(64), request=(n)=>"economy_test_"+String(n).p
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function until(fn,label,ms=7000){ const end=Date.now()+ms; while(Date.now()<end){const x=fn();if(x)return x;await sleep(30);} throw new Error("timeout: "+label); }
 const rooms=[];
-function monitor(room){const events=[]; for(const name of ["economy_state","inventory_state","market_result","market_state","trade_update","trade_complete","economy_error","command_rejected"]) room.onMessage(name,data=>events.push({name,data})); return events;}
+const batch = {recipeId:"mat_charcoal_1", requestId:request(21), quantity:2};
+const queuedCraft = {recipeId:"mat_charcoal_1", requestId:request(24)};
+const assertCrafted = events => {
+  const slots = last(events,"inventory_state").slots;
+  assert.equal(slots.find(s=>s?.itemId==="mat_charcoal_1")?.quantity,2);
+  assert.equal(slots.find(s=>s?.itemId==="mat_raw_wood_1")?.quantity,1);
+  assert.equal(last(events,"economy_state").gold,1250);
+};
+function monitor(room){const events=[]; for(const name of ["economy_state","inventory_state","craft_result","craft_queue","market_action_result","market_features","market_history","market_favorites","market_result","market_state","trade_update","trade_complete","economy_error","command_rejected"]) room.onMessage(name,data=>events.push({name,data})); return events;}
 const last=(events,name,predicate=()=>true)=>events.findLast(e=>e.name===name&&predicate(e.data))?.data;
 try {
   const a=await new Client(url).create("my_room",{guestToken:token("a")});rooms.push(a);const ae=monitor(a);
@@ -16,6 +24,10 @@ try {
   await until(()=>a.state?.economyAvailable&&a.state.players.size===2,"economy room");
   a.send("get_economy",{}); b.send("get_economy",{});
   await until(()=>last(ae,"economy_state")&&last(be,"economy_state"),"balances");
+  assert.equal(last(ae,"economy_state").craftBatchMax,10);
+  assert.equal(last(ae,"economy_state").craftQueueMax,3);
+  await until(()=>last(be,"market_features")?.history,"market history capability");
+  const favorite = {itemId:"health_potion",favorite:true,requestId:request(22)};
   if(stage==="write") {
     assert.equal(last(ae,"economy_state").gold,1000); assert.equal(last(be,"economy_state").gold,1000);
     a.send("market_create",{requestId:request(1),slot:0,amount:1,price:200});
@@ -38,10 +50,60 @@ try {
     await until(()=>last(ae,"trade_complete")&&last(be,"trade_complete"),"trade completion");
     assert.equal(last(ae,"economy_state").gold,1300); assert.equal(last(be,"economy_state").gold,700);
     assert.equal(last(ae,"inventory_state").slots[0].quantity,1); assert.equal(last(be,"inventory_state").slots[0].quantity,5);
-    console.log("PASS: live market and mutually confirmed player trade commit wallet and inventory");
+    a.send("starter_supply_buy",{requestId:request(20),item:"mat_raw_wood_1",quantity:5});
+    await until(()=>last(ae,"market_action_result",m=>m.requestId===request(20)),"buy test crafting materials");
+    a.send("craft_weapon",batch);
+    const crafted = await until(()=>last(ae,"craft_result",m=>m.requestId===batch.requestId),"craft two charcoal");
+    assert.deepEqual(crafted,{requestId:batch.requestId,itemId:"mat_charcoal_1",quantity:2,bankedQuantity:0,banked:false,spentGold:0});
+    assertCrafted(ae);
+    b.send("market_favorite_set",favorite);
+    const saved = await until(()=>last(be,"market_favorites",v=>v.requestId===favorite.requestId),"save market favorite");
+    assert.deepEqual(saved.items,["health_potion"]);
+    b.send("starter_supply_buy",{requestId:request(23),item:"mat_raw_wood_1",quantity:2});
+    await until(()=>last(be,"market_action_result",m=>m.requestId===request(23)),"buy queued craft materials");
+    b.send("craft_enqueue",queuedCraft);
+    const queued = await until(()=>last(be,"craft_queue",m=>m.requestId===queuedCraft.requestId),"enqueue timed craft");
+    assert.equal(queued.jobs.length,1);
+    assert.equal(queued.jobs[0].id,queued.jobId);
+    assert.equal(queued.jobs[0].readyAt-queued.jobs[0].startsAt,5000);
+    assert.equal(last(be,"inventory_state").slots.some(s=>s?.itemId==="mat_raw_wood_1"),false);
+    assert.equal(last(be,"inventory_state").slots.some(s=>s?.itemId==="mat_charcoal_1"),false);
+    console.log("PASS: market, player trade, batch crafting and timed queue commit wallet and inventory");
   } else {
-    assert.equal(last(ae,"economy_state").gold,1300); assert.equal(last(be,"economy_state").gold,700);
+    assertCrafted(ae);
+    a.send("craft_weapon",batch);
+    const replay = await until(()=>last(ae,"craft_result",m=>m.requestId===batch.requestId),"replay craft after restart");
+    assert.equal(replay.quantity,2);
+    assertCrafted(ae); assert.equal(last(be,"economy_state").gold,680);
     assert.equal(last(ae,"inventory_state").slots[0].quantity,1); assert.equal(last(be,"inventory_state").slots[0].quantity,5);
-    console.log("PASS: market and trade balances and inventories survive restart");
+    b.send("market_favorites",{});
+    a.send("market_favorites",{});
+    const buyer = await until(()=>last(be,"market_favorites"),"buyer's favorites survive restart");
+    const seller = await until(()=>last(ae,"market_favorites"),"seller has a separate list");
+    assert.deepEqual(buyer.items,["health_potion"]);
+    assert.deepEqual(seller.items,[]);
+    b.send("market_history",{itemId:"health_potion",tag:42});
+    const history = await until(()=>last(be,"market_history",m=>m.tag===42),"sale history");
+    assert.equal(history.itemId,"health_potion");
+    assert.equal(history.sales.length,1);
+    const {soldAt, ...sale} = history.sales[0];
+    assert(Number.isSafeInteger(soldAt));
+    assert.deepEqual(sale,{market:"fixed",quantity:1,total:200});
+    b.send("get_craft_queue",{});
+    const queue = await until(()=>last(be,"craft_queue"),"queued craft survives restart");
+    assert.equal(queue.jobs.length,1);
+    const job = queue.jobs[0];
+    assert.equal(job.recipeId,queuedCraft.recipeId);
+    await sleep(Math.max(0,job.readyAt-queue.serverNow)+75);
+    const order = {jobId:job.id,requestId:request(25)};
+    b.send("craft_claim",order);
+    const claimed = await until(()=>last(be,"craft_queue",m=>m.requestId===order.requestId),"claim timed craft after restart");
+    assert.deepEqual(claimed.claimed,{jobId:job.id,itemId:job.recipeId,quantity:1,bankedQuantity:0});
+    assert.deepEqual(claimed.jobs,[]);
+    const count = be.filter(e=>e.name==="craft_queue" && e.data.requestId===order.requestId).length;
+    b.send("craft_claim",order);
+    await until(()=>be.filter(e=>e.name==="craft_queue" && e.data.requestId===order.requestId).length>count,"replay claim receipt");
+    assert.equal(last(be,"inventory_state").slots.find(s=>s?.itemId==="mat_charcoal_1")?.quantity,1);
+    console.log("PASS: timed queue, batch craft, market history, favorites and trade survive restart");
   }
 } finally { for(const room of rooms.reverse()) await room.leave().catch(()=>{}); }

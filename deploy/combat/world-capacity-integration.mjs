@@ -67,7 +67,7 @@ try{
   const maps=[world.ritual_village,...Object.values(world).filter(m=>m.region && m.camps.length)];
   assert.equal(maps.length,10);
   const travelers=await fillRoom(await Promise.all(maps.map(m=>seed(m.id,m.spawn.x,m.spawn.z))));
-  await until(()=>travelers.every(r=>r.state.monsters.size===144),"all ten regions and their enemies");
+  await until(()=>travelers.every(r=>r.state.monsters.size===145),"all ten regions and their enemies");
   assert.equal(new Set([...travelers[0].state.players.values()].map(p=>p.mapId)).size,10);
   const himmapanIds = [
     "himmapan_matcha_naga", "himmapan_stone_yaksha", "himmapan_kochasri", "himmapan_hemaraj",
@@ -83,7 +83,7 @@ try{
   for(const room of travelers)room.send("summon",{});
   await until(()=>travelers.every(r=>r.state.summons.size===10),"ten summons across the occupied world");
   await closeAll();
-  console.log("PASS ten occupied maps, ten summons and 144 monsters including seven Himmapan spawns");
+  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and seven Himmapan spawns");
 
   const hunters=await fillRoom(await Promise.all(Array.from({length:10},(_,i)=>seed("forbidden_forest",-33+(i%3)*.25,-17+Math.floor(i/3)*.25))));
   const targetId="forest_west_1",monster=()=>hunters[0].state.monsters.get(targetId);

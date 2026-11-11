@@ -96,6 +96,8 @@
   }
   const flightBtn = $("flightButton");
   if (flightBtn) flightBtn.onclick = toggleFlightCommand;
+  const meteorBtn=$("meteorButton");
+  if(meteorBtn)meteorBtn.onclick=()=>window.MontraFlight.meteorSlam();
   function toggleBossCommand() {
     if (window.MontraBoss?.toggleBoss) {
       window.MontraBoss.toggleBoss();

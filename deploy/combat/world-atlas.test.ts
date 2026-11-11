@@ -8,7 +8,7 @@ import {checkWarp} from "./WarpRules.js";
 import {ForestEncounters} from "./ForestEncounters.js";
 import {MyRoomState,Player} from "./schema/MyRoomState.js";
 import {partyMonsterShares} from "./PartyMonsterRewards.js";
-import {REGIONAL_BOSSES} from "./RegionalBosses.js";
+import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import {groundAt} from "./WorldMaps.js";
 
 test("all sixteen maps connect to the village and every gate has a safe return",()=>{
@@ -157,15 +157,43 @@ test("the city and both forts have continuous crests, usable stair endpoints and
     assert.ok(provinceShotClear(map,low,top,true));assert.ok(provinceShotClear(map,top,low,true));
   }
 });
+test("Titan spawns beside the existing Asura boss, strikes nearby players and respawns on its own clock",()=>{
+  const map = WORLD_MAPS[TITAN_BOSS.mapId];
+  const state = new MyRoomState(), forest = new ForestEncounters(state.monsters);
+  const point = {x: TITAN_BOSS.x, z: TITAN_BOSS.z, y: groundAt(map.id,TITAN_BOSS.x,TITAN_BOSS.z)};
+  assert.ok(isSafeWorldPoint(map,point));
+  for (const id of ["first","second"]) state.players.set(id,new Player({...point,mapId:map.id,alive:true}));
+  const hits: string[] = [], respawned: string[] = [];
+  const tick = (at: number) => forest.update(at,0,state.players,new Set(),
+    (id, monster) => { if (monster.id === TITAN_BOSS.id) hits.push(id); }, id => respawned.push(id));
+  forest.initialize();
+  tick(100);
+  const titan = state.monsters.get(TITAN_BOSS.id)!;
+  assert.equal(titan.tier,"boss");
+  assert.ok(state.monsters.has("boss_asura_peak"));
+  assert.equal(titan.aiState,"windup");
+  tick(1499);
+  assert.deepEqual(hits,[]);
+  tick(1500);
+  assert.deepEqual(hits,["first","second"]);
+  assert.equal(forest.kill(titan.id,1600),true);
+  assert.equal(forest.kill(titan.id,1601),false);
+  tick(1600+TITAN_BOSS.respawnMs-1);
+  assert.equal(titan.alive,false);
+  tick(1600+TITAN_BOSS.respawnMs);
+  assert.equal(titan.hp,titan.maxHp);
+  assert.ok(respawned.includes(titan.id));
+});
+
 test("all occupied atlas zones replicate and the warden's respawn clock survives an empty zone",()=>{
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
   forest.initialize();assert.equal(state.monsters.size,34);
   const tick=(now:number)=>forest.update(now,0,state.players,new Set(),()=>{},()=>{});
   for(const mapId of ["drowned_marsh","moon_cemetery","asura_peak","spirit_rift"]) state.players.set(mapId,new Player({...ATLAS_MAPS[mapId].spawn,mapId,alive:true}));
-  tick(100);assert.equal(state.monsters.size+1,79);
+  tick(100);assert.equal(state.monsters.size+1,80);
   assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
   for (const map of Object.values(ATLAS_MAPS)) state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
-  tick(100);assert.equal(state.monsters.size+1,141);
+  tick(100);assert.equal(state.monsters.size+1,142);
   const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
   assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);
@@ -185,8 +213,8 @@ test("each enabled hunt has its own reachable boss, drops and twenty-minute cloc
     const map=WORLD_MAPS[boss.mapId];
     assert.equal(battlefield.profile(boss.id),null);
     if(!map){assert.equal(forest.profile(boss.id),null);assert.equal(parseAttackCommand({targetId:boss.id}),null);continue;}
-    assert.equal(map.boss?.id,boss.id);
-    assert.equal(map.boss.respawnMs,1_200_000);
+    if (boss.id !== TITAN_BOSS.id) assert.equal(map.boss?.id,boss.id);
+    assert.equal(boss.respawnMs,1_200_000);
     assert.deepEqual(parseAttackCommand({targetId:boss.id}),{targetId:boss.id});
     const home={x:boss.x,z:boss.z,y:groundAt(map.id,boss.x,boss.z)};
     assert(isSafeWorldPoint(map,home,.7) && !isRestArea(map.id,home),map.id);

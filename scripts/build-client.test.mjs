@@ -68,8 +68,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/019-state-and-portals.js",
-  "bytes": 21727,
-  "sha256": "2a6ab80d24a64951edc08a8196fca9481a9baf6de1a6e035383153051163e149"
+  "bytes": 21968,
+  "sha256": "4fe4741c9684e6c59cc657cbd39a61d83fb76d4755e08383a5dc1a7ccf7b12fa"
 },
 {
   "path": "world/018-region-dressing.js",
@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 163691,
-  "sha256": "19abca18bfa0fdf651ff0aae1dba593a57d2e006b00bc90a6fe388ef6c6ade48"
+  "bytes": 165695,
+  "sha256": "ce269ff24be900cbc9a56cfe0981ac955aa2edea4eeeba2b2ec963bb518e2164"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -143,11 +143,11 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
-    "bytes": 45220,
-    "sha256": "2cfa7b0ccd52ccc59f72759e91bd187b9eb67e1ea71ed85f03d3f569a6bec0e6"
+    "bytes": 45429,
+    "sha256": "c3dc11522e51a1372e9988c11f0be0a2b9e83a111899c95ab19c467ae177b6f9"
   },
   {
-    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 66271, "sha256": "54b9cc64d9a62436596f07e563da0cece3c982ed08f854de6214174208df1b6f"
+    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 71891, "sha256": "64e1a6e8dabe88f83631b81ede20ba2b337a57a5b7f47c5230d79ce4f5d85325"
   },
   {
     "path": "ui/052-help-and-inventory.js", "bytes": 41496, "sha256": "a92bbc3a3e55c928a8ad3e163af07778ec9694ed356713daedbe6a593eb6779f"
@@ -174,13 +174,13 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 7498,
-    "sha256": "25e65f93d9da9c033d3c72e9d866e22cd5b584807190097ef669c78c7a1aa447"
+    "bytes": 7606,
+    "sha256": "55694904ef426e2edb1b2715575757d0c856848e0fba9d231ad696600aceb0c0"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
-    "bytes": 49803,
-    "sha256": "afe577ae7154216c90705bc74a4c0f1d4bc656bd982f17b230c341c08c934685"
+    "bytes": 54305,
+    "sha256": "6d5644b25d151a61f6f75223239f47bfcd4b18d27123ee03cacf6843a155ec30"
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
@@ -194,8 +194,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/055-market-and-trade.js",
-    "bytes": 58990,
-    "sha256": "3dd172ea231bf4b0bdf0cbf3f593bd7d9e3d45b61a4936a1db1b1601175dbaef"
+    "bytes": 68666,
+    "sha256": "ed39282c4fb75e5899e1d552b143c6ca9d701a43702a6f92ba098897e0174281"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
@@ -204,8 +204,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "combat/038-demo-and-monster-state.js",
-    "bytes": 7618,
-    "sha256": "08b6bee69c971c6160947b6d1a75cb274ad8a4facd3293a4c293c6ae2cdecd54"
+    "bytes": 7685,
+    "sha256": "d94b9be0f79dead974e58d501ee99e8ddaa2449aefafac07146fc3585cd6a822"
   },
   {
     "path": "combat/040-spell-visuals.js",
@@ -214,8 +214,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "render/035-ghost-instantiation.js",
-    "bytes": 21329,
-    "sha256": "09c16dc2b89ae0ee649cd9444864c34c38e2a498b7b816793c01ce919e661ae6"
+    "bytes": 21697,
+    "sha256": "644a643fde081c222bea5dbf8597f866b6fbb554d97489a65f8e071a5f86da73"
   },
   {
     "path": "render/032-ghost-primitives.js",
@@ -249,8 +249,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1895793);
-  assert.equal(hash(bytes), 'cdc397de6ad9df84767ae05215e41b22edaf68f3b5c4dc2d2b4bde3687028bd3');
+  assert.equal(bytes.length, 1918588);
+  assert.equal(hash(bytes), '4e1fd9f005e672da1be77a56575f9f045b966e3dc53fff280740b96603a81f83');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

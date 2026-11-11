@@ -65,6 +65,47 @@ try{
     const accepted=await send(member,"guild_accept",{inviteId:invitation.inviteId},"guild_state",x=>x?.members?.length===2);
     assert.equal(accepted.name,"นาคพิทักษ์");
     assert.notEqual(accepted.ownId,accepted.leaderId);
+    const player = client => client.room.state.players.get(client.room.sessionId);
+    const baseDefense = new Map([member,leader,outsider].map(client=>[client,[player(client).def,player(client).magicDef]]));
+    for (const teammate of [outsider, leader]) {
+      teammate.events.length=0;
+      await send(member,"party_invite",{targetId:teammate.room.sessionId},"party_notice");
+      const invite = await event(teammate,"party_invitation");
+      await send(teammate,"party_accept",{inviteId:invite.inviteId},"party_state",v=>v.leaderId===member.room.sessionId);
+    }
+    await send(leader,"plant_war_banner",{},"command_rejected",v=>v.reason==="war_banner_leader_required");
+    leader.events.length=0;
+    await send(member,"plant_war_banner",{x:99,def:100},"command_rejected",v=>v.reason==="invalid_war_banner");
+    const planted = await send(member,"plant_war_banner",{},"war_banner_state",v=>v.buffed);
+    assert.equal(planted.canPlant,true);
+    assert.equal(planted.banner.ownerId,member.room.sessionId);
+    assert.equal(planted.banner.radius,12);
+    assert.equal((await event(leader,"war_banner_state",v=>v.buffed)).canPlant,false);
+    const stranger = await send(outsider,"get_war_banner",{},"war_banner_state");
+    assert.deepEqual(stranger,{canPlant:false,buffed:false,banner:null});
+    for (const teammate of [member, leader]) {
+      const [def,magicDef] = baseDefense.get(teammate);
+      await waitFor(()=>player(teammate).def===Math.round(def*1.1) &&
+        player(teammate).magicDef===Math.round(magicDef*1.1),"authoritative banner defenses");
+    }
+    assert.deepEqual([player(outsider).def,player(outsider).magicDef],baseDefense.get(outsider));
+    await send(leader,"move",{x:-14,z:0},"war_banner_state",v=>!v.buffed && v.banner?.id===planted.banner.id);
+    const [leaderDef,leaderMagicDef] = baseDefense.get(leader);
+    await waitFor(()=>player(leader).def===leaderDef && player(leader).magicDef===leaderMagicDef,"remove defense out of range");
+    await send(leader,"move",{x:planted.banner.x,z:planted.banner.z},"war_banner_state",v=>v.buffed);
+    await waitFor(()=>player(leader).def===Math.round(leaderDef*1.1),"restore defense in range");
+    await send(member,"plant_war_banner",{},"command_rejected",v=>v.reason==="war_banner_active");
+    leader.events.length=0;
+    outsider.events.length=0;
+    await send(member,"party_leave",{},"party_state",v=>v.leaderId===null);
+    await event(leader,"war_banner_state",v=>!v.buffed && v.banner===null);
+    const [def,magicDef] = baseDefense.get(leader);
+    await waitFor(()=>player(leader).def===def && player(leader).magicDef===magicDef,"remove defense on leadership change");
+    await event(outsider,"party_state",v=>v.leaderId===outsider.room.sessionId);
+    await send(outsider,"plant_war_banner",{},"command_rejected",v=>v.reason==="war_banner_leader_required");
+    await send(outsider,"party_leave",{},"party_state",v=>v.leaderId===null);
+    await send(leader,"party_leave",{},"party_state",v=>v.leaderId===null);
+    console.log("PASS banner: party leader must belong to a guild, buff is guild-local and ends on leader change");
     await send(leader,"guild_assign",{memberId:accepted.ownId,kind:"rank",value:"officer"},"guild_state",x=>x?.members?.some(m=>m.id===accepted.ownId && m.rank==="officer"));
     await send(member,"guild_invite",{targetId:outsider.room.sessionId},"guild_notice");
     const stale=await event(outsider,"guild_invitation");

@@ -54,7 +54,7 @@ function setup() {
   const context = {
     B, scene, window: {}, console, performance: { now: () => 20000 }, mode: 'live', localId: 'local',
     avatars: new Map([['local', hero]]), room: { state: { flightAvailable: true, players: new Map([['local', player]]) }, send: (...args) => sends.push(args) },
-    worldDefinitions: { ritual_village: {} }, activeMapId: 'ritual_village', activeFort: { x: 10, z: 10, width: 4, length: 4, height: 4 },
+    worldCombatFeatures: {}, worldDefinitions: { ritual_village: {} }, activeMapId: 'ritual_village', activeFort: { x: 10, z: 10, width: 4, length: 4, height: 4 },
     demoFlying: false, demoFlightTarget: null, demoMonsterHp: 100, DEMO_FLIGHT_HEIGHT: 6,
     pendingClimb: null, demoDest: null, demoDash: null, demoAutoAttack: false, marker: { setEnabled() {} },
     $: id => buttons.get(id), toast: value => notices.push(value), SFX: (...args) => effects.push(args),
@@ -166,3 +166,17 @@ test('unsupported meteor fails closed with no simulated damage, VFX or server me
 
 if (realBabylon) { scene.render(); engine.dispose(); }
 console.log(`PASS ${cases} production flight regression groups (${realBabylon ? `Babylon ${B.Engine.Version} NullEngine` : 'dependency-free scene contract'}).`);
+
+test('supported Meteor sends once and displays effects only for the confirmed same-map impact',()=>{
+  const t=setup();
+  t.context.worldCombatFeatures={meteor:true};
+  t.player.flying=true;
+  assert.equal(t.flight.meteorSlam(),true);
+  assert.deepEqual(t.sends.map(value=>value[0]),['meteor_slam']);
+  assert.equal(t.flight.meteorSlam(),false);
+  assert.equal(t.effects.length,0);
+  t.context.showMeteorImpact({ownerId:'local',mapId:'another',x:0,y:0,z:0});
+  assert.equal(t.effects.length,0);
+  t.context.showMeteorImpact({ownerId:'local',mapId:'ritual_village',x:0,y:0,z:0});
+  assert.equal(t.effects.length,1);
+});

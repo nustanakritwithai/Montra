@@ -403,6 +403,9 @@
       room = joined;
       replacementSkillSession = skillSession;
       resetHomeClient();
+      resetCombatFeatures();
+      resetCraftQueue();
+      resetAdvancedMarket();
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
@@ -572,7 +575,7 @@
           renderCityProduction();refreshCityProduction();
         }
       };
-      joined.onMessage("guild_state",onGuildState);
+      joined.onMessage("guild_state",message=>{onGuildState(message);if(room===joined)requestWarBanner();});
       earlyHandlers.set("guild_state",onGuildState);
       const onGuildRecruitment=message=>{
         if(room!==joined || !Array.isArray(message?.applications))return;
@@ -624,6 +627,7 @@
       joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});
       joined.onMessage("city_disband_claims", data=>{if(room===joined)cityReceiveClaims(data);});
       joined.onMessage("party_state", message => {
+        if(room===joined)requestWarBanner();
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
         partyState=typeof message.partyId==="string" ? {partyId:message.partyId,leaderId:message.leaderId,members:message.members.filter(m=>m && typeof m.sessionId==="string" && typeof m.name==="string")} : null;
         if (partyState) { partyInvitation=null; partyUnread=false; updatePartyBadge(); }
@@ -643,6 +647,8 @@
         if(message?.reason==="party_invite_expired") partyInvitation=null;
         toast(reasons[message?.reason] || "ทำรายการปาร์ตี้ไม่สำเร็จ");renderParty();
       });
+      joined.onMessage("war_banner_state",message=>{if(room===joined)applyWarBannerState(message);});
+      joined.onMessage("meteor_impact",message=>{if(room===joined)showMeteorImpact(message);});
       joined.onMessage("home_state", message => {
         if (room === joined) applyHomeState(message);
       });
@@ -656,7 +662,7 @@
       });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
-        economyGold=message.gold; renderEconomy(); renderBag();
+        economyGold=message.gold;applyCraftCapabilities(message); renderEconomy(); renderBag();
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || centralMarketVersion || !Array.isArray(message?.listings)) return;
@@ -666,9 +672,14 @@
       joined.onMessage("market_features",message=>{
         if(room!==joined || message?.version!==1)return;
         const first=!centralMarketVersion;centralMarketVersion=1;
+        marketCapabilities={history:message.history===true,baseStatFilter:message.baseStatFilter===true,
+          favoriteLimit:Number.isSafeInteger(message.favoriteLimit) && message.favoriteLimit>=1 && message.favoriteLimit<=50?message.favoriteLimit:0};
+        if(marketCapabilities.favoriteLimit && favoriteMarketItems===null)requestMarketFavorites();
         if(first && drawerActive==="economy"){requestMarketOverview();requestMarketPage(true);}
         renderEconomy();
       });
+      joined.onMessage("market_history",message=>{if(room===joined)applyMarketHistory(message);});
+      joined.onMessage("market_favorites",message=>{if(room===joined)applyMarketFavorites(message);});
       joined.onMessage("market_overview",message=>{
         if(room!==joined || !Array.isArray(message?.auctions) || !message?.supply || !Array.isArray(message.supply.items))return;
         centralMine=message.auctions.slice(0,100);centralSupply=message.supply;
@@ -684,14 +695,19 @@
         else centralAuctions=marketPageRequest.append?centralAuctions.concat(valid):valid;
         marketNextCursor=Number.isSafeInteger(message.nextCursor) && message.nextCursor>0?message.nextCursor:null;clearTimeout(marketPageTimer);marketPageRequest=null;marketPageError="";renderEconomy();
       });
+      joined.onMessage("craft_queue",message=>{if(room===joined)applyCraftQueue(message);});
       joined.onMessage("craft_result", result => {
         if (room !== joined) return;
         if (typeof finishHomeAction === "function" && finishHomeAction(result?.requestId,"craft_weapon","สร้างไอเท็มแล้ว")) readHomeState(false,true);
-        else finishEconomyPending();
+        else if(!finishCraftMutation(result?.requestId) &&
+          !["craft_weapon","craft_enqueue","craft_claim","market_favorite_set"].includes(economyPendingRequest?.command))finishEconomyPending();
         const item=bagMeta(result.itemId);
         craftResultRoom=joined;
         craftResultMessage=result.banked?"เก็บ"+(item?.name||"ของซ้ำ")+" เข้าคลังช่าง 1 ชิ้น":item?.station==="kiln"?benchAction(item)+"สำเร็จ · ได้ "+item.name+" × 1":"คราฟต์"+(item?.name || "ไอเทม")+"สำเร็จ · ใช้ "+result.spentGold+" ทอง";
+        if(Number.isSafeInteger(result.quantity) && result.quantity>1)craftResultMessage="คราฟต์"+(item?.name||"ไอเท็ม")+" × "+result.quantity+
+          (result.bankedQuantity?" · เข้าคลังช่าง "+result.bankedQuantity+" ชิ้น":"")+" · ใช้ "+result.spentGold+" ทอง";
         toast(craftResultMessage);
+        if(drawerActive==="crafting")renderCraftingPage();
         renderBag();
       });
       joined.onMessage("card_socket_result", result => {
@@ -791,7 +807,7 @@
         if (typeof homeCommandError === "function" && homeCommandError(message?.reason)) return;
         if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอถูกปฏิเสธ · ตรวจอุปกรณ์และค่าใช้จ่ายอีกครั้ง");
         finishEconomyPending(true);
-        const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={craft_queue_full:"คิวคราฟต์เต็ม",craft_job_unavailable:"งานนี้รับไปแล้วหรือไม่มีในคิว",craft_job_not_ready:"งานยังไม่เสร็จ",market_favorite_limit:"รายการโปรดเต็ม",forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
@@ -1574,6 +1590,7 @@
       });
       joined.onMessage("skill_hotbar_changed",()=>{if(room===joined){skillLoadoutKey="";syncAdvancedSkillUI();}});
       joined.onMessage("command_rejected", info => {
+        if(room===joined && showCombatFeatureError(info?.reason))return;
         if (room !== joined) return;
         if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
         if (info?.reason === "boat_action_unavailable") {toast("เข้าใกล้ท่าเรือ หรือหยุดเรือชิดฝั่งก่อนขึ้นลง");return;}
