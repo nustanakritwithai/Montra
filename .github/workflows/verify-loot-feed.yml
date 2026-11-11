@@ -34,7 +34,7 @@ jobs:
       - name: Install pinned test-only renderer and browser
         run: |
           npm install --prefix "$RUNNER_TEMP/montra-loot-test" --ignore-scripts --no-audit --no-fund babylonjs@8.34.0 playwright@1.56.1
-          "$RUNNER_TEMP/montra-loot-test/node_modules/.bin/playwright" install --with-deps chromium
+          bash scripts/install-ci-chromium.sh "$RUNNER_TEMP/montra-loot-test/node_modules/.bin/playwright" install --with-deps chromium
       - name: Verify full HUD and item history at mobile and desktop sizes
         run: NODE_PATH="$RUNNER_TEMP/montra-loot-test/node_modules" node deploy/combat/loot-feed-browser-test.cjs
       - uses: actions/upload-artifact@v4

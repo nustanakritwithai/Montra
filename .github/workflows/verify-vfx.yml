@@ -25,7 +25,7 @@ jobs:
       - name: Install pinned test-only renderer and browser
         run: |
           npm install --no-save --package-lock=false playwright@1.56.1 babylonjs@8.34.0
-          npx playwright install --with-deps chromium
+          bash scripts/install-ci-chromium.sh npx playwright install --with-deps chromium
       - name: Verify isolated real WebGL VFX
         run: node deploy/combat/vfx-browser-test.cjs
       - uses: actions/upload-artifact@v4
