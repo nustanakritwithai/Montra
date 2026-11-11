@@ -10,7 +10,7 @@ import {MIXED_SKILLS_ENABLED,hotbarState,hotbarSchool,availableHotbarSlot,valida
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
-import { WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, getWarDefinition, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
+import { WAR_ENTRY_RADIUS, WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, getWarDefinition, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
 import {parseWarRegistration,SCHEDULED_WARS_ENABLED} from "./WarSchedule.js";
 import {parseRouteOrder} from "./WarRoutes.js";
@@ -4628,7 +4628,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     try{
       const war=guildStore().war,member=war.member(character);
       if(!member)throw Error("war_guild");
-      if(start && planarDistance(p,rules.entry)>5)throw Error("war_flag");
+      if(start && planarDistance(p,rules.entry)>WAR_ENTRY_RADIUS)throw Error("war_flag");
       const now=Date.now();
       if(!start)war.openScheduled(p.mapId,now);
       const field=start?war.start(p.mapId,member,now):{site:p.mapId,seq:war.inspect(p.mapId,now).seq};

@@ -4,9 +4,16 @@ process.env.MONTRA_CASTLE_PILOT='1';
 process.env.MONTRA_RIDGE_TERRAIN='1';
 process.env.MONTRA_ORIGINAL_RELIEF='1';
 process.env.MONTRA_ATLAS_RELIEF='1';
-const {WORLD_MAPS,isSafeWorldPoint}=await import('./src/rooms/WorldMaps.ts');
+process.env.MONTRA_ALL_MAP_WARS='1';
+process.env.MONTRA_CITY_PRODUCTION='1';
+process.env.MONTRA_CITY_MINING='1';
+process.env.MONTRA_CITY_MISSIONS='1';
+process.env.MONTRA_CITY_GOVERNANCE='1';
+const {WORLD_MAPS,isSafeWorldPoint,isWorldSegmentClear}=await import('./src/rooms/WorldMaps.ts');
 const {objectiveRanger}=await import('./src/rooms/ForestObjectives.ts');
 const {NPC_SERVICES,serviceNpcsFor,mapsWithServiceNpcs}=await import('./src/rooms/ServiceNpcs.ts');
+const {getWarDefinition,WAR_ENTRY_RADIUS}=await import('./src/rooms/TerritoryWar.ts');
+const {RIVER_WAREHOUSE_PLOT}=await import('./src/rooms/RiverCity.ts');
 const totals=Object.fromEntries(Object.keys(NPC_SERVICES).map(role=>[role,0]));
 const wire=JSON.parse(JSON.stringify({version:1,maps:mapsWithServiceNpcs()}));
 for(const map of Object.values(WORLD_MAPS)){
@@ -15,6 +22,13 @@ for(const map of Object.values(WORLD_MAPS)){
   assert.equal(Object.hasOwn(map,'serviceNpcs'),false,'original gameplay geometry remains unchanged');
   assert.ok(npcs.length>=2,`${map.id} has service NPCs`);
   assert.deepEqual(serviceNpcsFor(map.id),npcs,`${map.id} placements are stable`);
+  const rules=getWarDefinition(map.id),officer=npcs.find(npc=>npc.role==='war');
+  assert.equal(Boolean(officer),Boolean(rules),`${map.id} has an officer only when a war is supported`);
+  if(officer){
+    assert.ok(Math.hypot(officer.x-rules.entry.x,officer.z-rules.entry.z)+officer.radius<=WAR_ENTRY_RADIUS,
+      `${officer.id} can be used from inside the battle entry radius`);
+    assert.ok(isWorldSegmentClear(map.id,officer,rules.entry),`${officer.id} shares walkable ground with the entry`);
+  }
   for(const npc of npcs){
     assert.ok(Object.hasOwn(NPC_SERVICES,npc.role));totals[npc.role]++;
     assert.ok(isSafeWorldPoint(map,npc),`${npc.id} is on walkable ground`);
@@ -23,8 +37,17 @@ for(const map of Object.values(WORLD_MAPS)){
     for(const other of npcs)if(other!==npc)assert.ok(Math.hypot(other.x-npc.x,other.z-npc.z)>=3.2,`${npc.id} does not overlap ${other.id}`);
   }
 }
-for(const [role,count] of Object.entries(totals))assert.ok(count>=2,`${role} appears in multiple areas`);
-for(const city of ['ritual_village','mantra_capital'])assert.equal(serviceNpcsFor(city).length,8,`${city} has all service roles`);
+for(const [role,count] of Object.entries(totals))assert.ok(count>=(role==='cityHall'?1:2),`${role} appears where supported`);
+for(const city of ['ritual_village','mantra_capital'])
+  assert.equal(serviceNpcsFor(city).filter(npc=>npc.role!=='war').length,8,`${city} has all regional service roles`);
+for(const city of ['sam_lan_estuary','moon_pass']){
+  const roles=serviceNpcsFor(city).map(npc=>npc.role);
+  for(const role of ['cityWarehouse','cityFactory','cityMissions','market'])assert.ok(roles.includes(role),`${city} offers ${role}`);
+  assert.equal(roles.includes('cityHall'),city==='moon_pass');
+}
+const warehouse=serviceNpcsFor('sam_lan_estuary').find(npc=>npc.role==='cityWarehouse');
+assert.ok(Math.hypot(warehouse.x-RIVER_WAREHOUSE_PLOT.x,warehouse.z-RIVER_WAREHOUSE_PLOT.z)+warehouse.radius<=
+  RIVER_WAREHOUSE_PLOT.radius,'the warehouse clerk is within the construction plot');
 const mentor=serviceNpcsFor('ritual_village').find(n=>n.role==='mentor');
 assert.ok(mentor && Math.hypot(mentor.x,mentor.z)<=6,'village mentor stands in the skill training area');
 const forest=serviceNpcsFor('forbidden_forest');
@@ -35,4 +58,4 @@ for(const [mapId,role,kind] of [['moon_pass','strategy','fort'],['moon_pass','ma
   const map=WORLD_MAPS[mapId],npc=serviceNpcsFor(mapId).find(n=>n.role===role),site=map.strategic.sites.find(s=>s.kind===kind);
   assert.ok(npc && site && Math.hypot(npc.x-site.x,npc.z-site.z)<=20,`${mapId} ${role} stands near the relevant landmark`);
 }
-console.log(`PASS: ${Object.keys(WORLD_MAPS).length} maps, repeated service roles, safe placement and village mentor`);
+console.log(`PASS: ${Object.keys(WORLD_MAPS).length} maps, ${totals.war} war officers, city services, safe placement and village mentor`);

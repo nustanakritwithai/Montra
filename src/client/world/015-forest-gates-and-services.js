@@ -312,6 +312,11 @@
     strategy:{color:"#a08145",action:"ดูแผนที่ยุทธศาสตร์",persona:"warrior",dialogue:"ตรวจด่าน เส้นทาง และเวลาของสงครามแต่ละพื้นที่ได้"},
     mentor:{color:"#785b53",action:"ดูวิชาอาชีพ",persona:"elder",dialogue:"มาตรวจวิชาของเจ้าได้ การเรียนบางวิชายังต้องทำที่ลานหมู่บ้าน"},
     guide:{color:"#74835b",action:"เปิดคู่มือ",persona:"guide",dialogue:"หากเพิ่งมาถึง ข้าช่วยอธิบายวิธีเล่นและการเดินทางได้"},
+    war:{color:"#9d4949",action:"เปิดกระดานศึก",persona:"warrior",dialogue:"ดูผู้ครองพื้นที่และสถานะศึกที่นี่ นายทหารและผู้บัญชาการยื่นท้าชิงได้ที่จุดนี้"},
+    cityWarehouse:{color:"#7c633c",action:"เปิดคลังเมือง",persona:"guide",dialogue:"ตรวจสต็อก ฝากวัตถุดิบ และติดตามโครงการขยายคลังของกิลด์"},
+    cityFactory:{color:"#a55d3f",action:"เปิดโรงงานเมือง",persona:"warrior",dialogue:"ตรวจสูตร คิวผลิต และผลผลิตของโรงงานเมือง"},
+    cityMissions:{color:"#4f8265",action:"เปิดกระดานภารกิจเมือง",persona:"guide",dialogue:"ดูงานเก็บแร่ งานขนเสบียง และสัญญาจัดซื้อที่เปิดรับ"},
+    cityHall:{color:"#446d78",action:"เปิดศาลาว่าการเมือง",persona:"elder",dialogue:"เจ้าหน้าที่กิลด์ตรวจยอดทองตลาด นโยบาย และเสบียงที่กันไว้ก่อนศึกได้ที่นี่"},
   };
   const serviceNpcLooks=new Map();
   function serviceNpcLook(role,name){

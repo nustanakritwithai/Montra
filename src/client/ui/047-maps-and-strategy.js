@@ -319,7 +319,8 @@
     const activeQuest=forestObjectiveState?.active,defense=activeQuest && forestObjectiveState?.options?.[activeQuest.id];
     if(defense?.kind==="defense" && defense.mapId===activeMapId && defense.defense){mapDot(ctx,sx(defense.defense.x),sy(defense.defense.z),large?6:3.5,"#ff9d69");if(large)mapText(ctx,"ป้องกันเสบียง",sx(defense.defense.x),sy(defense.defense.z)-10,10,"#ffe1c5");}
     if(defense?.kind==="escort" && defense.mapId===activeMapId && defense.escort){mapDot(ctx,sx(defense.escort.x),sy(defense.escort.z),large?6:3.5,"#b4dfff");if(large)mapText(ctx,"จุดหมายผู้เดินทาง",sx(defense.escort.x),sy(defense.escort.z)-10,10,"#d3eaff");}
-    for(const npc of map?.serviceNpcs || [])if(Object.hasOwn(serviceNpcUi,npc.role))mapDot(ctx,sx(npc.x),sy(npc.z),large?4:2.5,"#f3c776");
+    for(const npc of map?.serviceNpcs || [])if(Object.hasOwn(serviceNpcUi,npc.role))
+      mapDot(ctx,sx(npc.x),sy(npc.z),large?4:2.5,npc.role==="war"?"#ef8277":"#f3c776");
     room?.state?.monsters?.forEach(m => {
       if (m.mapId !== activeMapId || !m.alive) return;
       const x = sx(m.x), y = sy(m.z);
@@ -1019,10 +1020,12 @@
     scroll.scrollTop=atlasCells[selected][1]-scroll.clientHeight/2;
   }
   function openMap() {
-    openDrawer("map","แผนที่"+(worldDefinitions?.[activeMapId]?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>● NPC ผู้ให้บริการ</span><span>วงสีเขียว: เขตพัก</span></div>`);
     const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;
     const services=[...(activeMap?.serviceNpcs || [])],keeper=forestObjectiveState?.keeper;
+    const warLegend=services.some(npc=>npc.role==="war")?"<span>จุดแดงอ่อน · นายทหารรับศึก</span>":"";
+    openDrawer("map","แผนที่"+(activeMap?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),`<canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>● NPC ผู้ให้บริการ</span>${warLegend}<span>วงสีเขียว: เขตพัก</span></div>`);
     if(keeper?.mapId===activeMapId)services.unshift(keeper);
+    services.sort((a,b)=>Number(b.role==="war")-Number(a.role==="war"));
     if(services.length){
       const list=document.createElement("details"),summary=document.createElement("summary");list.className="help-topic";summary.textContent="NPC ในพื้นที่ · เดินไปหา";list.append(summary);
       for(const npc of services){
