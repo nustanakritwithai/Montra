@@ -13,7 +13,7 @@ import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js"
 import {CityProduction} from "./CityProduction.js";
 import {
   CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, cityMarketSide, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
+  CITY_PRODUCT, cityMarketSide, type CityContractOrder, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
   type CityMarketOrder, type CityMember,
   type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
@@ -325,6 +325,22 @@ export class EconomyStore {
   hasCityMarketAssets(): boolean {
     return this.city.hasLocalMarketAssets();
   }
+  hasOpenTradeContract(): boolean {
+    return this.city.hasOpenTradeContract();
+  }
+  viewTradeContracts(actor: string, member: CityMember | undefined, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, enabled: boolean) {
+    return this.city.tradeContractView(actor, member, cities, atCity, atMarket, enabled);
+  }
+  tradeContractOrder(actor: string, member: CityMember | undefined, order: CityContractOrder, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_trade_contract", intent, () => {
+      const result = this.city.tradeContractOrder(actor, member, order, cities, atCity, atMarket, now);
+      if (result.trade) this.settleLocalTrade(actor, CITY_PRODUCT, result.trade.amount, result.trade.total, result.trade.buying);
+      return result;
+    });
+  }
   viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean, returnEnabled = false) {
     const account = this.account(actor);
     const inventoryFor = (item: CityMarketItem) => {
@@ -356,20 +372,24 @@ export class EconomyStore {
         if (!member) throw Error("city_not_member");
         return this.city.configureLocalMarket(member, order, ownership, now);
       }
-      const account = this.account(actor), trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
+      const trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
       const item = order.item ?? CITY_PRODUCT;
-      if (cityMarketSide(order.site, item) === "sell") {
-        if (account.gold < trade.total) throw Error("insufficient_gold");
-        account.inventory = add(account.inventory, {itemId: item, quantity: trade.amount});
-        account.gold -= trade.total;
-      } else {
-        if (account.gold + trade.total > MAX_GOLD) throw Error("city_wallet_full");
-        consume(account, item, trade.amount, "item_unavailable");
-        account.gold += trade.total;
-      }
-      this.put(actor, account);
+      this.settleLocalTrade(actor, item, trade.amount, trade.total, cityMarketSide(order.site, item) === "sell");
       return trade;
     });
+  }
+  private settleLocalTrade(actor: string, item: CityMarketItem, amount: number, total: number, buying: boolean): void {
+    const account = this.account(actor);
+    if (buying) {
+      if (account.gold < total) throw Error("insufficient_gold");
+      account.inventory = add(account.inventory, {itemId: item, quantity: amount});
+      account.gold -= total;
+    } else {
+      if (account.gold + total > MAX_GOLD) throw Error("city_wallet_full");
+      consume(account, item, amount, "item_unavailable");
+      account.gold += total;
+    }
+    this.put(actor, account);
   }
   setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
     return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {

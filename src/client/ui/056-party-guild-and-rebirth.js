@@ -330,6 +330,10 @@
       haul_approve:"อนุมัติรับเสบียงและกันพื้นที่คลังแล้ว",haul_decline:"ปฏิเสธรับเสบียงแล้ว",
       haul_cancel:"ยกเลิกงานขนเสบียงแล้ว · คืนสินค้าและค่าจ้าง",haul_abandon:"คืนงานขนเสบียงแล้ว",
       haul_pickup:"รับเสบียงแล้ว · เดินทางไปส่งที่เมืองปลายทาง",haul_deliver:"ส่งเสบียงแล้ว · ได้รับ "+(data.gold ?? 0)+" ทอง",
+      contract_open:"เปิดสัญญาจัดซื้อแล้ว · กันทองและพื้นที่คลังเรียบร้อย",
+      contract_accept:"ซื้อแร่และรับสัญญาแล้ว · จ่าย "+(data.trade?.total??0)+" ทอง",
+      contract_deliver:"ส่งสินค้าตามสัญญาแล้ว · ได้รับ "+(data.trade?.total??0)+" ทอง",
+      contract_cancel:"ยกเลิกสัญญาและคืนงบให้กิลด์แล้ว",contract_abandon:"คืนงานแล้ว · แร่ที่ซื้ออยู่ในกระเป๋า",
       policy_set:"บันทึกนโยบายเมืองแล้ว · ใช้กับรายการใหม่",
       supply_reserve:"กันเสบียงเตรียมเมืองแล้ว",supply_cancel:"คืนเสบียงเข้าคลังเมืองแล้ว",
       supply_repair:data.repaired?"ใช้เสบียงซ่อมความเสียหายของเมืองแล้ว":"ซ่อมเมืองไม่ได้ · คืนเสบียงแล้ว",
@@ -347,6 +351,7 @@
   }
   function cityReceiveError(data){
     if(data?.requestId && data.requestId!==cityPending?.payload.requestId)return;
+    const action=cityPending?.payload.action;
     if(data?.requestId){
       clearTimeout(cityReplyTimer);
       // A previous attempt may have committed even if this retry was throttled.
@@ -382,6 +387,11 @@
       city_haul_siege:"พักงานขนเสบียงระหว่างศึก",city_haul_missing:"งานขนเสบียงปิดแล้ว · กรุณารีเฟรช",
       city_haul_exists:"เมืองนี้มีงานขนเสบียงค้างอยู่แล้ว",city_haul_active:"ตัวละครกำลังขนเสบียงอยู่",
       city_haul_state:"สถานะงานเปลี่ยนแล้ว · กรุณารีเฟรช",city_haul_courier:"ผู้ที่รับเสบียงเท่านั้นที่ส่งหรือคืนงานได้",
+      city_contract_disabled:"พักเปิดและรับสัญญาใหม่",
+      city_contract_location:"ไปที่เมืองตามสัญญา · ตอนรับและส่งให้ยืนใกล้นายหน้าตลาด",
+      city_contract_siege:"พักรับและส่งสัญญาระหว่างศึก",city_contract_route:"ต้องมีผู้ครองทั้งสองเมืองก่อนเปิดสัญญา",
+      city_contract_exists:"จันทรามีสัญญาจัดซื้อค้างอยู่แล้ว",city_contract_missing:"สัญญาปิดแล้ว · กรุณารีเฟรช",
+      city_contract_taken:"สัญญานี้มีผู้รับแล้ว",city_contract_merchant:"ผู้รับสัญญาเท่านั้นที่ส่งสินค้าหรือคืนงานได้",
       city_supply_disabled:"พักการกันและใช้เสบียงเตรียมเมือง",
       city_supply_location:"ไปยืนบนพื้นในด่านผนึกจันทราเพื่อจัดการเสบียง",
       city_supply_siege:"เสบียงเตรียมเมืองถูกล็อกระหว่างศึก",
@@ -413,6 +423,8 @@
       item_unavailable:"ของในกระเป๋าเปลี่ยนแล้ว",listing_unavailable:"ประกาศขายถูกซื้อหรือยกเลิกแล้ว",listing_limit:"ประกาศขายกิลด์เต็มแล้ว"};
     cityStatus=reasons[data?.reason] || "ทำรายการไม่สำเร็จ · กรุณาตรวจข้อมูลแล้วลองอีกครั้ง";
     renderCityProduction();
+    if(action==="contract_accept" && ["city_market_price_changed","city_market_quantity","city_contract_missing",
+      "city_contract_taken"].includes(data?.reason))refreshCityMission();
   }
   function transmitCityProduction(){
     if(!cityPending || cityPending.target!==room || !cityRecoveryReady())return;
@@ -641,6 +653,7 @@
     purchase_hold:"กันทองใบสั่งซื้อ",purchase_paid:"จ่ายค่าของตามใบสั่งซื้อ",purchase_release:"คืนทองใบสั่งซื้อ",
     mission_hold:"กันค่าจ้างภารกิจ",mission_paid:"จ่ายค่าจ้างภารกิจ",mission_release:"คืนค่าจ้างภารกิจ",
     haul_hold:"กันค่าจ้างขนเสบียง",haul_paid:"จ่ายค่าจ้างขนเสบียง",haul_release:"คืนค่าจ้างขนเสบียง",
+    contract_hold:"กันทองสัญญาจัดซื้อ",contract_paid:"จ่ายค่าของตามสัญญา",contract_release:"คืนทองสัญญาจัดซื้อ",
     local_market_hold:"กันงบตลาดเมือง",local_market_release:"คืนงบตลาดเมือง",
     local_market_income:"ขายสินค้าที่ตลาดเมือง",local_market_paid:"รับซื้อสินค้าที่ตลาดเมือง",
     policy_industry:"เลือกนโยบายเน้นผลิต",policy_procurement:"เลือกนโยบายเน้นจัดซื้อ"
@@ -675,7 +688,8 @@
     const ledger=group("ทองตลาดรวมของกิลด์");
     note(ledger,"พร้อมใช้ "+treasury.available+" ทอง · กันไว้ "+treasury.held+" ทอง");
     note(ledger,"กันใบสั่งซื้อ "+treasury.purchaseHeld+" · ค่าจ้างภารกิจ "+treasury.missionHeld+" · เร่งผลิต "+treasury.rushHeld+
-      " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" · ตลาดเมือง "+(treasury.localHeld ?? 0)+" ทอง");
+      " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" · ตลาดเมือง "+(treasury.localHeld ?? 0)+
+      (treasury.contractHeld?" · สัญญาจัดซื้อ "+treasury.contractHeld:"")+" ทอง");
     note(ledger,"รายรับสะสม "+treasury.earned+" ทอง · จ่ายแล้ว "+treasury.paid+" ทอง");
     const storage=group("คลังจันทรา");
     note(storage,"ใช้ "+used+" / "+capacity+" ชิ้น รวมพื้นที่ที่กันไว้");
@@ -760,6 +774,46 @@
           amount,reward,audience:audience.value});
     },locked);
   }
+  function renderCityTradeContracts(body,contracts,note,button,locked){
+    const {job,manage,source,destination,atMarket,atCity,enabled,paused}=contracts;
+    if(!enabled && !job)return;
+    const section=marketText("section","gx-page");body.append(section);
+    section.append(marketText("h3","cp-h","สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination]));
+    if(paused)note(section,"พักรับและส่งสัญญาระหว่างศึก");
+    else if(!enabled)note(section,"พักสัญญาใหม่ · ผู้รับงานแล้วส่งสินค้าได้");
+    if(job){
+      note(section,job.name+" · "+cityItemName(cityProduct)+" × "+job.amount+" · รับเงิน "+job.gold+" ทองเมื่อส่งครบ");
+      note(section,"หมดอายุ "+new Date(job.expires).toLocaleString("th-TH"));
+      const fields={contractId:job.id};
+      if(job.yours){
+        button(section,"ส่งสินค้าตามสัญญา",()=>sendCityProduction("contract_deliver",fields),locked || paused || atMarket!==destination);
+        if(atMarket!==destination)button(section,"ดูเส้นทางส่งสินค้า",()=>openStrategicMap(destination),locked);
+        button(section,"คืนสัญญาจัดซื้อ",()=>sendCityProduction("contract_abandon",fields));
+      }else if(job.carrying)note(section,"มีพ่อค้ารับสัญญาแล้ว");
+      else if(enabled && !paused){
+        if(job.total===null)note(section,"รอให้ตลาดต้นทางมีแร่ครบตามสัญญา");
+        else {
+          const difference=job.gold-job.total;
+          note(section,"ซื้อที่ต้นทาง "+job.total+" ทอง · ส่วนต่าง "+(difference>0?"+":"")+difference+" ทอง");
+          button(section,"ซื้อแร่และรับสัญญา",()=>sendCityProduction("contract_accept",{...fields,total:job.total}),
+            locked || atMarket!==source);
+        }
+        if(atMarket!==source)button(section,"ดูเส้นทางไปซื้อแร่",()=>openStrategicMap(source),locked);
+      }
+      if(job.canCancel)button(section,"ปิดสัญญาจัดซื้อ",()=>sendCityProduction("contract_cancel",fields),
+        locked || atCity!==destination);
+      return;
+    }
+    note(section,"ยังไม่มีสัญญาจัดซื้อเปิดอยู่");
+    if(!manage?.canOpen)return;
+    note(section,"ทองพร้อมใช้สำหรับสัญญา "+manage.maxGold+" ทอง · รับได้สูงสุด "+manage.maxAmount+" ชิ้น");
+    if(atCity!==destination){note(section,"ไปที่ด่านผนึกจันทราและยืนบนพื้นเพื่อเปิดสัญญา");return;}
+    if(manage.maxAmount<1 || manage.maxGold<1)return;
+    cityAmountForm(section,"เปิดสัญญาจัดซื้อ",[["จำนวนแร่",manage.maxAmount],["เงินรับประกัน (ทอง)",manage.maxGold]],(amount,gold)=>{
+      if(cityPositive(amount,manage.maxAmount) && cityPositive(gold,manage.maxGold))
+        sendCityProduction("contract_open",{epoch:manage.epoch,amount,gold});
+    },locked);
+  }
   function renderCityMission(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
     if(!body)return;
@@ -775,6 +829,7 @@
     if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
     if(!ready)return;
     if(!cityMission){note(body,"กำลังโหลดภารกิจ…");return;}
+    if(cityMission.tradeContracts)renderCityTradeContracts(body,cityMission.tradeContracts,note,button,locked);
     if(cityMission.hauls)renderCityHauls(body,cityMission.hauls,note,button,locked);
     const {missions,manage,enabled,siege,atMoon,item,required,maxSlots,maxReward,hours}=cityMission;
     const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);

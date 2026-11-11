@@ -1,7 +1,7 @@
 import {randomUUID} from "node:crypto";
 import type {DatabaseSync} from "node:sqlite";
 import {
-  CITY_CAPACITY, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_HAUL_AMOUNT, CITY_HAUL_DURATION_MS, CITY_LINES,
+  CITY_CAPACITY, CITY_CONTRACT_DURATION_MS, CITY_DURATION_MS, CITY_FACTORY_COSTS, CITY_HAUL_AMOUNT, CITY_HAUL_DURATION_MS, CITY_LINES,
   CITY_MARKET_BUDGET, CITY_MARKET_QUANTITY, CITY_MARKET_SHELF, CITY_MARKET_TARGET,
   cityMarketLimits, cityMarketPrices, cityMarketSide,
   CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE,
@@ -11,7 +11,8 @@ import {
   CITY_PURCHASE_AMOUNT, CITY_PURCHASE_DURATION_MS, CITY_PURCHASE_MAX_PRICE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_RUSH_GOLD, CITY_SITES,
   CITY_MINING_WAREHOUSE_MATERIALS, CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_REQUIREMENTS,
   CITY_SUPPLY_MATERIALS, CITY_SUPPLY_RECOVERY_SPEED, CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
-  otherCity, type CityAsset, type CityDisband, type CityHaulOrder, type CityItem, type CityMarketItem, type CityMarketOrder, type CityMember,
+  otherCity, type CityAsset, type CityContractOrder, type CityDisband, type CityHaulOrder, type CityItem, type CityMarketItem,
+  type CityMarketOrder, type CityMember,
   type CityMissionOrder, type CityOwnership, type CityOwnerships, type CityPolicy, type CitySite, type CitySupplyOrder, type CitySupplyRepair,
 } from "./CityProductionRules.js";
 
@@ -40,9 +41,12 @@ type Policy = {mode: CityPolicy; changed: number};
 type Supply = {id: string; epoch: number; guild: string; reserved: number; state: "held" | "repair_pending"};
 type LocalMarket = {epoch: number; site: CitySite; guild: string; item: CityMarketItem;
   open: number; stockLimit: number; shelf: number; budget: number};
+type TradeContract = {id: string; sourceEpoch: number; sourceGuild: string; epoch: number; guild: string; name: string;
+  amount: number; gold: number; expires: number; state: "open" | "carrying"; merchant: string | null};
+type ContractReceipt = {contractId: string; trade?: {amount: number; total: number; buying: boolean}};
 type Treasury = {sales: number; workshops: number; rushPaid: number; rushHeld: number; purchasePaid: number;
   purchaseHeld: number; missionPaid: number; missionHeld: number; haulPaid: number; haulHeld: number;
-  localSales: number; localPaid: number; localHeld: number};
+  localSales: number; localPaid: number; localHeld: number; contractPaid: number; contractHeld: number};
 type Release = {guild: string; gold: number};
 const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
   id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
@@ -54,6 +58,7 @@ const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
 const purchaseIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_open ON city_purchase_orders((1)) WHERE state='open';
   CREATE INDEX IF NOT EXISTS city_purchase_guild ON city_purchase_orders(guild);`;
 const activeHauls = "state IN ('pending','open','carrying')";
+const activeContracts = "state IN ('open','carrying')";
 const activeSupplies = "state IN ('held','repair_pending')";
 const supplySpace = CITY_SUPPLY_MATERIALS.reduce((total, material) => total + material.amount, 0);
 const marketItemColumn = `TEXT NOT NULL DEFAULT '${CITY_PRODUCT}' CHECK(item IN ('${CITY_PRODUCT}','${CITY_MINING_PRODUCT}'))`;
@@ -153,6 +158,15 @@ export class CityProduction {
       CREATE INDEX IF NOT EXISTS city_local_market_guild ON city_local_market_trades(guild,site,seq);
       CREATE INDEX IF NOT EXISTS city_local_market_actor ON city_local_market_trades(actor,seq);
       CREATE INDEX IF NOT EXISTS city_local_market_epoch ON city_local_market_trades(epoch,seq);
+      CREATE TABLE IF NOT EXISTS city_trade_contracts (
+        id TEXT PRIMARY KEY, sourceEpoch INTEGER NOT NULL, sourceGuild TEXT NOT NULL,
+        epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
+        amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND ${CITY_MARKET_QUANTITY}),
+        gold INTEGER NOT NULL CHECK(gold BETWEEN 1 AND ${CITY_MISSION_MAX_REWARD}), expires INTEGER NOT NULL,
+        merchant TEXT, state TEXT NOT NULL CHECK(state IN ('open','carrying','delivered','cancelled')),
+        CHECK(state NOT IN ('carrying','delivered') OR merchant IS NOT NULL));
+      CREATE UNIQUE INDEX IF NOT EXISTS city_contract_per_destination ON city_trade_contracts(epoch) WHERE ${activeContracts};
+      CREATE INDEX IF NOT EXISTS city_contract_guild ON city_trade_contracts(guild,state);
       CREATE TABLE IF NOT EXISTS city_disband_assets (
         guild TEXT NOT NULL REFERENCES city_guild_closures(guild), item TEXT NOT NULL,
         awarded INTEGER NOT NULL CHECK(awarded>0),
@@ -260,6 +274,8 @@ export class CityProduction {
       this.db.prepare("UPDATE city_factory_sites SET epoch=?,guild=? WHERE site=?").run(active, ownership.active?.guild ?? null, site);
     this.cancelHauls(`expires<=? OR (source=? AND sourceEpoch IS NOT ?) OR (destination=? AND destinationEpoch IS NOT ?)`,
       now, now, site, active, site, active);
+    const contractEpoch = site === CITY_PRODUCTION_SITE ? "sourceEpoch" : "epoch";
+    this.cancelContracts(`expires<=? OR ${contractEpoch} IS NOT ?`, now, now, active);
     if (site === CITY_MINING_SITE) {
       const reserves = this.db.prepare(`SELECT * FROM city_supply_reserves WHERE state='held' AND epoch IS NOT ?`).all(active) as Supply[];
       for (const supply of reserves) this.refundSupply(supply);
@@ -302,11 +318,13 @@ export class CityProduction {
         (site='${CITY_PRODUCTION_SITE}')=(item='${CITY_PRODUCT}')) AS localSales,
       (SELECT coalesce(sum(total),0) FROM city_local_market_trades WHERE guild=? AND
         (site='${CITY_PRODUCTION_SITE}')<>(item='${CITY_PRODUCT}')) AS localPaid,
-      (SELECT coalesce(sum(budget),0) FROM city_local_markets WHERE guild=?) AS localHeld`)
-      .get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
+      (SELECT coalesce(sum(budget),0) FROM city_local_markets WHERE guild=?) AS localHeld,
+      (SELECT coalesce(sum(gold),0) FROM city_trade_contracts WHERE guild=? AND state='delivered') AS contractPaid,
+      (SELECT coalesce(sum(gold),0) FROM city_trade_contracts WHERE guild=? AND ${activeContracts}) AS contractHeld`)
+      .get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
     const earned = values.sales + values.workshops + values.localSales;
-    const paid = values.rushPaid + values.purchasePaid + values.missionPaid + values.haulPaid + values.localPaid;
-    const held = values.rushHeld + values.purchaseHeld + values.missionHeld + values.haulHeld + values.localHeld;
+    const paid = values.rushPaid + values.purchasePaid + values.missionPaid + values.haulPaid + values.localPaid + values.contractPaid;
+    const held = values.rushHeld + values.purchaseHeld + values.missionHeld + values.haulHeld + values.localHeld + values.contractHeld;
     return {...values, earned, paid, held, available: earned - paid - held};
   }
 
@@ -339,7 +357,8 @@ export class CityProduction {
       (SELECT coalesce(sum(remaining),0) FROM city_purchase_orders WHERE epoch=? AND state='open' AND ?='${CITY_PRODUCT}') +
       (SELECT coalesce(sum(amount),0) FROM city_hauls WHERE destinationEpoch=? AND item=? AND state IN ('open','carrying')) AS total`)
       .get(market.epoch, market.item, market.epoch, market.item);
-    return {onHand, incoming: Number(pending?.total ?? 0)};
+    return {onHand, incoming: Number(pending?.total ?? 0) +
+      (market.item === CITY_PRODUCT && market.site === CITY_MINING_SITE ? this.contractFor(market.epoch)?.amount ?? 0 : 0)};
   }
 
   private localMarketQuote(market: LocalMarket) {
@@ -443,6 +462,100 @@ export class CityProduction {
 
   private released(kind: string, now: number, rows: Release[]): void {
     for (const {guild, gold} of rows) if (gold) this.treasuryEvent(guild, now, kind, gold);
+  }
+
+  private contractFor(epoch: number): TradeContract | undefined {
+    return this.db.prepare(`SELECT * FROM city_trade_contracts WHERE epoch=? AND ${activeContracts}`).get(epoch) as TradeContract | undefined;
+  }
+
+  hasOpenTradeContract(): boolean {
+    return Boolean(this.db.prepare(`SELECT 1 FROM city_trade_contracts WHERE ${activeContracts} LIMIT 1`).get());
+  }
+
+  private cancelContracts(condition: string, now: number, ...args: (string | number | null)[]): void {
+    const rows = this.db.prepare(`UPDATE city_trade_contracts SET state='cancelled'
+      WHERE ${activeContracts} AND (${condition}) RETURNING guild,gold`).all(...args) as Release[];
+    this.released("contract_release", now, rows);
+  }
+
+  tradeContractView(actor: string, member: CityMember | undefined, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, enabled: boolean) {
+    const source = cities[CITY_PRODUCTION_SITE], destination = cities[CITY_MINING_SITE];
+    const epoch = destination.active?.id;
+    const contract = epoch === undefined ? undefined : this.contractFor(epoch);
+    const paused = this.haulPaused(cities);
+    const commander = member?.commander && member.id === destination.active?.guild && !this.closureActor(member.id);
+    const quote = enabled && contract?.state === "open" && !paused ?
+      this.localMarketView(CITY_PRODUCTION_SITE, CITY_PRODUCT, source, undefined, enabled).prices : [];
+    return {
+      enabled, paused, atCity, atMarket, source: CITY_PRODUCTION_SITE, destination: CITY_MINING_SITE,
+      manage: commander && epoch !== undefined ? {
+        epoch, canOpen: enabled && !contract && !paused && !!source.active,
+        maxAmount: Math.min(CITY_MARKET_QUANTITY, this.capacity(CITY_MINING_SITE) - this.used(epoch)),
+        maxGold: Math.min(CITY_MISSION_MAX_REWARD, this.marketGold(member.id)),
+      } : null,
+      job: contract ? {
+        id: contract.id, name: contract.name, amount: contract.amount, gold: contract.gold, expires: contract.expires,
+        carrying: contract.state === "carrying", yours: contract.merchant === actor,
+        canCancel: !!commander && contract.state === "open",
+        total: quote.length >= contract.amount ? quote.slice(0, contract.amount).reduce((sum, price) => sum + price, 0) : null,
+      } : null,
+    };
+  }
+
+  private openTradeContract(member: CityMember | undefined, order: Extract<CityContractOrder, {action:"contract_open"}>,
+    cities: CityOwnerships, atCity: CitySite | null, now: number): ContractReceipt {
+    if (atCity !== CITY_MINING_SITE) throw Error("city_contract_location");
+    if (!member?.commander) throw Error("city_commander_required");
+    this.requireCity(member, order.epoch, cities[CITY_MINING_SITE], CITY_MINING_SITE);
+    if (this.haulPaused(cities)) throw Error("city_contract_siege");
+    const source = cities[CITY_PRODUCTION_SITE].active;
+    if (!source || this.closureActor(source.guild) || this.closureActor(member.id)) throw Error("city_contract_route");
+    if (this.contractFor(order.epoch)) throw Error("city_contract_exists");
+    if (this.used(order.epoch) + order.amount > this.capacity(CITY_MINING_SITE)) throw Error("city_storage_full");
+    if (order.gold > this.marketGold(member.id)) throw Error("city_market_funds");
+    const contractId = randomUUID();
+    this.db.prepare(`INSERT INTO city_trade_contracts(id,sourceEpoch,sourceGuild,epoch,guild,name,amount,gold,expires,state)
+      VALUES(?,?,?,?,?,?,?,?,?,'open')`).run(contractId, source.id, source.guild, order.epoch, member.id, member.name,
+      order.amount, order.gold, now + CITY_CONTRACT_DURATION_MS);
+    this.treasuryEvent(member.id, now, "contract_hold", order.gold);
+    return {contractId};
+  }
+
+  tradeContractOrder(actor: string, member: CityMember | undefined, order: CityContractOrder, cities: CityOwnerships,
+    atCity: CitySite | null, atMarket: CitySite | null, now: number): ContractReceipt {
+    if (order.action === "contract_open") return this.openTradeContract(member, order, cities, atCity, now);
+    const {contractId} = order, destination = cities[CITY_MINING_SITE], source = cities[CITY_PRODUCTION_SITE];
+    const contract = destination.active && this.contractFor(destination.active.id);
+    if (!contract || contract.id !== contractId || contract.sourceEpoch !== source.active?.id || contract.expires <= now ||
+        this.closureActor(contract.guild) || this.closureActor(contract.sourceGuild)) throw Error("city_contract_missing");
+    if (order.action === "contract_cancel") {
+      if (atCity !== CITY_MINING_SITE) throw Error("city_contract_location");
+      if (!member?.commander || member.id !== contract.guild) throw Error("city_commander_required");
+      if (contract.state !== "open") throw Error("city_contract_taken");
+      this.cancelContracts("id=?", now, contractId);
+      return {contractId};
+    }
+    if (order.action === "contract_abandon") {
+      if (contract.merchant !== actor) throw Error("city_contract_merchant");
+      this.cancelContracts("id=?", now, contractId);
+      return {contractId};
+    }
+    if (this.haulPaused(cities)) throw Error("city_contract_siege");
+    if (order.action === "contract_accept") {
+      if (atMarket !== CITY_PRODUCTION_SITE) throw Error("city_contract_location");
+      if (contract.state !== "open") throw Error("city_contract_taken");
+      const trade = this.tradeAtLocalMarket(actor, {action:"local_market_trade", requestId:order.requestId,
+        site:CITY_PRODUCTION_SITE, epoch:contract.sourceEpoch, amount:contract.amount, total:order.total}, source, now);
+      this.db.prepare("UPDATE city_trade_contracts SET state='carrying',merchant=? WHERE id=?").run(actor, contractId);
+      return {contractId, trade:{amount:trade.amount, total:trade.total, buying:true}};
+    }
+    if (atMarket !== CITY_MINING_SITE) throw Error("city_contract_location");
+    if (contract.merchant !== actor) throw Error("city_contract_merchant");
+    this.add(contract.epoch, contract.guild, CITY_PRODUCT, contract.amount);
+    this.db.prepare("UPDATE city_trade_contracts SET state='delivered' WHERE id=?").run(contractId);
+    this.treasuryEvent(contract.guild, now, "contract_paid", contract.gold);
+    return {contractId, trade:{amount:contract.amount, total:contract.gold, buying:false}};
   }
 
   private policy(epoch: number | null): Policy | undefined {
@@ -992,7 +1105,7 @@ export class CityProduction {
     const market = this.db.prepare("SELECT coalesce(sum(shelf),0) AS total FROM city_local_markets WHERE epoch=?").get(epoch);
     return Number(stock?.total) + Number(listed?.total) + (this.running(epoch)?.quantity ?? 0) +
       Number(ordered?.remaining ?? 0) + Number(missions?.slots ?? 0) * CITY_MISSION_ORE_COUNT + Number(hauls?.total) +
-      (this.supply(epoch) ? supplySpace : 0) + Number(market?.total);
+      (this.supply(epoch) ? supplySpace : 0) + Number(market?.total) + (this.contractFor(epoch)?.amount ?? 0);
   }
 
   private stockQuantity(epoch: number, guild: string, item: CityItem): number {
@@ -1095,10 +1208,12 @@ export class CityProduction {
       UNION ALL SELECT 1 FROM city_purchase_orders WHERE guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_missions WHERE guild=? AND state='open'
       UNION ALL SELECT 1 FROM city_hauls WHERE (sender=? OR receiver=?) AND ${activeHauls}
+      UNION ALL SELECT 1 FROM city_trade_contracts WHERE (sourceGuild=? OR guild=?) AND ${activeContracts}
       UNION ALL SELECT 1 FROM city_supply_reserves WHERE guild=? AND ${activeSupplies}
       UNION ALL SELECT 1 FROM city_local_markets WHERE guild=? AND (shelf>0 OR budget>0)
       UNION ALL SELECT 1 FROM city_warehouse_projects
-        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild))
+        WHERE guild=? AND status IN ('collecting','building') AND wood+stone+metal>0 LIMIT 1`).get(
+        guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild))
       || this.marketGold(guild) > 0;
   }
 
@@ -1120,6 +1235,7 @@ export class CityProduction {
     const reserves = this.db.prepare("SELECT * FROM city_supply_reserves WHERE guild=? AND state='held'").all(guild) as Supply[];
     for (const supply of reserves) this.refundSupply(supply);
     this.cancelHauls("sender=? OR receiver=?", requested, guild, guild);
+    this.cancelContracts("sourceGuild=? OR guild=?", requested, guild, guild);
     const markets = this.db.prepare("SELECT * FROM city_local_markets WHERE guild=? AND (open=1 OR shelf>0 OR budget>0)")
       .all(guild) as LocalMarket[];
     for (const market of markets) this.releaseLocalMarket(market, requested);

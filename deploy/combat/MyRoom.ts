@@ -92,9 +92,10 @@ import {
   CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_PRODUCT, CITY_MINING_SITE,
   CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
   CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED,
-  CITY_RETURN_MARKET_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
-  isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, isWarehouseOrder, parseCityOrder,
-  type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
+  CITY_RETURN_MARKET_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_TRADE_CONTRACTS_ENABLED, CITY_WORKSHOP_ENABLED,
+  isCityContractOrder, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder,
+  isWarehouseOrder, parseCityOrder,
+  type CityContractOrder, type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
   type CitySite, type CitySupplyOrder,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
@@ -189,6 +190,11 @@ const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MIN
 const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
 const cityMarketIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_LOCAL_MARKET_ENABLED;
 const cityReturnMarketIntake = cityMarketIntake && CITY_RETURN_MARKET_ENABLED;
+const cityContractIntake = cityMarketIntake && cityMissionIntake && CITY_TRADE_CONTRACTS_ENABLED;
+function cityBrokerAt(site: CitySite | null, x: number, z: number): CitySite | null {
+  return site && serviceNpcsFor(site).some(npc => npc.role === "market" &&
+    Math.hypot(x - npc.x, z - npc.z) <= npc.radius) ? site : null;
+}
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
   if (site === CITY_MINING_SITE)
@@ -4276,7 +4282,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | CitySupplyOrder | CityMarketOrder>, claimsOnly = false): void {
+  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | CitySupplyOrder | CityMarketOrder | CityContractOrder>, claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
@@ -4368,15 +4374,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       fail(reason);
     }
   }
-  private cityBoardAction(client: Client, board: "purchase" | "mission", order?: CityPurchaseOrder | CityMissionOrder | CityHaulOrder): void {
+  private cityBoardAction(client: Client, board: "purchase" | "mission",
+    order?: CityPurchaseOrder | CityMissionOrder | CityHaulOrder | CityContractOrder): void {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const purchase = board === "purchase", enabled = purchase ? cityPurchaseIntake : cityMissionIntake;
     const supported = purchase ? this.state.cityPurchaseSupported : this.state.cityMissionSupported;
     const haulOrder = order && isCityHaulOrder(order);
+    const contractOrder = order && isCityContractOrder(order);
     const cleanup = order?.action === "purchase_cancel" || order?.action === "mission_cancel" || order?.action === "mission_abandon" ||
-      order?.action === "haul_cancel" || order?.action === "haul_decline" || order?.action === "haul_abandon";
-    if (!supported || (order && !cleanup && !(haulOrder ? cityHaulIntake : enabled)))
-      return fail(haulOrder ? "city_haul_disabled" : purchase ? "city_purchase_disabled" : "city_mission_disabled");
+      order?.action === "haul_cancel" || order?.action === "haul_decline" || order?.action === "haul_abandon" ||
+      order?.action === "contract_cancel" || order?.action === "contract_abandon" || order?.action === "contract_deliver";
+    if (!supported || (order && !cleanup && !(contractOrder ? cityContractIntake : haulOrder ? cityHaulIntake : enabled)))
+      return fail(contractOrder ? "city_contract_disabled" : haulOrder ? "city_haul_disabled" :
+        purchase ? "city_purchase_disabled" : "city_mission_disabled");
     const id = client.sessionId;
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -4384,6 +4394,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id)!;
     const site = CITY_SITES.find(city => city === player.mapId);
     const atCity = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
+    const atMarket = cityBrokerAt(atCity, player.x, player.z);
     const atMoon = atCity === CITY_MINING_SITE;
     if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
     if (order?.action === "mission_open" && !atMoon) return fail("city_mission_location");
@@ -4393,7 +4404,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const now = Date.now(), store = characterStore.economy;
       const ownership = syncCityProduction(now, CITY_MINING_SITE);
       const withHauls = !purchase && (cityHaulIntake || haulOrder || store.hasOpenCityHaul());
-      const cities = withHauls ? {
+      const withContracts = !purchase && (cityContractIntake || contractOrder || store.hasOpenTradeContract());
+      const cities = withHauls || withContracts ? {
         [CITY_MINING_SITE]: ownership, [CITY_PRODUCTION_SITE]: syncCityProduction(now, CITY_PRODUCTION_SITE),
       } : null;
       const member = guildStore().war.member(actor);
@@ -4401,9 +4413,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         let result;
         if (isCityPurchaseOrder(order)) result = store.cityPurchaseOrder(actor, member, order, ownership, now);
         else if (isCityMissionOrder(order)) result = store.cityMissionOrder(actor, member, order, ownership, now);
-        else if (cities) result = store.cityHaulOrder(actor, member, order, cities, atCity, now);
-        else return fail("city_haul_disabled");
-        if (order.action === "purchase_fill" || order.action === "mission_submit" || order.action === "haul_deliver")
+        else if (cities && isCityHaulOrder(order)) result = store.cityHaulOrder(actor, member, order, cities, atCity, now);
+        else if (cities && isCityContractOrder(order)) result = store.tradeContractOrder(actor, member, order, cities, atCity, atMarket, now);
+        else return fail("city_mission_disabled");
+        if (order.action === "purchase_fill" || order.action === "mission_submit" || order.action === "haul_deliver" ||
+            order.action === "contract_accept" || order.action === "contract_deliver")
           this.syncEconomy(client, actor);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
       }
@@ -4411,11 +4425,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (purchase) client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership), ...location});
       else client.send("city_mission_state", {...store.viewCityMissions(actor, member, ownership),
         ...location, warehouseMissions: CITY_MINING_CONSTRUCTION_ENABLED,
-        hauls: cities ? {...store.viewCityHauls(actor, member, cities, atCity), enabled: cityHaulIntake} : null});
+        hauls: cities && withHauls ? {...store.viewCityHauls(actor, member, cities, atCity), enabled: cityHaulIntake} : null,
+        tradeContracts: cities && withContracts ? store.viewTradeContracts(actor, member, cities, atCity, atMarket, cityContractIntake) : null});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
-        "request_id_conflict", "invalid_request_id"];
+        "request_id_conflict", "invalid_request_id", "insufficient_gold", "inventory_full"];
       if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
         console.error("MONTRA city board action failed", board, error);
         return fail("city_unavailable");
@@ -4436,8 +4451,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id)!;
     const site = CITY_SITES.find(city => city === player.mapId);
     const atSite = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
-    const atMarket = atSite && serviceNpcsFor(atSite).some(npc => npc.role === "market" &&
-      Math.hypot(player.x - npc.x, player.z - npc.z) <= npc.radius) ? atSite : null;
+    const atMarket = cityBrokerAt(atSite, player.x, player.z);
     try {
       const now = Date.now(), store = characterStore.economy, member = guildStore().war.member(actor);
       const cities = {[CITY_PRODUCTION_SITE]: syncCityProduction(now), [CITY_MINING_SITE]: syncCityProduction(now, CITY_MINING_SITE)};
@@ -5129,7 +5143,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const order = parseCityOrder(message);
       if (!order) return client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
       if (isCityPurchaseOrder(order)) this.cityBoardAction(client, "purchase", order);
-      else if (isCityMissionOrder(order) || isCityHaulOrder(order)) this.cityBoardAction(client, "mission", order);
+      else if (isCityMissionOrder(order) || isCityHaulOrder(order) || isCityContractOrder(order)) this.cityBoardAction(client, "mission", order);
       else if (isCityMarketOrder(order)) this.cityMarketAction(client, order);
       else if (order.action === "policy_set" || isCitySupplyOrder(order)) this.cityGovernanceAction(client, order);
       else this.cityProductionAction(client, order);
@@ -6847,7 +6861,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.cityPurchaseSupported = this.state.cityRecoveryAvailable &&
       (cityPurchaseIntake || characterStore.economy.hasOpenCityPurchase());
     this.state.cityMissionSupported = this.state.cityRecoveryAvailable &&
-      (cityMissionIntake || characterStore.economy.hasOpenCityMission() || characterStore.economy.hasOpenCityHaul());
+      (cityMissionIntake || characterStore.economy.hasOpenCityMission() || characterStore.economy.hasOpenCityHaul() ||
+        characterStore.economy.hasOpenTradeContract());
     this.state.cityMarketSupported = this.state.cityRecoveryAvailable &&
       (cityMarketIntake || characterStore.economy.hasCityMarketAssets());
     this.state.cityGovernanceAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED && CITY_GOVERNANCE_ENABLED;

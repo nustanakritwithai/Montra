@@ -324,6 +324,35 @@ test("the freight board sends the selected scope, destination tenure and deliver
   assert.equal(f.wire.at(-1).payload.haulId,"freight");
 });
 
+test("the contract board refreshes a stale purchase quote and allows a committed delivery with intake paused", () => {
+  const f=fixture({missionSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMission();
+  const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,missions:[]};
+  const contracts={enabled:true,paused:false,source:river,destination:moon,atCity:moon,atMarket:moon,job:null,
+    manage:{epoch:7,canOpen:true,maxAmount:12,maxGold:100}};
+  f.ctx.cityReceiveMission({...board,tradeContracts:contracts});
+  f.submit("เปิดสัญญาจัดซื้อ",6,96);
+  const opened=f.wire.at(-1).payload;
+  assert.deepEqual(opened,{requestId:opened.requestId,action:"contract_open",epoch:7,amount:6,gold:96});
+  f.ctx.cityReceiveResult(opened);
+  const job={id:"contract",name:"กิลด์จันทรา",amount:6,gold:96,total:90,expires:2_000_000};
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job}});
+  assert.equal(f.button("ซื้อแร่และรับสัญญา").disabled,true);
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job,atCity:river,atMarket:river}});
+  f.button("ซื้อแร่และรับสัญญา").onclick();
+  const accepted=f.wire.at(-1).payload;
+  assert.deepEqual(accepted,{requestId:accepted.requestId,action:"contract_accept",contractId:"contract",total:90});
+  f.ctx.cityReceiveError({requestId:accepted.requestId,reason:"city_market_price_changed"});
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,enabled:false,job:{...job,yours:true,carrying:true}}});
+  assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,false);
+  f.button("ส่งสินค้าตามสัญญา").onclick();
+  const delivered=f.wire.at(-1).payload;
+  assert.deepEqual(delivered,{requestId:delivered.requestId,action:"contract_deliver",contractId:"contract"});
+  f.ctx.cityReceiveResult({...delivered,trade:{amount:6,total:96,buying:false}});
+  assert.match(f.nodes.cityStatus.textContent,/ได้รับ 96 ทอง/);
+});
+
 test("the city hall only permits spending reserved supplies after defense and binds the request to the set", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});

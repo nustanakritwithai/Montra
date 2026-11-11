@@ -11,8 +11,9 @@ import {
   CITY_PRODUCT, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_MATERIALS, parseCityOrder,
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   CITY_MINING_ENABLED, CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, type CitySite,
-  CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
-  cityMarketPrices, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, type CityPolicy,
+  CITY_CONTRACT_DURATION_MS, CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
+  cityMarketPrices, isCityContractOrder, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder,
+  isCitySupplyOrder, type CityPolicy,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
 import {WAR_DURATION, WAR_PROTECTION} from "./TerritoryWar.js";
@@ -61,7 +62,7 @@ function fixture(t: TestContext) {
     assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband" &&
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
       !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) &&
-      !isCityMarketOrder(parsed) && !isCitySupplyOrder(parsed) && parsed.action !== "policy_set");
+      !isCityMarketOrder(parsed) && !isCityContractOrder(parsed) && !isCitySupplyOrder(parsed) && parsed.action !== "policy_set");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -1109,6 +1110,117 @@ test("legacy market migration preserves shelves, budgets, receipts and treasury 
     assert.deepEqual(f.market(visitor,moon,sell,f.now,sellId), {site:moon,amount:3,total:48});
     assert.deepEqual([f.markets(rival), f.markets(leader), f.markets(visitor)], before);
   }
+});
+
+function tradeContractFixture(t: TestContext) {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  f.market(rival,river,{action:"local_market_config",open:true,limit:24});
+  f.market(rival,river,{action:"local_market_stock",amount:6});
+  f.market(leader,moon,{action:"local_market_config",open:true,limit:24});
+  const cities = (at: number) => ({[river]:f.sync(at,river),[moon]:f.sync(at,moon)});
+  const contract = (actor: string, fields: object, atCity: CitySite | null, atMarket: CitySite | null,
+    at = f.now, requestId = f.request()) => {
+    const order = parseCityOrder({...fields,requestId});
+    assert.ok(order && isCityContractOrder(order));
+    return f.economy.tradeContractOrder(actor,f.guild.war.member(actor),order,cities(at),atCity,atMarket,at);
+  };
+  const board = (actor: string, at = f.now, enabled = true) =>
+    f.economy.viewTradeContracts(actor,f.guild.war.member(actor),cities(at),null,null,enabled);
+  const proposal = {action:"contract_open",epoch:f.moonEpoch,amount:3,gold:70};
+  return {...f,get economy(){return f.economy;},get guild(){return f.guild;},contract,board,proposal};
+}
+
+test("a trade contract reserves one lot, buys at the source once, and pays its merchant once after restart", t => {
+  const f = tradeContractFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const used = f.miningStock(f.now).used;
+  assert.equal(parseCityOrder({...f.proposal,amount:13,requestId:f.request()}), null);
+  assert.throws(() => f.contract(member,f.proposal,moon,null), /city_commander_required/);
+  assert.throws(() => f.contract(leader,f.proposal,river,null), /city_contract_location/);
+  const {contractId} = f.contract(leader,f.proposal,moon,null);
+  assert.throws(() => f.contract(leader,f.proposal,moon,null), /city_contract_exists/);
+  assert.equal(f.miningStock(f.now).used, used+3);
+  assert.equal(f.miningStock(f.now).marketGold, 30);
+  assert.equal(f.markets(leader).markets[1].manage?.incoming, 3);
+  assert.throws(() => f.open(3,11,f.now), /city_market_funds/);
+  const accept = {action:"contract_accept",contractId,total:43}, acceptId = f.request();
+  assert.throws(() => f.contract(visitor,accept,river,null), /city_contract_location/);
+  assert.throws(() => f.contract(visitor,{...accept,total:42},river,river), /city_market_price_changed/);
+  f.economy.saveCharacter(visitor,{},bag(true));
+  assert.throws(() => f.contract(visitor,accept,river,river), /inventory_full/);
+  assert.equal(f.board(visitor).job?.total, 43);
+  assert.equal(f.markets(rival).markets[0].manage?.shelf, 6);
+  f.economy.saveCharacter(visitor,{},bag());
+  const bought = f.contract(visitor,accept,river,river,f.now,acceptId);
+  assert.deepEqual(bought.trade,{amount:3,total:43,buying:true});
+  f.restart();
+  assert.deepEqual(f.contract(visitor,accept,river,river,f.now,acceptId),bought);
+  assert.throws(() => f.contract(member,accept,river,river), /city_contract_taken/);
+  assert.throws(() => f.contract(leader,{action:"contract_cancel",contractId},moon,null), /city_contract_taken/);
+  const deliver = {action:"contract_deliver",contractId}, deliverId = f.request();
+  assert.equal(f.board(visitor,f.now,false).job?.yours, true);
+  assert.throws(() => f.contract(visitor,deliver,river,river), /city_contract_location/);
+  assert.throws(() => f.contract(member,deliver,moon,moon), /city_contract_merchant/);
+  const paid = f.contract(visitor,deliver,moon,moon,f.now,deliverId);
+  assert.deepEqual(paid.trade,{amount:3,total:70,buying:false});
+  f.restart();
+  assert.deepEqual(f.contract(visitor,deliver,moon,moon,f.now,deliverId),paid);
+  assert.equal(f.economy.getAccount(visitor).gold, 1027);
+  assert.equal(f.markets(visitor).itemCount, 0);
+  assert.equal(f.view(rival,f.now,river).marketGold, 43);
+  assert.equal(f.miningStock(f.now).used, used+3);
+  assert.equal(f.miningStock(f.now).marketGold, 30);
+  const ledger=f.economy.viewCityGovernance(f.guildMember(leader),f.sync(f.now,moon)).treasury;
+  assert.equal(ledger.contractHeld, 0);
+  assert.equal(ledger.contractPaid, 70);
+});
+
+test("contract expiry and the loss of either tenure release reservations without taking the merchant's ore", t => {
+  const f = tradeContractFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const used=f.miningStock(f.now).used;
+  const first=f.contract(leader,f.proposal,moon,null).contractId;
+  const expired=f.now+CITY_CONTRACT_DURATION_MS;
+  f.restart();
+  assert.equal(f.board(visitor,expired).job,null);
+  assert.equal(f.miningStock(expired).used,used);
+  assert.equal(f.miningStock(expired).marketGold,100);
+  const {contractId}=f.contract(leader,f.proposal,moon,null,expired);
+  assert.notEqual(first,contractId);
+  f.contract(visitor,{action:"contract_accept",contractId,total:43},river,river,expired);
+  f.capture(leader,expired+1,river);
+  assert.throws(() => f.contract(visitor,{action:"contract_deliver",contractId},moon,moon,expired+1), /city_contract_missing/);
+  assert.equal(f.miningStock(expired+1).used,used);
+  assert.equal(f.miningStock(expired+1).marketGold,100);
+  assert.equal(f.markets(visitor,expired+1).itemCount,3);
+  assert.equal(f.economy.getAccount(visitor).gold,957);
+  f.contract(leader,f.proposal,moon,null,expired+1);
+  f.capture(rival,expired+2,moon);
+  assert.equal(f.board(visitor,expired+2).job,null);
+  assert.equal(f.view(leader,expired+2,moon).marketGold,100);
+});
+
+test("a siege pauses a trade contract and destination disband returns its escrow with the guild's claims", t => {
+  const f=tradeContractFixture(t), river=CITY_PRODUCTION_SITE, moon=CITY_MINING_SITE;
+  const owner=f.guildMember(rival).id, siege=f.now+WAR_PROTECTION;
+  const db=new DatabaseSync(f.guildFile);
+  try {
+    db.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+      .run(river,owner,f.now-1,f.now,f.now,owner);
+  } finally {db.close();}
+  const {contractId}=f.contract(leader,f.proposal,moon,null);
+  const accept={action:"contract_accept",contractId,total:43};
+  f.guild.war.start(river,f.guildMember(leader),siege);
+  assert.equal(f.board(visitor,siege+1).paused,true);
+  assert.throws(() => f.contract(visitor,accept,river,river,siege+1), /city_contract_siege/);
+  const peace=siege+RIVER_WAR_DURATION;
+  assert.equal(f.guild.war.inspect(river,peace).ownerId,owner);
+  f.contract(visitor,accept,river,river,peace);
+  f.guild.leave(member);
+  const guild=f.guildMember(leader).id;
+  f.guild.settleCityDisband(f.economy,f.guild.beginCityDisband(leader,guild,peace+1));
+  f.restart();
+  assert.equal(f.economy.hasOpenTradeContract(),false);
+  assert.equal(f.economy.cityDisbandClaims(leader).find(row=>row.item==="gold")?.amount,100);
+  assert.equal(f.markets(visitor,peace+1).itemCount,3);
 });
 
 test("cross-guild freight reserves capacity only after approval and pays the assigned courier exactly once", t => {

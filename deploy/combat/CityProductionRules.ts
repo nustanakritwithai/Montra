@@ -16,6 +16,7 @@ export const CITY_SUPPLY_ENABLED = process.env.MONTRA_CITY_SUPPLY_RESERVE === "1
 export const CITY_HAUL_ENABLED = process.env.MONTRA_CITY_HAULS === "1";
 export const CITY_LOCAL_MARKET_ENABLED = process.env.MONTRA_CITY_LOCAL_MARKETS === "1";
 export const CITY_RETURN_MARKET_ENABLED = process.env.MONTRA_CITY_RETURN_MARKET === "1";
+export const CITY_TRADE_CONTRACTS_ENABLED = process.env.MONTRA_CITY_TRADE_CONTRACTS === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
@@ -70,6 +71,7 @@ export const CITY_MARKET_QUANTITY = 12;
 export const CITY_MARKET_SHELF = 24;
 export const CITY_MARKET_TARGET = [12, 24, 36] as const;
 export const CITY_MARKET_BUDGET = 1_000_000_000;
+export const CITY_CONTRACT_DURATION_MS = 86_400_000;
 const cityMarketProfiles = {
   [CITY_PRODUCT]: {shelf: CITY_MARKET_SHELF, target: CITY_MARKET_TARGET, sellPrice: 13, buyPrice: 11},
   [CITY_MINING_PRODUCT]: {shelf: 12, target: [6, 12, 18], sellPrice: 36, buyPrice: 34},
@@ -120,6 +122,11 @@ export type CityHaulOrder = {requestId: string} & (
     amount: number; reward: number; audience: "guild" | "public"} |
   {action: "haul_approve" | "haul_decline" | "haul_cancel" | "haul_pickup" | "haul_deliver" | "haul_abandon"; haulId: string}
 );
+export type CityContractOrder = {requestId: string} & (
+  {action: "contract_open"; epoch: number; amount: number; gold: number} |
+  {action: "contract_accept"; contractId: string; total: number} |
+  {action: "contract_cancel" | "contract_deliver" | "contract_abandon"; contractId: string}
+);
 
 export type CityFactoryOrder = {requestId: string} & (
   WarehouseOrder |
@@ -130,7 +137,7 @@ export type CityFactoryOrder = {requestId: string} & (
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
 export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder |
-  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | ({requestId: string} & (
+  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | CityContractOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -177,6 +184,11 @@ export function isCityHaulOrder(order: CityOrder): order is CityHaulOrder {
 export function isCityMarketOrder(order: CityOrder): order is CityMarketOrder {
   return order.action === "local_market_config" || order.action === "local_market_stock" ||
     order.action === "local_market_budget" || order.action === "local_market_trade";
+}
+
+export function isCityContractOrder(order: CityOrder): order is CityContractOrder {
+  return order.action === "contract_open" || order.action === "contract_accept" || order.action === "contract_cancel" ||
+    order.action === "contract_deliver" || order.action === "contract_abandon";
 }
 
 export function cityMarketSide(site: CitySite, item: CityMarketItem): "sell" | "buy" {
@@ -232,6 +244,11 @@ export function parseCityOrder(input: unknown): CityOrder | null {
   if (order.action === "haul_approve" || order.action === "haul_decline" || order.action === "haul_cancel" ||
       order.action === "haul_pickup" || order.action === "haul_deliver" || order.action === "haul_abandon")
     return keys("haulId") && uuid(order.haulId) ? order as CityOrder : null;
+  if (order.action === "contract_cancel" || order.action === "contract_deliver" || order.action === "contract_abandon")
+    return keys("contractId") && uuid(order.contractId) ? order as CityOrder : null;
+  if (order.action === "contract_accept")
+    return keys("contractId", "total") && uuid(order.contractId) &&
+      integer(order.total, 1, CITY_MARKET_BUDGET) ? order as CityOrder : null;
   if (order.action === "purchase_fill")
     return keys("orderId", "slot", "amount") && uuid(order.orderId) && integer(order.slot, 0, 11) &&
       integer(order.amount, 1, CITY_POLICY_PURCHASE_AMOUNT) ? order as CityOrder : null;
@@ -243,6 +260,9 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "contract_open":
+      return keys("epoch", "amount", "gold") && integer(order.amount, 1, CITY_MARKET_QUANTITY) &&
+        integer(order.gold, 1, CITY_MISSION_MAX_REWARD) ? order as CityOrder : null;
     case "local_market_config":
     case "local_market_stock":
     case "local_market_budget":
