@@ -214,8 +214,8 @@
       // skinned elbow and flattened the forearm); wrists nearly straight.
       // Twin swords face the opponent square on (krabi-krabong guard), so both arms read the same.
       P.Hips[1] = -.22; P.Hips[2] = -.03; P.Spine[1] *= .2; P.Spine1[1] *= .2; P.Chest[1] *= .2;
-      set("RightArm", -.8, 0, 1.02); set("RightForeArm", 0, 1.15, 0); set("RightHand", 0, 0, -.12);
-      set("LeftArm", -.8, 0, -1.02); set("LeftForeArm", 0, -1.15, 0); set("LeftHand", 0, 0, .12);
+      set("RightArm", -.8, 0, 1.02); set("RightForeArm", 0, 1.15, 0); set("RightHand", -.35, 0, -.3);
+      set("LeftArm", -.8, 0, -1.02); set("LeftForeArm", 0, -1.15, 0); set("LeftHand", -.35, 0, .3);
       add("RightShoulder", 0, .08, -.06); off[1] = -.06;
       add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
     } else if (weapon === "arcane_sword") {
