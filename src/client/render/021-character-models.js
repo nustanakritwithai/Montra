@@ -209,6 +209,7 @@
     thai_left: new B.Vector3(0, .1, 1),
     tool_axe: new B.Vector3(0, .05, 1), tool_pick: new B.Vector3(0, .05, 1), tool_sickle: new B.Vector3(0, .2, 1) };
   const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
+  const DAAB_ROLL = { thai_left: 0, thai_right: Math.PI };
   function attachShamanModel(a) {
     if (shamanBody === null) { shamanWaiting.push(a); return; }
     if (!shamanBody || a.node.isDisposed()) return;
@@ -228,8 +229,8 @@
       root.parent = kind === "thai_left" ? nodes.Socket_Hand_Weapon_L : nodes.Socket_Hand_Weapon_R;
       root.position.set(0, 0, 0); root.scaling.setAll(.6); // weapons were modelled for the larger procedural rig
       root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind] || DEFAULT_GRIP);
-      // The left daab is the mirror of the right one: turned half round its blade so its curve also sweeps outward.
-      if (kind === "thai_left") root.rotationQuaternion = root.rotationQuaternion.multiply(B.Quaternion.RotationAxis(B.Axis.Y, Math.PI));
+      // Twin daab: each blade is turned about its own length so the cutting edge faces out, toward the opponent.
+      if (DAAB_ROLL[kind] !== undefined) root.rotationQuaternion = root.rotationQuaternion.multiply(B.Quaternion.RotationAxis(B.Axis.Y, DAAB_ROLL[kind]));
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;
