@@ -12,7 +12,7 @@ import {
   CITY_MINING_WAREHOUSE_MATERIALS, CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_REQUIREMENTS,
   CITY_SUPPLY_MATERIALS, CITY_SUPPLY_RECOVERY_SPEED, CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   otherCity, type CityAsset, type CityContractOrder, type CityDisband, type CityHaulOrder, type CityItem, type CityMarketItem,
-  type CityMarketOrder, type CityMember, type CityNeutralMarketOrder,
+  type CityMarketContributionOrder, type CityMarketOrder, type CityMember, type CityNeutralMarketOrder,
   type CityMissionOrder, type CityOwnership, type CityOwnerships, type CityPolicy, type CitySite, type CitySupplyOrder, type CitySupplyRepair,
 } from "./CityProductionRules.js";
 
@@ -48,7 +48,7 @@ type SellerPayment = {seller: string; gold: number};
 type ContractReceipt = {contractId: string; trade?: {amount: number; total: number; buying: boolean; payments?: SellerPayment[]}};
 type Treasury = {sales: number; workshops: number; rushPaid: number; rushHeld: number; purchasePaid: number;
   purchaseHeld: number; missionPaid: number; missionHeld: number; haulPaid: number; haulHeld: number;
-  localSales: number; localPaid: number; localHeld: number; contractPaid: number; contractHeld: number};
+  localSales: number; localPaid: number; localHeld: number; contractPaid: number; contractHeld: number; contributions: number};
 type Release = {guild: string; gold: number};
 const purchaseTable = `CREATE TABLE IF NOT EXISTS city_purchase_orders (
   id TEXT PRIMARY KEY, epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
@@ -135,6 +135,11 @@ export class CityProduction {
         listing TEXT PRIMARY KEY REFERENCES listings(id), guild TEXT NOT NULL,
         amount INTEGER NOT NULL CHECK(amount>0));
       CREATE INDEX IF NOT EXISTS guild_market_gold_owner ON guild_market_gold(guild);
+      CREATE TABLE IF NOT EXISTS guild_market_contributions (
+        request TEXT PRIMARY KEY, guild TEXT NOT NULL, actor TEXT NOT NULL, epoch INTEGER NOT NULL,
+        at INTEGER NOT NULL, gold INTEGER NOT NULL CHECK(gold BETWEEN 1 AND ${CITY_MARKET_BUDGET}));
+      CREATE INDEX IF NOT EXISTS guild_market_contribution_guild ON guild_market_contributions(guild);
+      CREATE INDEX IF NOT EXISTS guild_market_contribution_actor ON guild_market_contributions(actor,guild,at);
       CREATE INDEX IF NOT EXISTS city_jobs_guild ON city_jobs(guild);
       CREATE TABLE IF NOT EXISTS city_guild_closures (
         guild TEXT PRIMARY KEY, actor TEXT NOT NULL, name TEXT NOT NULL, closed INTEGER NOT NULL);
@@ -349,9 +354,10 @@ export class CityProduction {
         (site='${CITY_PRODUCTION_SITE}')<>(item='${CITY_PRODUCT}')) AS localPaid,
       (SELECT coalesce(sum(budget),0) FROM city_local_markets WHERE guild=?) AS localHeld,
       (SELECT coalesce(sum(gold),0) FROM city_trade_contracts WHERE guild=? AND state='delivered') AS contractPaid,
-      (SELECT coalesce(sum(gold),0) FROM city_trade_contracts WHERE guild=? AND ${activeContracts}) AS contractHeld`)
-      .get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
-    const earned = values.sales + values.workshops + values.localSales;
+      (SELECT coalesce(sum(gold),0) FROM city_trade_contracts WHERE guild=? AND ${activeContracts}) AS contractHeld,
+      (SELECT coalesce(sum(gold),0) FROM guild_market_contributions WHERE guild=?) AS contributions`)
+      .get(guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild, guild) as Treasury;
+    const earned = values.sales + values.workshops + values.localSales + values.contributions;
     const paid = values.rushPaid + values.purchasePaid + values.missionPaid + values.haulPaid + values.localPaid + values.contractPaid;
     const held = values.rushHeld + values.purchaseHeld + values.missionHeld + values.haulHeld + values.localHeld + values.contractHeld;
     return {...values, earned, paid, held, available: earned - paid - held};
@@ -363,6 +369,25 @@ export class CityProduction {
 
   private treasuryEvent(guild: string, at: number, kind: string, gold: number): void {
     this.db.prepare("INSERT INTO city_treasury_events(guild,at,kind,gold) VALUES(?,?,?,?)").run(guild, at, kind, gold);
+  }
+
+  marketContributionView(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    const active = ownership.active;
+    if (!member || active?.guild !== member.id || this.closureActor(member.id)) return null;
+    return {epoch:active.id, siege:ownership.siegeStarted !== undefined, available:this.marketGold(member.id),
+      receipts:this.db.prepare(`SELECT at,gold FROM guild_market_contributions WHERE actor=? AND guild=?
+        ORDER BY at DESC,rowid DESC LIMIT 5`).all(actor, member.id)};
+  }
+
+  recordMarketContribution(actor: string, member: CityMember, order: CityMarketContributionOrder,
+    ownership: CityOwnership, now: number) {
+    this.requireCity(member, order.epoch, ownership, CITY_MINING_SITE);
+    if (this.closureActor(member.id)) throw Error("city_disband_pending");
+    if (ownership.siegeStarted !== undefined) throw Error("city_contribution_siege");
+    this.db.prepare("INSERT INTO guild_market_contributions(request,guild,actor,epoch,at,gold) VALUES(?,?,?,?,?,?)")
+      .run(order.requestId, member.id, actor, order.epoch, now, order.amount);
+    this.treasuryEvent(member.id, now, "market_contribution", order.amount);
+    return {amount:order.amount, available:this.marketGold(member.id)};
   }
 
   private localMarket(epoch: number, item: CityMarketItem): LocalMarket | undefined {
