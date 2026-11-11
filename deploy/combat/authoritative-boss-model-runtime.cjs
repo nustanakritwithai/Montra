@@ -216,6 +216,40 @@ test('new Himmapan rigs follow the replicated strike stages, geometry and counte
  }finally{f.dispose();}
 });
 
+test('new mountain and grove rigs render the landing, rear, line and half-circle markers',()=>{
+ const f=fixture();try{
+  for(const [id,mapId,part,specialStage,specialRange,specialHalfWidth,specialHalfAngle,front,back] of [
+   ['himmapan_karin_paksa','hex_ridge','karin paksa engraved leg guards',1,2.35,0,0,-5.35,-.65],
+   ['himmapan_tinna_siha','bamboo_frontier','tinna siha leaf mane and gentle muzzle',0,2.9,0,Math.PI/3,0,2.9],
+   ['himmapan_hera','naga_cavern','hera articulated bite',2,4.8,.95,0,-4.8,0],
+   ['himmapan_thanthi_ma','moon_cemetery','thanthi ma ribbed gold club',0,3.75,0,Math.PI/2,-3.75,0],
+  ]){
+   const m=state({id,mapId,displayName:id,level:40},{tier:'normal',x:0,y:0,z:0,facing:0,
+     aiState:'windup',specialStage,specialRange,specialHalfWidth,specialHalfAngle,specialOriginX:0,
+     specialOriginZ:id==='himmapan_karin_paksa'?-3:0});
+   const mesh=add(f,m),ghost=mesh.metadata.ghost;
+   assert(mesh.getChildMeshes().some(child=>child.name===part));
+   assert.equal(mesh.metadata.specialWarning.isPickable,false);
+   const positions=mesh.metadata.specialWarning.getVerticesData(f.B.VertexBuffer.PositionKind);
+   const depths=positions.filter((_,index)=>index%3===2);
+   close(Math.min(...depths),front,'replicated forward edge');
+   close(Math.max(...depths),back,'replicated rear edge');
+   ghost.spawnAt=0;
+   f.at(2000);f.ctx.animateGhosts(.016,2000);
+   assert(ghost.rig.getChildMeshes().every(child=>child.getWorldMatrix().m.every(Number.isFinite)));
+   const marker=mesh.metadata.specialWarning;
+   if(id==='himmapan_hera'){
+    const before=f.calls.length;
+    m.aiState='special_recovery';f.sync();
+    assert.deepEqual(f.calls.slice(before).filter(call=>call[0]==='spawnFx').map(call=>call[1]),
+      ['streak','streak','streak','star'],'the bite impact follows the line and splashes at its origin');
+   }
+   f.ctx.activeMapId='ritual_village';f.sync();
+   assert(marker.isDisposed());
+  }
+ }finally{f.dispose();}
+});
+
 test('production smoke color variants share the painted opacity texture without empty clone textures',()=>{
  const f=fixture();try{
   const materials=f.run('[gm.smoke,gm.smokeWhite,gm.moonMist]'),texture=materials[0].opacityTexture;
