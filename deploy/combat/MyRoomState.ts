@@ -83,6 +83,8 @@ export const Monster = schema({
   tier: t.string().default("normal"),
   specialRange: t.number().default(0),
   specialHalfWidth: t.number().default(0),
+  specialInnerRange: t.number().default(0),
+  specialHalfAngle: t.number().default(0),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;

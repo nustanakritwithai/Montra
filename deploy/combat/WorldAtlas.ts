@@ -207,7 +207,7 @@ export const FRONTIER_SPAWNS:readonly AtlasSpawn[]=[
     ...frontierGroup(CASTLE_ID,2,"วิญญาณไพร่แนวล้อม",[[-235,151,67],[252,150,68],[-22,-271,72],[23,-269,73]]),
   ] : []),
 ];
-export type HimmapanAttack = { range:number; halfWidth:number; windupMs:number };
+export type HimmapanAttack = { range:number; halfWidth:number; windupMs:number; innerRange?:number; halfAngle?:number };
 export const HIMMAPAN_SPAWNS = ([
   { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
     theme:"grove", special:{ range:4, halfWidth:1.05, windupMs:1100 } },
@@ -216,13 +216,13 @@ export const HIMMAPAN_SPAWNS = ([
   { id:"himmapan_stone_yaksha", name:"ยักษ์ศิลาด่าน", mapId:"hex_ridge", x:71, z:0, level:45, tier:"normal",
     theme:"guard", special:{ range:2.8, halfWidth:0, windupMs:1300 } },
   { id:"himmapan_kochasri", name:"คชสีห์", mapId:"naga_cavern", x:-56, z:22, level:50, tier:"normal",
-    theme:"guard", special:{ range:4.6, halfWidth:1.45, windupMs:1250 } },
+    theme:"guard", special:{ range:4.6, halfWidth:0, halfAngle:Math.PI/4, windupMs:1250 } },
   { id:"himmapan_hemaraj", name:"เหมราช", mapId:"naga_cavern", x:-12, z:-43, level:54, tier:"normal",
     theme:"hunter", special:{ range:3.2, halfWidth:1.3, windupMs:850 } },
   { id:"himmapan_durong_paksin", name:"ดุรงค์ปักษิณ", mapId:"hex_ridge", x:55, z:25, level:45, tier:"normal",
     theme:"hunter", special:{ range:5.6, halfWidth:.75, windupMs:1050 } },
   { id:"himmapan_kunchon_wari", name:"กุญชรวารี", mapId:"lotus_basin", x:101, z:-55, level:50, tier:"normal",
-    theme:"grove", special:{ range:3.45, halfWidth:0, windupMs:1350 } },
+    theme:"grove", special:{ range:3.45, halfWidth:0, innerRange:1.2, windupMs:1350 } },
   { id:"himmapan_karavek", name:"นกการเวก", mapId:"hex_ridge", x:-26, z:-29, level:45, tier:"normal",
     theme:"spirit", special:{ range:3.95, halfWidth:0, windupMs:1200 } },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);

@@ -76,6 +76,33 @@ for (const [id, mapId, name, level] of himmapan) {
   });
 }
 
+for (const [id, mapId, hitOffset, safeOffset] of [
+  ["himmapan_kochasri", "naga_cavern", [2.15, -3], [.95, -.65]],
+  ["himmapan_kunchon_wari", "lotus_basin", [1.9, 0], [.5, 0]],
+] as const) {
+  test(`${id} hits only its reference attack area`, () => {
+    const state = new MyRoomState(), forest = new ForestEncounters(state.monsters);
+    forest.initialize();
+    state.players.set("target", new Player({ ...getWorldMap(mapId)!.spawn, mapId }));
+    const hitPlayers: string[] = [];
+    const tick = (now: number) => forest.update(now, 0, state.players, new Set(),
+      (targetId, attacker) => { if (attacker.id === id) hitPlayers.push(targetId); }, () => {});
+    tick(0);
+    const monster = state.monsters.get(id)!;
+    const feetAt = (dx: number, dz: number) => {
+      const x = monster.x + dx, z = monster.z + dz;
+      return { x, y: groundAt(mapId, x, z), z, mapId };
+    };
+    Object.assign(state.players.get("target")!, feetAt(0, -1.5));
+    tick(100);
+    assert.equal(monster.aiState, "windup");
+    state.players.set("inside", new Player(feetAt(hitOffset[0], hitOffset[1])));
+    state.players.set("outside", new Player(feetAt(safeOffset[0], safeOffset[1])));
+    tick(1500);
+    assert.deepEqual(hitPlayers.sort(), ["inside", "target"]);
+  });
+}
+
 test("forest monsters use the server profile and respawn independently with local population",()=>{
   const state=new MyRoomState(), forest=new ForestEncounters(state.monsters);
   forest.initialize(); assert.equal([...state.monsters.values()].filter(m=>m.mapId==="forbidden_forest").length,17);
