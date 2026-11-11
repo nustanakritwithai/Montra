@@ -188,11 +188,25 @@
           ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
-        if(ghost.design.himmapan && ghost.ai!==monster.aiState && monster.aiState==="special_recovery"){
-          ghost.specialAt=performance.now();
-          const tint=ghost.design.impactTint;
-          if(tint)spawnFx("ring",tint,ghost.tx,ghost.ty+.14,ghost.tz,
-            {orient:"ground",life:420,s0:2*(Number(monster.specialInnerRange)||.35),s1:2*monster.specialRange,a0:.75,a1:0});
+        if(ghost.design.himmapan){
+          const stage=Number(monster.specialStage)||0, nextPhase=monster.aiState==="windup" && stage!==ghost.specialStage;
+          const recovery=ghost.ai!==monster.aiState && monster.aiState==="special_recovery";
+          if(recovery)ghost.specialAt=performance.now();
+          if(ghost.windup && (nextPhase || recovery) && ghost.strikeArea){
+            const {tint,x,y,z,inner,range}=ghost.strikeArea;
+            if(tint)spawnFx("ring",tint,x,y+.14,z,
+              {orient:"ground",life:420,s0:2*(inner||.35),s1:2*range,a0:.75,a1:0});
+          }
+          if(nextPhase || (monster.aiState==="windup" && !ghost.windup)){
+            ghost.stageAt=performance.now();
+            const x=stage?Number(monster.specialOriginX):ghost.tx,z=stage?Number(monster.specialOriginZ):ghost.tz;
+            const terrain=worldDefinitions?.[monster.mapId]?.terrain;
+            ghost.strikeArea={x,y:terrain?terrainHeight(terrain,x,z):ghost.ty,z,inner:Number(monster.specialInnerRange),
+              range:Number(monster.specialRange),tint:ghost.design.stages?.[stage-1]?.impact||ghost.design.impactTint};
+            if(ghost.design.leap && stage===2)ghost.leapDistance=Math.hypot(x-ghost.tx,z-ghost.tz);
+          }
+          if(recovery && ghost.windup && ghost.design.leap && stage===2)mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);
+          ghost.specialStage=stage;
         }
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
         if(ghost.design.himmapan)updateHimmapanWarning(mesh,monster);

@@ -17,6 +17,81 @@ const himmapan = [
   ["himmapan_karavek", "hex_ridge", "นกการเวก", 45],
 ] as const;
 
+for (const [id,mapId,name,level,tier,phases,recovery] of [
+  ["himmapan_phayak_nathi","drowned_marsh","พยัคฆนที",22,"normal",[[650,0],[750,1.25]],650],
+  ["himmapan_hatsadiling","twin_neck_pass","นกหัสดีลิงค์",57,"normal",[[1250,1.25]],1700],
+  ["himmapan_kraisorn","asura_peak","ไกรสรราชสีห์",80,"elite",[[950,.9],[800,1.1]],1750],
+  ["himmapan_kilen","bamboo_frontier","กิเลน",33,"normal",[[950,1],[850,1],[850,1.15]],650],
+] as const) {
+  test(`${name} uses its server-marked area, timing and recovery`, t=>{
+    const map=getWorldMap(mapId);
+    if(!map)return t.skip("optional map disabled");
+    const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
+    const siege=new ForestEncounters(new MyRoomState().monsters);
+    forest.initialize();siege.initialize(false);
+    assert.equal(siege.profile(id),null);
+    const hunter=new Player({...map.spawn,mapId});
+    const second=new Player({...map.spawn,mapId});
+    const blocked=new Player({...map.spawn,mapId});
+    state.players.set("hunter",hunter);
+    state.players.set("second",second);
+    state.players.set("blocked",blocked);
+    const hits:[string,number,number][]=[];
+    const tick=(now:number)=>forest.update(now,0,state.players,new Set(["blocked"]),
+      (pid,monster,force)=>{if(monster.id===id)hits.push([pid,force??1,now]);},()=>{});
+    tick(0);
+    const m=state.monsters.get(id)!;
+    assert.ok(m);
+    assert.deepEqual([m.displayName,m.level,m.tier],[name,level,tier]);
+    assert.ok(isSafeWorldPoint(map,m) && !isRestArea(mapId,m));
+    const home={x:m.x,z:m.z};
+    const place=(player:Player,x:number,z:number)=>Object.assign(player,{x,y:groundAt(mapId,x,z),z});
+    const resetHunter=()=>place(hunter,home.x,home.z-1.8);
+    resetHunter();
+    let now=100;
+    tick(now);
+    const centers=new Set<string>();
+    for(const [index,[windup,force]] of phases.entries()){
+      assert.equal(m.aiState,"windup");
+      assert.equal(m.specialStage,phases.length===1?0:index+1);
+      const origin=m.specialStage?{x:m.specialOriginX,z:m.specialOriginZ}:home;
+      centers.add(`${origin.x},${origin.z}`);
+      const front=m.specialHalfAngle ? .75 : 0;
+      for(const player of [hunter,second,blocked])place(player,origin.x,origin.z-front);
+      const previous=hits.length;
+      tick(now+windup-1);
+      assert.equal(hits.length,previous);
+      now+=windup;
+      tick(now);
+      assert.deepEqual(hits.slice(previous),force?[["hunter",force,now],["second",force,now]]:[]);
+    }
+    assert.equal(m.aiState,"special_recovery");
+    if(id==="himmapan_phayak_nathi"){
+      assert.equal(centers.size,2);
+      assert.ok(Math.hypot(m.x-home.x,m.z-home.z)>1);
+      assert.ok(isSafeWorldPoint(map,m));
+    }
+    if(id==="himmapan_kilen")assert.equal(centers.size,3);
+    tick(now+recovery-1);
+    assert.equal(m.aiState,"special_recovery");
+    tick(now+recovery);
+    assert.notEqual(m.aiState,"special_recovery");
+    assert.equal(m.specialStage,0);
+    if(id==="himmapan_kilen"){
+      resetHunter();
+      tick(8100);tick(9050);
+      assert.equal(m.specialStage,2);
+      assert.equal(forest.interrupt(id,9150,1500,0),"applied");
+      const before=hits.length;
+      tick(9900);
+      assert.equal(m.aiState,"stagger");
+      assert.equal(m.specialStage,0);
+      assert.equal(hits.length,before);
+    }
+    if(tier==="elite")assert.equal(forest.interrupt(id,8100,1500,0),"immune");
+  });
+}
+
 for (const [id, mapId, name, level] of himmapan) {
   test(`${id} spawns in the PvE map, winds up, can miss and respawns`, t => {
     const map = getWorldMap(mapId);

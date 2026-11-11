@@ -122,10 +122,57 @@
     }
   });
 
-  function himmapanJewel(b, x, y, z, size) {
+  const guardianHide = {
+    tiger: mat("Phayak Nathi striped coat", "#f5f3ee"),
+    lion: mat("Kraisorn ivory coat", "#fff2dd"),
+    kilen: mat("Kilen ivory scales", "#fff3de"),
+    scarlet: mat("Kraisorn crimson markings", "#a82e28"),
+    ruby: mat("Kraisorn chest ruby", "#cf3927", "#681f12"),
+    waterEye: mat("Phayak Nathi eyes", "#6ee7ff", "#328d9c"),
+  };
+  guardianHide.tiger.diffuseTexture = paintTexture("water tiger stripes", 128, (c, s) => {
+    c.fillStyle = "#eeeef0"; c.fillRect(0, 0, s, s);
+    c.fillStyle = "#203955";
+    for (let i = 0; i < 9; i++) {
+      const x = (i + .38) * s / 9, bend = i % 2 ? 9 : -8;
+      c.beginPath(); c.moveTo(x - 4, 0);
+      c.quadraticCurveTo(x + bend, s * .32, x, s * .69);
+      c.quadraticCurveTo(x + bend * .65, s * .4, x + 4, 0); c.fill();
+      c.beginPath(); c.moveTo(x - 3, s);
+      c.quadraticCurveTo(x - bend, s * .74, x + 5, s * .47);
+      c.quadraticCurveTo(x - bend * .4, s * .77, x + 4, s); c.fill();
+    }
+  });
+  guardianHide.lion.diffuseTexture = paintTexture("Kraisorn vermilion scrolls", 128, (c, s) => {
+    c.fillStyle = "#fff5e6"; c.fillRect(0, 0, s, s);
+    c.strokeStyle = "#a84737"; c.lineWidth = 2.4;
+    for (let i = 0; i < 6; i++) {
+      const cx = (i % 3 + .5) * s / 3, cy = (Math.floor(i / 3) + .5) * s / 2;
+      c.beginPath();
+      for (let j = 0; j <= 36; j++) {
+        const a = j * .29 + i, r = 2 + j * .52;
+        const x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r * 1.17;
+        if (j === 0) c.moveTo(x, y); else c.lineTo(x, y);
+      }
+      c.stroke();
+    }
+  });
+  guardianHide.kilen.diffuseTexture = paintTexture("Kilen overlapping pearl scales", 128, (c, s) => {
+    const size = s / 8;
+    c.fillStyle = "#a58a64"; c.fillRect(0, 0, s, s);
+    for (let row = 8; row >= -1; row--) for (let col = -1; col <= 8; col++) {
+      const x = (col + (row % 2) * .5) * size, y = row * size * .91;
+      c.strokeStyle = "#a48961"; c.fillStyle = row % 2 ? "#f6e6d0" : "#e2d0b8";
+      c.beginPath(); c.moveTo(x - size * .52, y);
+      c.quadraticCurveTo(x, y + size * 1.65, x + size * .52, y);
+      c.closePath(); c.fill(); c.stroke();
+    }
+  });
+
+  function himmapanJewel(b, x, y, z, size, gem = himmapanPalette.jade) {
     const p = himmapanPalette;
     b.ball(x, y, z, size*1.35, p.gold, 3).scaling.set(.82, 1.2, .44);
-    b.ball(x, y, z-size*.22, size, p.jade, 3).scaling.set(.72, 1.13, .45);
+    b.ball(x, y, z-size*.22, size, gem, 3).scaling.set(.72, 1.13, .45);
   }
 
   function himmapanLegs(b, body, hide, foot, x, z, length, radius) {
@@ -138,14 +185,14 @@
     }));
   }
 
-  function ornateHimmapanLegs(b, body, hide, x, z, length, radius, talon = false) {
+  function ornateHimmapanLegs(b, body, hide, x, z, length, radius, talon = false, paw = hide) {
     const p = himmapanPalette;
     return [-1, 1].flatMap(side => [-1, 1].map(end => {
       const leg = b.joint("articulated leg", body, side*x, 0, end*z);
       b.ball(0,-length*.24,end*length*.05,radius*2.9,hide,8).scaling.set(.83,1.68,1);
       b.taper([[0,-length*.13,0,radius],[0,-length*.53,end*.06,radius*.85],[0,-length*.86,-.03,radius*.65]],hide);
       b.cyl(0,-length*.7,-.01,length*.17,radius*1.56,radius*1.53,p.gold,9);
-      b.ball(0,-length*.9,-.08,radius*2,hide,7).scaling.set(1.16,.65,1.65);
+      b.ball(0,-length*.9,-.08,radius*2,paw,7).scaling.set(1.16,.65,1.65);
       for (let toe = -1; toe <= 1; toe++) {
         const offset = toe*radius*.62, reach = (talon ? 1.55 : 1.04)-Math.abs(toe)*.21;
         b.taper([[offset,-length*.92,-radius*.94,radius*.3],
@@ -212,7 +259,167 @@
     });
   }
 
+  function buildHimmapanCat(root, lion) {
+    const b = ghostBuilder(root), p = himmapanPalette;
+    const hide = lion ? guardianHide.lion : guardianHide.tiger;
+    const accent = lion ? guardianHide.scarlet : p.aqua;
+    const body = b.joint(lion ? "royal lion body" : "water tiger body", root, 0, 1.04, 0);
+    b.ball(0,.15,.08,1.1,hide,12).scaling.set(lion?.87:.74,.85,lion?1.62:1.85);
+    b.ball(0,.20,-.59,1.03,hide,10).scaling.set(lion?1.06:.84,lion?1.13:.93,.86);
+    b.ball(0,.08,.66,.95,hide,10).scaling.set(.84,.87,.90);
+    if(lion)b.ball(0,.58,-.64,1.30,p.cream,11).scaling.set(.88,1.09,.80);
+    for (const side of [-1, 1]) {
+      b.taper([[side*.42,.65,-.33,.048],[side*.49,.42,-.76,.061],[side*.37,.12,-1.01,.052],[0,-.05,-1.06,.068]],p.gold);
+      b.plume(side*.39,.37,-.72,.57,.21,side*.19,p.gold).rotation.set(.2,side*.64,side*.55);
+      if(lion){
+        for(let i=0;i<7;i++){
+          const angle=.32+i*.43,x=Math.sin(angle)*.46,y=.52+Math.cos(angle)*.53;
+          b.plume(side*x,y,-.62,.74-i*.033,.26,side*.25,i%3?p.cream:p.gold)
+            .rotation.set(-.63+i*.19,side*(.53+i*.08),side*.42);
+        }
+      }else{
+        for(let i=0;i<4;i++){
+          b.plume(side*(.29-i*.059),.56-i*.026,-.27+i*.23,.62-i*.047,.22,side*.24,accent)
+            .rotation.set(-.47,side*.47,side*.32);
+        }
+      }
+    }
+    himmapanJewel(b,0,.09,-1.10,.23,lion?guardianHide.ruby:p.jade);
+    b.flush(body,"armoured feline torso");
+    const legs = ornateHimmapanLegs(b,body,hide,.39,.65,1.04,.19,false,lion?accent:hide);
+    const head = b.joint("feline head",body,0,.61,-.84);
+    b.ball(0,.07,-.15,.84,hide,12).scaling.set(lion?1.04:.88,lion?.98:.82,.95);
+    b.ball(0,-.21,-.52,.43,gm.mouth,9).scaling.set(1.11,.82,.81);
+    b.ball(0,-.066,-.711,.18,lion?accent:p.claw,8).scaling.set(1.25,.65,.70);
+    for (const side of [-1, 1]) {
+      b.ball(side*.155,-.113,-.58,.33,p.cream,9).scaling.set(1,.68,lion?1.02:1.32);
+      b.taper([[side*.21,-.17,-.67,.055],[side*.19,-.30,-.70,.036],[side*.16,lion?-.36:-.44,-.66,.006]],p.cream,7);
+      b.ball(side*.24,.12,-.48,.142,p.claw,8).scaling.set(1,.58,.75);
+      b.ball(side*.25,.124,-.537,.086,lion?gm.eyeAmber:guardianHide.waterEye,8).scaling.z=.6;
+      b.ball(side*.34,.40,-.006,.27,hide,8).scaling.set(.81,1,.58);
+      b.plume(side*.12,.35,-.43,lion?.55:.32,.23,side*.23,p.gold).rotation.set(lion?-.72:-.4,side*.35,0);
+      for (let i=0;i<5;i++){
+        const y=.46-i*.16;
+        b.plume(side*(.18+Math.sin(i*.73)*.21),y,-.05,.61+(lion?.19:0)-i*.035,.32,side*.22,
+          lion?(i%2?p.cream:p.gold):(i<2?p.aqua:p.pearl)).rotation.set(-.48+i*.27,side*.65,side*.35);
+      }
+    }
+    b.flush(head,"feline muzzle fangs and crown");
+    const jaw=b.joint("feline jaw",head,0,-.25,-.34);
+    b.ball(0,-.06,-.23,.46,p.cream,8).scaling.set(1,.45,1.15);
+    b.flush(jaw,"feline lower jaw");
+    const tail=b.joint("feline tail",body,0,.23,1);
+    b.taper([[0,0,0,.115],[0,.13,.39,.095],[.07,.48,.62,.081],[.17,.8,.70,.066],[.19,1,.60,.046]],hide,10);
+    if(lion){
+      for(let i=-1;i<=1;i++) b.plume(.18,.84,.63,.64-Math.abs(i)*.11,.31,i*.23,i===0?p.gold:accent)
+        .rotation.set(-1.31,.12+i*.26,0);
+    }else{
+      for(let i=0;i<3;i++) b.plume(.18,.86,.61,.71-i*.11,.29,.36-i*.22,i===1?p.gold:accent)
+        .rotation.set(-1.45,.26-i*.22,.47-i*.36);
+    }
+    b.flush(tail,"crowned feline tail");
+    return k => {
+      const strike = himmapanStrike(k);
+      const second = k.g.specialStage === 2;
+      const leapProgress = !lion && k.wind && second ? Math.min(1, (k.now - (k.g.stageAt ?? k.now)) / 750) : 0;
+      const leap = Math.sin(Math.PI * leapProgress);
+      const crouch = k.wind * (lion ? .11 : .28);
+      body.position.y = 1.04 + Math.sin(k.t*5)*.035 - crouch + leap*.96;
+      body.position.z = -(k.g.leapDistance || 0)*leapProgress;
+      body.rotation.x = -crouch*.5 + leap*.25 - strike*.27;
+      body.rotation.y = lion ? (second ? -1 : 1) * (k.wind*.23 - strike*.52) : 0;
+      head.rotation.x = k.wind*.18-strike*.32;
+      jaw.rotation.x = -Math.max(strike, k.wind*.7)*.38;
+      tail.rotation.y = Math.sin(k.t*(3+k.move*2))*.25+k.wind*.22;
+      poseHimmapanLegs(legs,k,strike*.37+leap*.83);
+    };
+  }
+
   const GHOST_KINDS = {
+    phayakNathi: root => buildHimmapanCat(root, false),
+    kraisorn: root => buildHimmapanCat(root, true),
+    hatsadiling(root) {
+      const b = ghostBuilder(root), p = himmapanPalette;
+      const body = b.joint("hatsadiling body",root,0,1.25,0);
+      b.ball(0,.12,.03,1.06,p.cream,12).scaling.set(.83,1.0,1.36);
+      b.taper([[0,.25,-.37,.37],[0,.57,-.42,.30],[0,.89,-.50,.24]],p.cream,11);
+      for (const side of [-1,1]) {
+        b.taper([[side*.37,.43,-.32,.042],[side*.31,.29,-.55,.043],[0,.16,-.73,.063]],p.gold);
+        for (let i=0;i<4;i++) b.plume(side*.27,.32-i*.14,-.36+i*.08,.54,.25,side*.12,i%2?p.cream:p.gold)
+          .rotation.set(.62,side*.54,side*.20);
+      }
+      himmapanJewel(b,0,.17,-.72,.25);
+      b.flush(body,"hatsadiling feathered breast");
+      const {head,trunk}=himmapanElephantHead(b,body,p.ivory,p.cream);
+      head.position.set(0,.91,-.47);head.scaling.setAll(.86);
+      const wings=himmapanFeatherWings(b,body,p.cream,p.gold,1.5);
+      const tail=b.joint("hatsadiling tail",body,0,.13,.61);
+      for(let i=-2;i<=2;i++) b.plume(i*.07,0,0,1.58-Math.abs(i)*.15,.31,i*.22,i%2?p.gold:p.cream).rotation.set(-.3,i*.16,0);
+      b.flush(tail,"hatsadiling trailing feathers");
+      const legs=[-1,1].map(side=>{
+        const leg=b.joint("hatsadiling talon",body,side*.26,-.25,-.04);
+        b.taper([[0,0,0,.128],[0,-.34,.12,.075],[0,-.68,0,.061],[0,-.91,-.13,.078]],p.gold);
+        for(let toe=-1;toe<=1;toe++) b.taper([[toe*.066,-.9,-.12,.048],[toe*.109,-.94,-.29,.035],[toe*.13,-.98,-.39,.007]],p.claw,7);
+        b.flush(leg,"hatsadiling armoured talon");
+        return leg;
+      });
+      return k=>{
+        const strike=himmapanStrike(k);
+        body.position.y=1.25+Math.sin(k.t*4)*.039+k.wind*.52-strike*.11;
+        head.rotation.x=-k.wind*.25+strike*.24;
+        trunk.rotation.x=Math.sin(k.t*2.7)*.11-k.wind*.25;
+        tail.rotation.x=-k.wind*.24+strike*.13;
+        legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(k.walk+i*Math.PI)*k.move*.48-k.wind*.28;});
+        wings.forEach((wing,i)=>{
+          const side=i?1:-1;
+          wing.rotation.y=side*(.14+k.wind*.38);
+          wing.rotation.z=side*(.13+k.wind*.82+Math.sin(k.t*(k.wind?11:3))*(k.wind?.44:.13)-strike*.16);
+        });
+      };
+    },
+    kilen(root) {
+      const b=ghostBuilder(root),p=himmapanPalette,hide=guardianHide.kilen;
+      const body=b.joint("kilen body",root,0,1.24,0);
+      b.ball(0,.13,0,1.08,hide,12).scaling.set(.69,.78,1.56);
+      b.taper([[0,.14,-.52,.39],[0,.47,-.63,.31],[0,.87,-.76,.27]],hide,12);
+      for(const side of [-1,1]){
+        b.taper([[side*.26,.65,-.66,.039],[side*.35,.42,-.75,.054],[side*.22,.24,-.85,.052],[0,.18,-.94,.061]],p.gold);
+        b.plume(side*.30,.38,-.67,.70,.18,side*.22,p.gold).rotation.set(-.37,side*.68,side*.32);
+      }
+      for(let i=0;i<5;i++) b.plume(0,.56,.03+i*.14,.39,.16,0,p.gold).rotation.set(-.77,0,0);
+      himmapanJewel(b,0,.19,-.94,.24);
+      b.flush(body,"kilen scaled body and filigree");
+      const head=b.joint("kilen antlered head",body,0,.86,-.74);
+      b.ball(0,.04,-.1,.65,hide,10).scaling.set(.88,1,1.18);
+      b.taper([[0,-.04,-.2,.21],[0,-.12,-.46,.18],[0,-.02,-.64,.12]],hide,9);
+      b.ball(0,.02,-.63,.22,p.gold,8).scaling.set(1.1,.57,.64);
+      for(const side of [-1,1]){
+        b.ball(side*.21,.15,-.31,.073,gm.eyeAmber,7);
+        b.taper([[side*.13,.22,-.08,.094],[side*.25,.42,.08,.072],[side*.37,.62,.26,.054],[side*.49,.76,.45,.009]],p.gold);
+        b.taper([[side*.3,.50,.15,.057],[side*.48,.55,.17,.039],[side*.62,.66,.23,.008]],p.bronze);
+        b.taper([[side*.13,-.13,-.51,.045],[side*.26,-.22,-.4,.032],[side*.4,-.13,-.19,.008]],p.gold,6);
+      }
+      b.flush(head,"kilen horns and dragon muzzle");
+      const legs=[-1,1].flatMap(side=>[-1,1].map(end=>{
+        const leg=b.joint("kilen leg",body,side*.28,0,end*.61);
+        b.taper([[0,0,0,.19],[0,-.48,.07,.13],[0,-.88,-.04,.088],[0,-1.1,-.075,.11]],hide);
+        b.cyl(0,-.91,-.048,.16,.205,.22,p.gold);
+        for(const toe of [-1,1]) b.cyl(toe*.063,-1.13,-.09,.21,.108,.13,p.bronze,7);
+        b.flush(leg,"kilen split hooves");return leg;
+      }));
+      const tail=b.joint("kilen tail",body,0,.16,.79);
+      b.taper([[0,0,0,.098],[0,.16,.29,.092],[0,.53,.56,.069],[0,.91,.49,.052]],hide);
+      for(let i=-1;i<=1;i++) b.plume(0,.77,.50,.65,.27,i*.21,i?p.bronze:p.gold).rotation.set(-1.10,i*.17,0);
+      b.flush(tail,"kilen flame tail");
+      return k=>{
+        const stamp=k.wind?Math.sin(Math.PI*Math.min(1,(k.now-(k.g.stageAt??k.now))/720)):himmapanStrike(k);
+        body.position.y=1.24+Math.sin(k.t*3.9)*.04+stamp*.12;
+        head.rotation.x=-stamp*.31;
+        tail.rotation.y=Math.sin(k.t*2.9)*.22;
+        poseHimmapanLegs(legs,k);
+        legs[k.g.specialStage===2?2:0].rotation.x-=stamp*.76;
+      };
+    },
     matchaNaga(root) {
       const b = ghostBuilder(root), jade = gm.sash3[2];
       const body = b.joint("naga body", root, 0, .88, 0);

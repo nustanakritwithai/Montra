@@ -72,6 +72,7 @@ try{
   const himmapanIds = [
     "himmapan_matcha_naga", "himmapan_stone_yaksha", "himmapan_kochasri", "himmapan_hemaraj",
     "himmapan_durong_paksin", "himmapan_kunchon_wari", "himmapan_karavek",
+    "himmapan_phayak_nathi", "himmapan_kraisorn", "himmapan_kilen",
   ];
   for (const {state} of travelers) {
     for (const id of himmapanIds) assert.ok(state.monsters.get(id)?.specialRange>0,id);
@@ -83,7 +84,27 @@ try{
   for(const room of travelers)room.send("summon",{});
   await until(()=>travelers.every(r=>r.state.summons.size===10),"ten summons across the occupied world");
   await closeAll();
-  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and seven Himmapan spawns");
+  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and ten Himmapan spawns");
+
+  const tigerId="himmapan_phayak_nathi";
+  const marsh=await join(await seed("drowned_marsh",-73,-56.4));
+  const tiger=()=>marsh.state.monsters.get(tigerId);
+  const strikes=[];
+  marsh.onMessage("monster_hit",event=>{if(event.attackerId===tigerId)strikes.push(event);});
+  await until(()=>tiger()?.specialStage===1,"tiger ripple");
+  assert.equal(tiger().aiState,"windup");
+  assert.equal(strikes.length,0);
+  await until(()=>tiger()?.specialStage===2,"tiger landing warning");
+  const landing={x:tiger().specialOriginX,z:tiger().specialOriginZ};
+  assert.equal(tiger().aiState,"windup");
+  assert.ok(Math.hypot(landing.x-tiger().x,landing.z-tiger().z)>2);
+  assert.equal(strikes.length,0);
+  await until(()=>tiger()?.aiState==="special_recovery"&&strikes.length>0,"tiger landing and damage");
+  assert.ok(Math.hypot(landing.x-tiger().x,landing.z-tiger().z)<.01);
+  assert.equal(strikes.length,1);
+  assert.equal(strikes[0].targetId,marsh.sessionId);
+  await leave(marsh);
+  console.log("PASS networked tiger ripple, landing warning, leap and damage");
 
   const hunters=await fillRoom(await Promise.all(Array.from({length:10},(_,i)=>seed("forbidden_forest",-33+(i%3)*.25,-17+Math.floor(i/3)*.25))));
   const targetId="forest_west_1",monster=()=>hunters[0].state.monsters.get(targetId);

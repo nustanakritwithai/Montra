@@ -1,8 +1,8 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, type HimmapanAttack } from "./WorldAtlas.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, type HimmapanAttack, type HimmapanPhase } from "./WorldAtlas.js";
 import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
-import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
+import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isSafeWorldPoint, isWorldSegmentClear } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
 import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
 import { distance3d } from "./HeightRules.js";
@@ -26,8 +26,8 @@ const FOREST_TRACE_LIMIT=1024;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
 type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; nav:MonsterRRTNavigator};
 type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
-function inSpecialArea(monster:Monster, player:Player, attack:HimmapanAttack):boolean {
-  const dx=player.x-monster.x, dz=player.z-monster.z;
+function inSpecialArea(monster:Monster, origin:{x:number;z:number}, player:Player, attack:HimmapanPhase):boolean {
+  const dx=player.x-origin.x, dz=player.z-origin.z;
   const distance=Math.hypot(dx,dz);
   const sin=Math.sin(monster.facing), cos=Math.cos(monster.facing);
   const forward=-dx*sin-dz*cos;
@@ -35,6 +35,34 @@ function inSpecialArea(monster:Monster, player:Player, attack:HimmapanAttack):bo
   if (!attack.halfWidth) return distance>=(attack.innerRange??0) && distance<=attack.range;
   const lateral=dx*cos-dz*sin;
   return forward>=0 && forward<=attack.range && Math.abs(lateral)<=attack.halfWidth;
+}
+function canPlaceSpecial(life:Life, to:{x:number;y:number;z:number}):boolean {
+  const {actor,zone:{map,obstacles}}=life;
+  return !isRestArea(map.id,to) && isSafeWorldPoint(map,to,MONSTER_NAV.radius) &&
+    isMonsterSegmentClear(actor,to,obstacles,MONSTER_NAV.radius,map.bounds) &&
+    (!map.terrain || isWorldSegmentClear(map.id,actor,to));
+}
+function startSpecialPhase(life:Life, phase:HimmapanPhase, stage:number, now:number):void {
+  const m=life.actor;
+  m.specialRange=phase.range;m.specialHalfWidth=phase.halfWidth;
+  m.specialInnerRange=phase.innerRange??0;m.specialHalfAngle=phase.halfAngle??0;
+  m.specialStage=stage;
+  m.specialOriginX=m.x;m.specialOriginZ=m.z;
+  const forward=phase.forward??0, lateral=phase.lateral??0;
+  if(forward || lateral){
+    const sin=Math.sin(m.facing),cos=Math.cos(m.facing);
+    for(const scale of [1,.75,.5,.25]){
+      const x=m.x+(lateral*cos-forward*sin)*scale,z=m.z-(lateral*sin+forward*cos)*scale;
+      if(!canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))continue;
+      m.specialOriginX=x;m.specialOriginZ=z;break;
+    }
+  }
+  m.aiState="windup";
+  life.windupUntil=now+phase.windupMs;
+}
+function cancelSpecial(life:Life):void {
+  life.windupUntil=0;
+  life.actor.specialStage=0;
 }
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
@@ -114,7 +142,7 @@ export class ForestEncounters {
     if(life.profile.tier==="elite" || life.profile.tier==="boss")return "immune";
     if(now<life.interruptResistUntil)return "resisted";
     life.interruptUntil=now+durationMs;life.interruptResistUntil=now+immunityMs;
-    if(life.special)life.windupUntil=0;
+    if(life.special)cancelSpecial(life);
     life.nav.clear();monster.aiState="stagger";
     return "applied";
   }
@@ -142,7 +170,7 @@ export class ForestEncounters {
       if(player.alive && player.mapId===m.mapId && !blocked?.has(playerId) && !isRestArea(player.mapId,player) && planarDistance(player,m)<=MONSTER_CONFIG.populationRadius) nearby++;
     }
     m.alive=false;m.hp=0;m.targetId="";m.aiState="dead";
-    life.windupUntil=0;life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
+    cancelSpecial(life);life.nextChargeAt=0;life.interruptUntil=0;life.interruptResistUntil=0;life.tauntOwner="";life.tauntUntil=0;life.tauntResistUntil=0;
     // A siege can have more hunters than a world room; use the same minimum delay.
     const boss=id===TITAN_BOSS.id?TITAN_BOSS:life.zone.map.boss??life.zone.map.guardian;
     life.respawnAt=now+(boss?.id===id?boss.respawnMs:monsterRespawnDelay(Math.min(nearby,WORLD_ROOM_CAPACITY)));life.returning=false;life.nav.clear();
@@ -169,7 +197,7 @@ export class ForestEncounters {
     if(regions.size!==this.activeRegions.size || [...regions].some(id=>!this.activeRegions.has(id))){
       // Withdraw first, then add. Room-owned life clocks survive the last player leaving.
       for(const [id,life] of this.lives)if(this.activeRegions.has(life.zone.map.id) && !regions.has(life.zone.map.id)){
-        life.actor.targetId="";life.windupUntil=0;life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
+        life.actor.targetId="";cancelSpecial(life);life.tauntOwner="";life.tauntUntil=0;life.nav.clear();this.monsters.delete(id);
         if(this.traceEnabled)this.traceEvent({kind:"withdrawn",now,monsterId:id,mapId:life.actor.mapId,from:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});
       }
       for(const [id,life] of this.lives)if(regions.has(life.zone.map.id) && !this.activeRegions.has(life.zone.map.id)){
@@ -190,24 +218,40 @@ export class ForestEncounters {
       }
       if(!occupied.has(m.mapId))continue;
       const special=life.special;
-      if(isBound?.(id)){if(special)life.windupUntil=0;m.aiState="stagger";continue;}
+      if(isBound?.(id)){if(special)cancelSpecial(life);m.aiState="stagger";continue;}
       if(now<life.interruptUntil){m.aiState="stagger";continue;}
       const eligible=(pid:string,p:Player|undefined):p is Player=>Boolean(p&&p.alive&&p.mapId===m.mapId&&
         !blocked.has(pid)&&(p.boatId || onMapGround(p))&&!isRestArea(p.mapId,p) && (!canDetect || canDetect(pid,p,m)));
-      const clear=(target:Player)=>isMonsterSegmentClear(m,target,obstacles,MONSTER_NAV.radius,map.bounds) &&
-        (!map.terrain || isWorldSegmentClear(map.id,m,target));
+      const clear=(target:Player,origin:{x:number;y:number;z:number}=m)=>
+        isMonsterSegmentClear(origin,target,obstacles,MONSTER_NAV.radius,map.bounds) &&
+        (!map.terrain || isWorldSegmentClear(map.id,origin,target));
       const titan=id===TITAN_BOSS.id;
       const boss=titan?TITAN_BOSS:map.boss??map.guardian;
       if (life.windupUntil > 0) {
         if (special) {
           if (now < life.windupUntil) continue;
+          const stage=m.specialStage;
+          const phase=special.followups?.[stage-2]??special;
+          const x=m.specialOriginX,z=m.specialOriginZ;
+          const origin=stage?{x,y:groundAt(map.id,x,z),z}:m;
+          const validOrigin=!(phase.forward || phase.lateral) || canPlaceSpecial(life,origin);
+          const next=stage?special.followups?.[stage-1]:undefined;
+          const force=phase.force??1.25;
           life.windupUntil=0;life.lastAttack=now;m.aiState="special_recovery";
-          for (const [pid, player] of players) {
-            if (eligible(pid,player) && inSpecialArea(m,player,special) && clear(player)) {
-              if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:pid,force:1.25,to:{x:m.x,y:m.y,z:m.z}});
-              hit(pid,m,1.25,now);
+          if(validOrigin && phase.leap){
+            const from={x:m.x,y:m.y,z:m.z};
+            m.x=origin.x;m.y=origin.y;m.z=origin.z;life.nav.clear();
+            if(this.traceEnabled)this.traceEvent({kind:"move",now,monsterId:id,mapId:m.mapId,from,to:origin});
+            walk?.(m,from);
+          }
+          if(validOrigin && !phase.cueOnly)for(const [pid,player] of players){
+            if(!m.alive || m.aiState!=="special_recovery")break;
+            if(eligible(pid,player) && inSpecialArea(m,origin,player,phase) && clear(player,origin)){
+              if(this.traceEnabled)this.traceEvent({kind:"attack_requested",now,monsterId:id,mapId:m.mapId,targetId:pid,force,to:{x:origin.x,y:origin.y,z:origin.z}});
+              hit(pid,m,force,now);
             }
           }
+          if(next && m.alive && m.aiState==="special_recovery")startSpecialPhase(life,next,stage+1,now);
           continue;
         }
         const target = players.get(m.targetId);
@@ -227,7 +271,10 @@ export class ForestEncounters {
         m.aiState="patrol";
         continue;
       }
-      if(special && m.aiState==="special_recovery" && now-life.lastAttack<650)continue;
+      if(special && m.aiState==="special_recovery"){
+        if(now-life.lastAttack<(special.recoveryMs??650))continue;
+        m.specialStage=0;
+      }
       if(planarDistance(m,life)>=9)life.returning=true;
       let target=m.targetId?players.get(m.targetId):undefined;
       if(!eligible(m.targetId,target)||planarDistance(m,target)>11){target=undefined;m.targetId="";}
@@ -241,9 +288,9 @@ export class ForestEncounters {
       if(life.returning){m.targetId="";m.aiState="return";destination=life;speed=2.4;
         if(planarDistance(m,life)<.2){life.returning=false;m.hp=m.maxHp;}}
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
-        if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 && planarDistance(m,target)<=special.range && clear(target)){
-          m.aiState="windup";
-          life.windupUntil=now+special.windupMs;
+        if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 &&
+          planarDistance(m,target)<=(special.triggerRange??special.range) && clear(target)){
+          startSpecialPhase(life,special,special.followups?1:0,now);
           life.nextChargeAt=now+8000;
           continue;
         }

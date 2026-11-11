@@ -85,6 +85,9 @@ export const Monster = schema({
   specialHalfWidth: t.number().default(0),
   specialInnerRange: t.number().default(0),
   specialHalfAngle: t.number().default(0),
+  specialStage: t.number().default(0),
+  specialOriginX: t.number().default(0),
+  specialOriginZ: t.number().default(0),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;

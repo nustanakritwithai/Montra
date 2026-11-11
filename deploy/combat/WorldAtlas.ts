@@ -207,7 +207,13 @@ export const FRONTIER_SPAWNS:readonly AtlasSpawn[]=[
     ...frontierGroup(CASTLE_ID,2,"วิญญาณไพร่แนวล้อม",[[-235,151,67],[252,150,68],[-22,-271,72],[23,-269,73]]),
   ] : []),
 ];
-export type HimmapanAttack = { range:number; halfWidth:number; windupMs:number; innerRange?:number; halfAngle?:number };
+export type HimmapanPhase = {
+  range:number; halfWidth:number; windupMs:number; innerRange?:number; halfAngle?:number;
+  forward?:number; lateral?:number; cueOnly?:boolean; leap?:boolean; force?:number;
+};
+export type HimmapanAttack = HimmapanPhase & {
+  triggerRange?:number; followups?:readonly HimmapanPhase[]; recoveryMs?:number;
+};
 export const HIMMAPAN_SPAWNS = ([
   { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
     theme:"grove", special:{ range:4, halfWidth:1.05, windupMs:1100 } },
@@ -225,5 +231,17 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"grove", special:{ range:3.45, halfWidth:0, innerRange:1.2, windupMs:1350 } },
   { id:"himmapan_karavek", name:"นกการเวก", mapId:"hex_ridge", x:-26, z:-29, level:45, tier:"normal",
     theme:"spirit", special:{ range:3.95, halfWidth:0, windupMs:1200 } },
+  { id:"himmapan_phayak_nathi", name:"พยัคฆนที", mapId:"drowned_marsh", x:-73, z:-53, level:22, tier:"normal",
+    theme:"hunter", special:{ range:1.9, halfWidth:0, windupMs:650, triggerRange:5, cueOnly:true,
+      followups:[{range:1.85,halfWidth:0,windupMs:750,forward:3.4,leap:true}] } },
+  { id:"himmapan_hatsadiling", name:"นกหัสดีลิงค์", mapId:RIDGE_PASS, x:64, z:-40, level:57, tier:"normal",
+    theme:"hunter", special:{ range:5.2, halfWidth:0, halfAngle:Math.PI/3, windupMs:1250, recoveryMs:1700 } },
+  { id:"himmapan_kraisorn", name:"ไกรสรราชสีห์", mapId:"asura_peak", x:-84, z:-60, level:80, tier:"elite",
+    theme:"guard", special:{ range:3.5, halfWidth:0, halfAngle:Math.PI/4, windupMs:950, force:.9, recoveryMs:1750,
+      followups:[{range:4.4,halfWidth:0,halfAngle:Math.PI/3,windupMs:800,force:1.1}] } },
+  { id:"himmapan_kilen", name:"กิเลน", mapId:"bamboo_frontier", x:-63, z:-24, level:33, tier:"normal",
+    theme:"spirit", special:{ range:1.4, halfWidth:0, windupMs:950, triggerRange:5.2, forward:1.6, force:1,
+      followups:[{range:1.4,halfWidth:0,windupMs:850,forward:3.25,lateral:1.2,force:1},
+        {range:1.55,halfWidth:0,windupMs:850,forward:4.9,lateral:-1,force:1.15}] } },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);
 export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...HIMMAPAN_SPAWNS].map(s=>s.id));

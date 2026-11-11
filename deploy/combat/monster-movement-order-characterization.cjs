@@ -122,6 +122,28 @@ test('real forest schedule applies Firm Guard once when an attack callback is de
  }
 });
 
+test('a forest strike damages each eligible target once on the same tick',async()=>{
+ const {MyRoom,Player}=await load(),room=new MyRoom(),mapId='asura_peak',events=[];
+ room.forest.initialize();
+ const add=(id,x,z)=>{const p=new Player({x,y:0,z,mapId,hp:100,maxHp:100,level:80,alive:true});room.state.players.set(id,p);return p;};
+ const a=add('a',-84,-62),b=add('b',-83.6,-62),outside=add('outside',-84,-57);
+ room.priestProtected=()=>false;room.endBladeCloak=()=>{};room.masteryPower=()=>0;room.directGuardDamage=()=>7;
+ room.broadcast=(type,data)=>events.push({type,data});
+ const tick=now=>{
+  room.simulatedMs=now;
+  room.forest.update(now,0,room.state.players,new Set(),(id,m,force,at)=>{
+   if(m.id!=='himmapan_kraisorn')return;
+   room.resolveForestMonsterHit(id,m,force,at);
+   room.resolveForestMonsterHit(id,m,force,at);
+  },()=>{});
+ };
+ tick(100);tick(1050);
+ assert.deepEqual([a.hp,b.hp,outside.hp],[93,93,100]);
+ assert.deepEqual(events.filter(e=>e.type==='monster_hit').map(e=>e.data.targetId),['a','b']);
+ tick(1850);
+ assert.deepEqual([a.hp,b.hp,outside.hp],[86,86,100]);
+});
+
 test('Ash Rice resolves a real walk before a different forest monster can deliver its queued hit',async()=>{
  const {Player}=await load();
  const staged=file=>import(pathToFileURL(path.join(rooms,file)).href);

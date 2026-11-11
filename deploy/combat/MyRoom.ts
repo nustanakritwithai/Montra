@@ -304,7 +304,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterHitSequence = 0;
   private pendingDefaultMonsterHits = new WeakSet<DefaultMonsterHit>();
   private pendingMonsterDefeats = new WeakSet<MonsterDefeat>();
-  private lastForestHitAt = new WeakMap<Monster,number>();
+  private forestStrikeHits = new WeakMap<Monster,{at:number;targets:Set<string>}>();
   private prototypeCounters = new Map<string,CounterCursor>();
   private prototypeOpportunities = new Map<string,CounterOpportunity>();
   private prototypeDebuffs = new Map<string,ChaiyaDebuff>();
@@ -7503,13 +7503,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private resolveForestMonsterHit(id:string,monster:Monster,force:number,attackAt:number):void {
-    // ForestEncounters schedules at most one attack per monster per tick.
-    // Commit that occurrence before guard, counters, interception or damage.
+    // A single strike can overlap several players. Commit each target once
+    // before guard, counters, interception or damage.
     if(attackAt!==this.simulatedMs || this.state.monsters.get(monster.id)!==monster ||
-      (this.lastForestHitAt.get(monster)??-Infinity)>=attackAt)return;
-    this.lastForestHitAt.set(monster,attackAt);
+      !monster.alive)return;
+    let strike=this.forestStrikeHits.get(monster);
+    if(strike?.at!==attackAt){
+      strike={at:attackAt,targets:new Set()};
+      this.forestStrikeHits.set(monster,strike);
+    }
+    if(strike.targets.has(id))return;
+    strike.targets.add(id);
     const player=this.state.players.get(id);
-    if(!monster.alive || !player?.alive || this.priestProtected(id) || !this.sameCombatMap(id,monster.id))return;
+    if(!player?.alive || this.priestProtected(id) || !this.sameCombatMap(id,monster.id))return;
     const profile=this.forest.profile(monster.id);if(!profile)return;
     const rawDamage=this.prototypeMonsterDamage(monster,calculateDamage(profile.attack*force,
       this.masteryPower(player,"pve","def",equipmentRatings(this.inventories.get(id)).guard),player.level));

@@ -158,6 +158,53 @@ test('repeated create/map-exit cycles release owned meshes and MultiMaterials wi
  }finally{f.dispose();}
 });
 
+test('new Himmapan rigs follow the replicated strike stages, geometry and counter window',()=>{
+ const f=fixture();try{
+  for(const [id,mapId,tier,part,ranges,counter] of [
+   ['himmapan_phayak_nathi','drowned_marsh','normal','crowned feline tail',[1.9,1.85],false],
+   ['himmapan_hatsadiling','twin_neck_pass','normal','hatsadiling feathered breast',[5.2],true],
+   ['himmapan_kraisorn','asura_peak','elite','feline muzzle fangs and crown',[3.5,4.4],true],
+   ['himmapan_kilen','bamboo_frontier','normal','kilen split hooves',[1.4,1.4,1.55],false],
+  ]){
+   const m=state({id,mapId,displayName:id,level:50},{tier,x:10,y:2,z:20,facing:0,specialHalfWidth:0});
+   const mesh=add(f,m),g=mesh.metadata.ghost;
+   assert(mesh.getChildMeshes().some(child=>child.name===part));
+   const isTiger=id==='himmapan_phayak_nathi',isLion=tier==='elite';
+   let warning;
+   const colors=new Set();
+   for(const [i,range] of ranges.entries()){
+    const stage=ranges.length===1?0:i+1;
+    Object.assign(m,{aiState:'windup',specialRange:range,specialStage:stage,
+      specialHalfAngle:counter?(isLion&&i===0?Math.PI/4:Math.PI/3):0,
+      specialOriginX:10,specialOriginZ:20-i*2});
+    f.at(1400+i*1000);f.sync();
+    const current=mesh.metadata.specialWarning;
+    assert(current.isEnabled());
+    if(warning)assert(warning.isDisposed(),'each stage replaces the previous outline');
+    warning=current;
+    colors.add(current.color.toHexString());
+    const centerZ=stage?m.specialOriginZ:m.z;
+    const positions=current.getVerticesData(f.B.VertexBuffer.PositionKind);
+    close(Math.min(...positions.filter((_,j)=>j%3===2)),centerZ-range,'ground marker starts at the replicated center');
+    assert.equal(mesh.metadata.specialWarningFill?.isEnabled()??false,!(isTiger&&i===0));
+    g.spawnAt=0;
+    f.at(1730+i*1000);f.ctx.animateGhosts(.016,1730+i*1000);
+    assert(g.rig.getChildMeshes().every(child=>child.getWorldMatrix().m.every(Number.isFinite)));
+   }
+   assert.equal(colors.size,ranges.length,'every phase has a distinct color');
+   m.aiState='special_recovery';f.sync();
+   const opening=mesh.metadata.specialCounter;
+   assert.equal(opening?.isEnabled()??false,counter);
+   assert.equal(warning.isEnabled(),false);
+   m.aiState='chase';f.sync();
+   if(opening)assert.equal(opening.isEnabled(),false);
+   f.ctx.activeMapId='ritual_village';f.sync();
+   assert(warning.isDisposed());
+   if(opening)assert(opening.isDisposed());
+  }
+ }finally{f.dispose();}
+});
+
 test('production smoke color variants share the painted opacity texture without empty clone textures',()=>{
  const f=fixture();try{
   const materials=f.run('[gm.smoke,gm.smokeWhite,gm.moonMist]'),texture=materials[0].opacityTexture;

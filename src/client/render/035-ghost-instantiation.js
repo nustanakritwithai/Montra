@@ -27,6 +27,18 @@
     ["himmapan_durong_paksin", { kind: "durongPaksin", height: 3.0, width: 2.7, depth: 3.65, warningColor: "#ffce5f", warningText: "โผพุ่ง · หลบด้านข้าง", warningFill: true }],
     ["himmapan_kunchon_wari", { kind: "kunchonWari", height: 2.8, width: 2.3, depth: 3.7, warningColor: "#78e2ff", warningText: "ตวัดหาง · ถอยออกจากวงน้ำ", innerWarningText: "ตวัดหาง · เข้ากลางวงหรือออกนอกขอบน้ำ", warningFill: true, impactTint: "cyan" }],
     ["himmapan_karavek", { kind: "karavek", height: 2.55, width: 2.5, depth: 2.9, warningColor: "#ffd792", warningText: "คลื่นเสียง · ถอยออกจากวงนอกสุด", warningFill: true, warningBands: [.33, .66], impactTint: "gold" }],
+    ["himmapan_phayak_nathi", { kind: "phayakNathi", height: 2.5, width: 1.8, depth: 3.25, warningFill: true, leap: true,
+      stages: [{ color: "#6fe9ff", text: "ระลอกน้ำ · เตรียมหลบจุดลง", bands: [.4,.7], fill: false },
+        { color: "#ff6853", text: "กระโจนตะปบ · ออกจากวงลงพื้น", impact: "red" }] }],
+    ["himmapan_hatsadiling", { kind: "hatsadiling", height: 3.25, width: 2.65, depth: 3.4, warningFill: true,
+      warningColor: "#a8dbff", warningText: "ลมรูปพัด · หลบออกด้านข้าง", counterText: "ลงเกาะแล้ว · สวนได้" }],
+    ["himmapan_kraisorn", { kind: "kraisorn", height: 2.55, width: 1.9, depth: 3.3, warningFill: true,
+      stages: [{ color: "#ffb950", text: "ตะปบครั้งแรก · หลบแนวหน้า" },
+        { color: "#ff5f56", text: "ตะปบครั้งที่สอง · หลบออกจากรูปพัด" }], counterText: "จบสองจังหวะแล้ว · สวนได้" }],
+    ["himmapan_kilen", { kind: "kilen", height: 2.95, width: 1.55, depth: 3.15, warningFill: true,
+      stages: [{ color: "#ffd365", text: "ตราที่ 1 · ออกจากวง", seal: 1, impact: "gold" },
+        { color: "#dc9eff", text: "ตราที่ 2 · ออกจากวง", seal: 2, impact: "violet" },
+        { color: "#ff6966", text: "ตราที่ 3 · ออกจากวง", seal: 3, impact: "red" }] }],
   ]);
   function monsterName(monster, id) {
     if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
@@ -127,6 +139,20 @@
   }
   function updateHimmapanWarning(mesh, monster) {
     const metadata = mesh.metadata, design = metadata.ghost.design;
+    const counter = monster.alive && monster.aiState === "special_recovery" && design.counterText;
+    if (counter && !metadata.specialCounter) {
+      const ring = B.MeshBuilder.CreateTorus("himmapan counter opening", { diameter: 2.15, thickness: .055, tessellation: 36 }, scene);
+      const paint = new B.StandardMaterial("himmapan counter opening", scene);
+      paint.emissiveColor = B.Color3.FromHexString("#91e68b");
+      paint.disableLighting = true;
+      ring.material = paint; ring.isPickable = false; ring.parent = mesh;
+      ring.position.y = -metadata.ghost.tall / 2 + .12;
+      ring.setEnabled(false); metadata.specialCounter = ring;
+    }
+    if (counter && !metadata.specialCounter.isEnabled() && monster.targetId === room?.sessionId) {
+      toast(monsterName(monster, metadata.monsterId) + " · " + design.counterText);
+    }
+    metadata.specialCounter?.setEnabled(Boolean(counter));
     const range = Number(monster.specialRange), halfWidth = Number(monster.specialHalfWidth);
     const inner = Number(monster.specialInnerRange) || 0, halfAngle = Number(monster.specialHalfAngle) || 0;
     if (!monster.alive || monster.aiState !== "windup" || !(range > 0)) {
@@ -134,12 +160,19 @@
       metadata.specialWarningFill?.setEnabled(false);
       return;
     }
-    if (metadata.specialWarning?.isEnabled()) return;
+    const stage = Number(monster.specialStage) || 0;
+    if (metadata.specialWarning?.isEnabled() && metadata.warningStage === stage) return;
+    if (metadata.specialWarning && metadata.warningStage !== stage) {
+      metadata.specialWarning.dispose(); metadata.specialWarning = undefined;
+    }
+    metadata.warningStage = stage;
+    const style = design.stages?.[stage - 1];
     const terrain = worldDefinitions?.[monster.mapId]?.terrain;
     const facing = Number(monster.facing) || 0, sin = Math.sin(facing), cos = Math.cos(facing);
+    const centerX = stage ? monster.specialOriginX : monster.x, centerZ = stage ? monster.specialOriginZ : monster.z;
     const point = (side, forward) => {
-      const x = monster.x + side * cos - forward * sin;
-      const z = monster.z - side * sin - forward * cos;
+      const x = centerX + side * cos - forward * sin;
+      const z = centerZ - side * sin - forward * cos;
       return new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z);
     };
     const rect = halfWidth > 0, fullCircle = !rect && !halfAngle;
@@ -154,17 +187,26 @@
     const lines = [rows.at(-1)];
     if (fullCircle) {
       if (inner > 0) lines.push(rows[0]);
-      for (const band of design.warningBands || []) lines.push(rowAt(range * band));
+      for (const band of style?.bands || design.warningBands || []) lines.push(rowAt(range * band));
+      if (style?.seal) {
+        const size = range * .42;
+        lines.push([point(0,-size),point(size,0),point(0,size),point(-size,0),point(0,-size)]);
+        for (let i = 0; i < style.seal; i++) {
+          const side = (i - (style.seal - 1) / 2) * size * .36;
+          lines.push([point(side,-size*.25),point(side,size*.25)]);
+        }
+      }
     } else {
       lines.push(rows.map(row => row[0]), rows.map(row => row.at(-1)));
       if (rect) lines.push(rows[0]);
     }
     const warning = B.MeshBuilder.CreateLineSystem("himmapan strike boundary", { lines, updatable: true, instance: metadata.specialWarning }, scene);
-    warning.color = B.Color3.FromHexString(design.warningColor);
+    warning.color = B.Color3.FromHexString(style?.color || design.warningColor);
     warning.isPickable = false;
     warning.setEnabled(true);
     metadata.specialWarning = warning;
-    if (design.warningFill) {
+    if (style?.fill === false) metadata.specialWarningFill?.setEnabled(false);
+    else if (design.warningFill) {
       if (!metadata.specialWarningFill) {
         const fill = new B.Mesh("himmapan strike area", scene);
         const paint = new B.StandardMaterial("himmapan strike area", scene);
@@ -177,6 +219,7 @@
         metadata.specialWarningFill = fill;
       }
       const fill = metadata.specialWarningFill;
+      fill.material.emissiveColor = warning.color;
       const positions = rows.flatMap(row => row.flatMap(p => [p.x, p.y - .025, p.z]));
       const indices = [], normals = [];
       for (let row = 0; row < rows.length - 1; row++) {
@@ -194,7 +237,7 @@
       fill.setEnabled(true);
     }
     if (monster.targetId === room?.sessionId) {
-      const hint = inner > 0 && design.innerWarningText ? design.innerWarningText : design.warningText;
+      const hint = style?.text || (inner > 0 && design.innerWarningText ? design.innerWarningText : design.warningText);
       toast(monsterName(monster, mesh.metadata.monsterId) + " · " + hint);
     }
   }
@@ -232,6 +275,7 @@
     if (design.himmapan) root.onDisposeObservable.add(() => {
       root.metadata.specialWarning?.dispose();
       root.metadata.specialWarningFill?.dispose(false, true);
+      root.metadata.specialCounter?.material.dispose();
     });
     const build = () => {
       if (design.boss) {
