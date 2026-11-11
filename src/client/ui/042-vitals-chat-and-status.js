@@ -42,7 +42,7 @@
     const bar = document.querySelector(".learned-bar"); if (!bar) return;
     const wide = orbWide.matches; bar.toggleAttribute("data-wide", wide); bar.toggleAttribute("data-arc", !wide);
     const hot = [...bar.querySelectorAll(".sword-hotbar")].find(h => !h.hidden), slots = hot ? [...hot.querySelectorAll("button")] : [];
-    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, $("fly"), bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
+    const mount = $("mountButton"), all = [...bar.querySelectorAll(".sword-hotbar button"), mount, bar.querySelector(".orb-fx"), vitalOrb?.el].filter(Boolean);
     for (const b of all) { b.style.removeProperty("right"); b.style.removeProperty("bottom"); }
     if (wide) return;
     const cx = ORB_R + ORB / 2, cy = ORB_B + ORB / 2;
@@ -54,8 +54,6 @@
       b.style.right = Math.round(cx - Math.cos(t) * ARC_R - SLOT / 2) + "px"; b.style.bottom = Math.round(cy - Math.sin(t) * ARC_R - SLOT / 2) + "px"; });
     // Small horse button in the very bottom-right corner, on the orb's right-hand side.
     if (mount) { mount.style.right = "0px"; mount.style.bottom = "0px"; }
-    // Fly sits right above the horse, against the right edge.
-    const fly = $("fly"); if (fly) { fly.style.right = "0px"; fly.style.bottom = "36px"; }
     const ofx = bar.querySelector(".orb-fx"); if (ofx) { ofx.style.right = ORB_R + "px"; ofx.style.width = ORB + "px"; ofx.style.bottom = "4px"; }
   }
   const syncOrbLayout = () => requestAnimationFrame(layoutOrbArc);
@@ -323,7 +321,6 @@
     if (loc && nav) { (name || loc.lastElementChild).after(nav); nav.classList.add("map-shortcuts"); }
     const mount = $("mountButton"), orbEl = document.querySelector(".vital-orb");
     if (mount && orbEl) { orbEl.before(mount); mount.classList.add("orb-mount"); }
-    const fly = $("fly"); if (fly && orbEl) { orbEl.before(fly); fly.classList.add("orb-mount", "orb-fly"); fly.classList.remove("warp-button", "flight-context"); }
     // Harmful-effect boxes in the small gap under the orb.
     if (orbEl) { const fx = document.createElement("div"); fx.className = "fx-row orb-fx"; fx.hidden = true; orbEl.after(fx); }
   }

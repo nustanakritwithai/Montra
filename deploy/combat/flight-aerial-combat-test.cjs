@@ -10,7 +10,7 @@ const phase = source.slice(source.indexOf('  // Phase 17:'), source.indexOf('  /
 const movementSource = read('src/client/input/039-movement-flight-and-climbing.js');
 const movement = movementSource.slice(movementSource.indexOf('  function updateFlightButton()'), movementSource.indexOf('  function syncClimbButton()'));
 const fieldSource = read('src/client/input/058-field-control-bindings.js');
-const fieldCommand = fieldSource.slice(fieldSource.indexOf('  function toggleFlightCommand()'), fieldSource.indexOf('  const flightBtn ='));
+const fieldCommand = fieldSource.slice(fieldSource.indexOf('  function toggleFlightCommand()'), fieldSource.indexOf('  const meteorBtn='));
 const avatarSource = read('src/client/render/020-avatar-materials-and-meshes.js');
 const avatarLiteral = avatarSource.slice(avatarSource.indexOf('    const avatar = {'), avatarSource.indexOf('    attachShamanModel(avatar);'));
 const stateSource = read('src/client/render/025-horse-and-avatar-animation.js');
@@ -44,13 +44,13 @@ function avatar(id = 'local') {
   return vm.runInNewContext(avatarLiteral + '\navatar;', { id, parent: new B.TransformNode(id, scene), local: id === 'local', npcOptions: null, halo: null, weaponModels: {}, body: null, arms: [], elbows: [], legs: [], knees: [], familiars: [] });
 }
 function button() {
-  const attributes = {}, label = { textContent: '' };
-  return { attributes, label, hidden: false, disabled: false, classList: { toggle() {} }, querySelector: () => label, setAttribute: (key, value) => { attributes[key] = value; } };
+  const attributes = {};
+  return { attributes, hidden: false, disabled: false, classList: { toggle() {} }, setAttribute: (key, value) => { attributes[key] = value; } };
 }
 function setup() {
   const hero = avatar();
   const player = { alive: true, flying: false, pathId: 'seer', combatState: 'idle', x: 0, y: 0, z: 0, mapId: 'ritual_village' };
-  const sends = [], notices = [], effects = [], buttons = new Map([['fly', button()], ['flightButton', button()], ['meteorButton', button()]]);
+  const sends = [], notices = [], effects = [], buttons = new Map([['fly', button()], ['meteorButton', button()]]);
   const context = {
     B, scene, window: {}, console, performance: { now: () => 20000 }, mode: 'live', localId: 'local',
     avatars: new Map([['local', hero]]), room: { state: { flightAvailable: true, players: new Map([['local', player]]) }, send: (...args) => sends.push(args) },
@@ -121,12 +121,19 @@ test('capability, class, death, transition and no-flight zones retain command gu
   t.flight.land(); assert.equal(t.sends.length, 1, 'legacy airborne classes can always request safe landing');
 });
 
-test('both flight controls show confirmed state and disable forbidden/dead/transition requests', () => {
-  const t = setup(); t.context.updateFlightButton(); assert.equal(t.buttons.get('flightButton').attributes['aria-pressed'], 'false');
-  t.player.flying = true; t.context.updateFlightButton(); assert.equal(t.buttons.get('flightButton').label.textContent, 'ลงจอด');
-  t.player.combatState = 'descending'; t.context.updateFlightButton(); assert.equal(t.buttons.get('flightButton').disabled, true);
-  t.player.flying = false; t.player.combatState = 'idle'; t.player.alive = false; t.context.updateFlightButton(); assert.equal(t.buttons.get('flightButton').disabled, true);
-  t.player.alive = true; t.player.pathId = 'muay'; t.context.updateFlightButton(); assert.equal(t.buttons.get('flightButton').hidden, true);
+test('bottom flight control shows confirmed state and disables forbidden/dead/transition requests', () => {
+  const t = setup();
+  const fly = t.buttons.get('fly');
+  t.context.updateFlightButton(); assert.equal(fly.attributes['aria-pressed'], 'false');
+  t.player.flying = true; t.context.updateFlightButton(); assert.equal(fly.attributes['aria-label'], 'ลงจอด');
+  t.player.combatState = 'descending'; t.context.updateFlightButton(); assert.equal(fly.disabled, true);
+  Object.assign(t.player, { flying: false, combatState: 'idle', alive: false });
+  t.context.updateFlightButton(); assert.equal(fly.disabled, true);
+  t.player.alive = true;
+  t.context.worldDefinitions.ritual_village.region = { noFlight: true };
+  t.context.updateFlightButton(); assert.equal(fly.disabled, true);
+  t.player.pathId = 'muay'; t.context.updateFlightButton(); assert.equal(fly.hidden, true);
+  t.context.mode = 'demo'; t.context.updateFlightButton(); assert.equal(fly.hidden, false); assert.equal(fly.disabled, false);
 });
 
 test('local death hides wings and remote flight does not allocate extra visuals', () => {
