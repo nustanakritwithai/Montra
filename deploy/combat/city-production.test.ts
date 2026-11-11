@@ -12,7 +12,7 @@ import {
   CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   CITY_MINING_ENABLED, CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, type CitySite,
   CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
-  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, type CityPolicy,
+  cityMarketPrices, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, type CityPolicy,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
 import {WAR_DURATION, WAR_PROTECTION} from "./TerritoryWar.js";
@@ -60,7 +60,8 @@ function fixture(t: TestContext) {
     const parsed = parseCityOrder({...fields, requestId});
     assert.ok(parsed && parsed.action !== "disband" && parsed.action !== "claim_disband" &&
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
-      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) && !isCitySupplyOrder(parsed) && parsed.action !== "policy_set");
+      !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) &&
+      !isCityMarketOrder(parsed) && !isCitySupplyOrder(parsed) && parsed.action !== "policy_set");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -849,6 +850,266 @@ function haulFixture(t: TestContext) {
     f.economy.viewCityHauls(actor, f.guild.war.member(actor), cities(now), atCity);
   return {...f, get economy() {return f.economy;}, get guild() {return f.guild;}, haul, board, cities};
 }
+
+function localMarketFixture(t: TestContext) {
+  const f = purchaseFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  f.capture(rival, f.now, river);
+  const riverEpoch = f.view(rival, f.now, river).epoch!;
+  const factory = (action: string, fields: object = {}, at = f.now) =>
+    f.factoryOrder(rival, {action, epoch:riverEpoch, ...fields}, at, f.request(), river);
+  factory("deposit", {item:wood, slot:0, amount:11});
+  factory("deposit", {item:stone, slot:1, amount:17});
+  factory("build");
+  let now = f.now;
+  for (let count = 0; count < 6; count++) now = Number(factory("start", {}, now).readyAt);
+  f.economy.saveCharacter(visitor, {}, bag());
+  const market = (actor: string, site: CitySite, fields: object, at = now, requestId = f.request()) => {
+    const parsed = parseCityOrder({epoch:site===river?riverEpoch:f.moonEpoch,site,...fields,requestId});
+    assert.ok(parsed && isCityMarketOrder(parsed));
+    return f.economy.cityMarketOrder(actor, f.guild.war.member(actor), parsed, f.sync(at, site), at);
+  };
+  const markets = (actor: string, at = now, enabled = true, returnEnabled = false) =>
+    f.economy.viewCityMarkets(actor, f.guild.war.member(actor), {[river]:f.sync(at, river),[moon]:f.sync(at, moon)},
+      enabled, returnEnabled);
+  return {...f, get economy() {return f.economy;}, get guild() {return f.guild;}, market, markets, factory, now, riverEpoch};
+}
+
+test("local market prices step through stock and stop at quantity, demand, capacity or budget", () => {
+  const river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  assert.deepEqual(cityMarketPrices(river, 22, 24, 0, 0).slice(0, 3), [10,10,11]);
+  assert.equal(cityMarketPrices(river, 24, 24, 0, 0).length, 12);
+  assert.deepEqual(cityMarketPrices(moon, 4, 24, 46, 60), [16,15,15]);
+  assert.deepEqual(cityMarketPrices(moon, 21, 24, 500, 60), [11,11,11]);
+  assert.deepEqual(cityMarketPrices(moon, 21, 24, 500, 1), [11]);
+  assert.deepEqual(cityMarketPrices(moon, 24, 24, 500, 60), []);
+});
+
+test("a merchant buys factory stock at the river and sells to the Moon factory without minting gold", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  assert.throws(() => f.market(member, moon, configure), /city_officer_required/);
+  assert.throws(() => f.market(leader, river, configure), /city_not_owner/);
+  f.market(rival, river, configure);
+  f.market(leader, moon, configure);
+  const originUsed = f.view(rival, f.now, river).used;
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  assert.equal(f.view(rival, f.now, river).used, originUsed);
+  assert.throws(() => f.market(leader, moon, {action:"local_market_budget", amount:101}), /city_market_funds/);
+  f.market(leader, moon, {action:"local_market_budget", amount:80});
+  assert.equal(f.miningStock(f.now).marketGold, 20);
+  assert.throws(() => f.open(3, 7, f.now), /city_market_funds/);
+  assert.equal(f.markets(visitor).markets[0].manage, null);
+  const buy = {action:"local_market_trade", amount:3, total:43}, buyId = f.request();
+  assert.deepEqual(f.markets(visitor).markets[0].prices.slice(0,3), [14,14,15]);
+  assert.throws(() => f.market(visitor, river, {...buy, total:42}), /city_market_price_changed/);
+  const memberBag = f.economy.getAccount(member).inventory;
+  f.economy.saveCharacter(member, {}, bag(true));
+  assert.throws(() => f.market(member, river, buy), /inventory_full/);
+  assert.equal(f.view(rival, f.now, river).marketGold, 0);
+  assert.equal(f.markets(rival).markets[0].manage?.shelf, 6);
+  f.economy.saveCharacter(member, {}, memberBag);
+  assert.throws(() => f.market(visitor, moon, {action:"local_market_trade", amount:3,total:48}), /item_unavailable/);
+  assert.equal(f.markets(leader).markets[1].manage?.budget, 80);
+  f.market(visitor, river, buy, f.now, buyId);
+  assert.throws(() => f.market(member, river, {action:"local_market_trade", amount:1, total:14}), /city_market_price_changed/);
+  assert.equal(f.view(rival, f.now, river).marketGold, 43);
+  assert.equal(f.economy.getAccount(visitor).gold, 957);
+  const sell = {action:"local_market_trade", amount:3, total:48}, sellId = f.request();
+  f.market(visitor, moon, sell, f.now, sellId);
+  f.restart();
+  assert.deepEqual(f.market(visitor, river, buy, f.now, buyId), {site:river,amount:3,total:43});
+  assert.deepEqual(f.market(visitor, moon, sell, f.now, sellId), {site:moon,amount:3,total:48});
+  assert.equal(f.economy.getAccount(visitor).gold, 1005);
+  assert.equal(f.markets(leader).markets[1].manage?.budget, 32);
+  assert.equal(f.miningStock(f.now).marketGold, 20);
+  assert.equal(f.markets(visitor).history.length, 2);
+  const before = f.miningStock(f.now).stock.find(row => row.item===CITY_PRODUCT)!.quantity;
+  f.mine({action:"start"}, f.now);
+  assert.equal(f.miningStock(f.now).stock.find(row => row.item===CITY_PRODUCT)?.quantity, before-1);
+  f.market(member, river, {...buy,total:45});
+  assert.throws(() => f.market(visitor, river, buy), /city_market_quantity/);
+  assert.equal(f.markets(visitor).markets[0].status, "empty");
+});
+
+test("market capacity includes inbound purchase orders and capture returns stock and unused gold", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  f.market(rival, river, configure);
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  f.market(rival, river, {...configure,item:CITY_MINING_PRODUCT,limit:12});
+  f.market(leader, moon, configure);
+  f.market(leader, moon, {action:"local_market_budget", amount:40});
+  f.open(20, 1, f.now);
+  assert.deepEqual(f.markets(visitor).markets[1].prices, [11,11,11]);
+  assert.deepEqual(f.markets(visitor,f.now,false).markets[0].prices, []);
+  assert.equal(f.markets(visitor,f.now,false).markets[0].status, "disabled");
+  const owner = f.guildMember(rival).id, siege = f.now+WAR_PROTECTION;
+  const db = new DatabaseSync(f.guildFile);
+  try {
+    db.prepare("INSERT INTO territory_battles(site,attacker,started,sample,ended,winner) VALUES(?,?,?,?,?,?)")
+      .run(river,owner,f.now-1,f.now,f.now,owner);
+  } finally {db.close();}
+  f.guild.war.start(river, f.guildMember(leader), siege);
+  assert.equal(f.markets(visitor,siege+1).markets[0].status, "siege");
+  assert.equal(f.markets(visitor,siege+1,true,true).returnMarkets[0].status, "siege");
+  assert.throws(() => f.market(visitor, river, {action:"local_market_trade",item:CITY_MINING_PRODUCT,amount:1,total:37}, siege+1),
+    /city_market_siege/);
+  assert.throws(() => f.market(visitor, river, {action:"local_market_trade", amount:1,total:14}, siege+1), /city_market_siege/);
+  const end = siege + RIVER_WAR_DURATION;
+  assert.equal(f.guild.war.inspect(river,end).ownerId, owner);
+  assert.equal(f.markets(visitor,end).markets[0].status, "open");
+  f.capture(leader, end+1, river);
+  f.capture(rival, end+1, moon);
+  f.restart();
+  assert.throws(() => f.market(visitor, river, {action:"local_market_trade", amount:1,total:14}, end+2), /city_ownership_changed/);
+  const former = f.view(rival, end+2, river).reclaim.find(row => row.item===CITY_PRODUCT && row.epoch===f.riverEpoch);
+  assert.equal(former?.quantity, 6);
+  assert.equal(f.view(leader, end+2, moon).marketGold, 100);
+  assert.deepEqual(f.markets(visitor,end+2).markets.map(row=>row.status), ["paused","paused"]);
+});
+
+test("disband includes stock on sale and reserved local market gold in the former commanders' claims", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  f.market(rival, river, configure);
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  f.market(leader, moon, configure);
+  f.market(leader, moon, {action:"local_market_budget", amount:80});
+  f.guild.leave(member);
+  for (const actor of [rival,leader]) {
+    const guild = f.guildMember(actor).id;
+    f.guild.settleCityDisband(f.economy, f.guild.beginCityDisband(actor,guild,f.now+1));
+  }
+  assert.equal(f.economy.cityDisbandClaims(rival).find(row=>row.item===CITY_PRODUCT)?.amount, 6);
+  assert.equal(f.economy.cityDisbandClaims(leader).find(row=>row.item==="gold")?.amount, 100);
+  assert.equal(f.economy.hasCityMarketAssets(), false);
+});
+
+test("round-trip trade uses separate quotes and inventory, then lets the river list imported iron", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE, item = CITY_MINING_PRODUCT;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  f.market(rival, river, configure);
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  f.market(leader, moon, configure);
+  f.market(leader, moon, {action:"local_market_budget", amount:80});
+  f.market(visitor, river, {action:"local_market_trade", amount:3, total:43});
+  f.market(visitor, moon, {action:"local_market_trade", amount:3, total:48});
+  f.mine({action:"deposit", item:CITY_MINING_ORE, slot:1, amount:2}, f.now);
+  let now = f.now;
+  for (let i=0; i<3; i++) now = Number(f.mine({action:"start"}, now).readyAt);
+
+  const purchase = {...configure, item, limit:18};
+  assert.equal(parseCityOrder({...purchase, site:river, epoch:f.riverEpoch, item:wood, requestId:f.request()}), null);
+  assert.equal(parseCityOrder({action:"local_market_stock", site:river, epoch:f.riverEpoch, item, amount:1,
+    requestId:f.request()}), null);
+  assert.throws(() => f.market(member, moon, {...configure, item, limit:12}, now), /city_officer_required/);
+  f.market(rival, river, purchase, now);
+  f.market(leader, moon, {...configure, item, limit:12}, now);
+  f.market(rival, river, {action:"local_market_budget", item, amount:40}, now);
+  const moonUsed = f.miningStock(now).used;
+  f.market(leader, moon, {action:"local_market_stock", item, amount:3}, now);
+  assert.equal(f.miningStock(now).used, moonUsed);
+  assert.equal(f.markets(leader,now).returnMarkets[0].status, "disabled");
+  assert.equal(f.markets(visitor,now).returnMarkets.length, 0);
+  const quote = f.markets(visitor,now,true,true);
+  assert.deepEqual(quote.markets.map(row=>row.item), [CITY_PRODUCT,CITY_PRODUCT]);
+  assert.deepEqual(quote.returnMarkets.map(row=>row.prices), [[38],[36,37,37]]);
+  const buy = {action:"local_market_trade", item, amount:1, total:36};
+  const sell = {...buy,total:38}, saleId = f.request();
+  assert.throws(() => f.market(visitor, river, sell, now), /item_unavailable/);
+  f.market(visitor, moon, buy, now);
+  assert.equal(f.markets(visitor,now).returnInventory.itemCount, 1);
+  assert.equal(f.markets(visitor,now).itemCount, 0);
+  f.market(visitor, river, sell, now, saleId);
+  f.restart();
+  assert.deepEqual(f.market(visitor, river, sell, now, saleId), {site:river,item,amount:1,total:38});
+  const history = f.markets(visitor,now,true,true);
+  assert.equal(history.returnInventory.itemCount, 0);
+  assert.equal(history.history.length, 2);
+  assert.equal(history.returnHistory.length, 2);
+  assert.equal(history.wallet, 1007);
+  assert.equal(f.markets(rival,now,true,true).returnMarkets[0].manage?.budget, 2);
+  assert.equal(f.markets(rival,now,true,true).returnMarkets[0].manage?.tradedGold, 38);
+  assert.equal(f.markets(leader,now,true,true).returnMarkets[1].manage?.tradedGold, 36);
+  assert.equal(f.miningStock(now).marketGold, 56);
+  assert.equal(f.view(rival,now,river).marketGold, 3);
+  const listing = f.factory("list", {item, amount:1, price:45}, now);
+  f.economy.buy(visitor, f.request(), String(listing.listingId));
+  assert.equal(f.markets(visitor,now).returnInventory.itemCount, 1);
+});
+
+test("the return market accounts for reserved freight and releases both books after conquest or disband", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE, item = CITY_MINING_PRODUCT;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  f.market(rival, river, configure);
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  f.market(leader, moon, configure);
+  f.market(leader, moon, {action:"local_market_budget", amount:40});
+  f.market(visitor, river, {action:"local_market_trade", amount:3, total:43});
+  f.market(rival, river, {...configure, item, limit:6});
+  f.market(rival, river, {action:"local_market_budget", item, amount:40});
+  const {orderId} = f.open(1, 1, f.now);
+  f.order(member, {action:"purchase_fill", orderId, slot:2, amount:1}, f.now);
+  let now = f.now;
+  for (let i=0; i<2; i++) now = Number(f.mine({action:"start"}, now).readyAt);
+  f.market(leader, moon, {...configure, item, limit:12}, now);
+  f.market(leader, moon, {action:"local_market_stock", item, amount:1}, now);
+  const haul = (actor: string, site: CitySite, fields: object) => {
+    const order = parseCityOrder({...fields,requestId:f.request()});
+    assert.ok(order && isCityHaulOrder(order));
+    return f.economy.cityHaulOrder(actor,f.guildMember(actor),order,
+      {[river]:f.sync(now,river),[moon]:f.sync(now,moon)},site,now);
+  };
+  const {haulId} = haul(leader,moon,{action:"haul_open",epoch:f.moonEpoch,destination:river,destinationEpoch:f.riverEpoch,
+    amount:1,reward:10,audience:"public"});
+  f.factory("deposit", {item:wood, slot:0, amount:59-f.view(rival,now,river).used}, now);
+  assert.equal(f.markets(rival,now,true,true).returnMarkets[0].prices.length, 1);
+  haul(rival,river,{action:"haul_approve",haulId});
+  const blocked = f.markets(rival,now,true,true).returnMarkets[0];
+  assert.equal(blocked.manage?.incoming, 1);
+  assert.equal(blocked.status, "capacity");
+  f.capture(leader,now+1,river);
+  assert.equal(f.markets(rival,now+1,true,true).returnMarkets[0].status, "paused");
+  assert.equal(f.view(rival,now+1,river).marketGold, 43);
+  assert.equal(f.view(rival,now+1,river).reclaim.find(row=>row.item===CITY_PRODUCT)?.quantity, 3);
+  f.guild.leave(member);
+  const guild = f.guildMember(leader).id;
+  f.guild.settleCityDisband(f.economy,f.guild.beginCityDisband(leader,guild,now+2));
+  f.restart();
+  const claims = f.economy.cityDisbandClaims(leader);
+  assert.equal(claims.find(row=>row.item===item)?.amount, 2);
+  assert.equal(claims.find(row=>row.item==="gold")?.amount, 99);
+  assert.equal(f.economy.hasCityMarketAssets(), false);
+});
+
+test("legacy market migration preserves shelves, budgets, receipts and treasury totals", t => {
+  const f = localMarketFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;
+  const configure = {action:"local_market_config", open:true, limit:24};
+  f.market(rival, river, configure);
+  f.market(rival, river, {action:"local_market_stock", amount:6});
+  f.market(leader, moon, configure);
+  f.market(leader, moon, {action:"local_market_budget", amount:80});
+  const buy = {action:"local_market_trade", amount:3, total:43}, buyId = f.request();
+  const sell = {...buy,total:48}, sellId = f.request();
+  f.market(visitor,river,buy,f.now,buyId);
+  f.market(visitor,moon,sell,f.now,sellId);
+  const before = [f.markets(rival), f.markets(leader), f.markets(visitor)];
+  const db = new DatabaseSync(f.economyFile);
+  try {
+    db.exec(`ALTER TABLE city_local_markets RENAME TO saved_local_markets;
+      CREATE TABLE city_local_markets(epoch INTEGER PRIMARY KEY, site TEXT NOT NULL, guild TEXT NOT NULL,
+        open INTEGER NOT NULL, stockLimit INTEGER NOT NULL, shelf INTEGER NOT NULL, budget INTEGER NOT NULL);
+      INSERT INTO city_local_markets SELECT epoch,site,guild,open,stockLimit,shelf,budget FROM saved_local_markets;
+      DROP TABLE saved_local_markets;
+      ALTER TABLE city_local_market_trades DROP COLUMN item;`);
+  } finally {db.close();}
+  for (let i=0; i<2; i++) {
+    f.restart();
+    assert.deepEqual(f.market(visitor,river,buy,f.now,buyId), {site:river,amount:3,total:43});
+    assert.deepEqual(f.market(visitor,moon,sell,f.now,sellId), {site:moon,amount:3,total:48});
+    assert.deepEqual([f.markets(rival), f.markets(leader), f.markets(visitor)], before);
+  }
+});
 
 test("cross-guild freight reserves capacity only after approval and pays the assigned courier exactly once", t => {
   const f = haulFixture(t), river = CITY_PRODUCTION_SITE, moon = CITY_MINING_SITE;

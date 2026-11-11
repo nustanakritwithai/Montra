@@ -12,8 +12,10 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
+  CITY_PRODUCT, cityMarketSide, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
+  type CityMarketOrder, type CityMember,
+  type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
 } from "./CityProductionRules.js";
@@ -319,6 +321,55 @@ export class EconomyStore {
   }
   viewCityGovernance(member: CityMember, ownership: CityOwnership) {
     return this.city.governanceView(member, ownership);
+  }
+  hasCityMarketAssets(): boolean {
+    return this.city.hasLocalMarketAssets();
+  }
+  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean, returnEnabled = false) {
+    const account = this.account(actor);
+    const inventoryFor = (item: CityMarketItem) => {
+      let itemCount = 0, bagSpace = 0;
+      for (const stack of account.inventory.slots) {
+        if (!stack) bagSpace += 99;
+        else if (stack.itemId === item) {
+          itemCount += stack.quantity;
+          bagSpace += 99 - stack.quantity;
+        }
+      }
+      return {itemCount, bagSpace};
+    };
+    const returnMarkets = CITY_SITES.map(site =>
+      this.city.localMarketView(site, CITY_MINING_PRODUCT, cities[site], member, enabled && returnEnabled))
+      .filter(market => returnEnabled || market.manage?.configured);
+    return {
+      markets: CITY_SITES.map(site => this.city.localMarketView(site, CITY_PRODUCT, cities[site], member, enabled)),
+      wallet: account.gold, walletSpace: MAX_GOLD - account.gold, ...inventoryFor(CITY_PRODUCT),
+      history: this.city.localMarketHistory(actor, CITY_PRODUCT),
+      returnMarkets, returnInventory: inventoryFor(CITY_MINING_PRODUCT),
+      returnHistory: this.city.localMarketHistory(actor, CITY_MINING_PRODUCT),
+    };
+  }
+  cityMarketOrder(actor: string, member: CityMember | undefined, order: CityMarketOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_local_market", intent, () => {
+      if (order.action !== "local_market_trade") {
+        if (!member) throw Error("city_not_member");
+        return this.city.configureLocalMarket(member, order, ownership, now);
+      }
+      const account = this.account(actor), trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
+      const item = order.item ?? CITY_PRODUCT;
+      if (cityMarketSide(order.site, item) === "sell") {
+        if (account.gold < trade.total) throw Error("insufficient_gold");
+        account.inventory = add(account.inventory, {itemId: item, quantity: trade.amount});
+        account.gold -= trade.total;
+      } else {
+        if (account.gold + trade.total > MAX_GOLD) throw Error("city_wallet_full");
+        consume(account, item, trade.amount, "item_unavailable");
+        account.gold += trade.total;
+      }
+      this.put(actor, account);
+      return trade;
+    });
   }
   setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
     return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {

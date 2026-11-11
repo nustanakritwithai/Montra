@@ -185,6 +185,7 @@ export const MyRoomState = schema({
   ghostPotAvailable: t.boolean().default(false),
   boatsAvailable: t.boolean().default(false),
   boats: t.map(SailingBoat),
+  cityMarketSupported: t.boolean().default(false),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;
