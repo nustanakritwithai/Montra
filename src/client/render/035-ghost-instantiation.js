@@ -187,7 +187,9 @@
       }
       B.VertexData.ComputeNormals(positions, indices, normals);
       const data = new B.VertexData();
-      Object.assign(data, { positions, indices, normals });
+      data.positions = Float32Array.from(positions);
+      data.indices = Uint16Array.from(indices);
+      data.normals = Float32Array.from(normals);
       data.applyToMesh(fill);
       fill.setEnabled(true);
     }

@@ -66,7 +66,10 @@
         for (let i = 0; i < positions.length; i += 3) uvs.push(.5+positions[i]/(width+Math.abs(bend)), positions[i+2]/length);
         B.VertexData.ComputeNormals(positions, indices, normals);
         const data = new B.VertexData();
-        Object.assign(data, { positions, indices, normals, uvs });
+        data.positions = Float32Array.from(positions);
+        data.indices = Uint16Array.from(indices);
+        data.normals = Float32Array.from(normals);
+        data.uvs = Float32Array.from(uvs);
         data.applyToMesh(mesh);
         return at(mesh, x, y, z, m);
       },
