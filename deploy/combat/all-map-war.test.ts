@@ -43,6 +43,21 @@ test("all 18 available maps have profiles and each new battlefield has a walkabl
   }
 });
 
+test("Forbidden Forest bases have equal approaches and clear space around both bases and the flag",()=>{
+  const site="forbidden_forest",map=WORLD_MAPS[site],{attack,flag,defend}=getWarDefinition(site)!.isolated!;
+  for(const base of [attack,defend]){
+    assert.equal(Math.hypot(base.x-flag.x,base.z-flag.z),40);
+  }
+  for(const [point,radius] of [[attack,4],[flag,5],[defend,4]] as const){
+    for(let dx=-radius;dx<=radius;dx++)for(let dz=-radius;dz<=radius;dz++){
+      if(Math.hypot(dx,dz)>radius)continue;
+      const x=point.x+dx,z=point.z+dz;
+      assert.ok(isSafeWorldPoint(map,{x,y:groundAt(site,x,z),z},.75),"clear war circle at "+x+", "+z);
+    }
+    assert.ok(map.portals.every(portal=>Math.hypot(portal.x-point.x,portal.z-point.z)>radius+3),"war circle clear of portals");
+  }
+});
+
 test("a legacy manual challenge wins and stays the only battle even if the optional calendar opens",()=>{
   const store=new GuildStore(":memory:");
   try{

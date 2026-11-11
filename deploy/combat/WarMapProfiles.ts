@@ -12,7 +12,7 @@ type FrontierField=Readonly<{
 
 // These are walkable positions on the existing maps. The world maps themselves are not rewritten.
 export const FRONTIER_WAR_FIELDS:Readonly<Record<string,FrontierField>>={
-  forbidden_forest:{size:"small",attack:[0,8],flag:[9,-5],defend:[21,-15]},
+  forbidden_forest:{size:"small",attack:[-40,-30],flag:[0,-30],defend:[40,-30]},
   bound_temple:{size:"small",attack:[-15,2],flag:[1,3],defend:[17,1]},
   bamboo_frontier:{size:"small",attack:[10,17],flag:[-5,23],defend:[-20,27]},
   drowned_marsh:{size:"small",attack:[10,20],flag:[-5,24],defend:[-19,31]},
