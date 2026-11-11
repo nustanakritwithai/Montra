@@ -233,7 +233,7 @@
     shakeCamera(0.68, 450);
     SFX("bell", { intensity: 1.4 });
     const y = (g.ty ?? 0) + 0.1;
-    hitBurst(mesh.position.x, mesh.position.z, "orange", true, y, true);
+    hitBurst(mesh.position.x, mesh.position.z, "orange", y, true);
     sparks("gold", mesh.position.x, mesh.position.y + 1, mesh.position.z, 22, { speed: 4.2, up: 3.2, life: 600 });
     triggerCombatCallout("shield_break");
   }

@@ -842,7 +842,7 @@
         const dmg = Math.round(Number(hit.damage) || 0);
         if (hit.attackerId === localId) {
           const skill = SKILL_SOURCES.has(hit.source), isCrit = dmg >= 40 || (skill && dmg >= 25);
-          impactAt(hit.attackerId, Number(at.x), Number(at.z), hit.source, undefined, isCrit, Number(at.y) || 0);
+          impactAt(hit.attackerId, Number(at.x), Number(at.z), hit.source, undefined, Number(at.y) || 0);
           if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), isCrit ? "crit" : skill ? "skill" : "dealt", { big: isCrit });
           registerComboHit();
           hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
@@ -1300,7 +1300,7 @@
         playAttack(hit.attackerId, hit.source === "ranged", victim?.x, victim?.z);
         const taken = hit.targetId === localId, mine = hit.attackerId === localId;
         if (taken || mine) {
-          if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, hit.targetId, false, victim.y || 0);
+          if (victim) impactAt(hit.attackerId, victim.x, victim.z, hit.source, hit.targetId, victim.y || 0);
           const dmg = Math.round(Number(hit.damage) || 0);
           if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), taken ? "taken" : SKILL_SOURCES.has(hit.source) ? "skill" : "dealt");
         }
@@ -1326,7 +1326,7 @@
           const dmg = Math.round(Number(hit.damage) || 0);
           if (dmg > 0) floatAtPlayer(hit.targetId, String(dmg), "taken");
           if (victim && combatImpactReady()) {
-            hitBurst(victim.x, victim.z, "red", false, victim.y || 0);
+            hitBurst(victim.x, victim.z, "red", victim.y || 0);
             SFX("hurt", { x: victim.x, z: victim.z, intensity: .65 });
           }
           if (!(hudTarget.until > performance.now())) hudTarget = { id: hit.attackerId, until: performance.now() + 8000 };

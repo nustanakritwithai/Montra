@@ -24,7 +24,7 @@ assert(mainSrc.includes('g.enraged ? 1.15 : 1'), 'boss scale expands by 1.15x wh
 // 4. Verify Enhanced Danger Zones & Slam Impact
 assert(mainSrc.includes('spawnFx("cross", "red"'), 'windupTelegraph spawns layered runic danger zone');
 assert(mainSrc.includes('!g.windup && g.wasWindup'), 'detects windup completion to land strike impact');
-assert(mainSrc.includes('hitBurst(mesh.position.x, mesh.position.z, "red", true, y, true);'), 'strike lands heavy ground slam burst');
+assert(mainSrc.includes('hitBurst(mesh.position.x, mesh.position.z, "red", y, true);'), 'boss ground slam uses its scripted impact cue');
 
 // 5. Death still has the monster's own visual and audible cues.
 assert(mainSrc.includes('ghostVoice(ghost,mesh,"die")'), 'monster death keeps its own sound');

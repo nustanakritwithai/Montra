@@ -48,8 +48,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/009-effects-and-target-hud.js",
-  "bytes": 20380,
-  "sha256": "b6a73050c5842a10cbbb245d4d9b098313d991c16061450cef1291113081ba1b"
+  "bytes": 20250,
+  "sha256": "13b4370110d468f01af3804aeda30a8d0b51b6b97ddc24376eb6b48dad707531"
 },
 {
   "path": "combat/005-floating-feedback.js",
@@ -133,13 +133,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 161980,
-  "sha256": "8f52b9c28951f02174cebd96f608d1c9de56ad5d6ed820f423f7b430609c0e1e"
+  "bytes": 161958,
+  "sha256": "e6ddb016ee36b39cdd7ebcbd1ce53acfa4c48193a9f8d258f0a47ee062b9a3c4"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 30078,
-  "sha256": "2c85d8e8cdd211254b6b35746e8ca78c0a013af398595c95ec7daa820da31ba6"
+  "bytes": 30071,
+  "sha256": "832e5269733b155d414a2c5ddfce366f69141e76ac5428e7e599127d3c19968a"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -179,8 +179,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
-    "bytes": 54808,
-    "sha256": "85764d369a6dad8916ea8e0c7c42a92fa61304f51ba5d186dfbfb884a00eb5de"
+    "bytes": 54802,
+    "sha256": "2e4c119fb350350e7ffe9f5fd84fc663904f25d8f0264b983ffe9e706c9de83f"
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
@@ -244,8 +244,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "audio/023-action-and-impact-sounds.js",
-    "bytes": 3921,
-    "sha256": "4b33d31077b752d030b96a6af5813596877af596e4e366121d229de3e9c2b64e"
+    "bytes": 3746,
+    "sha256": "fa6e1fe2e791ffc945ee809dad8c00a8ce79f8394e2318fa7a1909a3dcde9adc"
   },
   {
     "path": "combat/024-action-and-skill-motion.js",
@@ -254,8 +254,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "audio/036-ghost-voices.js",
-    "bytes": 3278,
-    "sha256": "2d884bbafadaa0ae11bd0c4c8957b5df60f8ec56d0a184ef98265e353f63a0c7"
+    "bytes": 3272,
+    "sha256": "15ee292d8918b9d48b035d07b07038c2afd3c3ab45d6f469b2fa64d5dbfe6a47"
   }
 , {"path":"audio/002-voice-guidance.js","bytes":22456,"sha256":"48db11a5e02c570e15435503dd9e0a0717415ccbc6b28143cc90c104ba0792db"}].map(entry => [entry.path, entry]));
 
@@ -264,8 +264,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1970642);
-  assert.equal(hash(bytes), '70be0890ec628fab995b4a8c42529158012d5cb37a0786aa6776c2c3935a0a4d');
+  assert.equal(bytes.length, 1970296);
+  assert.equal(hash(bytes), '44197592ba3500f740f98fe73bea5d87af78f55a2cd8f2c90ce282a2ba3359c9');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

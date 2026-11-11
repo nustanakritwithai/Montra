@@ -40,7 +40,7 @@
     return true;
   }
 
-  function impactAt(attackerId, x, z, source, victimId, isCrit = false, y = 0) {
+  function impactAt(attackerId, x, z, source, victimId, y = 0) {
     const mine = attackerId === localId;
     if ((!mine && victimId !== localId) || !Number.isFinite(x) || !Number.isFinite(z) || !combatImpactReady()) return;
     const a = avatars.get(attackerId), weapon = a?.weaponId, move = a?.action?.type || "";
@@ -51,8 +51,6 @@
     else if (weapon === "spirit_staff") name = "blunt";
     else if (weapon === "muay_wraps") name = /elbow|counter/.test(move) ? "elbow" : /knee|teep|throw/.test(move) ? "kick" : "fist";
     SFX(name, { x, z, intensity: .7 });
-    const heavy = mine && (SKILL_SOURCES.has(source) || name === "blunt");
-    hitBurst(x, z, mine ? (isCrit ? "orange" : "gold") : "red", heavy, y, isCrit);
-    if (mine && isCrit) shakeCamera(.22, 160);
+    hitBurst(x, z, mine ? "gold" : "red", y);
   }
   let lastCombatAt = -1e9, musicSyncIn = 0;

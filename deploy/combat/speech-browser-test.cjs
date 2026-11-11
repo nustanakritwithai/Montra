@@ -51,7 +51,7 @@ document.querySelector('#settings').innerHTML=soundSettingsHtml();bindSoundSetti
 const skillFixture = `<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Accepted skill voice fixture</title>
 <button id="cast" style="min-height:48px">Cast then receive acceptance</button>
 <script src="/audio.js"></script><script>const localId='me';${skillVoiceHelper}
-document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('phuttha_core','me'),80);</script>`;
+window.__skillAccepts=0;document.querySelector('#cast').onclick=()=>setTimeout(()=>{playSkillVoiceShout('phuttha_core','me');window.__skillAccepts++;},80);</script>`;
 (async () => {
   const out = path.join(root, 'speech-browser-evidence'); fs.mkdirSync(out, { recursive: true });
   const report = { cases: [], errors: [], blockedOrigins: [], limits: 'Synthetic media fixture; no full game, physical device, native Thai voice, or Google service verification.' };
@@ -212,8 +212,12 @@ document.querySelector('#cast').onclick=()=>setTimeout(()=>playSkillVoiceShout('
       assert.equal(await page.evaluate(() => MontraAudio.isSpeaking()), false);
       await page.evaluate(() => { window.__rejectedSkillPlays = 0; HTMLMediaElement.prototype.play = function () { window.__rejectedSkillPlays++; return Promise.reject(new DOMException('Test async policy rejection', 'NotAllowedError')); }; });
       await tap('#cast');
+      await page.waitForFunction(() => window.__skillAccepts === 2);
+      assert.equal(await page.evaluate(() => window.__rejectedSkillPlays), 0, 'rapid repeated skill stays within the production voice cooldown');
+      await page.waitForFunction(() => performance.now() - lastSkillVoiceAt >= 8100);
+      await tap('#cast');
       await page.waitForFunction(() => window.__rejectedSkillPlays === 1 && !MontraAudio.isSpeaking());
-      report.cases.push({ name: `${name}-accepted-skill`, delayedMediaPlayingAndEnded: true, injectedAutoplayRejectionSettled: true });
+      report.cases.push({ name: `${name}-accepted-skill`, delayedMediaPlayingAndEnded: true, repeatVoiceCooldown: true, injectedAutoplayRejectionSettled: true });
       await context.close();
     }
     assert.deepEqual(report.errors, []); assert.deepEqual(report.blockedOrigins, []);
