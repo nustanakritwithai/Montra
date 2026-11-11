@@ -1104,6 +1104,7 @@ test("legacy market migration preserves shelves, budgets, receipts and treasury 
         open INTEGER NOT NULL, stockLimit INTEGER NOT NULL, shelf INTEGER NOT NULL, budget INTEGER NOT NULL);
       INSERT INTO city_local_markets SELECT epoch,site,guild,open,stockLimit,shelf,budget FROM saved_local_markets;
       DROP TABLE saved_local_markets;
+      DROP INDEX city_local_market_sales_time;
       ALTER TABLE city_local_market_trades DROP COLUMN item;`);
   } finally {db.close();}
   for (let i=0; i<2; i++) {
@@ -1252,9 +1253,12 @@ function neutralMarketFixture(t: TestContext) {
     f.economy.viewCityMarkets(actor,f.guild.war.member(actor),cities(at),true,false,true);
   const board=(actor:string,at=f.now)=>
     f.economy.viewTradeContracts(actor,f.guild.war.member(actor),cities(at),null,null,true);
+  const route=(actor:string,at=f.now)=>
+    f.economy.viewCityTradeRoute(actor,f.guild.war.member(actor),cities(at),
+      {atCity:null,atMarket:null,contractsEnabled:true,now:at});
   const listing={action:"neutral_market_list",epoch,slot:2,amount:3,unitPrice:12};
   const proposal={action:"contract_open",epoch:f.moonEpoch,amount:6,gold:96};
-  return {...f,get economy(){return f.economy;},get guild(){return f.guild;},market,contract,view,board,listing,proposal};
+  return {...f,get economy(){return f.economy;},get guild(){return f.guild;},market,contract,view,board,route,listing,proposal};
 }
 
 test("neutral consignments fund a six-ore contract from two sellers and honor it after origin conquest", t=>{
@@ -1271,6 +1275,10 @@ test("neutral consignments fund a six-ore contract from two sellers and honor it
   assert.equal(f.board(visitor).job?.neutral,true);
   assert.equal(f.board(visitor).job?.total,78);
   assert.equal(f.miningStock(f.now).marketGold,4);
+  assert.equal(f.route(visitor).contracts.manage,null);
+  assert.equal(f.route(leader).contracts.manage?.gold,4);
+  assert.equal(f.route(leader).contracts.manage?.free,60-f.miningStock(f.now).used);
+  assert.equal(f.route(visitor).report.lastPurchase,null);
   const accept={action:"contract_accept",contractId,total:78}, acceptId=f.request();
   assert.throws(()=>f.contract(visitor,{...accept,total:77},river),/city_market_price_changed/);
   f.economy.saveCharacter(visitor,{},bag(true));
@@ -1306,6 +1314,23 @@ test("neutral consignments fund a six-ore contract from two sellers and honor it
   assert.deepEqual(f.contract(visitor,delivery,moon,f.now+2,deliveryId),paid);
   assert.equal(f.economy.getAccount(visitor).gold,1018);
   assert.equal(f.miningStock(f.now+2).stock.find(row=>row.item===CITY_PRODUCT)?.quantity,7);
+  const week=7*24*60*60*1000;
+  assert.deepEqual(f.route(visitor,f.now+2).report,{since:f.now+2-week,deals:1,units:6,gold:78,delivered:1,
+    lastPurchase:{at:f.now,amount:6,total:78}});
+  const reportAt=f.now+week-10, owner=f.guildMember(rival).id, epoch=f.sync(f.now+2,river).active!.id;
+  const db=new DatabaseSync(f.economyFile);
+  try {
+    const add=db.prepare("INSERT INTO city_local_market_trades(site,epoch,guild,item,actor,at,amount,total) VALUES(?,?,?,?,?,?,?,?)");
+    add.run(river,epoch,owner,CITY_PRODUCT,visitor,f.now+10,2,30);
+    add.run(river,epoch,owner,CITY_PRODUCT,visitor,f.now-11,1,15);
+    add.run(river,epoch,owner,CITY_PRODUCT,visitor,reportAt+1,1,15);
+    add.run(river,epoch,owner,CITY_MINING_PRODUCT,visitor,f.now+11,2,66);
+    add.run(moon,f.moonEpoch,f.guildMember(leader).id,CITY_PRODUCT,visitor,f.now+12,2,32);
+  } finally {db.close();}
+  assert.deepEqual(f.route(visitor,reportAt).report,{since:f.now-10,deals:2,units:8,gold:108,delivered:1,
+    lastPurchase:{at:f.now+10,amount:2,total:30}});
+  assert.equal(f.route(visitor,reportAt+week+100).report.delivered,0);
+  assert.equal(f.route(visitor,reportAt+week+100).report.deals,0);
 });
 
 test("neutral shelf caps and stale rounds survive even if conquest and abandonment occur before the next sync", t=>{

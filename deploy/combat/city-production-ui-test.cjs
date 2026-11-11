@@ -14,13 +14,14 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function node(tag = "div") {
   return {
-    tag, children: [], disabled: false, textContent: "",
+    tag, children: [], disabled: false, textContent: "", dataset:{},
     get valueAsNumber() { return Number(this.value); },
     append(...children) {
       this.children.push(...children);
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
     replaceChildren(...children) { this.children = children; },
+    querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
     setAttribute() {},
   };
 }
@@ -424,6 +425,57 @@ test("the neutral board uses its own quote, submits the selected bag slot, and p
   f.button("รับแร่คืน").onclick();
   assert.equal(f.wire.at(-1).payload.action,"neutral_market_withdraw");
   assert.equal(f.wire.at(-1).payload.offerId,"offer");
+});
+
+test("the atlas compares exact contract quantities and follows the pinned delivery through portals", () => {
+  const f=fixture({marketSupported:true,missionSupported:true}), river="sam_lan_estuary", moon="moon_pass", camp="camp";
+  const atlas=readFileSync(join(__dirname,"../../src/client/ui/047-maps-and-strategy.js"),"utf8");
+  const journey=readFileSync(join(__dirname,"../../src/client/ui/041-character-hud-and-journey.js"),"utf8");
+  const panel=f.nodes.atlasTradeRoute=node(), visited=[];
+  const gate={targetMapId:river,x:1,z:2}, nextGate={targetMapId:moon,x:3,z:4}, broker={role:"market",x:5,z:6};
+  Object.assign(f.ctx,{mode:"live",drawerActive:"strategy",activeMapId:camp,territoryState:null,travelRoutes:null,
+    ownServerCharacter:()=>({characterId:"merchant"}),openStrategicMap:site=>visited.push(site),updateAtlasCityMarket(){},
+    worldDefinitions:{[camp]:{name:"ค่าย",portals:[gate]},[river]:{name:"สามลาน",portals:[nextGate]},
+      [moon]:{name:"จันทรา",portals:[],serviceNpcs:[broker]}},
+    $:id=>id==="atlasTradeDeadline"?panel.children.find(child=>child.id===id):f.$(id)});
+  vm.runInNewContext(journey.slice(journey.indexOf("  function travelRoute("),journey.indexOf("  function currentItemHunt("))+
+    atlas.slice(atlas.indexOf("  function currentCityTradePin("),atlas.indexOf("  function openStrategicMap(")),f.ctx);
+  const origin={site:river,item:metal,side:"sell",status:"open",prices:[12,12,14]};
+  const destination={site:moon,item:metal,side:"buy",status:"open",prices:[15,15,14]};
+  const job={id:"contract",amount:3,gold:50,total:38,expires:1_120_000,carrying:false,yours:false};
+  const contracts={source:river,destination:moon,job,manage:null,paused:false,enabled:true};
+  const report={deals:2,units:4,gold:52,delivered:1,lastPurchase:null};
+  const state={serverNow:1_000_000,markets:[origin,destination],history:[],wallet:100,bagSpace:10,
+    tradeRoute:{contracts,report}};
+  f.ctx.cityReceiveMarkets(state);
+  const text=()=>panel.children.map(child=>child.textContent).join("\n");
+  assert.match(text(),/ตามสัญญา 50 ทอง · ส่วนต่าง \+12 ทอง/);
+  assert.match(text(),/ซื้อที่สามลาน 2 ดีล · 4 ชิ้น · ส่งสัญญาสำเร็จ 1 งาน · เฉลี่ย 13 ทอง/);
+  const input=panel.querySelector("input");
+  input.value="2";input.oninput();
+  assert.match(text(),/ซื้อ 2 ชิ้น · 24 ทอง/);
+  assert.match(text(),/สัญญาต้องส่งครบ 3 ชิ้น/);
+  assert.doesNotMatch(text(),/ตามสัญญา 50 ทอง/);
+  panel.children.find(child=>child.textContent==="ปักหมุดไปสามลาน").onclick();
+  assert.deepEqual(visited,[river]);
+  assert.equal(f.ctx.cityTradeHudGuide().to,gate);
+  f.ctx.activeMapId=river;
+  const carrying={...contracts,job:{...job,yours:true,carrying:true,total:null}};
+  f.ctx.cityReceiveMission({serverNow:1_001_000,missions:[],tradeContracts:carrying});
+  assert.equal(f.ctx.currentCityTradePin().site,moon);
+  assert.equal(f.ctx.cityTradeHudGuide().to,nextGate);
+  f.ctx.activeMapId=moon;
+  assert.equal(f.ctx.cityTradeHudGuide().to,broker);
+  f.ctx.territoryState={warTimes:{[moon]:{phase:"battle"}}};
+  assert.equal(f.ctx.cityTradeHudGuide().to,undefined);
+  f.ctx.territoryState=null;
+  f.ctx.cityReceiveMarkets({...state,serverNow:1_002_000,tradeRoute:{contracts:carrying,report}});
+  assert.match(text(),/สัญญาที่คุณรับแล้ว/);
+  f.setNow(125_000);
+  f.ctx.updateAtlasTradeDeadline();
+  assert.match(text(),/สัญญาถึงกำหนดแล้ว/);
+  assert.equal(f.ctx.cityTradeHudGuide(),null);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
 });
 
 test("the return quote uses tier-two quantities and the disabled market can release its budget", () => {

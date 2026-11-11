@@ -4481,6 +4481,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         }
       }
       client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake, cityReturnMarketIntake, cityNeutralMarketIntake),
+        tradeRoute: cityMarketIntake ? store.viewCityTradeRoute(actor, member, cities,
+          {atCity:atSite, atMarket, contractsEnabled:cityContractIntake, now}) : null,
         atSite, atMarket, enabled: cityMarketIntake, serverNow: now});
     } catch (error) {
       console.error("MONTRA city market action failed", error);

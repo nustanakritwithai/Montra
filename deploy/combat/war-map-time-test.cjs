@@ -14,7 +14,7 @@ assert.equal(label({phase:'protected',phaseEndsAt:1000},1000),'กำลัง�
   let accessible='';const button={dataset:{baseLabel:'ด่านจันทรา'},setAttribute:(_key,value)=>{accessible=value;}};
   const icon={dataset:{warSite:'moon_pass'},closest:()=>button,textContent:''};
   const detail={dataset:{warSite:'moon_pass'},closest:()=>null,textContent:''};
-  const context={drawerActive:'strategy',territoryReceivedAt:1000,performance:{now:()=>2500},
+  const context={drawerActive:'strategy',cityMarkets:null,$:()=>null,territoryReceivedAt:1000,performance:{now:()=>2500},
     territoryState:{serverNow:10000,warTimes:{moon_pass:{phase:'protected',phaseEndsAt:18000}}},
     ui:{drawerBody:{querySelectorAll:()=>[icon,detail]}}};
   vm.runInNewContext(source.slice(start,source.indexOf('  function openStrategicMap(',end))+'\nupdateAtlasWarTimes();',context);
