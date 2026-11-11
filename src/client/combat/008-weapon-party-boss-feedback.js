@@ -957,10 +957,18 @@
     return toggleFlight();
   }
 
+  const METEOR_LEADER_REQUIRED_TEXT="หัวหน้าปาร์ตี้ที่สังกัดกิลด์เท่านั้นที่ใช้ท่าทุบธรณีได้";
   let meteorPendingUntil=0;
+  function isGuildPartyLeader() {
+    return Boolean(guildState && partyState && partyState.leaderId===localId);
+  }
   function meteorSlamAttack() {
     if(mode!=="live" || !room || worldCombatFeatures.meteor!==true) {
       toast("ท่าทุบธรณียังไม่เปิดใช้งาน");
+      return false;
+    }
+    if(!isGuildPartyLeader()) {
+      toast(METEOR_LEADER_REQUIRED_TEXT);
       return false;
     }
     const player=ownServerCharacter();
@@ -981,6 +989,7 @@
       war_banner_unavailable:"ปักธงที่ตำแหน่งนี้ไม่ได้",
       war_banner_active:"ปาร์ตี้มีธงชัยอยู่แล้ว",
       war_banner_cooldown:"ธงชัยกำลังพักใช้งาน",
+      meteor_leader_required:METEOR_LEADER_REQUIRED_TEXT,
       meteor_unavailable:"ใช้ท่าทุบธรณีจากกลางอากาศนอกเขตพัก",
       meteor_cooldown:"ท่าทุบธรณีกำลังพักใช้งาน",
     };
@@ -1000,7 +1009,7 @@
     const state = celestialFlightState(hero);
     const meteor=$("meteorButton");
     if(meteor){
-      meteor.hidden=!(mode==="live" && worldCombatFeatures.meteor===true && state.active);
+      meteor.hidden=!(mode==="live" && worldCombatFeatures.meteor===true && state.active && isGuildPartyLeader());
       meteor.disabled=state.changing || performance.now()<meteorPendingUntil;
     }
     if (!hero?.node || hero.node.isDisposed?.()) return;

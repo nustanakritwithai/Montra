@@ -4141,6 +4141,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     client.send("guild_recruitment",{pending:guildStore().pending(character) ?? null,applications:guildStore().applications(character)});
   }
 
+  private isGuildPartyLeader(id: string): boolean {
+    return this.sessionGuilds.has(id) && this.parties.get(id)?.leader === id;
+  }
+
   private plantWarBanner(client: Client): void {
     const id = client.sessionId, player = this.state.players.get(id);
     const party = this.parties.get(id), guildId = this.sessionGuilds.get(id);
@@ -5834,6 +5838,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     meteor_slam: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_meteor");
       const id = client.sessionId, player = this.state.players.get(id);
+      if (!this.isGuildPartyLeader(id)) return this.reject(client, "meteor_leader_required");
       if (!player?.alive || !player.flying || !isOccultPath(player.pathId) || this.field ||
           this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
           this.flightTransitions.has(id) || isRestArea(player.mapId, player)) return this.reject(client, "meteor_unavailable");
@@ -6989,7 +6994,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.flightTransitions.delete(id);
       player.flying = !transition.landing;
       player.combatState = "idle";
-      if (transition.meteor) this.resolveMeteor(id, player);
+      if (transition.meteor && this.isGuildPartyLeader(id)) this.resolveMeteor(id, player);
       this.broadcast("flight_finished", {
         playerId: id, altitude: player.y, flying: player.flying,
       }, { afterNextPatch: true });

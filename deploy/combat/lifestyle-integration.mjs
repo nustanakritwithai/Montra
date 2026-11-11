@@ -146,13 +146,39 @@ try {
     const target = await until(()=>fighter.room.state.monsters.get("forest_west_1"),"nearby monster");
     const id = fighter.room.sessionId;
     await send(fighter,"fly",{},"flight_finished",v=>v.playerId===id && v.flying);
+    async function expectMeteorDenied() {
+      await pause(700); // Rejections share a per-client 500 ms notice limit.
+      const from = fighter.events.length;
+      const stamina = fighter.me().stamina;
+      await send(fighter,"meteor_slam",{},"command_rejected",v=>v.reason==="meteor_leader_required");
+      assert.equal(fighter.me().stamina,stamina);
+      assert.equal(fighter.me().flying,true);
+      assert.equal(fighter.me().combatState,"idle");
+      assert(!fighter.events.slice(from).some(e=>e.type==="meteor_impact" && e.data.ownerId===id));
+    }
+    async function formParty(leader, member) {
+      const from = member.events.length, leaderId = leader.room.sessionId;
+      await send(leader,"party_invite",{targetId:member.room.sessionId},"party_notice");
+      const invite = await until(()=>member.events.slice(from).find(e=>e.type==="party_invitation" && e.data.fromId===leaderId)?.data,"Meteor party invitation");
+      await send(member,"party_accept",{inviteId:invite.inviteId},"party_state",v=>v.leaderId===leaderId);
+    }
+    await expectMeteorDenied();
+    await formParty(fighter,other);
+    await expectMeteorDenied(); // Party leader without a guild.
+    await send(fighter,"party_leave",{},"party_state",v=>v.leaderId===null);
+    await send(fighter,"guild_create",{name:"Meteor Guard"},"guild_state",v=>v?.name==="Meteor Guard");
+    await formParty(other,fighter);
+    await expectMeteorDenied(); // Guild commander who is a regular party member.
+    const from = fighter.events.length;
+    await send(other,"party_leave",{},"party_state",v=>v.leaderId===null);
+    await until(()=>fighter.events.slice(from).some(e=>e.type==="party_state" && e.data.leaderId===id),"Meteor party promotion");
     const impact = await send(fighter,"meteor_slam",{},"meteor_impact",v=>v.ownerId===id);
     assert(impact.targets.includes(target.id));
     assert(fighter.events.some(e=>e.type==="combat_hit" && e.data.source==="meteor" && e.data.targetId===target.id));
     const exit=await send(other,"leave_home",{},"warp_complete");
     assert.equal(exit.mapId,"ritual_village");
     await until(()=>other.me()?.mapId===exit.mapId,"exit returns to village");
-    console.log("PASS: private home maps, construction restrictions, cooking, drinking and Meteor landing");
+    console.log("PASS: private home maps, construction restrictions, cooking, drinking and guild party leader Meteor landing");
   } else {
     const home = await send(artisan,"get_home",{},"home_state");
     assert.equal(home.level,1);
