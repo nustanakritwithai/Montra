@@ -158,6 +158,7 @@
   }
   function openChat(){
     if(!chatBox)return;
+    chatBox.potion?.close();
     if(!ui.drawer.hidden)closeDrawer();
     chatBox.el.classList.add("composing");chatBox.toggle.textContent="×";
     chatBox.toggle.setAttribute("aria-label","ย่อช่องพิมพ์แชท");chatBox.toggle.setAttribute("aria-expanded","true");
