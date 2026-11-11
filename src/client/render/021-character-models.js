@@ -205,8 +205,8 @@
   // once the elbow bends.
   const HAND_GRIPS = { ritual_dagger: new B.Vector3(0, .15, 1), arcane_sword: new B.Vector3(0, .1, 1), spirit_staff: new B.Vector3(0, 0, 1),
     sentinel_pike: new B.Vector3(0, .05, 1), seer_wand: new B.Vector3(0, .25, 1), mender_crook: new B.Vector3(0, 0, 1),
-    // The left daab of a twin pair leaves the fist on the other side so both blades point away from the body.
-    thai_left: new B.Vector3(0, .1, -1),
+    // Twin daab are both held in a normal grip, blade up out of the top of the fist.
+    thai_left: new B.Vector3(0, .1, 1),
     tool_axe: new B.Vector3(0, .05, 1), tool_pick: new B.Vector3(0, .05, 1), tool_sickle: new B.Vector3(0, .2, 1) };
   const DEFAULT_GRIP = new B.Vector3(0, .1, 1);
   function attachShamanModel(a) {
@@ -228,6 +228,8 @@
       root.parent = kind === "thai_left" ? nodes.Socket_Hand_Weapon_L : nodes.Socket_Hand_Weapon_R;
       root.position.set(0, 0, 0); root.scaling.setAll(.6); // weapons were modelled for the larger procedural rig
       root.rotationQuaternion = quatFromUp(HAND_GRIPS[kind] || DEFAULT_GRIP);
+      // The left daab is the mirror of the right one: turned half round its blade so its curve also sweeps outward.
+      if (kind === "thai_left") root.rotationQuaternion = root.rotationQuaternion.multiply(B.Quaternion.RotationAxis(B.Axis.Y, Math.PI));
     }
     a.rig.body.setEnabled(false);
     const hips = nodes.Hips.position;

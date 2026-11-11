@@ -208,8 +208,10 @@
     } else if (weapon === "thai_dual") {
       // Dual-blade guard: right blade raised before the face, edge out;
       // left blade low and back along the forearm, ready to cover.
-      set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
-      set("LeftArm", -.2, .1, -1.15); set("LeftForeArm", 0, -.45, 0); set("LeftHand", 1.9, 0, -.1);
+      // The blades are aimed with the arms and elbows; the wrists turn only a little (a 1.9 rad wrist
+      // roll twisted the skinned forearm like a candy wrapper).
+      set("RightArm", -.45, .15, 1.12); set("RightForeArm", 0, 1.6, 0); set("RightHand", 0, 0, -.35);
+      set("LeftArm", -.45, -.15, -1.12); set("LeftForeArm", 0, -1.6, 0); set("LeftHand", 0, 0, .35);
       add("RightShoulder", 0, .08, -.06); off[1] = -.06;
       add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
     } else if (weapon === "arcane_sword") {
