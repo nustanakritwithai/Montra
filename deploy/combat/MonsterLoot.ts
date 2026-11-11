@@ -4,7 +4,7 @@ import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
-import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,HIMMAPAN_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
+import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,HIMMAPAN_SPAWNS,HIMMAPAN_REPLACED_TARGETS,RIFT_WARDEN} from "./WorldAtlas.js";
 
 type Theme="grove"|"hunter"|"guard"|"spirit";
 type Hunt={id:string;name:string;level:number;mapId:string;tier?:string;theme:Theme;x?:number;z?:number};
@@ -72,15 +72,16 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const eligible=hunts.filter(m=>m.level>=item.level! && m.level<=item.dropMax!);
   const local=eligible.filter(m=>materials[m.theme].includes(material));
   // If a short unlock window lacks this profession, one ordinary camp carries the item.
-  const fallback=eligible.find(m=>m.tier!=="elite" && m.tier!=="boss");
-  const primary=local.length?local:eligible.filter(m=>m.mapId===fallback?.mapId && m.name===fallback.name);
+  const fallback=eligible.find(m=>m.tier!=="elite" && m.tier!=="boss" && !HIMMAPAN_REPLACED_TARGETS.has(m.id));
+  const primary=local.some(m=>!HIMMAPAN_REPLACED_TARGETS.has(m.id))?local:
+    [...local,...eligible.filter(m=>m.mapId===fallback?.mapId && m.name===fallback.name)];
   // Offer one accessible hunt near the unlock if the specialist camp starts much later.
-  const early=eligible.filter(m=>m.level<=item.level!+2 && m.tier!=="elite" && m.tier!=="boss");
+  const early=eligible.filter(m=>m.level<=item.level!+2 && m.tier!=="elite" && m.tier!=="boss" && !HIMMAPAN_REPLACED_TARGETS.has(m.id));
   const alternate=early.some(m=>primary.includes(m))?undefined:early.find(m=>m.theme===nearbyTheme[material])??early[0];
   const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss"||
     (journey && alternate && m.mapId===alternate.mapId && m.name===alternate.name && campKey(m)===campKey(alternate))||
     (starterWeapons.has(id) && isStarterHuntMob(m.id)));
-  sources.set(id,sites);
+  sources.set(id,sites.filter(m=>!HIMMAPAN_REPLACED_TARGETS.has(m.id)));
   for(const m of sites){
     const table=tables.get(m.id)!;
     if(item.kind==="material")table.materials.push(id as MaterialId);else table.gear.push(id as GearId);

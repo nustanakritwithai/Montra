@@ -1,4 +1,4 @@
-import { ATLAS_MAPS, FRONTIER_SPAWNS, RIFT_WARDEN } from "./WorldAtlas.js";
+import { ATLAS_MAPS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS, RIFT_WARDEN } from "./WorldAtlas.js";
 import { TEMPLE_CAMPS, TEMPLE_ID } from "./TempleMap.js";
 import { getWorldMap, groundAt, isSafeWorldPoint, isWorldSegmentClear, SHRINE_GUARDIAN, FOREST_CAMPS } from "./WorldMaps.js";
 import { REGIONAL_BOSSES } from "./RegionalBosses.js";
@@ -141,7 +141,8 @@ export function advanceForestObjective(active:ForestObjective|null,monsterId:str
     ? {active:null,completed:objective.id} : {active:objective,completed:null};
   if(definition.kind==="delivery" && objective.progress>=definition.goal-1)return {active:objective,completed:null};
   const prefix=definition.stages?.[objective.progress]?.prefix ?? definition.prefix;
-  if(mapId!==definition.mapId || !prefix || !monsterId.startsWith(prefix) || !/^[1-4]$/.test(monsterId.slice(prefix.length)))return {active:objective,completed:null};
+  const campMonster=HIMMAPAN_REPLACEMENTS.get(monsterId)??monsterId;
+  if(mapId!==definition.mapId || !prefix || !campMonster.startsWith(prefix) || !/^[1-4]$/.test(campMonster.slice(prefix.length)))return {active:objective,completed:null};
   const progress=objective.progress+1;
   return progress>=definition.goal && definition.kind!=="delivery" ? {active:null,completed:objective.id} : {active:{...objective,progress},completed:null};
 }

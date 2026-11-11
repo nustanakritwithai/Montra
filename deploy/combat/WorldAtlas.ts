@@ -231,17 +231,20 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"grove", special:{ range:3.45, halfWidth:0, innerRange:1.2, windupMs:1350 } },
   { id:"himmapan_karavek", name:"นกการเวก", mapId:"hex_ridge", x:-26, z:-29, level:45, tier:"normal",
     theme:"spirit", special:{ range:3.95, halfWidth:0, windupMs:1200 } },
-  { id:"himmapan_phayak_nathi", name:"พยัคฆนที", mapId:"drowned_marsh", x:-73, z:-53, level:22, tier:"normal",
+  { id:"himmapan_phayak_nathi", replaces:"atlas_drowned_marsh_3_2", name:"พยัคฆนที", mapId:"drowned_marsh", x:-73, z:-53, level:22, tier:"normal",
     theme:"hunter", special:{ range:1.9, halfWidth:0, windupMs:650, triggerRange:5, cueOnly:true,
       followups:[{range:1.85,halfWidth:0,windupMs:750,forward:3.4,leap:true}] } },
-  { id:"himmapan_hatsadiling", name:"นกหัสดีลิงค์", mapId:RIDGE_PASS, x:64, z:-40, level:57, tier:"normal",
+  { id:"himmapan_hatsadiling", replaces:"frontier_twin_neck_pass_2_3", name:"นกหัสดีลิงค์", mapId:RIDGE_PASS, x:64, z:-40, level:57, tier:"normal",
     theme:"hunter", special:{ range:5.2, halfWidth:0, halfAngle:Math.PI/3, windupMs:1250, recoveryMs:1700 } },
-  { id:"himmapan_kraisorn", name:"ไกรสรราชสีห์", mapId:"asura_peak", x:-84, z:-60, level:80, tier:"elite",
+  { id:"himmapan_kraisorn", replaces:"atlas_asura_peak_4_2", name:"ไกรสรราชสีห์", mapId:"asura_peak", x:-84, z:-60, level:80, tier:"elite",
     theme:"guard", special:{ range:3.5, halfWidth:0, halfAngle:Math.PI/4, windupMs:950, force:.9, recoveryMs:1750,
       followups:[{range:4.4,halfWidth:0,halfAngle:Math.PI/3,windupMs:800,force:1.1}] } },
-  { id:"himmapan_kilen", name:"กิเลน", mapId:"bamboo_frontier", x:-63, z:-24, level:33, tier:"normal",
+  { id:"himmapan_kilen", replaces:"atlas_bamboo_frontier_4_2", name:"กิเลน", mapId:"bamboo_frontier", x:-63, z:-24, level:33, tier:"normal",
     theme:"spirit", special:{ range:1.4, halfWidth:0, windupMs:950, triggerRange:5.2, forward:1.6, force:1, markFollowups:true,
       followups:[{range:1.4,halfWidth:0,windupMs:850,forward:3.25,lateral:1.2,force:1},
         {range:1.55,halfWidth:0,windupMs:850,forward:4.9,lateral:-1,force:1.15}] } },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);
+export const HIMMAPAN_REPLACEMENTS:ReadonlyMap<string,string>=new Map(HIMMAPAN_SPAWNS.flatMap(s=>
+  "replaces" in s?[[s.id,s.replaces] as const]:[]));
+export const HIMMAPAN_REPLACED_TARGETS:ReadonlySet<string>=new Set(HIMMAPAN_REPLACEMENTS.values());
 export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...HIMMAPAN_SPAWNS].map(s=>s.id));

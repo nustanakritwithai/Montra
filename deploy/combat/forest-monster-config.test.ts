@@ -5,6 +5,8 @@ import { SHRINE_GUARDIAN, getWorldMap, groundAt, isRestArea, isSafeWorldPoint } 
 import { parseAttackCommand } from "./GameRules.js";
 import { grantRewardPotion, makeStarterInventory, INVENTORY_STACK_LIMIT } from "./ItemRules.js";
 import { ForestEncounters } from "./ForestEncounters.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS } from "./WorldAtlas.js";
+import { advanceForestObjective } from "./ForestObjectives.js";
 
 const himmapan = [
   ["himmapan_matcha_naga", "lotus_basin", "มัจฉนาคา", 48],
@@ -30,6 +32,15 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
     const siege=new ForestEncounters(new MyRoomState().monsters);
     forest.initialize();siege.initialize(false);
     assert.equal(siege.profile(id),null);
+    const replaced=HIMMAPAN_REPLACEMENTS.get(id)!;
+    const base=[...ATLAS_SPAWNS,...FRONTIER_SPAWNS];
+    const duplicate=base.find(spawn=>spawn.id===replaced)!;
+    assert.equal(duplicate.mapId,mapId);
+    assert.ok(base.some(spawn=>spawn.id!==replaced && spawn.mapId===mapId && spawn.name===duplicate.name));
+    assert.equal(forest.profile(replaced),null);
+    assert.ok(siege.profile(replaced));
+    const objectiveId=replaced.slice(0,replaced.lastIndexOf("_"));
+    assert.equal(advanceForestObjective({id:objectiveId,progress:0},id,mapId).active?.progress,1);
     const hunter=new Player({...map.spawn,mapId});
     const second=new Player({...map.spawn,mapId});
     const blocked=new Player({...map.spawn,mapId});

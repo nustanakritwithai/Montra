@@ -1,5 +1,5 @@
 import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js";
-import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, type HimmapanAttack, type HimmapanPhase } from "./WorldAtlas.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, HIMMAPAN_REPLACED_TARGETS, type HimmapanAttack, type HimmapanPhase } from "./WorldAtlas.js";
 import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
 import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isSafeWorldPoint, isWorldSegmentClear } from "./WorldMaps.js";
@@ -111,7 +111,8 @@ export class ForestEncounters {
     // A full world room can populate every atlas hunting region at once.
     const bosses=includeWorldEncounters?REGIONAL_BOSSES.filter(b=>getWorldMap(b.mapId)?.boss?.id===b.id || (b.id===TITAN_BOSS.id && getWorldMap(b.mapId))):[];
     const templeSpawns=[...TEMPLE_SPAWNS,...bosses.filter(b=>b.mapId===TEMPLE_MAP.id)];
-    const regionalSpawns=[...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...bosses.filter(b=>b.mapId!==TEMPLE_MAP.id),
+    const regionalSpawns=[...[...ATLAS_SPAWNS,...FRONTIER_SPAWNS].filter(s=>!includeWorldEncounters || !HIMMAPAN_REPLACED_TARGETS.has(s.id)),
+      ...bosses.filter(b=>b.mapId!==TEMPLE_MAP.id),
       ...(includeWorldEncounters?HIMMAPAN_SPAWNS:[])];
     const totalSpawns=normalSpawns.length+templeSpawns.length+regionalSpawns.length+2;
     if (totalSpawns > MONSTER_CONFIG.maxSpawnPointsPerRoom) throw new Error("monster_spawn_cap_exceeded");

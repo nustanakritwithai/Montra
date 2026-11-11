@@ -76,6 +76,9 @@ try{
   ];
   for (const {state} of travelers) {
     for (const id of himmapanIds) assert.ok(state.monsters.get(id)?.specialRange>0,id);
+    for (const id of ["atlas_drowned_marsh_3_2","atlas_asura_peak_4_2","atlas_bamboo_frontier_4_2"]) {
+      assert.ok(!state.monsters.has(id),id+" was replaced");
+    }
     assert.equal(state.monsters.get("himmapan_matcha_naga")?.specialRange,4);
     assert.ok(Math.abs(state.monsters.get("himmapan_stone_yaksha")?.specialRange-2.8)<1e-6);
     assert.ok(Math.abs(state.monsters.get("himmapan_kochasri")?.specialHalfAngle-Math.PI/4)<1e-6);
