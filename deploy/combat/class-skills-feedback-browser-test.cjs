@@ -14,6 +14,7 @@ function fixture(){
  f.script+='\nlet warBannerPendingUntil=0;\n'+between(combat,'  const METEOR_LEADER_REQUIRED_TEXT=', '  function isGuildPartyLeader(');
  f.script+=between(combat,'  function showCombatFeatureError(', '  function toggleCelestialFlight(');
  const network=read('src/client/network/044-state-sync-and-connection.js');
+ f.script+='\nfunction showCombatFeatureError(){return false;}';
  f.script+='\nconst responses={},joined=room;let questNavigation=null,economyPending=false;room.onMessage=(name,callback)=>responses[name]=callback;\n'+between(network,'      joined.onMessage("command_rejected",','      joined.onMessage("warp_complete",');
  f.script+=between(network,'      joined.onMessage("sword_tree_changed",','      joined.onMessage("sword_counter_cleared",');
  f.script+='\nObject.assign(fixture,{reject:reason=>responses.command_rejected({reason}),accept:()=>responses.sword_tree_changed({action:"upgrade"}),notice:toast});';

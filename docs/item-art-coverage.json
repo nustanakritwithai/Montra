@@ -1230,6 +1230,8 @@
     "mat_boss_naga_cavern",
     "mat_boss_fallen_city",
     "mat_boss_tri_wiang_castle",
+    "mat_boss_wessuwan_titan",
+    "acc_boss_wessuwan_titan",
     "mat_fish_common species mismatch."
   ]
 }

@@ -208,8 +208,14 @@
     } else if (weapon === "thai_dual") {
       // Dual-blade guard: right blade raised before the face, edge out;
       // left blade low and back along the forearm, ready to cover.
-      set("RightArm", -.95, .25, .95); set("RightForeArm", 0, 1.35, 0); set("RightHand", .35, 0, .1);
-      set("LeftArm", -.2, .1, -1.15); set("LeftForeArm", 0, -.45, 0); set("LeftHand", 1.9, 0, -.1);
+      // The blades are aimed with the arms and elbows; the wrists turn only a little (a 1.9 rad wrist
+      // roll twisted the skinned forearm like a candy wrapper).
+      // Upper arms carried forward so the elbows bend only ~65 deg (a near-right-angle bend pinched the
+      // skinned elbow and flattened the forearm); wrists nearly straight.
+      // Twin swords face the opponent square on (krabi-krabong guard), so both arms read the same.
+      P.Hips[1] = -.22; P.Hips[2] = -.03; P.Spine[1] *= .2; P.Spine1[1] *= .2; P.Chest[1] *= .2;
+      set("RightArm", -.8, 0, 1.02); set("RightForeArm", 0, 1.15, 0); set("RightHand", -.35, 0, -.3);
+      set("LeftArm", -.8, 0, -1.02); set("LeftForeArm", 0, -1.15, 0); set("LeftHand", -.35, 0, .3);
       add("RightShoulder", 0, .08, -.06); off[1] = -.06;
       add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
     } else if (weapon === "arcane_sword") {
