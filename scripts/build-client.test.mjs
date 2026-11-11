@@ -48,8 +48,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/009-effects-and-target-hud.js",
-  "bytes": 18701,
-  "sha256": "582e5a1fd3edd97772b0f3bbac1dad545f7bf794a91c9afe736445166d4f7381"
+  "bytes": 18216,
+  "sha256": "274852d7732477492d23e66a24f404c3a64327ab40b3751f6af8c7f7bd58ad3d"
 },
 {
   "path": "combat/005-floating-feedback.js",
@@ -133,8 +133,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 161958,
-  "sha256": "e6ddb016ee36b39cdd7ebcbd1ce53acfa4c48193a9f8d258f0a47ee062b9a3c4"
+  "bytes": 161845,
+  "sha256": "81b6e0cbebbc80359715d4c2d9d6ed8cf534d1f6d08730c0d1eac02e3d54b192"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -257,7 +257,7 @@ const reviewedReleaseFragments = new Map([
     "bytes": 3272,
     "sha256": "15ee292d8918b9d48b035d07b07038c2afd3c3ab45d6f469b2fa64d5dbfe6a47"
   },
-  {"path":"audio/002-voice-guidance.js","bytes":21830,"sha256":"eeeb78a5d11cf9e42fa50431a80b7ee480357ba7019bd3cfdd749debf4127712"}
+  {"path":"audio/002-voice-guidance.js","bytes":20866,"sha256":"6f33c22dc7ed56558cdf635cd4544b231d7512e176e491a65b46b8e44964d623"}
 ].map(entry => [entry.path, entry]));
 
 test('reviewed combined client preserves unchanged snapshot bytes and deterministic assembly', () => {
@@ -265,8 +265,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 1978711);
-  assert.equal(hash(bytes), 'fde234ece716f4c4924756d3febdef12cead0238b20421b4c2832bf46ba5087c');
+  assert.equal(bytes.length, 1977149);
+  assert.equal(hash(bytes), '6fbae259eca8f1e7c961ba499b977861def0027066c571bf959b423783834566');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

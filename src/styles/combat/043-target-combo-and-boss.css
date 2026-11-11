@@ -40,30 +40,6 @@
 .combo-streak-hits::after {
   content: " HITS"; font-size: 18px; color: #ffd84a; -webkit-text-stroke: 3px #260f00;
 }
-/* ===== Phase 6: Epic Boss & Execute Encounter ===== */
-.target-overhead-execute {
-  display: inline-block;
-  color: #ff3344;
-  font: 900 11px/1 "Noto Sans Thai", system-ui, sans-serif;
-  letter-spacing: 0.5px;
-  background: rgba(180, 20, 20, 0.45);
-  border: 1px solid #ff3344;
-  border-radius: 6px;
-  padding: 2px 6px;
-  margin-left: 6px;
-  text-shadow: 0 0 6px #ff0000;
-  box-shadow: 0 0 10px rgba(255, 51, 68, 0.6);
-  animation: pulseExecute 0.45s infinite alternate;
-}
-@keyframes pulseExecute {
-  0% { transform: scale(1); filter: drop-shadow(0 0 2px #ff2200); }
-  100% { transform: scale(1.15); filter: drop-shadow(0 0 8px #ff5500); }
-}
-.target-overhead-hud.execute-active .target-overhead-bar-wrap {
-  border-color: #ff3344;
-  box-shadow: 0 0 10px rgba(255, 30, 30, 0.7);
-}
-
 /* ===== Phase 10: Boss Raid Phase Shift & Occult Shield ===== */
 .target-overhead-phase2-badge {
   display: inline-block;

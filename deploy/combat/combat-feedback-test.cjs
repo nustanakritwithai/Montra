@@ -81,7 +81,8 @@ test('a burst of confirmed hits has one sound and flash, while damage, combo, an
   assert.equal(f.count('shake'), 0);
   f.ctx.joined.state.monsters.get('mob').tier = 'boss';
   f.emit('combat_hit', { attackerId: 'me', targetId: 'mob', damage: 15, hp: 0 });
-  assert.deepEqual(f.calls.filter(call => call[0] === 'callout'), [['callout', 'execute_finisher']]);
+  assert.equal(f.ctx.hudKills.ritual_village, 2);
+  assert.equal(f.count('callout'), 0);
 });
 
 test('other players keep their animations without observer impact sounds, flashes, or damage labels', () => {

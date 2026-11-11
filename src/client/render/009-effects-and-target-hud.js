@@ -184,18 +184,9 @@
     let bossBadges = "";
     if (g?.phase2) bossBadges += '<span class="target-overhead-phase2-badge">🔥 ขั้น 2</span>';
     if (g?.staggeredUntil && g.staggeredUntil > now) bossBadges += '<span class="target-overhead-stagger-badge">😵 มึนงง!</span>';
-    if (pct <= 20 && hp > 0) {
-      triggerVoiceGuidance("execute");
-      targetOverheadHud.classList.add("execute-active");
-      targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + '<span class="target-overhead-execute">⚔️ ประหาร!</span>' + bossBadges;
-    } else {
-      targetOverheadHud.classList.remove("execute-active");
-      if (bossBadges) {
-        targetOverheadTag.innerHTML = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp + bossBadges;
-      } else {
-        targetOverheadTag.textContent = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
-      }
-    }
+    const label = (target.name || "มอนสเตอร์") + " · " + hp + "/" + maxHp;
+    if (bossBadges) targetOverheadTag.innerHTML = label + bossBadges;
+    else targetOverheadTag.textContent = label;
     targetOverheadHud.hidden = false;
   }
 

@@ -11,14 +11,13 @@ assert(!mainSrc.includes('function ensureVoiceGuidanceHud('), 'no guidance overl
 assert(!mainSrc.includes('TYPHOON AI'), 'no Typhoon information badge');
 assert(!cssSrc.includes('.voice-guidance-'), 'no obsolete overlay styles');
 
-// 2. Verify Typhoon Voice Guidance 7 Milestones
+// 2. Verify Typhoon Voice Guidance 6 Milestones
 assert(mainSrc.includes('const TYPHOON_VOICE_GUIDANCE = {'), 'defines TYPHOON_VOICE_GUIDANCE table');
-for (const key of ['move', 'target', 'combo', 'execute', 'levelup', 'gear', 'forest']) {
+for (const key of ['move', 'target', 'combo', 'levelup', 'gear', 'forest']) {
   assert(mainSrc.includes(`${key}: {`), `TYPHOON_VOICE_GUIDANCE includes ${key} milestone`);
 }
 assert(mainSrc.includes('ยินดีต้อนรับสู่แดนมนตรา'), 'move milestone contains welcome lore');
 assert(mainSrc.includes('วิชากำหนดจิตเล็งเป้า'), 'target milestone contains lock-on title');
-assert(mainSrc.includes('ตราราหูประหาร'), 'execute milestone contains finisher lore');
 assert(mainSrc.includes('เขตแดนป่าต้องห้าม'), 'forest milestone contains danger warning');
 
 // 3. Verify Voice Guidance Engine & Persistence
@@ -35,7 +34,7 @@ assert(mainSrc.includes('setVoiceGuidanceEnabled(vGuideToggle.checked)'), 'binds
 assert(mainSrc.includes('triggerVoiceGuidance("move");'), 'triggers move on first pointMove');
 assert(mainSrc.includes('triggerVoiceGuidance("target");'), 'triggers target on attack requests');
 assert(mainSrc.includes('triggerVoiceGuidance("combo");'), 'triggers combo on combo milestone');
-assert(mainSrc.includes('triggerVoiceGuidance("execute");'), 'triggers execute on execute threshold');
+assert(!mainSrc.includes('triggerVoiceGuidance("execute")'), 'low target health does not start execution guidance');
 assert(mainSrc.includes('triggerVoiceGuidance("levelup");'), 'triggers levelup on level increase');
 assert(mainSrc.includes('triggerVoiceGuidance("gear");'), 'triggers gear on opening bag');
 assert(mainSrc.includes('triggerVoiceGuidance("forest");'), 'triggers forest on warp portal');
