@@ -38,9 +38,9 @@ const civicFields:Readonly<Record<string,IsolatedField & {durationMs:number}>>={
     attack:{x:0,z:18},defend:{x:0,z:-41},durationMs:8*60_000,
   },
   ritual_village:{
-    flag:{kind:"fort",name:"ธงลานนอกหมู่บ้าน",x:-34,z:25},
+    flag:{kind:"fort",name:"ธงลานนอกหมู่บ้าน",x:-32,z:23},
     relay:{name:"จุดส่งเสบียงทุ่งนา",x:-36,z:12,radius:4,effect:"banner"},
-    attack:{x:-51,z:32},defend:{x:-17,z:35},durationMs:4*60_000,
+    attack:{x:-55,z:-9},defend:{x:-9,z:55},durationMs:4*60_000,
   },
 };
 const cityBattleModes = {
