@@ -12,7 +12,7 @@ import {
   CITY_MINING_WAREHOUSE_MATERIALS, CITY_WAREHOUSE_CAPACITY, CITY_WAREHOUSE_DURATION_MS, CITY_WAREHOUSE_REQUIREMENTS,
   CITY_SUPPLY_MATERIALS, CITY_SUPPLY_RECOVERY_SPEED, CITY_WORKSHOP_FEE, CITY_WORKSHOP_SLOTS,
   otherCity, type CityAsset, type CityContractOrder, type CityDisband, type CityHaulOrder, type CityItem, type CityMarketItem,
-  type CityMarketOrder, type CityMember,
+  type CityMarketOrder, type CityMember, type CityNeutralMarketOrder,
   type CityMissionOrder, type CityOwnership, type CityOwnerships, type CityPolicy, type CitySite, type CitySupplyOrder, type CitySupplyRepair,
 } from "./CityProductionRules.js";
 
@@ -42,8 +42,10 @@ type Supply = {id: string; epoch: number; guild: string; reserved: number; state
 type LocalMarket = {epoch: number; site: CitySite; guild: string; item: CityMarketItem;
   open: number; stockLimit: number; shelf: number; budget: number};
 type TradeContract = {id: string; sourceEpoch: number; sourceGuild: string; epoch: number; guild: string; name: string;
-  amount: number; gold: number; expires: number; state: "open" | "carrying"; merchant: string | null};
-type ContractReceipt = {contractId: string; trade?: {amount: number; total: number; buying: boolean}};
+  sourceNeutral: number; amount: number; gold: number; expires: number; state: "open" | "carrying"; merchant: string | null};
+type NeutralOffer = {id: string; seller: string; remaining: number; unitPrice: number};
+type SellerPayment = {seller: string; gold: number};
+type ContractReceipt = {contractId: string; trade?: {amount: number; total: number; buying: boolean; payments?: SellerPayment[]}};
 type Treasury = {sales: number; workshops: number; rushPaid: number; rushHeld: number; purchasePaid: number;
   purchaseHeld: number; missionPaid: number; missionHeld: number; haulPaid: number; haulHeld: number;
   localSales: number; localPaid: number; localHeld: number; contractPaid: number; contractHeld: number};
@@ -59,6 +61,7 @@ const purchaseIndexes = `CREATE UNIQUE INDEX IF NOT EXISTS city_purchase_one_ope
   CREATE INDEX IF NOT EXISTS city_purchase_guild ON city_purchase_orders(guild);`;
 const activeHauls = "state IN ('pending','open','carrying')";
 const activeContracts = "state IN ('open','carrying')";
+const neutralSourceColumn = "INTEGER NOT NULL DEFAULT 0 CHECK(sourceNeutral IN (0,1))";
 const activeSupplies = "state IN ('held','repair_pending')";
 const supplySpace = CITY_SUPPLY_MATERIALS.reduce((total, material) => total + material.amount, 0);
 const marketItemColumn = `TEXT NOT NULL DEFAULT '${CITY_PRODUCT}' CHECK(item IN ('${CITY_PRODUCT}','${CITY_MINING_PRODUCT}'))`;
@@ -163,10 +166,23 @@ export class CityProduction {
         epoch INTEGER NOT NULL, guild TEXT NOT NULL, name TEXT NOT NULL,
         amount INTEGER NOT NULL CHECK(amount BETWEEN 1 AND ${CITY_MARKET_QUANTITY}),
         gold INTEGER NOT NULL CHECK(gold BETWEEN 1 AND ${CITY_MISSION_MAX_REWARD}), expires INTEGER NOT NULL,
+        sourceNeutral ${neutralSourceColumn},
         merchant TEXT, state TEXT NOT NULL CHECK(state IN ('open','carrying','delivered','cancelled')),
         CHECK(state NOT IN ('carrying','delivered') OR merchant IS NOT NULL));
       CREATE UNIQUE INDEX IF NOT EXISTS city_contract_per_destination ON city_trade_contracts(epoch) WHERE ${activeContracts};
       CREATE INDEX IF NOT EXISTS city_contract_guild ON city_trade_contracts(guild,state);
+      CREATE TABLE IF NOT EXISTS city_neutral_market_offers (
+        seq INTEGER PRIMARY KEY, id TEXT NOT NULL UNIQUE, epoch INTEGER NOT NULL, seller TEXT NOT NULL,
+        remaining INTEGER NOT NULL CHECK(remaining BETWEEN 0 AND ${CITY_MARKET_QUANTITY}),
+        unitPrice INTEGER NOT NULL CHECK(unitPrice BETWEEN 1 AND ${CITY_PURCHASE_MAX_PRICE}),
+        state TEXT NOT NULL CHECK(state IN ('open','retired','sold','withdrawn')),
+        CHECK((state IN ('open','retired'))=(remaining>0)));
+      CREATE INDEX IF NOT EXISTS city_neutral_open_offers ON city_neutral_market_offers(epoch,unitPrice,seq) WHERE state='open';
+      CREATE INDEX IF NOT EXISTS city_neutral_seller_offers ON city_neutral_market_offers(seller) WHERE remaining>0;
+      CREATE TABLE IF NOT EXISTS city_neutral_market_sales (
+        request TEXT NOT NULL, offer TEXT NOT NULL REFERENCES city_neutral_market_offers(id), buyer TEXT NOT NULL,
+        at INTEGER NOT NULL, amount INTEGER NOT NULL CHECK(amount>0), total INTEGER NOT NULL CHECK(total>0),
+        PRIMARY KEY(request,offer));
       CREATE TABLE IF NOT EXISTS city_disband_assets (
         guild TEXT NOT NULL REFERENCES city_guild_closures(guild), item TEXT NOT NULL,
         awarded INTEGER NOT NULL CHECK(awarded>0),
@@ -175,6 +191,8 @@ export class CityProduction {
     for (const site of CITY_SITES) factorySite.run(site);
     this.migrateWarehouseProjects();
     this.migrateLocalMarkets();
+    if (!db.prepare("PRAGMA table_info(city_trade_contracts)").all().some(column => column.name === "sourceNeutral"))
+      db.exec(`ALTER TABLE city_trade_contracts ADD COLUMN sourceNeutral ${neutralSourceColumn};`);
     const columns = new Set(db.prepare("PRAGMA table_info(city_jobs)").all().map(column => column.name));
     for (const [name, definition] of [
       ["fee", "INTEGER NOT NULL DEFAULT 0 CHECK(fee>=0)"],
@@ -274,8 +292,15 @@ export class CityProduction {
       this.db.prepare("UPDATE city_factory_sites SET epoch=?,guild=? WHERE site=?").run(active, ownership.active?.guild ?? null, site);
     this.cancelHauls(`expires<=? OR (source=? AND sourceEpoch IS NOT ?) OR (destination=? AND destinationEpoch IS NOT ?)`,
       now, now, site, active, site, active);
-    const contractEpoch = site === CITY_PRODUCTION_SITE ? "sourceEpoch" : "epoch";
-    this.cancelContracts(`expires<=? OR ${contractEpoch} IS NOT ?`, now, now, active);
+    if (site === CITY_PRODUCTION_SITE) {
+      const neutralEpoch = ownership.neutralEpoch ?? null;
+      this.db.prepare("UPDATE city_neutral_market_offers SET state='retired' WHERE state='open' AND epoch IS NOT ?")
+        .run(neutralEpoch);
+      this.cancelContracts(`expires<=? OR (sourceNeutral=0 AND sourceEpoch IS NOT ?)
+        OR (sourceNeutral=1 AND state='open' AND sourceEpoch IS NOT ?)`, now, now, active, neutralEpoch);
+    } else {
+      this.cancelContracts("expires<=? OR epoch IS NOT ?", now, now, active);
+    }
     if (site === CITY_MINING_SITE) {
       const reserves = this.db.prepare(`SELECT * FROM city_supply_reserves WHERE state='held' AND epoch IS NOT ?`).all(active) as Supply[];
       for (const supply of reserves) this.refundSupply(supply);
@@ -460,6 +485,83 @@ export class CityProduction {
     return {site, amount, total, ...(order.item ? {item} : {})};
   }
 
+  private neutralStock(epoch: number): number {
+    const stock = this.db.prepare("SELECT coalesce(sum(remaining),0) AS stock FROM city_neutral_market_offers WHERE epoch=? AND state='open'")
+      .get(epoch);
+    return Number(stock?.stock ?? 0);
+  }
+
+  private neutralOffers(actor: string, epoch: number): NeutralOffer[] {
+    return this.db.prepare(`SELECT id,seller,remaining,unitPrice FROM city_neutral_market_offers
+      WHERE epoch=? AND state='open' AND seller<>? ORDER BY unitPrice,seq`).all(epoch, actor) as NeutralOffer[];
+  }
+
+  private neutralPrices(offers: NeutralOffer[]): number[] {
+    return offers.flatMap(offer => Array<number>(offer.remaining).fill(offer.unitPrice)).slice(0, CITY_MARKET_QUANTITY);
+  }
+
+  hasNeutralConsignments(seller?: string): boolean {
+    return seller === undefined ?
+      !!this.db.prepare("SELECT 1 FROM city_neutral_market_offers WHERE remaining>0 LIMIT 1").get() :
+      !!this.db.prepare("SELECT 1 FROM city_neutral_market_offers WHERE seller=? AND remaining>0 LIMIT 1").get(seller);
+  }
+
+  neutralMarketView(actor: string, ownership: CityOwnership, enabled: boolean) {
+    const epoch = enabled ? ownership.neutralEpoch : undefined;
+    const offers = this.db.prepare(`SELECT id,remaining,unitPrice,state FROM city_neutral_market_offers
+      WHERE seller=? AND remaining>0 ORDER BY seq`).all(actor);
+    if (epoch === undefined && !offers.length) return null;
+    const siege = ownership.siegeStarted !== undefined, open = epoch !== undefined && !siege;
+    const prices = open ? this.neutralPrices(this.neutralOffers(actor, epoch)) : [];
+    return {site:CITY_PRODUCTION_SITE, item:CITY_PRODUCT, side:"sell" as const, epoch:epoch ?? null,
+      neutral:true, enabled:open, status:epoch === undefined ? "disabled" : siege ? "siege" : prices.length ? "open" : "empty",
+      prices, space:epoch === undefined ? 0 : CITY_MARKET_SHELF - this.neutralStock(epoch), maxPrice:CITY_PURCHASE_MAX_PRICE, offers};
+  }
+
+  private requireNeutralMarket(ownership: CityOwnership, epoch: number): void {
+    if (ownership.siegeStarted !== undefined) throw Error("city_market_siege");
+    if (ownership.active || ownership.neutralEpoch !== epoch) throw Error("city_neutral_market_closed");
+  }
+
+  listNeutralStock(actor: string, order: Extract<CityNeutralMarketOrder, {action:"neutral_market_list"}>, ownership: CityOwnership) {
+    this.requireNeutralMarket(ownership, order.epoch);
+    if (this.neutralStock(order.epoch) + order.amount > CITY_MARKET_SHELF) throw Error("city_neutral_market_full");
+    const offerId = randomUUID();
+    this.db.prepare(`INSERT INTO city_neutral_market_offers(id,epoch,seller,remaining,unitPrice,state) VALUES(?,?,?,?,?,'open')`)
+      .run(offerId, order.epoch, actor, order.amount, order.unitPrice);
+    return {offerId, amount:order.amount};
+  }
+
+  withdrawNeutralStock(actor: string, offerId: string): {offerId: string; amount: number} {
+    const row = this.db.prepare("SELECT remaining FROM city_neutral_market_offers WHERE id=? AND seller=? AND remaining>0")
+      .get(offerId, actor);
+    if (!row) throw Error("city_neutral_offer_missing");
+    this.db.prepare("UPDATE city_neutral_market_offers SET remaining=0,state='withdrawn' WHERE id=?").run(offerId);
+    return {offerId, amount:Number(row.remaining)};
+  }
+
+  buyNeutralStock(actor: string, order: Extract<CityNeutralMarketOrder, {action:"neutral_market_buy"}>, ownership: CityOwnership, now: number) {
+    const {epoch, amount, total} = order;
+    this.requireNeutralMarket(ownership, epoch);
+    const offers = this.neutralOffers(actor, epoch), prices = this.neutralPrices(offers);
+    if (prices.length < amount) throw Error("city_market_quantity");
+    if (prices.slice(0, amount).reduce((sum, price) => sum + price, 0) !== total) throw Error("city_market_price_changed");
+    const update = this.db.prepare("UPDATE city_neutral_market_offers SET remaining=?,state=? WHERE id=?");
+    const sale = this.db.prepare("INSERT INTO city_neutral_market_sales(request,offer,buyer,at,amount,total) VALUES(?,?,?,?,?,?)");
+    const payments: SellerPayment[] = [];
+    let left = amount;
+    for (const offer of offers) {
+      const quantity = Math.min(left, offer.remaining), remaining = offer.remaining - quantity;
+      const gold = quantity * offer.unitPrice;
+      update.run(remaining, remaining ? "open" : "sold", offer.id);
+      sale.run(order.requestId, offer.id, actor, now, quantity, gold);
+      payments.push({seller:offer.seller, gold});
+      left -= quantity;
+      if (!left) break;
+    }
+    return {amount, total, payments};
+  }
+
   private released(kind: string, now: number, rows: Release[]): void {
     for (const {guild, gold} of rows) if (gold) this.treasuryEvent(guild, now, kind, gold);
   }
@@ -486,16 +588,18 @@ export class CityProduction {
     const paused = this.haulPaused(cities);
     const commander = member?.commander && member.id === destination.active?.guild && !this.closureActor(member.id);
     const quote = enabled && contract?.state === "open" && !paused ?
-      this.localMarketView(CITY_PRODUCTION_SITE, CITY_PRODUCT, source, undefined, enabled).prices : [];
+      (contract.sourceNeutral ? this.neutralMarketView(actor, source, enabled)?.prices ?? [] :
+        this.localMarketView(CITY_PRODUCTION_SITE, CITY_PRODUCT, source, undefined, enabled).prices) : [];
     return {
       enabled, paused, atCity, atMarket, source: CITY_PRODUCTION_SITE, destination: CITY_MINING_SITE,
       manage: commander && epoch !== undefined ? {
-        epoch, canOpen: enabled && !contract && !paused && !!source.active,
+        epoch, canOpen: enabled && !contract && !paused && (!!source.active || source.neutralEpoch !== undefined),
         maxAmount: Math.min(CITY_MARKET_QUANTITY, this.capacity(CITY_MINING_SITE) - this.used(epoch)),
         maxGold: Math.min(CITY_MISSION_MAX_REWARD, this.marketGold(member.id)),
       } : null,
       job: contract ? {
         id: contract.id, name: contract.name, amount: contract.amount, gold: contract.gold, expires: contract.expires,
+        neutral: !!contract.sourceNeutral,
         carrying: contract.state === "carrying", yours: contract.merchant === actor,
         canCancel: !!commander && contract.state === "open",
         total: quote.length >= contract.amount ? quote.slice(0, contract.amount).reduce((sum, price) => sum + price, 0) : null,
@@ -509,14 +613,16 @@ export class CityProduction {
     if (!member?.commander) throw Error("city_commander_required");
     this.requireCity(member, order.epoch, cities[CITY_MINING_SITE], CITY_MINING_SITE);
     if (this.haulPaused(cities)) throw Error("city_contract_siege");
-    const source = cities[CITY_PRODUCTION_SITE].active;
-    if (!source || this.closureActor(source.guild) || this.closureActor(member.id)) throw Error("city_contract_route");
+    const source = cities[CITY_PRODUCTION_SITE], sourceEpoch = source.active?.id ?? source.neutralEpoch;
+    const sourceGuild = source.active?.guild ?? "";
+    if (sourceEpoch === undefined || (sourceGuild && this.closureActor(sourceGuild)) || this.closureActor(member.id))
+      throw Error("city_contract_route");
     if (this.contractFor(order.epoch)) throw Error("city_contract_exists");
     if (this.used(order.epoch) + order.amount > this.capacity(CITY_MINING_SITE)) throw Error("city_storage_full");
     if (order.gold > this.marketGold(member.id)) throw Error("city_market_funds");
     const contractId = randomUUID();
-    this.db.prepare(`INSERT INTO city_trade_contracts(id,sourceEpoch,sourceGuild,epoch,guild,name,amount,gold,expires,state)
-      VALUES(?,?,?,?,?,?,?,?,?,'open')`).run(contractId, source.id, source.guild, order.epoch, member.id, member.name,
+    this.db.prepare(`INSERT INTO city_trade_contracts(id,sourceEpoch,sourceGuild,sourceNeutral,epoch,guild,name,amount,gold,expires,state)
+      VALUES(?,?,?,?,?,?,?,?,?,?,'open')`).run(contractId, sourceEpoch, sourceGuild, Number(!source.active), order.epoch, member.id, member.name,
       order.amount, order.gold, now + CITY_CONTRACT_DURATION_MS);
     this.treasuryEvent(member.id, now, "contract_hold", order.gold);
     return {contractId};
@@ -527,8 +633,12 @@ export class CityProduction {
     if (order.action === "contract_open") return this.openTradeContract(member, order, cities, atCity, now);
     const {contractId} = order, destination = cities[CITY_MINING_SITE], source = cities[CITY_PRODUCTION_SITE];
     const contract = destination.active && this.contractFor(destination.active.id);
-    if (!contract || contract.id !== contractId || contract.sourceEpoch !== source.active?.id || contract.expires <= now ||
-        this.closureActor(contract.guild) || this.closureActor(contract.sourceGuild)) throw Error("city_contract_missing");
+    if (!contract || contract.id !== contractId || contract.expires <= now ||
+        this.closureActor(contract.guild)) throw Error("city_contract_missing");
+    const validSource = contract.sourceNeutral ?
+      contract.state === "carrying" || contract.sourceEpoch === source.neutralEpoch :
+      contract.sourceEpoch === source.active?.id && !this.closureActor(contract.sourceGuild);
+    if (!validSource) throw Error("city_contract_missing");
     if (order.action === "contract_cancel") {
       if (atCity !== CITY_MINING_SITE) throw Error("city_contract_location");
       if (!member?.commander || member.id !== contract.guild) throw Error("city_commander_required");
@@ -545,10 +655,13 @@ export class CityProduction {
     if (order.action === "contract_accept") {
       if (atMarket !== CITY_PRODUCTION_SITE) throw Error("city_contract_location");
       if (contract.state !== "open") throw Error("city_contract_taken");
-      const trade = this.tradeAtLocalMarket(actor, {action:"local_market_trade", requestId:order.requestId,
-        site:CITY_PRODUCTION_SITE, epoch:contract.sourceEpoch, amount:contract.amount, total:order.total}, source, now);
+      const purchase = {requestId:order.requestId, epoch:contract.sourceEpoch, amount:contract.amount, total:order.total};
+      const trade = contract.sourceNeutral ?
+        this.buyNeutralStock(actor, {action:"neutral_market_buy", ...purchase}, source, now) :
+        this.tradeAtLocalMarket(actor, {action:"local_market_trade", site:CITY_PRODUCTION_SITE, ...purchase}, source, now);
       this.db.prepare("UPDATE city_trade_contracts SET state='carrying',merchant=? WHERE id=?").run(actor, contractId);
-      return {contractId, trade:{amount:trade.amount, total:trade.total, buying:true}};
+      const payments = "payments" in trade ? trade.payments : undefined;
+      return {contractId, trade:{amount:trade.amount, total:trade.total, buying:true, payments}};
     }
     if (atMarket !== CITY_MINING_SITE) throw Error("city_contract_location");
     if (contract.merchant !== actor) throw Error("city_contract_merchant");

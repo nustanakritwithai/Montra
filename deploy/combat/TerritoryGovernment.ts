@@ -1,5 +1,6 @@
 import type {DatabaseSync} from "node:sqlite";
-import {CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_SITES, type CityOwnership, type CitySite, type CitySupplyRepair, type CityTenure} from "./CityProductionRules.js";
+import {CITY_MINING_SITE, CITY_NEUTRAL_MARKET_ENABLED, CITY_PRODUCTION_SITE, CITY_SITES,
+  type CityOwnership, type CitySite, type CitySupplyRepair, type CityTenure} from "./CityProductionRules.js";
 
 // An income tick is 1/3,600,000 of a guild coin. No fractional income is lost on collection or conquest.
 const HOUR=3_600_000;
@@ -99,6 +100,10 @@ export class TerritoryGovernment {
     const battle = this.db.prepare(`SELECT seq,started,ended,incumbent,winner
       FROM territory_battles WHERE site=? ORDER BY seq DESC LIMIT 1`).get(site);
     const ownership: CityOwnership = {active: active ?? null, previous: null};
+    if (CITY_NEUTRAL_MARKET_ENABLED && site === CITY_PRODUCTION_SITE && !active) {
+      const last = this.db.prepare("SELECT id FROM city_tenures WHERE site=? ORDER BY id DESC LIMIT 1").get(site);
+      ownership.neutralEpoch = Number(last?.id ?? 0);
+    }
     if (battle?.ended === null) ownership.siegeStarted = Number(battle.started);
     else if (site === CITY_MINING_SITE && active && battle?.incumbent === active.guild && battle.winner === active.guild)
       ownership.defense = {seq: Number(battle.seq), started: Number(battle.started), damaged: !!this.estate(site)?.damaged};

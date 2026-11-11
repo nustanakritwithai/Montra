@@ -17,6 +17,7 @@ export const CITY_HAUL_ENABLED = process.env.MONTRA_CITY_HAULS === "1";
 export const CITY_LOCAL_MARKET_ENABLED = process.env.MONTRA_CITY_LOCAL_MARKETS === "1";
 export const CITY_RETURN_MARKET_ENABLED = process.env.MONTRA_CITY_RETURN_MARKET === "1";
 export const CITY_TRADE_CONTRACTS_ENABLED = process.env.MONTRA_CITY_TRADE_CONTRACTS === "1";
+export const CITY_NEUTRAL_MARKET_ENABLED = process.env.MONTRA_CITY_NEUTRAL_MARKET === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
@@ -117,6 +118,11 @@ export type CityMarketOrder = {requestId: string; epoch: number; site: CitySite;
   {action: "local_market_budget"; amount: number} |
   {action: "local_market_trade"; amount: number; total: number}
 );
+export type CityNeutralMarketOrder = {requestId: string} & (
+  {action: "neutral_market_list"; epoch: number; slot: number; amount: number; unitPrice: number} |
+  {action: "neutral_market_buy"; epoch: number; amount: number; total: number} |
+  {action: "neutral_market_withdraw"; offerId: string}
+);
 export type CityHaulOrder = {requestId: string} & (
   {action: "haul_open"; epoch: number; destination: CitySite; destinationEpoch: number;
     amount: number; reward: number; audience: "guild" | "public"} |
@@ -137,7 +143,7 @@ export type CityFactoryOrder = {requestId: string} & (
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
 export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder |
-  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | CityContractOrder | ({requestId: string} & (
+  CityPolicyOrder | CitySupplyOrder | CityHaulOrder | CityMarketOrder | CityContractOrder | CityNeutralMarketOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -148,6 +154,7 @@ export type CityTenure = {id: number; guild: string};
 export type CityOwnership = {
   active: CityTenure | null;
   previous: {guild: string; ended: number; siegeStarted?: number} | null;
+  neutralEpoch?: number;
   siegeStarted?: number;
   defense?: {seq: number; started: number; damaged: boolean};
 };
@@ -184,6 +191,11 @@ export function isCityHaulOrder(order: CityOrder): order is CityHaulOrder {
 export function isCityMarketOrder(order: CityOrder): order is CityMarketOrder {
   return order.action === "local_market_config" || order.action === "local_market_stock" ||
     order.action === "local_market_budget" || order.action === "local_market_trade";
+}
+
+export function isCityNeutralMarketOrder(order: CityOrder): order is CityNeutralMarketOrder {
+  return order.action === "neutral_market_list" || order.action === "neutral_market_buy" ||
+    order.action === "neutral_market_withdraw";
 }
 
 export function isCityContractOrder(order: CityOrder): order is CityContractOrder {
@@ -258,6 +270,14 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     return keys("guildId", "item", "amount") && uuid(order.guildId) &&
       (order.item === "gold" || CITY_ITEMS.some(item => item === order.item)) &&
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
+  if (order.action === "neutral_market_withdraw")
+    return keys("offerId") && uuid(order.offerId) ? order as CityOrder : null;
+  if (order.action === "neutral_market_list")
+    return keys("epoch", "slot", "amount", "unitPrice") && integer(order.epoch, 0) && integer(order.slot, 0, 11) &&
+      integer(order.amount, 1, CITY_MARKET_QUANTITY) && integer(order.unitPrice, 1, CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
+  if (order.action === "neutral_market_buy")
+    return keys("epoch", "amount", "total") && integer(order.epoch, 0) && integer(order.amount, 1, CITY_MARKET_QUANTITY) &&
+      integer(order.total, 1, CITY_MARKET_QUANTITY * CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
     case "contract_open":

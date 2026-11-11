@@ -399,6 +399,33 @@ test("local market submits the selected batch total only at the broker and uses 
   assert.equal(f.wire.at(-1).payload.site,moon);
 });
 
+test("the neutral board uses its own quote, submits the selected bag slot, and permits remote returns", () => {
+  const f=fixture({marketSupported:true,member:false}), river="sam_lan_estuary";
+  f.ctx.inventoryState.slots.push({itemId:metal,quantity:4});
+  f.ctx.openCityMarket();
+  const original={site:river,epoch:null,status:"unowned",prices:[],manage:null};
+  const market={site:river,epoch:0,item:metal,side:"sell",neutral:true,enabled:true,status:"open",prices:[12,14],space:10,
+    maxPrice:100,offers:[]};
+  const state={atMarket:river,markets:[original],neutralMarket:market,serverNow:1_000_000,history:[],
+    wallet:100,walletSpace:100,itemCount:4,bagSpace:20};
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.ctx.cityMarketRows()[0].epoch,0);
+  f.submit("ฝากแร่ขึ้นขาย",3,14);
+  const listed=f.wire.at(-1).payload;
+  assert.deepEqual(listed,{requestId:listed.requestId,action:"neutral_market_list",epoch:0,slot:2,amount:3,unitPrice:14});
+  f.ctx.cityReceiveResult(listed);
+  f.submit("ยืนยันซื้อแร่",2);
+  const bought=f.wire.at(-1).payload;
+  assert.deepEqual(bought,{requestId:bought.requestId,action:"neutral_market_buy",epoch:0,amount:2,total:26});
+  f.ctx.cityReceiveResult(bought);
+  const retired={...market,epoch:null,enabled:false,prices:[],offers:[{id:"offer",state:"retired",remaining:2,unitPrice:14}]};
+  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralMarket:retired});
+  assert.equal(f.button("ฝากแร่ขึ้นขาย"),undefined);
+  f.button("รับแร่คืน").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"neutral_market_withdraw");
+  assert.equal(f.wire.at(-1).payload.offerId,"offer");
+});
+
 test("the return quote uses tier-two quantities and the disabled market can release its budget", () => {
   const f=fixture({marketSupported:true});
   const river="sam_lan_estuary", moon="moon_pass", item="mat_metal_2";

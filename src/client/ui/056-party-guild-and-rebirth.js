@@ -342,6 +342,8 @@
       local_market_stock:data.amount>0?"นำแร่ขึ้นขายแล้ว":"คืนแร่เข้าคลังแล้ว",
       local_market_budget:data.amount>0?"กันงบรับซื้อแล้ว":"คืนงบให้กิลด์แล้ว",
       local_market_trade:(cityMarketPlayerBuys(data)?"ซื้อแร่แล้ว · จ่าย ":"ขายแร่แล้ว · ได้รับ ")+data.total+" ทอง",
+      neutral_market_list:"ฝากแร่ขึ้นขายแล้ว",neutral_market_buy:"ซื้อแร่แล้ว · จ่าย "+data.total+" ทอง",
+      neutral_market_withdraw:"รับแร่คืน "+data.amount+" ชิ้น",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -389,7 +391,7 @@
       city_haul_state:"สถานะงานเปลี่ยนแล้ว · กรุณารีเฟรช",city_haul_courier:"ผู้ที่รับเสบียงเท่านั้นที่ส่งหรือคืนงานได้",
       city_contract_disabled:"พักเปิดและรับสัญญาใหม่",
       city_contract_location:"ไปที่เมืองตามสัญญา · ตอนรับและส่งให้ยืนใกล้นายหน้าตลาด",
-      city_contract_siege:"พักรับและส่งสัญญาระหว่างศึก",city_contract_route:"ต้องมีผู้ครองทั้งสองเมืองก่อนเปิดสัญญา",
+      city_contract_siege:"พักรับและส่งสัญญาระหว่างศึก",city_contract_route:"ตลาดต้นทางยังไม่พร้อมให้เปิดสัญญา",
       city_contract_exists:"จันทรามีสัญญาจัดซื้อค้างอยู่แล้ว",city_contract_missing:"สัญญาปิดแล้ว · กรุณารีเฟรช",
       city_contract_taken:"สัญญานี้มีผู้รับแล้ว",city_contract_merchant:"ผู้รับสัญญาเท่านั้นที่ส่งสินค้าหรือคืนงานได้",
       city_supply_disabled:"พักการกันและใช้เสบียงเตรียมเมือง",
@@ -409,6 +411,9 @@
       city_market_budget:"จำนวนทองเกินเพดานหรือมากกว่างบที่กันไว้",
       city_market_quantity:"จำนวนที่ซื้อขายได้เปลี่ยนแล้ว · ตรวจยอดใหม่",
       city_market_price_changed:"ราคาขยับแล้ว · ตรวจยอดใหม่ก่อนยืนยัน",
+      city_neutral_market_closed:"รอบตลาดฝากขายสิ้นสุดแล้ว · ตรวจรายการรอรับคืน",
+      city_neutral_market_full:"ชั้นฝากขายเต็ม · กรุณาตรวจจำนวนว่าง",
+      city_neutral_offer_missing:"รายการฝากขายเปลี่ยนแล้ว · กรุณารีเฟรช",
       insufficient_gold:"ทองในกระเป๋าไม่พอ",
       city_policy_disabled:"ศาลาว่าการยังไม่เปิด",city_policy_location:"ไปยืนบนพื้นในด่านผนึกจันทราก่อนเปลี่ยนนโยบาย",
       city_policy_siege:"พักเปลี่ยนนโยบายระหว่างศึก",city_policy_cooldown:"เปลี่ยนนโยบายได้ทุก 24 ชั่วโมง · กรุณารีเฟรช",
@@ -457,16 +462,16 @@
     form.onsubmit=event=>{event.preventDefault();run(...inputs.map(input=>input.valueAsNumber));};
     target.append(form);return inputs;
   }
-  function cityBagForm(target,caption,label,slots,limit,send,locked){
+  function cityBagForm(target,caption,label,slots,limit,send,locked,extraFields=[]){
     const field=marketText("label","field",caption),select=document.createElement("select");
     for(const {item,slot} of slots){
       const choice=marketText("option","",economyItemName(item));choice.value=String(slot);select.append(choice);
     }
     select.disabled=locked;field.append(select);target.append(field);
     const selected=()=>slots.find(entry=>entry.slot===Number(select.value));
-    const [quantity]=cityAmountForm(target,label,[["จำนวน",Math.min(limit,slots[0].item.quantity)]],amount=>{
+    const [quantity]=cityAmountForm(target,label,[["จำนวน",Math.min(limit,slots[0].item.quantity)],...extraFields],(amount,...values)=>{
       const choice=selected();
-      if(choice)send({slot:choice.slot,item:choice.item.itemId,amount});
+      if(choice)send({slot:choice.slot,item:choice.item.itemId,amount},...values);
     },locked);
     select.onchange=()=>{
       quantity.max=String(Math.min(limit,selected().item.quantity));quantity.value="1";quantity.oninput?.();
@@ -505,7 +510,10 @@
     paused:"ตลาดปิด",empty:"สินค้าในตลาดหมด",target:"แร่ในคลังถึงเป้าหมาย",capacity:"คลังเมืองเต็ม",budget:"งบรับซื้อไม่พอ"
   };
   function cityMarketRows(){
-    return cityMarkets ? [...cityMarkets.markets,...(cityMarkets.returnMarkets??[])] : [];
+    if(!cityMarkets)return [];
+    const neutral=cityMarkets.neutralMarket;
+    return [...cityMarkets.markets.map(market=>neutral?.epoch!=null && market.site===neutral.site?neutral:market),
+      ...(cityMarkets.returnMarkets??[])];
   }
   function cityMarketPlayerBuys(market){
     return market.side ? market.side==="sell" : (market.site==="sam_lan_estuary")===(market.item!==cityReturnProduct);
@@ -515,9 +523,10 @@
     return {site,epoch,...(item===cityReturnProduct?{item}:{})};
   }
   function cityMarketSummary(market){
-    const label=cityMarketPlayerBuys(market)?"ราคาขายของเมือง":"ราคารับซื้อของเมือง";
+    const label=market.neutral?"ราคาฝากขาย":cityMarketPlayerBuys(market)?"ราคาขายของเมือง":"ราคารับซื้อของเมือง";
     if(!market.prices.length){
-      const status=cityMarketStatuses[market.status] || "ตลาดปิด", latest=market.lastTrade;
+      const status=market.neutral && market.status==="empty"?"ไม่มีแร่จากผู้ฝากรายอื่น":cityMarketStatuses[market.status] || "ตลาดปิด";
+      const latest=market.lastTrade;
       return latest?label+" · "+status+" · รายการล่าสุดเฉลี่ย "+(latest.total/latest.amount).toLocaleString("th-TH",
         {maximumFractionDigits:2})+" ทอง/ชิ้น · "+new Date(latest.at).toLocaleString("th-TH"):label+" · "+status;
     }
@@ -552,7 +561,9 @@
       return;
     }
     const [quantity]=cityAmountForm(target,buy?"ยืนยันซื้อแร่":"ยืนยันขายแร่",[["จำนวนชิ้น",totals.length]],amount=>{
-      if(cityPositive(amount,totals.length))
+      if(!cityPositive(amount,totals.length))return;
+      if(market.neutral)sendCityProduction("neutral_market_buy",{epoch:market.epoch,amount,total:totals[amount-1]});
+      else
         sendCityProduction("local_market_trade",{...cityMarketFields(market),amount,total:totals[amount-1]});
     },locked);
     const quote=marketText("p","note");quote.setAttribute("aria-live","polite");target.append(quote);
@@ -561,6 +572,29 @@
       quote.textContent=cityPositive(amount,totals.length)?(buy?"จ่าย ":"ได้รับ ")+totals[amount-1]+" ทอง":"เลือกจำนวนที่จะซื้อขาย";
     };
     quantity.oninput();
+  }
+  function renderNeutralConsignments(body,market,note,button,locked){
+    const section=marketText("section","gx-page");body.append(section);
+    section.append(marketText("h3","cp-h","ฝากขายที่สามลาน"));
+    for(const offer of market.offers){
+      note(section,(offer.state==="retired"?"รอรับคืน ":"กำลังฝากขาย ")+offer.remaining+" ชิ้น · "+offer.unitPrice+" ทอง/ชิ้น");
+      button(section,"รับแร่คืน",()=>sendCityProduction("neutral_market_withdraw",{offerId:offer.id}),locked);
+    }
+    if(!market.enabled)return;
+    note(section,"พื้นที่ฝากขายว่าง "+market.space+" ชิ้น");
+    if(cityMarkets.atMarket!==market.site){
+      note(section,"ไปยืนใกล้นายหน้าตลาดสามลานเพื่อฝากขาย");return;
+    }
+    if(market.space<1)return;
+    const slots=(inventoryState?.slots??[]).map((item,slot)=>({item,slot}))
+      .filter(({item})=>item?.itemId===cityProduct && !item.bound);
+    if(!slots.length){note(section,"ต้องมีแร่เหล็กชั้น 1 ในกระเป๋าก่อนฝากขาย");return;}
+    const limit=Math.min(12,market.space);
+    cityBagForm(section,"แร่ในกระเป๋า","ฝากแร่ขึ้นขาย",slots,limit,({slot,amount},unitPrice)=>{
+      const stock=slots.find(entry=>entry.slot===slot)?.item.quantity??0;
+      if(cityPositive(amount,Math.min(stock,limit)) && cityPositive(unitPrice,market.maxPrice))
+        sendCityProduction("neutral_market_list",{epoch:market.epoch,slot,amount,unitPrice});
+    },locked,[["ทองต่อชิ้น",market.maxPrice]]);
   }
   function renderCityMarketManagement(target,market,note,button,locked){
     const manage=market.manage, buy=cityMarketPlayerBuys(market), fields=cityMarketFields(market);
@@ -625,6 +659,7 @@
       }
       if(market.manage)renderCityMarketManagement(section,market,note,button,locked);
     }
+    if(cityMarkets.neutralMarket)renderNeutralConsignments(body,cityMarkets.neutralMarket,note,button,locked);
     const history=[...cityMarkets.history,...(cityMarkets.returnHistory??[])].sort((a,b)=>b.at-a.at);
     if(history.length)body.append(marketText("h3","cp-h","ประวัติซื้อขายของคุณ"));
     for(const entry of history.slice(0,10))note(body,citySiteNames[entry.site]+" · "+
@@ -783,6 +818,7 @@
     else if(!enabled)note(section,"พักสัญญาใหม่ · ผู้รับงานแล้วส่งสินค้าได้");
     if(job){
       note(section,job.name+" · "+cityItemName(cityProduct)+" × "+job.amount+" · รับเงิน "+job.gold+" ทองเมื่อส่งครบ");
+      if(job.neutral)note(section,"ซื้อแร่จากตลาดฝากขายสามลาน");
       note(section,"หมดอายุ "+new Date(job.expires).toLocaleString("th-TH"));
       const fields={contractId:job.id};
       if(job.yours){
