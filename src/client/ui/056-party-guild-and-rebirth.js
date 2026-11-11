@@ -63,7 +63,7 @@
     $("partyLeave").onclick=()=>{if(partyReady())room.send("party_leave",{});};
     renderParty(); if(partyReady())room.send("get_party",{});
   }
-  let guildRenderKey="";
+  let guildRenderKey="",guildTacticsKey="";
   const guildRankLabels={commander:"ผู้บัญชาการ",officer:"นายทหาร",squad_leader:"หัวหน้าหน่วย",member:"สมาชิก"};
   const guildSpecialtyLabels={none:"ทั่วไป",engineer:"ช่าง",scout:"สายข่าว",support:"สนับสนุน"};
   function guildReady(){return mode==="live" && room?.state?.guildAvailable===true && ownServerCharacter()?.persistent===true;}
@@ -80,29 +80,124 @@
       '<path d="M22 40 C28 34 34 36 34 42 C34 47 28 48 27 44 M78 40 C72 34 66 36 66 42 C66 47 72 48 73 44 M30 88 C36 94 44 96 50 96 C56 96 64 94 70 88" fill="none" stroke="#e8c47a" stroke-width="2" stroke-linecap="round" opacity=".85"/>'+
       '<text x="50" y="74" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="34" fill="#ffe7a8">'+esc+'</text>';
   }
+  function renderGuildTactics(){
+    if(!guildState)return;
+    const owners=territoryState?.owners || {},times=territoryState?.warTimes || {};
+    const wars=(territoryState?.engagements || []).filter(war=>Object.hasOwn(worldDefinitions || {},war.site));
+    const sites=Object.keys(owners).map(site=>({site,owner:owners[site],name:worldDefinitions?.[site]?.name || site,phase:times[site]?.phase}));
+    const selected=$("guildSitePanel").dataset.site;
+    const key=JSON.stringify([guildState.id,guildState.name,activeMapId,wars,sites,selected]);
+    if(guildTacticsKey===key)return;
+    guildTacticsKey=key;
+    const appendRow=(list,title,detail,action,run,tone)=>{
+      const row=marketText("div","gd-fort gx-territory-row"),info=marketText("div","gx-territory-info");
+      row.dataset.tone=tone;
+      row.dataset.guildIcon=tone==="battle"?"war":"town";
+      info.append(marketText("strong","",title),marketText("small","",detail));
+      const button=marketText("button","secondary",action);
+      button.type="button";button.onclick=run;row.append(info,button);list.append(row);
+      return button;
+    };
+    const visit=site=>site===activeMapId?openWarPanel():openStrategicMap(site);
+    const battles=$("gdBattles");
+    battles.replaceChildren();
+    if(!wars.length)battles.append(marketText("p","gx-empty-line",territoryState?"กิลด์ยังไม่มีศึกที่กำลังรบ":"กำลังโหลดสถานะสงคราม…"));
+    for(const war of wars){
+      appendRow(battles,worldDefinitions[war.site].name || war.site,war.side==="attack"?"กำลังรบ · ฝ่ายบุก":"กำลังรบ · ฝ่ายรับ",
+        war.site===activeMapId?"กระดานศึก":"ดูเส้นทาง",()=>visit(war.site),"battle");
+    }
+    const owned=$("gdForts"),others=$("gdOtherForts");
+    owned.replaceChildren();others.replaceChildren();
+    let count=0;
+    for(const entry of sites){
+      const mine=entry.owner===guildState.name;
+      if(mine)count++;
+      const phase={battle:"กำลังรบ",protected:"อยู่ในช่วงคุ้มครอง",open:"เปิดท้าชิง"}[entry.phase];
+      const ownership=mine?"กิลด์เราครอง":entry.owner?"ครองโดย "+entry.owner:"เป็นกลาง";
+      const label=Object.hasOwn(citySiteNames,entry.site)?"ข้อมูลเมือง":"ข้อมูลด่าน";
+      const button=appendRow(mine?owned:others,entry.name,[ownership,phase].filter(Boolean).join(" · "),
+        label,()=>{
+          $("guildSitePanel").dataset.site=entry.site;
+          renderGuild();
+          $("guildSiteName").focus();
+        },entry.phase==="battle"?"battle":mine?"owned":"neutral");
+      button.setAttribute("aria-pressed",String(selected===entry.site));
+      button.setAttribute("aria-label",label+" "+entry.name);
+    }
+    if(!count)owned.append(marketText("p","gx-empty-line",territoryState?"กิลด์ยังไม่ได้ครองด่าน":"กำลังโหลดข้อมูลด่าน…"));
+    $("gxForts").textContent=territoryState?String(count):"—";
+    $("guildOtherSites").hidden=sites.length===count;
+    $("guildOtherSitesLabel").textContent="ด่านอื่น ("+(sites.length-count)+")";
+  }
+  function renderGuildSite(recover,canGovern){
+    const panel=$("guildSitePanel"),site=panel.dataset.site,owners=territoryState?.owners;
+    panel.hidden=!site || !Object.hasOwn(owners || {},site);
+    if(panel.hidden)return;
+    const owner=owners[site],local=site===activeMapId,capabilities=room.state;
+    const localWar=territoryState.local;
+    const phase=territoryState.warTimes?.[site]?.phase || (localWar?.site===site?localWar.phase:null);
+    const name=worldDefinitions?.[site]?.name || site;
+    const status=$("guildSitePhase");
+    $("guildSiteName").textContent=name;
+    $("guildSiteOwner").textContent="ผู้ครอง · "+(owner || "เป็นกลาง");
+    status.textContent=phase?warPhase(phase):"รอข้อมูลศึก";
+    status.dataset.tone=phase || "";
+    const back=()=>openGuild(site),navigation={site,back};
+    const travel=$("guildSiteTravel");
+    travel.hidden=!worldDefinitions?.[site];
+    travel.dataset.guildIcon=local?"war":"map";
+    travel.textContent=local?"เปิดกระดานศึก":"ดูเส้นทางไปเมือง";
+    travel.onclick=()=>local?openWarPanel(back):openStrategicMap(site,back);
+
+    const economy=recover && Object.hasOwn(citySiteNames,site);
+    const production=economy && capabilities.cityProductionAvailable===true;
+    const warehouse=$("guildSiteWarehouse"),factory=$("guildSiteFactory");
+    warehouse.hidden=!production || !local;
+    factory.hidden=warehouse.hidden;
+    warehouse.onclick=()=>openCityProduction("warehouse",navigation);
+    factory.onclick=()=>openCityProduction("factory",navigation);
+    const location=$("guildSiteLocation");
+    location.hidden=!production || local;
+    location.textContent="เดินทางไปเมืองเพื่อเปิดคลังและโรงงาน";
+    const market=$("guildSiteMarket"),missions=$("guildSiteMissions"),hall=$("guildSiteHall");
+    market.hidden=!economy || capabilities.cityMarketSupported!==true;
+    market.onclick=()=>openCityMarket(navigation);
+    missions.hidden=!economy || capabilities.cityMissionSupported!==true;
+    missions.textContent=site==="moon_pass"?"กระดานภารกิจเมือง":"งานระหว่างเมือง";
+    missions.onclick=()=>openCityMission(navigation);
+    hall.hidden=!economy || site!=="moon_pass" || capabilities.cityGovernanceAvailable!==true || !canGovern || owner!==guildState.name;
+    hall.onclick=()=>openCityGovernance(navigation);
+  }
+  function filterGuildMembers(){
+    const search=$("guildMemberSearch").value.normalize("NFC").trim().toLocaleLowerCase("th");
+    const onlyOnline=$("guildOnlineOnly").checked;
+    const rows=[...$("guildMembers").children];
+    for(const row of rows)row.hidden=(onlyOnline && row.dataset.online!=="true") || !row.dataset.name.includes(search);
+    $("guildRosterEmpty").hidden=rows.some(row=>!row.hidden);
+  }
   function renderGuild(){
     if(drawerActive!=="guild" || !$("guildStatus"))return;
     const ready=guildReady(),roles=room?.state?.guildRolesAvailable===true;
-    if($("guildCityProduction")){
-      $("guildCityProduction").hidden=!cityRecoveryReady();
-      $("guildCityProduction").textContent=guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"รับทรัพย์สินกิลด์เดิม";
-    }
     const commander=guildState && guildState.ownId===guildState.leaderId;
     const own=guildState?.members.find(m=>m.id===guildState.ownId);
     const officer=roles && own?.rank==="officer";
+    const recover=cityRecoveryReady();
+    $("guildMemberRecovery").hidden=!recover;
+    $("guildCityRecovery").hidden=!!guildState || !recover;
+    $("guildCityRecovery").textContent=room?.state?.cityWorkshopSupported?"โรงงานสาธารณะและทรัพย์สินเดิม":"รับทรัพย์สินกิลด์เดิม";
+    if(ready && guildState){renderGuildTactics();renderGuildSite(recover,commander || officer);}
     const candidates=[];
     room?.state?.players?.forEach?.((player,id)=>{
       if(id===localId || player.persistent!==true || (guildState?.members||[]).some(m=>m.publicId && m.publicId===player.characterId))return;
       candidates.push({id,name:String(player.characterName || "ผู้เล่น")});
     });
-    const key=JSON.stringify({ready,roles,guildState,guildInvitation,guildDirectory,guildRecruitment,candidates,owners:territoryState?.owners,engagements:territoryState?.engagements});
+    const key=JSON.stringify({ready,roles,guildState,guildInvitation,guildDirectory,guildRecruitment,candidates});
     if(guildRenderKey===key)return;
     guildRenderKey=key;
-    $("guildStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว":guildState?guildState.name+" · สมาชิก "+guildState.members.length+" / 30":"ยังไม่มีกิลด์";
-    if(ready && Number.isFinite(guildState?.treasury))$("guildStatus").textContent+=" · คลังกิลด์ "+guildState.treasury+" หน่วย";
+    $("guildStatus").textContent=ready?"":"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว";
     $("guildCreateArea").hidden=!!guildState || !ready;
-    $("guildStatus").hidden=!!guildState; // the banner already names the guild
-    $("guildMemberArea").hidden=!guildState;
+    $("guildStatus").hidden=ready;
+    $("guildMemberArea").hidden=!guildState || !ready;
     $("guildInvitationBox").hidden=!guildInvitation || !!guildState;
     if(guildInvitation){$("guildInviteName").textContent=guildInvitation.guildName;$("guildInviterName").textContent=guildInvitation.fromName;}
     $("guildAccept").disabled=!ready;$("guildDecline").disabled=!ready;
@@ -123,6 +218,10 @@
     }
     const applications=$("guildApplications");applications.replaceChildren();
     $("guildApplicationsArea").hidden=!(commander||officer);
+    const count=guildRecruitment.applications.length,badge=$("guildApplicationBadge");
+    badge.textContent=String(count);
+    badge.setAttribute("aria-label",count+" คำขอสมัคร");
+    badge.hidden=!(commander||officer) || !count;
     if(!guildRecruitment.applications.length){const p=document.createElement("p");p.className="note";p.textContent="ยังไม่มีคำขอสมัคร";applications.append(p);}
     for(const application of guildRecruitment.applications){
       const row=document.createElement("div"),name=document.createElement("strong"),actions=document.createElement("div");row.className="gd-fort";actions.className="guild-actions";name.textContent=application.name;
@@ -135,25 +234,10 @@
       // Seal, counts, own rank.
       const members=guildState.members,online=members.filter(m=>m.online).length,ownRank=own?.id===guildState.leaderId?"commander":own?.rank||"member";
       $("gdName").textContent=guildState.name;
-      $("guildTreasury").textContent="คลังกิลด์ "+guildState.treasury+" หน่วย";
-      $("gxMembers").textContent=String(members.length);$("gxOnline").textContent=String(online);
+      $("guildTreasury").textContent=Number.isFinite(guildState.treasury)?guildState.treasury.toLocaleString("th-TH"):"—";
+      $("gxMembers").textContent=members.length+" / 30";$("gxOnline").textContent=String(online);
       $("gxCrest").innerHTML=guildCrestSvg(guildState.name);
-      $("gdRank").textContent="ตำแหน่งของคุณ · "+(guildRankLabels[ownRank] || "สมาชิก");$("gdRank").dataset.rank=ownRank;
-      const battles=$("gdBattles"),activeWars=territoryState?.engagements || [];battles.replaceChildren();
-      if(!activeWars.length){const note=document.createElement("p");note.className="note";note.textContent="ขณะนี้กิลด์ไม่มีศึกที่กำลังรบ";battles.append(note);}
-      for(const war of activeWars){if(typeof war.site!=="string" || !worldDefinitions?.[war.site])continue;
-        const row=document.createElement("div"),label=document.createElement("strong"),button=document.createElement("button");row.className="gd-fort mine";
-        label.textContent=(worldDefinitions[war.site].name || war.site)+" · ฝ่าย"+(war.side==="attack"?"บุก":"รับ");button.type="button";button.className="secondary";
-        button.textContent=war.site===activeMapId?"เข้าศึก":"ดูเส้นทาง";button.onclick=()=>war.site===activeMapId?openWarPanel():openStrategicMap(war.site);
-        row.append(label,button);battles.append(row);
-      }
-      // Forts: which strategic sites this guild holds, and who holds the rest.
-      const owners=territoryState?.owners||{},sites=Object.keys(owners);
-      $("gdForts").innerHTML=sites.length?sites.map(site=>{const mine=owners[site]===guildState.name,name=worldDefinitions?.[site]?.name||site;
-        return '<div class="gd-fort'+(mine?' mine':'')+'"><i>'+(mine?'⚑':'⚐')+'</i><div><strong></strong><small></small></div></div>';}).join(""):'<p class="note">ยังไม่มีข้อมูลด่าน · เข้าใกล้ด่านสงครามเพื่ออัปเดต</p>';
-      $("gxForts").textContent=String(sites.filter(site=>owners[site]===guildState.name).length);
-      [...$("gdForts").querySelectorAll(".gd-fort")].forEach((el,i)=>{const site=sites[i],mine=owners[site]===guildState.name;
-        el.querySelector("strong").textContent=worldDefinitions?.[site]?.name||site;el.querySelector("small").textContent=mine?"กิลด์เราครองอยู่":owners[site]?"ครองโดย "+owners[site]:"เป็นกลาง";});
+      $("gdRank").textContent=guildRankLabels[ownRank] || "สมาชิก";$("gdRank").dataset.rank=ownRank;
       // Squads: six squads of up to five, plus the unassigned.
       // Squads as five seats each: member initials, gold ring for the squad leader, dim when offline.
       const box=$("gdSquads");box.replaceChildren();
@@ -175,14 +259,18 @@
     for(const member of sorted){
       const rank=member.id===guildState.leaderId?"commander":member.rank || "member";
       const row=document.createElement("div");row.className="guild-member gd-member"+(member.online?" online":"");row.dataset.rank=rank;
+      row.dataset.name=member.name.normalize("NFC").toLocaleLowerCase("th");row.dataset.online=String(Boolean(member.online));
       const info=document.createElement("div"),name=document.createElement("strong"),status=document.createElement("small");
       name.textContent=member.name+(member.id===guildState.ownId?" · คุณ":"");
       const labels=[guildRankLabels[rank] || "สมาชิก",member.squad?"หน่วย "+member.squad:"ยังไม่เข้าหน่วย",guildSpecialtyLabels[member.specialty] || "ทั่วไป",member.online?"ออนไลน์":"ออฟไลน์"];
-      // Chips instead of one long line: rank, squad, role (online shown by the dot).
       status.className="gd-chips";
-      for(const [text,cls] of [[labels[0],"rank"],[labels[1],"squad"],[labels[2],"role"]]){const chip=document.createElement("span");chip.className="gd-chip "+cls;chip.textContent=text;status.append(chip);}
+      for(const [text,cls] of [[labels[0],"rank"],[labels[1],"squad"],[labels[2],"role"],[labels[3],"presence"]]){const chip=document.createElement("span");chip.className="gd-chip "+cls;chip.textContent=text;status.append(chip);}
       const avatar=document.createElement("span");avatar.className="gx-avatar";avatar.textContent=Array.from(member.name)[0]||"?";avatar.title=labels[3];
-      const icon=document.createElement("i");icon.className="gx-rank-icon";icon.textContent={commander:"♛",officer:"✦",squad_leader:"⛨"}[rank]||"";avatar.append(icon);
+      const rankArt={commander:"seal",officer:"war",squad_leader:"banner"}[rank];
+      if(rankArt){
+        const icon=document.createElement("span");icon.className="gx-rank-icon";icon.dataset.guildIcon=rankArt;
+        icon.setAttribute("aria-hidden","true");avatar.append(icon);
+      }
       row.append(avatar);info.append(name,status);row.append(info);
       const canOrganize=roles && (commander || (officer && rank!=="commander" && rank!=="officer"));
       const canManage=commander && member.id!==guildState.ownId;
@@ -221,6 +309,7 @@
       }
       list.append(row);
     }
+    filterGuildMembers();
     const select=$("guildTarget"),previous=select.value;select.replaceChildren();
     for(const candidate of candidates){const option=document.createElement("option");option.value=candidate.id;option.textContent=candidate.name;select.append(option);}
     if([...select.options].some(o=>o.value===previous))select.value=previous;
@@ -229,34 +318,163 @@
     $("guildLeave").disabled=!ready;
     $("guildRolesNote").hidden=!roles;
   }
-  function openGuild(){
-    guildRenderKey="";guildUnread=false;updatePartyBadge();
-    openDrawer("guild","กิลด์",
-      '<button class="secondary" id="backToParty" type="button">← ปาร์ตี้</button><div class="economy-balance" id="guildStatus" role="status"></div><div id="guildInvitationBox" class="party-invitation" hidden><strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong><div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div><p class="note">คำเชิญมีอายุ 60 วินาที</p></div><div id="guildCreateArea" hidden><div class="gx-empty"><svg class="gx-crest ghost" viewBox="0 0 100 116" aria-hidden="true"><path d="M50 4 L92 18 V58 C92 84 72 102 50 112 C28 102 8 84 8 58 V18 Z"/></svg><strong>ยังไม่มีกิลด์</strong><span>ตั้งกิลด์ของคุณ รวมพลยึดด่าน หรือรอคำเชิญจากผู้บัญชาการกิลด์อื่น</span></div><label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label><input id="guildName" maxlength="48" autocomplete="off"><button class="primary" id="guildCreate" type="button">สร้างกิลด์</button></div><div id="guildMemberArea" hidden><div class="gx-banner"><svg id="gxCrest" class="gx-crest" viewBox="0 0 100 116" aria-hidden="true"></svg><div class="gx-title"><small>กิลด์</small><strong id="gdName"></strong><em id="gdRank"></em></div></div><div class="gx-stats"><div><b id="gxMembers">0</b><span>สมาชิก / 30</span></div><div><b id="gxOnline">0</b><span>ออนไลน์</span></div><div><b id="gxForts">0</b><span>ด่านที่ครอง</span></div></div><div class="cp-tabs gx-tabs" role="tablist"><button type="button" data-gx="overview" class="on">ภาพรวม</button><button type="button" data-gx="members">สมาชิก</button><button type="button" data-gx="manage">เชิญและตั้งค่า</button></div><section class="gx-page" data-gpage="overview"><h3 class="cp-h">ด่านยุทธศาสตร์</h3><div id="gdForts" class="gd-forts"></div><h3 class="cp-h">หน่วยรบ</h3><div id="gdSquads" class="gx-squads"></div></section><section class="gx-page" data-gpage="members" hidden><div id="guildMembers"></div></section><section class="gx-page" data-gpage="manage" hidden><p class="note" id="guildRolesNote" hidden>ผู้บัญชาการแต่งตั้งนายทหารและหัวหน้าหน่วย · นายทหารช่วยจัดหน่วยและเชิญสมาชิก · หน่วยละไม่เกิน 5 คน</p><div id="guildInviteArea" hidden><label class="field" for="guildTarget">เชิญผู้เล่นในห้อง</label><select id="guildTarget"></select><button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button></div><button class="secondary" id="guildLeave" type="button">ออกจากกิลด์</button><p class="note">หัวหน้าที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก · หากเป็นสมาชิกคนสุดท้าย การออกจะยุบกิลด์</p></section></div></div>');
-    $("guildStatus").before(Object.assign(document.createElement("button"),{
-      id:"guildCityProduction",className:"secondary",type:"button",hidden:true,onclick:openCityProduction,
-    }));
-    const heading=document.createElement("h3"),battles=document.createElement("div");heading.className="cp-h";heading.textContent="ศึกของกิลด์";battles.id="gdBattles";battles.className="gd-forts";
-    $("gdForts").before(heading,battles);
-    $("guildCreateArea").insertAdjacentHTML("afterbegin",'<h3 class="cp-h">ค้นหากิลด์เพื่อสมัคร</h3><label class="field" for="guildSearch">ชื่อกิลด์</label><div class="party-actions"><input id="guildSearch" maxlength="48" autocomplete="off" placeholder="พิมพ์ชื่อกิลด์ หรือดูทั้งหมด"><button type="button" class="secondary" id="guildSearchButton">ค้นหา</button></div><div id="guildPending" class="party-invitation" hidden><strong id="guildPendingName"></strong><button type="button" class="secondary" id="guildCancelApplication">ยกเลิกคำขอ</button></div><div id="guildDirectory"></div><p class="note">แสดงสูงสุด 50 กิลด์ · สมัครได้ครั้งละหนึ่งกิลด์ รอผู้บัญชาการหรือนายทหารอนุมัติ</p>');
-    $("gdRank").insertAdjacentHTML("afterend",'<small id="guildTreasury"></small>');
-    $("gdBattles").before(Object.assign(document.createElement("div"),{className:"party-actions",innerHTML:'<button type="button" class="secondary" id="guildWarMap">แผนที่สงคราม</button><button type="button" class="secondary" id="guildWarPanel">สงครามและปกครองด่าน</button>'}));
-    $("guildInviteArea").insertAdjacentHTML("beforebegin",'<div id="guildApplicationsArea" hidden><h3 class="cp-h">คำขอสมัคร</h3><div id="guildApplications"></div></div>');
+  function setupGuildTabs(){
+    const tabs=[...$("guildTabs").querySelectorAll("[role=tab]")];
+    const select=tab=>{
+      for(const option of tabs){
+        const active=option===tab;
+        option.setAttribute("aria-selected",String(active));
+        option.tabIndex=active?0:-1;
+        $(option.getAttribute("aria-controls")).hidden=!active;
+      }
+    };
+    tabs.forEach((tab,index)=>{
+      tab.onclick=()=>select(tab);
+      tab.onkeydown=event=>{
+        const next={ArrowLeft:(index+tabs.length-1)%tabs.length,ArrowRight:(index+1)%tabs.length,Home:0,End:tabs.length-1}[event.key];
+        if(!Number.isInteger(next))return;
+        event.preventDefault();select(tabs[next]);tabs[next].focus();
+      };
+    });
+    return select;
+  }
+  function openGuild(site){
+    guildRenderKey="";guildTacticsKey="";guildUnread=false;updatePartyBadge();
+    openDrawer("guild","กิลด์",`
+      <div class="guild-command-panel">
+        <div class="gx-toolbar"><button class="secondary" id="backToParty" type="button">‹ ปาร์ตี้</button></div>
+        <p class="gx-empty-line" id="guildStatus" role="status" hidden></p>
+        <section class="party-invitation gx-invitation" id="guildInvitationBox" hidden>
+          <strong><span id="guildInviterName"></span> ชวนเข้ากิลด์ <span id="guildInviteName"></span></strong>
+          <div class="party-actions"><button id="guildAccept" type="button">เข้าร่วม</button><button id="guildDecline" type="button">ปฏิเสธ</button></div>
+          <p class="note">คำเชิญมีอายุ 60 วินาที</p>
+        </section>
+        <div id="guildCreateArea" hidden>
+          <section class="gx-panel">
+            <h3>ค้นหากิลด์</h3>
+            <label class="field" for="guildSearch">ชื่อกิลด์</label>
+            <div class="gx-search-row">
+              <input id="guildSearch" maxlength="48" autocomplete="off" placeholder="เว้นว่างเพื่อดูทั้งหมด">
+              <button class="secondary" id="guildSearchButton" type="button">ค้นหา</button>
+            </div>
+            <div class="party-invitation" id="guildPending" hidden>
+              <strong id="guildPendingName"></strong>
+              <button class="secondary" id="guildCancelApplication" type="button">ยกเลิกคำขอ</button>
+            </div>
+            <div class="gd-forts" id="guildDirectory"></div>
+          </section>
+          <details class="gx-disclosure">
+            <summary>สร้างกิลด์</summary>
+            <label class="field" for="guildName">ชื่อกิลด์ 2–24 ตัวอักษร</label>
+            <input id="guildName" maxlength="48" autocomplete="off">
+            <button class="primary" id="guildCreate" type="button">สร้างกิลด์</button>
+          </details>
+        </div>
+        <button class="secondary" id="guildCityRecovery" type="button" hidden></button>
+        <div id="guildMemberArea" hidden>
+          <header class="gx-banner">
+            <svg id="gxCrest" class="gx-crest" viewBox="0 0 100 116" aria-hidden="true"></svg>
+            <div class="gx-title"><strong id="gdName"></strong><em id="gdRank"></em></div>
+          </header>
+          <dl class="gx-stats">
+            <div data-guild-icon="banner"><dt>ออนไลน์</dt><dd id="gxOnline">—</dd></div>
+            <div data-guild-icon="members"><dt>สมาชิก</dt><dd id="gxMembers">—</dd></div>
+            <div data-guild-icon="town"><dt>ด่านที่ครอง</dt><dd id="gxForts">—</dd></div>
+            <div data-guild-icon="warehouse"><dt>คลังกิลด์</dt><dd><span id="guildTreasury">—</span> <small>หน่วย</small></dd></div>
+          </dl>
+          <div class="gx-tabs" id="guildTabs" role="tablist" aria-label="แผงกิลด์">
+            <button id="guildOverviewTab" data-guild-icon="banner" role="tab" type="button" aria-controls="guildOverviewPage" aria-selected="true">ภาพรวม</button>
+            <button id="guildTerritoryTab" data-guild-icon="town" role="tab" type="button" aria-controls="guildTerritoryPage" aria-selected="false" tabindex="-1">ด่านและเมือง</button>
+            <button id="guildMembersTab" data-guild-icon="members" role="tab" type="button" aria-controls="guildMembersPage" aria-selected="false" tabindex="-1">สมาชิก</button>
+            <button id="guildManageTab" data-guild-icon="seal" role="tab" type="button" aria-controls="guildManagePage" aria-selected="false" tabindex="-1">จัดการ<span id="guildApplicationBadge" hidden></span></button>
+          </div>
+          <section class="gx-page" id="guildOverviewPage" role="tabpanel" aria-labelledby="guildOverviewTab" tabindex="0">
+            <section class="gx-panel gx-battle-panel">
+              <h3 class="gx-with-emblem" data-guild-icon="war">ศึกของกิลด์</h3>
+              <div class="gd-forts" id="gdBattles"></div>
+            </section>
+            <div class="gx-shortcuts gx-overview-actions">
+              <button class="secondary" data-guild-icon="map" id="guildWarMap" type="button">แผนที่สงคราม</button>
+              <button class="secondary" data-guild-icon="war" id="guildWarPanel" type="button">กระดานศึก</button>
+              <button class="secondary" data-guild-icon="town" id="guildBrowseCities" type="button">ด่านและเมือง</button>
+            </div>
+          </section>
+          <section class="gx-page" id="guildTerritoryPage" role="tabpanel" aria-labelledby="guildTerritoryTab" tabindex="0" hidden>
+            <section class="gx-panel gx-city-detail" id="guildSitePanel" aria-labelledby="guildSiteName" hidden>
+              <div class="field-banner-head"><h3 class="gx-with-emblem" data-guild-icon="town" id="guildSiteName" tabindex="-1"></h3><span class="field-status" id="guildSitePhase"></span></div>
+              <p id="guildSiteOwner"></p><p class="note" id="guildSiteLocation" hidden></p>
+              <button class="primary gx-with-emblem" id="guildSiteTravel" type="button"></button>
+              <div class="gx-shortcuts gx-city-services">
+                <button class="secondary" data-guild-icon="warehouse" id="guildSiteWarehouse" type="button" hidden>คลังเมือง</button>
+                <button class="secondary" data-guild-icon="forge" id="guildSiteFactory" type="button" hidden>โรงงาน</button>
+                <button class="secondary" data-guild-icon="market" id="guildSiteMarket" type="button" hidden>ตลาดเมือง</button>
+                <button class="secondary" data-guild-icon="journal" id="guildSiteMissions" type="button" hidden></button>
+                <button class="secondary" data-guild-icon="hall" id="guildSiteHall" type="button" hidden>ศาลาว่าการ</button>
+              </div>
+            </section>
+            <section class="gx-panel"><h3 class="gx-with-emblem" data-guild-icon="town">ด่านที่กิลด์ครอง</h3><div class="gd-forts" id="gdForts"></div></section>
+            <details class="gx-disclosure" id="guildOtherSites" hidden>
+              <summary id="guildOtherSitesLabel">ด่านอื่น</summary>
+              <div class="gd-forts" id="gdOtherForts"></div>
+            </details>
+          </section>
+          <section class="gx-page" id="guildMembersPage" role="tabpanel" aria-labelledby="guildMembersTab" tabindex="0" hidden>
+            <div class="gx-roster-filters">
+              <label class="field">ค้นหาสมาชิก<input id="guildMemberSearch" type="search" autocomplete="off" placeholder="ชื่อตัวละคร"></label>
+              <label class="gx-online-filter"><input id="guildOnlineOnly" type="checkbox"> ออนไลน์เท่านั้น</label>
+            </div>
+            <p class="gx-empty-line" id="guildRosterEmpty" hidden>ไม่พบสมาชิกที่ตรงกับตัวกรอง</p>
+            <div id="guildMembers"></div>
+            <details class="gx-disclosure"><summary>หน่วยรบ</summary><div class="gx-squads" id="gdSquads"></div></details>
+          </section>
+          <section class="gx-page" id="guildManagePage" role="tabpanel" aria-labelledby="guildManageTab" tabindex="0" hidden>
+            <section class="gx-panel" id="guildApplicationsArea" hidden>
+              <h3 class="gx-with-emblem" data-guild-icon="contract">คำขอสมัคร</h3><div class="gd-forts" id="guildApplications"></div>
+            </section>
+            <section class="gx-panel" id="guildInviteArea" hidden>
+              <h3 class="gx-with-emblem" data-guild-icon="members">เชิญสมาชิก</h3>
+              <label class="field" for="guildTarget">ผู้เล่นในห้อง</label>
+              <select id="guildTarget"></select>
+              <button class="primary" id="guildInvite" type="button">ส่งคำเชิญ</button>
+            </section>
+            <p class="note" id="guildRolesNote" hidden>แต่งตั้งตำแหน่งและจัดหน่วยได้จากแท็บสมาชิก</p>
+            <button class="secondary gx-with-emblem" data-guild-icon="warehouse" id="guildMemberRecovery" type="button" hidden>ทรัพย์สินและการรับคืน</button>
+            <details class="gx-disclosure">
+              <summary>ออกจากกิลด์</summary>
+              <p class="note">ผู้บัญชาการที่มีสมาชิกต้องส่งต่อตำแหน่งก่อนออก สมาชิกคนสุดท้ายออกแล้วกิลด์จะถูกยุบ</p>
+              <button class="secondary gx-danger" id="guildLeave" type="button">ออกจากกิลด์</button>
+            </details>
+          </section>
+        </div>
+      </div>`);
     const search=()=>{if(guildReady()){guildDirectory=null;guildRenderKey="";renderGuild();room.send("guild_search",{query:$("guildSearch").value.trim()});}};
     $("guildSearchButton").onclick=search;
     $("guildSearch").onkeydown=event=>{if(event.key==="Enter"){event.preventDefault();search();}};
     $("guildCancelApplication").onclick=()=>{if(guildReady())room.send("guild_application_cancel",{});};
     $("guildWarMap").onclick=()=>openStrategicMap();$("guildWarPanel").onclick=()=>openWarPanel();
+    $("guildCityRecovery").onclick=openCityProduction;$("guildMemberRecovery").onclick=openCityProduction;
     $("backToParty").onclick=openParty;
-    for(const tab of ui.drawerBody.querySelectorAll("[data-gx]"))tab.onclick=()=>{
-      for(const t of ui.drawerBody.querySelectorAll("[data-gx]"))t.classList.toggle("on",t===tab);
-      for(const pg of ui.drawerBody.querySelectorAll(".gx-page"))pg.hidden=pg.dataset.gpage!==tab.dataset.gx;};
+    const selectTab=setupGuildTabs(),territoryTab=$("guildTerritoryTab");
+    $("guildBrowseCities").onclick=()=>{selectTab(territoryTab);territoryTab.focus();};
+    const returning=typeof site==="string" && !!site;
+    if(returning){
+      $("guildSitePanel").dataset.site=site;
+      selectTab(territoryTab);
+      if(territoryState?.owners?.[site]!==guildState?.name)$("guildOtherSites").open=true;
+    }
+    $("guildMemberSearch").oninput=filterGuildMembers;$("guildOnlineOnly").onchange=filterGuildMembers;
     $("guildCreate").onclick=()=>{const name=$("guildName").value.normalize("NFC").trim();if(guildReady() && name)room.send("guild_create",{name});};
     $("guildInvite").onclick=()=>{const targetId=$("guildTarget").value;if(guildReady() && targetId)room.send("guild_invite",{targetId});};
     $("guildAccept").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_accept",{inviteId:guildInvitation.inviteId});};
     $("guildDecline").onclick=()=>{if(guildReady() && guildInvitation)room.send("guild_decline",{inviteId:guildInvitation.inviteId});};
     $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
-    renderGuild();if(guildReady()){room.send("get_guild",{});if(!guildState)room.send("guild_search",{query:""});}
+    renderGuild();
+    if(returning && guildReady() && guildState)($("guildSitePanel").hidden?territoryTab:$("guildSiteName")).focus();
+    if(guildReady()){
+      room.send("get_guild",{});
+      if(room.state.worldMapsAvailable===true)room.send("get_territories",{});
+      if(!guildState)room.send("guild_search",{query:""});
+    }
   }
   const cityProduct="mat_metal_1", cityReturnProduct="mat_metal_2";
   const cityAssets=["gold",cityProduct,"mat_raw_wood_1","mat_raw_stone_1","mat_raw_stone_2","mat_metal_2"];
@@ -282,6 +500,16 @@
     }catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
   }
   function cityItemName(id){return id==="gold"?"ทองตลาด":bagMeta(id)?.name || "วัสดุ";}
+  function cityEmblemText(tag,label,icon){
+    const element=marketText(tag,"gx-with-emblem",label);
+    element.dataset.guildIcon=icon;return element;
+  }
+  function cityMaterialLabel(item,quantity){
+    const label=marketText("div","city-material-label"),tile=createItemTile(item);
+    tile.className+=" city-material-art";tile.setAttribute("aria-hidden","true");
+    label.append(tile,marketText("span","",cityItemName(item)+" × "+quantity));
+    return label;
+  }
   function cityPositive(n,max=Number.MAX_SAFE_INTEGER){return Number.isSafeInteger(n) && n>0 && n<=max;}
   function cityReceiveState(data){
     if(data?.guildId!==guildState?.id || !Array.isArray(data?.stock) || !Array.isArray(data?.reclaim) ||
@@ -455,8 +683,12 @@
       item_unavailable:"ของในกระเป๋าเปลี่ยนแล้ว",listing_unavailable:"ประกาศขายถูกซื้อหรือยกเลิกแล้ว",listing_limit:"ประกาศขายกิลด์เต็มแล้ว"};
     cityStatus=reasons[data?.reason] || "ทำรายการไม่สำเร็จ · กรุณาตรวจข้อมูลแล้วลองอีกครั้ง";
     renderCityProduction();
-    if(action==="contract_accept" && ["city_market_price_changed","city_market_quantity","city_contract_missing",
-      "city_contract_taken"].includes(data?.reason))refreshCityMission();
+    const staleMission=drawerActive==="cityMission" && action?.startsWith("mission_") &&
+      ["city_mission_full","city_mission_missing","city_mission_active","city_mission_limit","city_mission_siege",
+        "city_mission_guild_only","city_not_owner","city_ownership_changed","city_storage_full","city_market_funds"].includes(data?.reason);
+    const staleContract=action==="contract_accept" && ["city_market_price_changed","city_market_quantity","city_contract_missing",
+      "city_contract_taken"].includes(data?.reason);
+    if(staleContract || staleMission)refreshCityMission();
   }
   function transmitCityProduction(){
     if(!cityPending || cityPending.target!==room || !cityRecoveryReady())return;
@@ -514,13 +746,15 @@
     cityPurchase=null;
     openCityBoard("cityPurchase","ใบสั่งซื้อกิลด์",refreshCityPurchase);
   }
-  function openCityMission(){
+  function openCityMission(navigation){
     cityMission=null;
-    openCityBoard("cityMission","กระดานภารกิจเมือง",refreshCityMission);
+    const title=navigation?.site==="sam_lan_estuary"?"งานระหว่างเมือง":"กระดานภารกิจเมือง";
+    openCityBoard("cityMission",title,refreshCityMission,navigation);
   }
-  function openCityGovernance(){
+  function openCityGovernance(navigation){
     cityGovernance=null;
-    openCityBoard("cityGovernance","ศาลาว่าการเมือง",refreshCityGovernance,"คลังเมือง",openCityProduction);
+    openCityBoard("cityGovernance","ศาลาว่าการเมือง",refreshCityGovernance,navigation?.site?navigation:
+      {backLabel:"คลังเมือง",back:openCityProduction});
   }
   function cityMarketReady(){return cityRecoveryReady() && room.state.cityMarketSupported===true;}
   function refreshCityMarkets(){
@@ -528,9 +762,9 @@
     try{room.send("get_city_markets",{});}
     catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
   }
-  function openCityMarket(){
+  function openCityMarket(navigation){
     cityMarkets=null;
-    openCityBoard("cityMarket","ตลาดประจำเมือง",refreshCityMarkets);
+    openCityBoard("cityMarket","ตลาดประจำเมือง",refreshCityMarkets,navigation);
   }
   const cityMarketStatuses={
     unowned:"เมืองยังไม่มีผู้ครอง",disabled:"พักเปิดรับคำสั่งใหม่",siege:"พักระหว่างศึก",
@@ -740,17 +974,21 @@
     if(!cityMarkets){note(body,"กำลังโหลดราคาตลาดเมือง…");return;}
     if(cityMarkets.contribution)renderCityMarketContribution(body,cityMarkets.contribution,note,button,locked);
     note(body,"ราคาของแต่ละชิ้นอาจเปลี่ยนตามสต็อก");
+    const navigation=cityBoardNavigation(body),site=navigation?.site;
     const markets=cityMarketRows();
+    if(site)markets.sort((a,b)=>Number(b.site===site)-Number(a.site===site));
     for(const market of markets){
       const section=marketText("section","gx-page");body.append(section);
-      section.append(marketText("h3","cp-h",citySiteNames[market.site]+" · "+cityItemName(market.item??cityProduct)));
+      const heading=cityEmblemText("h3",citySiteNames[market.site]+" · "+cityItemName(market.item??cityProduct),"market");
+      heading.className+=" cp-h";section.append(heading);
       note(section,cityMarketSummary(market));
       const comparison=cityMarketRouteQuote(market,markets);
       if(comparison)note(section,comparison);
       if(cityMarkets.atMarket===market.site && market.prices.length)renderCityMarketTrade(section,market,note,locked);
       else if(market.prices.length){
         note(section,"เข้าใกล้นายหน้าตลาดของเมืองนี้เพื่อซื้อขาย");
-        button(section,"ดูเส้นทาง",()=>openStrategicMap(market.site));
+        button(section,"ดูเส้นทาง",()=>navigation?
+          openStrategicMap(market.site,()=>openCityMarket(navigation)):openStrategicMap(market.site));
       }
       if(market.manage)renderCityMarketManagement(section,market,note,button,locked);
     }
@@ -762,12 +1000,18 @@
       (cityMarketPlayerBuys(entry)?"ซื้อ ":"ขาย ")+cityItemName(entry.item??cityProduct)+" "+entry.amount+" ชิ้น · "+
       entry.total+" ทอง · "+new Date(entry.at).toLocaleString("th-TH"));
   }
-  function openCityBoard(drawer,title,refresh,backLabel="ตลาดโลก",back=openEconomy){
-    if(!cityPending)cityStatus="";
+  function cityBoardNavigation(body){
+    const {site}=body.dataset;
+    return site?{site,back:$("cityBack").onclick}:undefined;
+  }
+  function openCityBoard(drawer,title,refresh,{site,backLabel=site?"ข้อมูลเมือง":"ตลาดโลก",back=openEconomy}={}){
+    if(drawer!=="cityProduction" && !cityPending)cityStatus="";
     openDrawer(drawer,title,
-      '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← '+backLabel+'</button>'+
+      '<div class="guild-actions"><button id="cityBack" class="secondary" type="button"></button>'+
       '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
       '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
+    if(site)$("cityProductionContent").dataset.site=site;
+    $("cityBack").textContent="← "+backLabel;
     $("cityBack").onclick=back;
     $("cityRefresh").onclick=()=>{if(!cityPending)cityStatus="";refresh();renderCityProduction();};
     renderCityProduction();refresh();
@@ -795,9 +1039,9 @@
     if(!body)return;
     $("cityRefresh").disabled=!ready;
     $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับเมืองเพื่อเปิดศาลาว่าการ");
+    const openDetails=new Set(["cityHallLedger","cityHallStorage","cityHallHistory"].filter(id=>$(id)?.open));
     body.replaceChildren();
     const note=(target,label)=>target.append(marketText("p","note",label));
-    const group=title=>{const section=marketText("section","gx-page");section.append(marketText("h3","cp-h",title));body.append(section);return section;};
     const button=(target,label,run,disabled)=>{
       const control=marketText("button","secondary",label);control.type="button";
       control.onclick=run;control.disabled=disabled;target.append(control);
@@ -806,7 +1050,31 @@
     if(!ready)return;
     if(!cityGovernance){if(!cityStatus)note(body,"กำลังโหลดข้อมูลเมือง…");return;}
     const {treasury,stock,history,used,capacity,policy,commander,siege,atMoon,serverNow,nextAt,epoch}=cityGovernance;
-    const choices=group("นโยบายด่านผนึกจันทรา");
+    const panel=marketText("div","field-command");body.append(panel);
+    const group=(title,icon)=>{
+      const section=marketText("section","field-card");
+      section.append(cityEmblemText("h3",title,icon));panel.append(section);return section;
+    };
+    const disclosure=(id,title)=>{
+      const details=marketText("details","field-card");details.id=id;details.open=openDetails.has(id);
+      details.append(marketText("summary","",title));panel.append(details);return details;
+    };
+    const overview=marketText("section","field-banner"),head=marketText("div","field-banner-head");
+    const status=marketText("span","field-status",siege?"อยู่ระหว่างศึก":atMoon?"ยืนบนพื้นในด่าน":"ต้องยืนบนพื้นในด่าน");
+    status.dataset.tone=siege?"battle":atMoon?"open":"";
+    head.append(cityEmblemText("h3","ด่านผนึกจันทรา","hall"),status);
+    const stats=marketText("dl","field-stats");
+    for(const [id,label,value,icon] of [
+      ["cityHallAvailable","ทองพร้อมใช้",treasury.available,"gold"],
+      ["cityHallHeld","ทองกันไว้",treasury.held,"seal"],
+      ["cityHallCapacity","พื้นที่คลัง (ชิ้น)",used+" / "+capacity,"warehouse"]
+    ]){
+      const cell=marketText("div",""),amount=marketText("dd","",String(value));amount.id=id;
+      cell.dataset.guildIcon=icon;
+      cell.append(marketText("dt","",label),amount);stats.append(cell);
+    }
+    overview.append(head,stats);panel.append(overview);
+    const choices=group("นโยบายเมือง","seal");
     note(choices,"นโยบายปัจจุบัน · "+(cityPolicyLabels[policy] || "ยังไม่เลือก"));
     note(choices,"เน้นผลิต · งานผลิตใหม่ใช้เวลาน้อยลง 15%  |  เน้นจัดซื้อ · เปิดใบสั่งซื้อได้สูงสุด 24 ชิ้น");
     const locked=!!cityPending || !atMoon || siege || serverNow<nextAt;
@@ -814,25 +1082,19 @@
       if(siege)note(choices,"พักเปลี่ยนนโยบายระหว่างศึก");
       else if(!atMoon)note(choices,"ไปที่ด่านและยืนบนพื้นเพื่อเปลี่ยนนโยบาย");
       if(serverNow<nextAt)note(choices,"เปลี่ยนได้อีกครั้ง "+new Date(nextAt).toLocaleString("th-TH"));
+      const actions=marketText("div","field-actions");
       for(const [mode,label] of Object.entries(cityPolicyLabels))
-        button(choices,label,()=>sendCityProduction("policy_set",{epoch,policy:mode}),locked || mode===policy);
+        button(actions,label,()=>sendCityProduction("policy_set",{epoch,policy:mode}),locked || mode===policy);
+      choices.append(actions);
     } else note(choices,"ผู้บัญชาการเป็นผู้เลือกนโยบาย");
-    const ledger=group("ทองตลาดรวมของกิลด์");
-    note(ledger,"พร้อมใช้ "+treasury.available+" ทอง · กันไว้ "+treasury.held+" ทอง");
-    note(ledger,"กันใบสั่งซื้อ "+treasury.purchaseHeld+" · ค่าจ้างภารกิจ "+treasury.missionHeld+" · เร่งผลิต "+treasury.rushHeld+
-      " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" · ตลาดเมือง "+(treasury.localHeld ?? 0)+
-      (treasury.contractHeld?" · สัญญาจัดซื้อ "+treasury.contractHeld:"")+" ทอง");
-    note(ledger,"รายรับสะสม "+treasury.earned+" ทอง · จ่ายแล้ว "+treasury.paid+" ทอง");
-    if(treasury.contributions>0)note(ledger,"เงินสมทบจากสมาชิกสะสม "+treasury.contributions+" ทอง");
-    const storage=group("คลังจันทรา");
-    note(storage,"ใช้ "+used+" / "+capacity+" ชิ้น รวมพื้นที่ที่กันไว้");
-    for(const row of stock)note(storage,cityItemName(row.item)+" × "+row.quantity);
     const {supply,supplyEnabled}=cityGovernance;
     if(supply && (supplyEnabled || supply.status)){
-      const reserve=group("เสบียงเตรียมเมือง");
-      const cost=supply.materials.map(material=>cityItemName(material.item)+" × "+material.amount).join(" + ");
+      const reserve=group("เสบียงเตรียมเมือง","haul");
       const busy=!!cityPending || !atMoon || siege;
-      note(reserve,(supply.status?"กันไว้แล้ว · ":"ต่อชุด · ")+cost);
+      note(reserve,supply.status?"กันไว้แล้ว":"วัสดุต่อชุด");
+      const materials=marketText("div","city-materials");
+      for(const material of supply.materials)materials.append(cityMaterialLabel(material.item,material.amount));
+      reserve.append(materials);
       if(siege)note(reserve,"พักจัดการเสบียงระหว่างศึก");
       else if(!atMoon)note(reserve,"ไปยืนบนพื้นในด่านแล้วกดรีเฟรชเพื่อจัดการเสบียง");
       if(supply.status==="repair_pending")note(reserve,"กำลังยืนยันการซ่อมเมือง");
@@ -852,9 +1114,19 @@
         if(!enough)note(reserve,"เตรียมวัสดุในคลังด่านให้ครบ");
       }
     }
-    const activity=group("ประวัติล่าสุด");
-    note(activity,"แสดงรายการตั้งแต่มีศาลาว่าการ ส่วนยอดสะสมรวมธุรกรรมเดิมด้วย");
-    for(const row of history)if(cityTreasuryLabels[row.kind])
+    const ledger=disclosure("cityHallLedger","ทองตลาดรวมของกิลด์");
+    note(ledger,"กันใบสั่งซื้อ "+treasury.purchaseHeld+" · ค่าจ้างภารกิจ "+treasury.missionHeld+" · เร่งผลิต "+treasury.rushHeld+
+      " · ขนเสบียง "+(treasury.haulHeld ?? 0)+" · ตลาดเมือง "+(treasury.localHeld ?? 0)+
+      (treasury.contractHeld?" · สัญญาจัดซื้อ "+treasury.contractHeld:"")+" ทอง");
+    note(ledger,"รายรับสะสม "+treasury.earned+" ทอง · จ่ายแล้ว "+treasury.paid+" ทอง");
+    if(treasury.contributions>0)note(ledger,"เงินสมทบจากสมาชิกสะสม "+treasury.contributions+" ทอง");
+    const storage=disclosure("cityHallStorage","คลังจันทรา");
+    note(storage,stock.length?"ความจุด้านบนรวมพื้นที่ที่กันไว้":"ยังไม่มีสินค้าในคลังจันทรา");
+    for(const row of stock)storage.append(cityMaterialLabel(row.item,row.quantity));
+    const activity=disclosure("cityHallHistory","ประวัติล่าสุด");
+    const entries=history.filter(row=>cityTreasuryLabels[row.kind]);
+    note(activity,entries.length?"เริ่มบันทึกเมื่อเปิดศาลาว่าการ · ยอดสะสมรวมธุรกรรมก่อนหน้านั้น":"ยังไม่มีรายการตั้งแต่เปิดศาลาว่าการ");
+    for(const row of entries)
       note(activity,new Date(row.at).toLocaleString("th-TH")+" · "+cityTreasuryLabels[row.kind]+(row.gold?" · "+row.gold+" ทอง":""));
   }
   function refreshCityMission(){
@@ -863,34 +1135,59 @@
     catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
   }
   const citySiteNames={sam_lan_estuary:"เวียงปากน้ำสามลาน",moon_pass:"ด่านผนึกจันทรา"};
-  function renderCityHauls(body,hauls,note,button,locked){
+  function cityMissionCard(section,title,icon){
+    const card=marketText("article","city-mission-card");
+    card.append(cityEmblemText("h4",title,icon));section.append(card);return card;
+  }
+  function cityMissionTerms(card,item,amount,reward){
+    const terms=marketText("div","city-mission-terms"),gold=cityEmblemText("span","","gold");
+    gold.className+=" city-mission-gold";gold.title="รางวัล";
+    gold.append(marketText("span","gx-sr-only","รางวัล "),marketText("span","",reward+" ทอง"));
+    terms.append(cityMaterialLabel(item,amount),gold);card.append(terms);
+  }
+  function cityMissionDeadline(card,expires){
+    if(!Number.isFinite(expires))return;
+    const date=new Date(expires),time=marketText("time","",date.toLocaleString("th-TH"));
+    time.dateTime=date.toISOString();
+    const line=cityEmblemText("p","","time");
+    line.className+=" note city-mission-deadline";line.title="หมดอายุ";
+    line.append(marketText("span","gx-sr-only","หมดอายุ "),time);card.append(line);
+  }
+  function renderCityHauls(sections,hauls,{note,button,route},locked){
     const {jobs,manage,enabled,paused,atCity}=hauls;
-    const section=marketText("section","gx-page");body.append(section);
-    section.append(marketText("h3","cp-h","ขนเสบียงระหว่างเมือง"));
-    note(section,"รับเสบียงขณะยืนบนพื้นในเมืองต้นทาง แล้วเดินทางไปส่งที่เมืองปลายทางเพื่อรับค่าจ้าง");
-    if(paused || !enabled)note(section,paused?"พักงานขนเสบียงระหว่างศึก":"พักรับและส่งงานขนเสบียง");
-    if(!jobs.length)note(section,"ยังไม่มีงานขนเสบียงที่เปิดให้ตัวละครนี้");
-    const unavailable=locked || paused || !enabled;
+    const pause=paused?"พักงานขนเสบียงระหว่างศึก":!enabled?"พักรับและส่งงานขนเสบียง":"";
+    if(pause && !jobs.length)note(sections.open,pause);
     for(const job of jobs){
-      const card=marketText("section","gx-page");section.append(card);
-      card.append(marketText("h3","cp-h",citySiteNames[job.source]+" → "+citySiteNames[job.destination]));
-      note(card,job.name+" · "+cityItemName(job.item)+" × "+job.amount+" · ค่าจ้าง "+job.reward+" ทอง");
+      const card=cityMissionCard(job.carrying?sections.active:sections.open,"ขนเสบียง · "+citySiteNames[job.source]+" → "+citySiteNames[job.destination],"haul");
+      cityMissionTerms(card,job.item,job.amount,job.reward);
       const status={pending:"รอปลายทางอนุมัติ",open:"เปิดรับผู้ขนส่ง",carrying:"กำลังขนส่ง"}[job.state];
-      note(card,status+" · "+(job.audience==="guild"?"เฉพาะกิลด์ต้นทาง":"ผู้เล่นทุกคน")+" · หมดอายุ "+new Date(job.expires).toLocaleString("th-TH"));
+      note(card,[job.name,status,job.audience==="guild"?"เฉพาะกิลด์ต้นทาง":"ผู้เล่นทุกคน"].filter(Boolean).join(" · "));
+      cityMissionDeadline(card,job.expires);
+      if(pause)note(card,pause);
       const fields={haulId:job.id};
+      const actions=marketText("div","field-actions");
       if(job.canApprove){
-        button(card,"อนุมัติรับเสบียง",()=>sendCityProduction("haul_approve",fields),unavailable || atCity!==job.destination);
-        button(card,"ปฏิเสธรับเสบียง",()=>sendCityProduction("haul_decline",fields));
+        if(!pause && atCity!==job.destination)note(card,"ยืนบนพื้นในเมืองปลายทางเพื่ออนุมัติ");
+        button(actions,"อนุมัติรับเสบียง",()=>sendCityProduction("haul_approve",fields),!!pause || atCity!==job.destination,true);
+        button(actions,"ปฏิเสธรับเสบียง",()=>sendCityProduction("haul_decline",fields));
       }
-      if(job.canCancel)button(card,"ยกเลิกงานขนเสบียง",()=>sendCityProduction("haul_cancel",fields));
-      if(job.canPickup)button(card,"รับเสบียงจากต้นทาง",()=>sendCityProduction("haul_pickup",fields),unavailable || atCity!==job.source);
+      if(job.canCancel)button(actions,"ยกเลิกงานขนเสบียง",()=>sendCityProduction("haul_cancel",fields));
+      if(job.canPickup){
+        if(!pause && atCity!==job.source)note(card,"ยืนบนพื้นในเมืองต้นทางเพื่อรับเสบียง");
+        button(actions,"รับเสบียงจากต้นทาง",()=>sendCityProduction("haul_pickup",fields),!!pause || atCity!==job.source,true);
+        if(!pause && atCity!==job.source)button(actions,"ดูเส้นทางไปรับเสบียง",()=>route(job.source));
+      }
       if(job.carrying){
-        button(card,"ส่งเสบียงและรับทอง",()=>sendCityProduction("haul_deliver",fields),unavailable || atCity!==job.destination);
-        if(atCity!==job.destination)button(card,"ดูเส้นทางส่งเสบียง",()=>openStrategicMap(job.destination),locked);
-        button(card,"คืนงานขนเสบียง",()=>sendCityProduction("haul_abandon",fields));
+        if(!pause && atCity!==job.destination)note(card,"ยืนบนพื้นใน"+citySiteNames[job.destination]+"เพื่อส่งเสบียง");
+        button(actions,"ส่งเสบียงและรับทอง",()=>sendCityProduction("haul_deliver",fields),!!pause || atCity!==job.destination,true);
+        if(atCity!==job.destination)button(actions,"ดูเส้นทางส่งเสบียง",()=>route(job.destination));
+        button(actions,"คืนงานขนเสบียง",()=>sendCityProduction("haul_abandon",fields));
       }
+      if(actions.children.length)card.append(actions);
     }
-    if(!manage || !enabled || paused)return;
+    if(!manage)return;
+    const section=cityMissionCard(sections.manage,"เปิดงานขนเสบียง","haul");
+    if(pause){note(section,pause);return;}
     note(section,"ปลายทาง "+citySiteNames[manage.destination]+" · "+cityItemName(manage.item)+
       (manage.needsApproval?" · รอเจ้าหน้าที่ปลายทางอนุมัติ":" · กันพื้นที่ปลายทางทันที"));
     if(manage.amount<1 || manage.reward<1){
@@ -907,39 +1204,42 @@
           amount,reward,audience:audience.value});
     },locked);
   }
-  function renderCityTradeContracts(body,contracts,note,button,locked){
+  function renderCityTradeContracts(sections,contracts,{note,button,route},locked){
     const {job,manage,source,destination,atMarket,atCity,enabled,paused}=contracts;
-    if(!enabled && !job)return;
-    const section=marketText("section","gx-page");body.append(section);
-    section.append(marketText("h3","cp-h","สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination]));
-    if(paused)note(section,"พักรับและส่งสัญญาระหว่างศึก");
-    else if(!enabled)note(section,"พักสัญญาใหม่ · ผู้รับงานแล้วส่งสินค้าได้");
     if(job){
-      note(section,job.name+" · "+cityItemName(cityProduct)+" × "+job.amount+" · รับเงิน "+job.gold+" ทองเมื่อส่งครบ");
+      const section=cityMissionCard(job.yours?sections.active:sections.open,
+        "สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination],"contract");
+      cityMissionTerms(section,cityProduct,job.amount,job.gold);
+      note(section,job.name+" · รับรางวัลเมื่อส่งครบ");
       if(job.neutral)note(section,"ซื้อแร่จากตลาดฝากขายสามลาน");
-      note(section,"หมดอายุ "+new Date(job.expires).toLocaleString("th-TH"));
+      cityMissionDeadline(section,job.expires);
+      if(paused)note(section,"พักรับและส่งสัญญาระหว่างศึก");
+      else if(!enabled)note(section,job.yours?"พักสัญญาใหม่ · คุณยังส่งสินค้าตามสัญญาได้":"พักรับสัญญาใหม่");
       const fields={contractId:job.id};
+      const actions=marketText("div","field-actions");
       if(job.yours){
-        button(section,"ส่งสินค้าตามสัญญา",()=>sendCityProduction("contract_deliver",fields),locked || paused || atMarket!==destination);
-        if(atMarket!==destination)button(section,"ดูเส้นทางส่งสินค้า",()=>openStrategicMap(destination),locked);
-        button(section,"คืนสัญญาจัดซื้อ",()=>sendCityProduction("contract_abandon",fields));
+        if(!paused && atMarket!==destination)note(section,"ไปพบนายหน้าตลาดที่"+citySiteNames[destination]+"เพื่อส่งสินค้า");
+        button(actions,"ส่งสินค้าตามสัญญา",()=>sendCityProduction("contract_deliver",fields),paused || atMarket!==destination,true);
+        if(atMarket!==destination)button(actions,"ดูเส้นทางส่งสินค้า",()=>route(destination));
+        button(actions,"คืนสัญญาจัดซื้อ",()=>sendCityProduction("contract_abandon",fields));
       }else if(job.carrying)note(section,"มีพ่อค้ารับสัญญาแล้ว");
       else if(enabled && !paused){
         if(job.total===null)note(section,"รอให้ตลาดต้นทางมีแร่ครบตามสัญญา");
         else {
           const difference=job.gold-job.total;
           note(section,"ซื้อที่ต้นทาง "+job.total+" ทอง · ส่วนต่าง "+(difference>0?"+":"")+difference+" ทอง");
-          button(section,"ซื้อแร่และรับสัญญา",()=>sendCityProduction("contract_accept",{...fields,total:job.total}),
-            locked || atMarket!==source);
+          button(actions,"ซื้อแร่และรับสัญญา",()=>sendCityProduction("contract_accept",{...fields,total:job.total}),
+            atMarket!==source,true);
         }
-        if(atMarket!==source)button(section,"ดูเส้นทางไปซื้อแร่",()=>openStrategicMap(source),locked);
+        if(atMarket!==source)button(actions,"ดูเส้นทางไปซื้อแร่",()=>route(source));
       }
-      if(job.canCancel)button(section,"ปิดสัญญาจัดซื้อ",()=>sendCityProduction("contract_cancel",fields),
-        locked || atCity!==destination);
+      if(job.canCancel)button(actions,"ปิดสัญญาจัดซื้อ",()=>sendCityProduction("contract_cancel",fields),atCity!==destination);
+      if(actions.children.length)section.append(actions);
       return;
     }
-    note(section,"ยังไม่มีสัญญาจัดซื้อเปิดอยู่");
+    if(paused && enabled)note(sections.open,"พักรับและส่งสัญญาระหว่างศึก");
     if(!manage?.canOpen)return;
+    const section=cityMissionCard(sections.manage,"เปิดสัญญาจัดซื้อ","contract");
     note(section,"ทองพร้อมใช้สำหรับสัญญา "+manage.maxGold+" ทอง · รับได้สูงสุด "+manage.maxAmount+" ชิ้น");
     if(atCity!==destination){note(section,"ไปที่ด่านผนึกจันทราและยืนบนพื้นเพื่อเปิดสัญญา");return;}
     if(manage.maxAmount<1 || manage.maxGold<1)return;
@@ -948,92 +1248,166 @@
         sendCityProduction("contract_open",{epoch:manage.epoch,amount,gold});
     },locked);
   }
-  function renderCityMission(){
+    function renderCityMission(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
     if(!body)return;
     $("cityRefresh").disabled=!ready;
-    $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับตลาดโลกเพื่อดูกระดานภารกิจ");
+    const status=$("cityStatus"),message=cityStatus || (ready?"":"เข้า LIVE ด้วยตัวละครที่บันทึกแล้วเพื่อดูกระดานภารกิจ");
+    if(status.textContent!==message)status.textContent=message;
+    const previousPost=$("cityMissionPost");
+    const focused=document.activeElement;
+    const focusId=focused?.id && previousPost?.contains(focused)?focused.id:null;
+    const draft=previousPost?{
+      epoch:previousPost.dataset.epoch,purpose:$("cityMissionPurpose")?.value,
+      audience:$("cityMissionAudience")?.value,hours:$("cityMissionHours")?.value,
+      slots:$("cityMissionSlots")?.value,reward:$("cityMissionReward")?.value,
+    }:null;
     body.replaceChildren();
     const note=(target,label)=>target.append(marketText("p","note",label));
     const locked=!!cityPending;
-    const button=(target,label,run,disabled=locked)=>{
-      const control=marketText("button","secondary",label);control.type="button";
-      control.onclick=run;control.disabled=disabled;target.append(control);
+    const button=(target,label,run,disabled=false,primary=false)=>{
+      const control=marketText("button",primary?"primary":"secondary",label);
+      control.type="button";control.onclick=run;control.disabled=locked || disabled;target.append(control);
     };
-    if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
+    if(cityPending && !cityPending.waiting){
+      const retry=marketText("button","secondary","ส่งคำขอเดิมซ้ำ");
+      retry.type="button";retry.onclick=transmitCityProduction;retry.disabled=!ready;body.append(retry);
+    }
     if(!ready)return;
     if(!cityMission){note(body,"กำลังโหลดภารกิจ…");return;}
-    if(cityMission.tradeContracts)renderCityTradeContracts(body,cityMission.tradeContracts,note,button,locked);
-    if(cityMission.hauls)renderCityHauls(body,cityMission.hauls,note,button,locked);
-    const {missions,manage,enabled,siege,atMoon,item,required,maxSlots,maxReward,hours}=cityMission;
-    const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
-    body.append(marketText("h3","cp-h","ด่านผนึกจันทรา"));
-    note(body,"เก็บ "+cityItemName(item)+" "+required+" ชิ้นที่ลานแต่งแร่หลังรับงาน แล้วส่งจากกระเป๋าตามที่ระบุในภารกิจ");
-    if(siege || !enabled)note(body,siege?"พักเปิด รับ และส่งงานระหว่างศึก":"กระดานพักเปิด รับ และส่งงาน");
-    if(!missions.length)note(body,"ยังไม่มีภารกิจที่เปิดให้ตัวละครนี้");
-    for(const mission of missions){
-      const card=marketText("section","gx-page");body.append(card);
-      const warehouse=mission.purpose==="warehouse";
-      card.append(marketText("h3","cp-h",(warehouse?"งานขยายคลัง":"งานเก็บแร่")+" · "+mission.name));
-      if(warehouse)note(card,"ส่งแร่เข้าโครงการขยายคลังเมือง");
-      note(card,(mission.audience==="guild"?"เฉพาะสมาชิกกิลด์":"เปิดให้ทุกคน")+" · "+mission.reward+" ทอง · ว่าง "+mission.remaining+" / "+mission.slots);
-      note(card,"หมดอายุ "+new Date(mission.expiresAt).toLocaleString("th-TH"));
-      if(mission.progress!==null){
-        note(card,"เก็บแล้ว "+mission.progress+" / "+required+" ชิ้น · ในกระเป๋า "+ore+" ชิ้น");
-        button(card,"ส่งงานและรับทอง",()=>sendCityProduction("mission_submit",{missionId:mission.id}),
-          locked || !enabled || siege || mission.progress<required || ore<required);
-        button(card,"คืนงาน",()=>sendCityProduction("mission_abandon",{missionId:mission.id}));
-      } else if(enabled && !siege && mission.canAccept) {
-        button(card,"รับงาน",()=>sendCityProduction("mission_accept",{missionId:mission.id}));
-      }
-      if(mission.canCancel)button(card,"ปิดประกาศ",()=>{
-        if(window.confirm("ปิดประกาศและคืนค่าจ้างที่ยังไม่ได้ใช้หรือไม่"))sendCityProduction("mission_cancel",{missionId:mission.id});
-      });
+    const navigation=cityBoardNavigation(body);
+    const route=site=>openStrategicMap(site,()=>openCityMission(navigation));
+    const panel=marketText("div","field-command city-mission-board");
+    const group=(id,title,icon)=>{
+      const section=marketText("section","field-card city-mission-group");
+      section.id=id;section.append(cityEmblemText("h3",title,icon));return section;
+    };
+    const sections={
+      active:group("cityMissionActive","งานของฉัน","journal"),
+      open:group("cityMissionOpen","งานที่เปิดรับ","contract"),
+      manage:group("cityMissionManage","จัดการประกาศ","seal"),
+    };
+    const intercityOnly=navigation?.site==="sam_lan_estuary",tools={note,button,route};
+    if(!intercityOnly){
+      renderCityOreMissions(sections,cityMission,tools);
+      renderCityMissionPosting(sections.manage,cityMission,note,locked,draft);
     }
-    if(!manage || !manage.canPost || !enabled || siege)return;
-    note(body,"ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
-    if(!atMoon){note(body,"ไปที่ด่านผนึกจันทรา ยืนบนพื้นแล้วกดรีเฟรชเพื่อเปิดงาน");return;}
+    if(cityMission.tradeContracts)renderCityTradeContracts(sections,cityMission.tradeContracts,tools,locked);
+    if(cityMission.hauls)renderCityHauls(sections,cityMission.hauls,tools,locked);
+    if(sections.active.children.length===1)note(sections.active,"ยังไม่มีงานที่รับอยู่");
+    if(!sections.open.querySelector("article"))
+      note(sections.open,intercityOnly?"ยังไม่มีงานระหว่างเมืองที่เปิดให้ตัวละครนี้":"ยังไม่มีประกาศงานสำหรับตัวละครนี้");
+    panel.append(sections.active,sections.open);
+    if(sections.manage.children.length>1)panel.append(sections.manage);
+    body.append(panel);
+    const restored=focusId && $(focusId);
+    if(restored && !restored.disabled && $("cityMissionPost").dataset.epoch===draft.epoch)
+      restored.focus({preventScroll:true});
+  }
+  function renderCityOreMissions(sections,{missions,enabled,siege,item,required},{note,button,route}){
+    const oreName=cityItemName(item);
+    const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
+    const hasWork=missions.some(mission=>Number.isFinite(mission.progress));
+    const pause=siege?"ด่านผนึกจันทราพักรับและส่งงานระหว่างศึก":!enabled?"ด่านผนึกจันทราพักรับและส่งงาน":"";
+    if(pause)note(sections.open,pause);
+    for(const mission of missions){
+      const active=Number.isFinite(mission.progress),warehouse=mission.purpose==="warehouse";
+      const card=cityMissionCard(active?sections.active:sections.open,(warehouse?"งานขยายคลัง":"งานเก็บแร่")+" · "+mission.name,
+        warehouse?"warehouse":"ore");
+      cityMissionTerms(card,item,required,mission.reward);
+      note(card,"ด่านผนึกจันทรา · ส่งเข้า"+(warehouse?"โครงการขยายคลัง":"คลังเมือง"));
+      note(card,(mission.audience==="guild"?"เฉพาะสมาชิกกิลด์":"เปิดให้ทุกคน")+" · ว่าง "+mission.remaining+" / "+mission.slots+" คน");
+      cityMissionDeadline(card,mission.expiresAt);
+      const actions=marketText("div","field-actions"),fields={missionId:mission.id};
+      if(active){
+        const progress=marketText("progress","city-mission-progress");
+        progress.max=required;progress.value=mission.progress;
+        progress.setAttribute("aria-label","ความคืบหน้าการเก็บแร่");
+        note(card,"เก็บแล้ว "+mission.progress+" / "+required+" ชิ้น · ในกระเป๋า "+ore+" ชิ้น");
+        card.append(progress);
+        const gathering=mission.progress<required,missing=ore<required;
+        note(card,pause || (gathering?"เก็บ "+oreName+" อีก "+(required-mission.progress)+" ชิ้นที่ลานแต่งแร่":
+          missing?"ต้องมี "+oreName+" ในกระเป๋าอีก "+(required-ore)+" ชิ้น":"พร้อมส่งงานและรับรางวัล"));
+        button(actions,"ส่งงานและรับทอง",()=>sendCityProduction("mission_submit",fields),!!pause || gathering || missing,true);
+        if(!pause && gathering && activeMapId!=="moon_pass")button(actions,"ดูเส้นทางไปด่าน",()=>route("moon_pass"));
+        button(actions,"คืนงาน",()=>sendCityProduction("mission_abandon",fields));
+      }else{
+        note(card,"เก็บ "+oreName+" "+required+" ชิ้นที่ลานแต่งแร่หลังรับงาน");
+        const blocked=mission.remaining<=0?"งานเต็ม":hasWork?"ส่งหรือคืนงานเก็บแร่ที่รับอยู่ก่อน":
+          !mission.canAccept?"ตัวละครนี้รับประกาศนี้ไม่ได้":"";
+        if(blocked)note(card,blocked);
+        button(actions,"รับงาน",()=>sendCityProduction("mission_accept",fields),!!pause || !!blocked,true);
+      }
+      if(mission.canCancel)button(actions,"ปิดประกาศ",()=>{
+        if(window.confirm("ปิดประกาศและคืนค่าจ้างที่ยังไม่ได้ใช้หรือไม่"))sendCityProduction("mission_cancel",fields);
+      });
+      card.append(actions);
+    }
+  }
+  function renderCityMissionPosting(parent,{manage,enabled,siege,atMoon,required,maxSlots,maxReward,hours,warehouseMissions},note,locked,draft){
+    if(!manage)return;
+    const card=cityMissionCard(parent,"เปิดภารกิจด่านผนึกจันทรา","journal");
+    card.id="cityMissionPost";card.dataset.epoch=String(manage.epoch);
+    note(card,"ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
+    const blocked=siege?"พักเปิดภารกิจระหว่างศึก":!enabled?"กระดานพักเปิดงานใหม่":
+      !manage.canPost?"จำนวนประกาศถึงขีดจำกัดแล้ว":!atMoon?"ไปยืนบนพื้นในด่านผนึกจันทราแล้วกดรีเฟรช":"";
+    if(blocked){note(card,blocked);return;}
     const stockMax=Math.min(maxSlots,Math.floor(manage.free/required));
-    const warehouseMax=cityMission.warehouseMissions?Math.min(maxSlots,Math.floor((manage.warehouseFree||0)/required)):0;
+    const warehouseMax=warehouseMissions?Math.min(maxSlots,Math.floor((manage.warehouseFree||0)/required)):0;
     const rewardMax=Math.min(maxReward,manage.gold);
-    if(Math.max(stockMax,warehouseMax)<1 || rewardMax<1)return;
-    const select=(label,choices)=>{
+    if(Math.max(stockMax,warehouseMax)<1 || rewardMax<1){
+      if(Math.max(stockMax,warehouseMax)<1)note(card,"พื้นที่คลังหรือโครงการขยายคลังไม่พอสำหรับผู้รับงาน 1 คน");
+      if(rewardMax<1)note(card,"ทองตลาดไม่พอสำหรับค่าจ้าง 1 คน");
+      return;
+    }
+    const saved=draft?.epoch===card.dataset.epoch?draft:null;
+    const select=(id,label,choices,selected)=>{
       const field=marketText("label","field",label),input=document.createElement("select");
+      input.id=id;
       for(const [value,text] of choices){
         const option=marketText("option","",text);option.value=String(value);input.append(option);
       }
-      input.disabled=locked;field.append(input);body.append(field);return input;
+      if(choices.some(choice=>String(choice[0])===selected))input.value=selected;
+      input.disabled=locked;field.append(input);card.append(field);return input;
     };
     const destinations=stockMax>0?[["stock","คลังด่าน"]]:[];
     if(warehouseMax>0)destinations.push(["warehouse","โครงการขยายคลัง"]);
-    const purpose=warehouseMax>0?select("ปลายทางส่งแร่",destinations):null;
-    const toWarehouse=()=>purpose?.value==="warehouse";
+    if(saved?.purpose && !destinations.some(([value])=>value===saved.purpose))
+      note(card,"ปลายทางที่เลือกไว้รับแร่เพิ่มไม่ได้ · ตรวจปลายทางก่อนเปิดภารกิจ");
+    const purpose=select("cityMissionPurpose","ปลายทางส่งแร่",destinations,saved?.purpose);
+    const toWarehouse=()=>purpose.value==="warehouse";
     const maxSlotsForPurpose=()=>toWarehouse()?warehouseMax:stockMax;
-    const audience=select("ผู้รับงาน",[["public","ผู้เล่นทุกคน"],["guild","เฉพาะสมาชิกกิลด์"]]);
-    const duration=select("อายุประกาศ",hours.map(h=>[h,h+" ชั่วโมง"]));
-    const [slots,reward]=cityAmountForm(body,"เปิดภารกิจ",[["จำนวนคน",maxSlotsForPurpose()],["ค่าจ้างต่อคน",rewardMax]],(count,gold)=>{
+    const audience=select("cityMissionAudience","ผู้รับงาน",[["public","ผู้เล่นทุกคน"],["guild","เฉพาะสมาชิกกิลด์"]],saved?.audience);
+    const duration=select("cityMissionHours","อายุประกาศ",hours.map(h=>[h,h+" ชั่วโมง"]),saved?.hours);
+    const [slots,reward]=cityAmountForm(card,"เปิดภารกิจ",[["จำนวนคน",maxSlotsForPurpose()],["ค่าจ้างต่อคน (ทอง)",rewardMax]],(count,gold)=>{
       if(cityPositive(count,maxSlotsForPurpose()) && cityPositive(gold,rewardMax) && count*gold<=manage.gold)
         sendCityProduction("mission_open",{epoch:manage.epoch,audience:audience.value,slots:count,reward:gold,
           hours:Number(duration.value),...(toWarehouse()?{purpose:"warehouse"}:{})});
     },locked);
-    const quote=marketText("p","note");body.append(quote);
+    slots.id="cityMissionSlots";reward.id="cityMissionReward";
+    if(saved?.slots!==undefined)slots.value=saved.slots;
+    if(saved?.reward!==undefined)reward.value=saved.reward;
+    const form=card.querySelector("form"),submit=form.querySelector("button"),quote=marketText("p","note");
+    quote.id="cityMissionQuote";submit.setAttribute("aria-describedby",quote.id);form.insertBefore(quote,submit);
     const update=()=>{
       const max=maxSlotsForPurpose(), count=slots.valueAsNumber,gold=reward.valueAsNumber;
-      quote.textContent=cityPositive(count,max) && cityPositive(gold,rewardMax)?
-        "กัน "+(count*gold)+" ทอง · "+(toWarehouse()?"แร่สำหรับโครงการ ":"พื้นที่คลัง ")+(count*required)+" ชิ้น"+
-        (count*gold>manage.gold?" · ทองตลาดไม่พอ":""):"";
+      const valid=cityPositive(count,max) && cityPositive(gold,rewardMax);
+      const shortage=valid && count*gold>manage.gold;
+      submit.disabled=locked || !valid || shortage;
+      quote.textContent=!cityPositive(count,max)?"พื้นที่รองรับผู้รับงานได้สูงสุด "+max+" คน":
+        !cityPositive(gold,rewardMax)?"ระบุค่าจ้างต่อคน 1–"+rewardMax+" ทอง":
+        "กันค่าจ้าง "+(count*gold)+" ทอง · กันพื้นที่ "+(count*required)+" ชิ้น"+(shortage?" · ทองตลาดไม่พอ":"");
     };
     const updatePurpose=()=>{
       slots.max=String(maxSlotsForPurpose());
-      if(slots.valueAsNumber>maxSlotsForPurpose())slots.value=slots.max;
       if(toWarehouse())audience.value="guild";
       audience.disabled=locked || toWarehouse();
       update();
     };
-    if(purpose)purpose.onchange=updatePurpose;
+    purpose.onchange=updatePurpose;
     slots.oninput=reward.oninput=update;updatePurpose();
   }
-  function renderCityPurchase(){
+function renderCityPurchase(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityPurchaseSupported===true;
     if(!body)return;
     $("cityRefresh").disabled=!ready;
@@ -1119,15 +1493,10 @@
     if(Number.isFinite(nextTick))cityJobTimer=setTimeout(updateCityCountdown,nextTick);
     if(refresh)try{room.send("get_city_production",{});}catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";$("cityStatus").textContent=cityStatus;}
   }
-  function openCityProduction(target){
+  function openCityProduction(target,navigation){
     cityProductionTarget=target==="warehouse" || target==="factory"?target:null;
-    openDrawer("cityProduction",guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"ทรัพย์สินกิลด์เดิม",
-      '<div class="guild-actions"><button id="cityBack" class="secondary" type="button">← กิลด์</button>'+
-      '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
-      '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
-    $("cityBack").onclick=openGuild;
-    $("cityRefresh").onclick=()=>{cityStatus="";refreshCityProduction();renderCityProduction();};
-    renderCityProduction();refreshCityProduction();
+    const title=guildState || room?.state?.cityWorkshopSupported?"คลังเมืองและโรงงาน":"ทรัพย์สินกิลด์เดิม";
+    openCityBoard("cityProduction",title,refreshCityProduction,navigation || {backLabel:"กิลด์",back:openGuild});
   }
   function renderCityProduction(){
     if(drawerActive==="cityMarket"){renderCityMarket();return;}
@@ -1136,7 +1505,9 @@
     if(drawerActive==="cityGovernance"){renderCityGovernance();return;}
     if(drawerActive!=="cityProduction" || !$("cityProductionContent"))return;
     const body=$("cityProductionContent"),ready=cityRecoveryReady(),status=$("cityStatus");
-    const state=guildState && cityState?.guildId===guildState.id ? cityState : null;
+    const navigation=cityBoardNavigation(body),site=navigation?.site;
+    const currentState=guildState && cityState?.guildId===guildState.id?cityState:null;
+    const state=!site || currentState?.site===site?currentState:null;
     const enabled=ready && room.state.cityProductionAvailable===true;
     const locked=!ready || !!cityPending;
     $("cityRefresh").disabled=!ready;
@@ -1146,18 +1517,29 @@
       const node=marketText("button","secondary",text);
       node.type="button";node.disabled=disabled;node.onclick=run;return node;
     };
-    const group=(title,id)=>{
+    const group=(title,id,icon)=>{
       const section=marketText("section","gx-page");
       if(id)section.id=id;
-      section.append(marketText("h3","cp-h",title));body.append(section);return section;
+      const heading=icon?cityEmblemText("h3",title,icon):marketText("h3","",title);
+      heading.className+=" cp-h";section.append(heading);body.append(section);return section;
     };
     const note=(target,text)=>target.append(marketText("p","note",text));
     const submit=(target,label,fields,run,disabled=locked)=>cityAmountForm(target,label,fields,run,disabled);
     const submitBag=(target,caption,label,slots,limit,send)=>cityBagForm(target,caption,label,slots,limit,send,locked);
     if(cityPending && !cityPending.waiting)body.append(button("ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready));
     if(!ready)return;
-    if(cityWorkshop?.enabled || cityWorkshop?.job){
-      const workshop=cityWorkshop,section=group("โรงงานสาธารณะเวียงปากน้ำสามลาน","cityPublicWorkshopSection");
+    if(site && activeMapId!==site){
+      note(body,"เดินทางไป"+citySiteNames[site]+"เพื่อเปิดคลังและโรงงาน");
+      body.append(button("ดูเส้นทาง",()=>openStrategicMap(site,()=>openGuild(site))));
+      return;
+    }
+    if(site && !state){
+      const unavailable=!guildState || site==="moon_pass" && currentState?.miningSite===null;
+      note(body,unavailable?"ยังเปิดคลังและโรงงานของเมืองนี้ไม่ได้":"กำลังโหลดข้อมูลเมือง…");
+      if(unavailable)return;
+    }
+    if((!site || site==="sam_lan_estuary") && (cityWorkshop?.enabled || cityWorkshop?.job)){
+      const workshop=cityWorkshop,section=group("โรงงานสาธารณะเวียงปากน้ำสามลาน","cityPublicWorkshopSection","forge");
       if(workshop.job){
         const job=workshop.job,clock=marketText("p","note"),claim=button("รับผลผลิต · "+cityItemName(job.item)+" × "+job.quantity,
           ()=>sendCityProduction("workshop_claim",{jobId:job.id}),true);
@@ -1191,11 +1573,11 @@
     }
     if(guildState && !state)note(body,"กำลังโหลดคลังเมือง…");
     if(state){
-      const summary=group(state.cityName || "เวียงปากน้ำสามลาน","cityWarehouseSection");
+      const summary=group(state.cityName || "เวียงปากน้ำสามลาน","cityWarehouseSection","warehouse");
       note(summary,"ทองตลาด "+state.marketGold+" หน่วย");
-      if(room.state.cityMarketSupported===true)summary.append(button("ตลาดประจำเมือง",openCityMarket,locked));
+      if(room.state.cityMarketSupported===true)summary.append(button("ตลาดประจำเมือง",()=>openCityMarket(navigation),locked));
       if(state.epoch!==null && state.officer && state.site===state.miningSite && room.state.cityGovernanceAvailable===true)
-        summary.append(button("ศาลาว่าการเมือง",openCityGovernance,locked));
+        summary.append(button("ศาลาว่าการเมือง",()=>openCityGovernance(navigation),locked));
       if(state.miningSite && state.site!==state.miningSite){
         note(summary,"ด่านผนึกจันทรามีคลังและสายผลิตแร่เหล็กชั้น 2 · เดินทางไปที่ด่านเพื่อดูและใช้ระบบ");
         summary.append(button("ดูเส้นทางไปด่านผนึกจันทรา",()=>openStrategicMap(state.miningSite)));
@@ -1209,9 +1591,11 @@
         const inputIds=inputs.map(input=>input.item),output=state.recipe.output;
         const stock=id=>state.stock.find(row=>row.item===id)?.quantity || 0;
         note(summary,"คลัง "+state.used+" / "+state.capacity+" ชิ้น · โรงงานระดับ "+state.level);
-        const list=marketText("ul","note");
+        const list=marketText("ul","note city-materials city-material-stock");
         const shownItems=new Set([...inputIds,output,...state.stock.map(row=>row.item)]);
-        for(const id of shownItems)list.append(marketText("li","",cityItemName(id)+" × "+stock(id)));
+        for(const id of shownItems){
+          const row=marketText("li","");row.append(cityMaterialLabel(id,stock(id)));list.append(row);
+        }
         summary.append(list);
         if(!state.atCity && enabled)note(summary,"ไปที่เมืองและยืนบนพื้นเพื่อฝาก ผลิต หรือตั้งขาย");
         const bagSlots=(inventoryState?.slots || []).flatMap((item,slot)=>item && !item.bound ? [{item,slot}] : []);
@@ -1240,7 +1624,7 @@
             }
             if(project.status==="collecting")note(construction,"วัสดุที่สมทบจะเป็นทรัพย์สินของกิลด์");
             if(moon && project.status==="collecting" && room.state.cityMissionSupported)
-              construction.append(button("ดูกระดานภารกิจเมือง",openCityMission,locked));
+              construction.append(button("ดูกระดานภารกิจเมือง",()=>openCityMission(navigation),locked));
             for(const {item,amount,reserved,promised=0} of project.materials){
               const name=cityItemName(item),needed=amount-reserved-promised;
               note(construction,name+" · "+reserved+" / "+amount+(promised?" · กันไว้ให้ภารกิจ "+promised+" ชิ้น":""));
@@ -1253,7 +1637,7 @@
             }
           }
         }
-        const factory=group("โรงงาน","cityFactorySection");
+        const factory=group("โรงงาน","cityFactorySection","forge");
         note(factory,inputs.map(i=>cityItemName(i.item)+" × "+i.amount).join(" + ")+" → "+cityItemName(state.recipe.output));
         if(state.job){const clock=marketText("p","note");clock.id="cityJobClock";factory.append(clock);}
         if(local && state.officer){

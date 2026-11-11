@@ -487,6 +487,7 @@
       const onTerritoryState=message=>{
         if(room!==joined)return;
         const previousLocal=territoryState?.local,previousOwners=territoryState?.owners;
+        const previousWarTimes=territoryState?.warTimes;
         const oldDrums=previousLocal?.supply?.drums || [];
         territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();syncWarQuartermaster();
         checkTerritoryWarEvents(message.local);
@@ -498,6 +499,10 @@
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
+        if(drawerActive==="cityMission" && cityMission && Object.keys(citySiteNames).some(site=>
+          previousOwners?.[site]!==message.owners?.[site] || previousWarTimes?.[site]?.phase!==message.warTimes?.[site]?.phase)){
+          refreshCityMission();
+        }
         const local=message.local;
         if(drawerActive==="cityProduction" && (cityState || cityWorkshop?.enabled) && cityRecoveryReady()){
           const observed=[cityState?.site,cityWorkshop?.site].filter(Boolean);
@@ -576,10 +581,13 @@
           guildDirectory=null;room.send("guild_search",{query:""});
         }
         renderGuild();
-        if(drawerActive==="cityProduction" && (previousGuild?.id!==guildState?.id ||
-          previousGuild?.leaderId!==guildState?.leaderId || previousGuild?.members.length!==guildState?.members.length ||
-          previousGuild?.members.find(m=>m.id===previousGuild.ownId)?.rank!==guildState?.members.find(m=>m.id===guildState.ownId)?.rank)){
+        const accessChanged=previousGuild?.id!==guildState?.id || previousGuild?.leaderId!==guildState?.leaderId ||
+          previousGuild?.members.find(m=>m.id===previousGuild.ownId)?.rank!==guildState?.members.find(m=>m.id===guildState.ownId)?.rank;
+        if(drawerActive==="cityProduction" && (accessChanged || previousGuild?.members.length!==guildState?.members.length)){
           renderCityProduction();refreshCityProduction();
+        }
+        if(drawerActive==="cityMission" && accessChanged){
+          cityMission=null;renderCityProduction();refreshCityMission();
         }
       };
       joined.onMessage("guild_state",message=>{onGuildState(message);if(room===joined)requestWarBanner();});
@@ -769,6 +777,7 @@
       joined.onMessage("resource_result",data=>{
         if(room!==joined)return;
         finishEconomyPending();toast((data.action==="refine"?"แปรรูปได้ ":"เก็บได้ ")+(personalItems[data.item]?.name||data.item)+" × "+data.quantity);renderBag();
+        if(drawerActive==="cityMission" && data.action==="harvest" && cityMission?.item===data.item)refreshCityMission();
       });
       joined.onMessage("fish_state",data=>{
         if(room!==joined || (!fishingPending && !fishingState) || typeof data?.id!=="string" ||

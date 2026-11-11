@@ -21,9 +21,12 @@ function node(tag = "div") {
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
     replaceChildren(...children) { this.children = children; },
+    insertBefore(child,before) { this.children.splice(this.children.indexOf(before),0,child); },
+    contains(child) { return this === child || this.children.some(node=>node.contains(child)); },
+    focus() { this.focused = true; },
     scrollIntoView() { this.scrolled = true; },
     querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
-    setAttribute() {},
+    setAttribute(key,value) { (this.attributes ||= {})[key]=value; },
   };
 }
 
@@ -34,7 +37,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
   const walk = el => [el, ...el.children.flatMap(walk)];
   const $ = id => nodes[id] || (nodes.cityProductionContent && walk(nodes.cityProductionContent).find(el => el.id === id));
   const ctx = {
-    $, document: {createElement: node}, performance: {now: () => now},
+    $, document: {createElement: node}, performance: {now: () => now}, activeMapId: "sam_lan_estuary",
     room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
       cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported, cityMissionSupported: missionSupported,
       cityGovernanceAvailable: governanceAvailable, cityMarketSupported: marketSupported},
@@ -42,13 +45,15 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
     economyReady: () => true, bagMeta: id => ({name: id}),
+    createItemTile: id => Object.assign(node(),{className:"bag-slot item-slot",itemId:id}),
     economyItemName: item => item.itemId+" × "+item.quantity,
     economyRequestId: () => "request_city_ui_"+ ++serial,
-    marketText: (tag, _className, text) => Object.assign(node(tag), {textContent: text || ""}),
+    marketText: (tag, className, text) => Object.assign(node(tag), {className,textContent: text || ""}),
     openGuild() {},
     openEconomy() {},
-    openDrawer(name) {
+    openDrawer(name,title) {
       ctx.drawerActive = name;
+      ctx.drawerTitle = title;
       for (const id of ["cityBack","cityRefresh","cityStatus","cityProductionContent"]) nodes[id] = node();
     },
     setTimeout(fn, delay) { timers.set(++serial,{fn,delay}); return serial; },
@@ -267,19 +272,62 @@ test("the mission board distinguishes accepting, gathering and handing in a publ
     canAccept:true,progress:null};
   const board={enabled:true,required:3,item,serverNow:1_000_000};
   f.ctx.cityReceiveMission({...board,missions:[mission]});
+  const card=f.$("cityMissionOpen").querySelector("article");
+  assert.equal(card.querySelector("h4").dataset.guildIcon,"ore");
+  const terms=card.children.find(el=>el.className==="city-mission-terms");
+  assert.equal(terms.children[0].children[0].itemId,item);
+  assert.equal(terms.children[0].children[0].attributes["aria-hidden"],"true");
+  assert.equal(terms.children[0].children[1].textContent,item+" × 3");
+  assert.equal(terms.children[1].children[1].textContent,"15 ทอง");
+  assert.equal(card.querySelector("time").dateTime,new Date(mission.expiresAt).toISOString());
   f.button("รับงาน").onclick();
   const accepted=f.wire.at(-1).payload;
   assert.equal(accepted.action,"mission_accept");
+  assert.equal(f.button("รับงาน").disabled,true);
+  f.button("รับงาน").onclick();
+  assert.equal(f.wire.filter(entry=>entry.payload.action==="mission_accept").length,1);
+  [...f.timers.values()].find(timer=>timer.delay===6000).fn();
+  assert.match(f.nodes.cityStatus.textContent,/ยังไม่ได้รับผล/);
+  f.button("ส่งคำขอเดิมซ้ำ").onclick();
+  assert.deepEqual(f.wire.at(-1).payload,accepted);
   f.ctx.cityReceiveResult(accepted);
-  f.ctx.inventoryState.slots.push({itemId:item,quantity:3});
+  assert.match(f.nodes.cityStatus.textContent,/รับงานแล้ว/);
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:0}]});
+  assert.equal(f.$("cityMissionActive").querySelector("progress").value,0);
+  f.ctx.inventoryState.slots.push({itemId:item,quantity:2});
   f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:2}]});
   assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:3}]});
+  assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  assert.match(f.$("cityMissionActive").querySelector("article").children.map(el=>el.textContent).join(" "),/ในกระเป๋าอีก 1 ชิ้น/);
+  f.ctx.inventoryState.slots.at(-1).quantity=3;
   f.ctx.cityReceiveMission({...board,siege:true,missions:[{...mission,progress:3}]});
   assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  assert.equal(f.button("คืนงาน").disabled,false);
   f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:3}]});
   f.button("ส่งงานและรับทอง").onclick();
   const submitted=f.wire.at(-1).payload;
   assert.deepEqual(submitted,{requestId:submitted.requestId,action:"mission_submit",missionId:"work"});
+  f.ctx.cityReceiveResult({...submitted,gold:15});
+  f.ctx.cityReceiveMission({...board,missions:[]});
+  assert.match(f.nodes.cityStatus.textContent,/ได้รับ 15 ทอง/);
+  assert.equal(f.$("cityMissionActive").querySelector("article"),undefined);
+});
+
+test("a full or newly claimed mission shows its state and reloads the board on a race", () => {
+  const f=fixture({member:false,missionSupported:true});
+  f.ctx.openCityMission();
+  const mission={id:"work",name:"กิลด์จันทรา",audience:"public",slots:1,remaining:1,reward:15,expiresAt:2_000_000,
+    canAccept:true,progress:null};
+  const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000};
+  f.ctx.cityReceiveMission({...board,missions:[mission]});
+  f.button("รับงาน").onclick();
+  f.ctx.cityReceiveError({requestId:f.wire.at(-1).payload.requestId,reason:"city_mission_full"});
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,remaining:0,canAccept:false}]});
+  assert.equal(f.button("รับงาน").disabled,true);
+  assert(f.$("cityMissionOpen").querySelector("article").children.some(el=>el.textContent==="งานเต็ม"));
+  assert.match(f.nodes.cityStatus.textContent,/มีคนรับครบแล้ว/);
 });
 
 test("the mission board can post guild-only warehouse work when regular stock is full", () => {
@@ -289,15 +337,30 @@ test("the mission board can post guild-only warehouse work when regular stock is
     maxSlots:4,maxReward:100,hours:[1],atMoon:true,missions:[],
     manage:{epoch:2,canPost:true,gold:30,free:0,warehouseFree:6}};
   f.ctx.cityReceiveMission(board);
-  const audience=f.nodes.cityProductionContent.children.find(el=>el.tag==="label" && el.textContent==="ผู้รับงาน").children[0];
+  const audience=f.$("cityMissionAudience");
   assert.equal(audience.value,"guild");
   assert.equal(audience.disabled,true);
+  const slots=f.$("cityMissionSlots"),reward=f.$("cityMissionReward");
+  slots.value="3";slots.oninput();
+  assert.equal(f.button("เปิดภารกิจ").disabled,true);
+  assert.match(f.$("cityMissionQuote").textContent,/สูงสุด 2 คน/);
+  slots.value="2";reward.value="20";reward.oninput();
+  assert.equal(f.button("เปิดภารกิจ").disabled,true);
+  assert.match(f.$("cityMissionQuote").textContent,/กันค่าจ้าง 40 ทอง · กันพื้นที่ 6 ชิ้น · ทองตลาดไม่พอ/);
+  f.ctx.document.activeElement=reward;
+  f.ctx.cityReceiveMission(board);
+  assert.equal(f.$("cityMissionSlots").value,"2");
+  assert.equal(f.$("cityMissionReward").value,"20");
+  assert.equal(f.$("cityMissionReward").focused,true);
   f.submit("เปิดภารกิจ",3,5);
   assert.equal(f.wire.at(-1).command,"get_city_missions");
   f.submit("เปิดภารกิจ",2,5);
   const order=f.wire.at(-1).payload;
   assert.deepEqual(order,{requestId:order.requestId,action:"mission_open",epoch:2,
     audience:"guild",slots:2,reward:5,hours:1,purpose:"warehouse"});
+  f.ctx.cityReceiveResult(order);
+  f.ctx.cityReceiveMission({...board,manage:null});
+  assert.equal(f.$("cityMissionManage"),undefined);
 });
 
 test("the freight board sends the selected scope, destination tenure and delivery only on site", () => {
@@ -316,6 +379,8 @@ test("the freight board sends the selected scope, destination tenure and deliver
     audience:"public",state:"carrying",carrying:true,expires:2_000_000};
   const carrying={...hauls,jobs:[job],manage:null};
   f.ctx.cityReceiveMission({...board,hauls:carrying});
+  assert.match(f.$("cityMissionActive").querySelector("h4").textContent,/^ขนเสบียง/);
+  assert.equal(f.$("cityMissionOpen").querySelector("article"),undefined);
   assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
   f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river,paused:true}});
   assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
@@ -347,6 +412,7 @@ test("the contract board refreshes a stale purchase quote and allows a committed
   f.ctx.cityReceiveError({requestId:accepted.requestId,reason:"city_market_price_changed"});
   assert.equal(f.wire.at(-1).command,"get_city_missions");
   f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,enabled:false,job:{...job,yours:true,carrying:true}}});
+  assert.match(f.$("cityMissionActive").querySelector("h4").textContent,/^สัญญาจัดซื้อ/);
   assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,false);
   f.button("ส่งสินค้าตามสัญญา").onclick();
   const delivered=f.wire.at(-1).payload;
@@ -581,6 +647,85 @@ test("warehouse and factory NPC entry points focus their own sections when city 
   assert.equal(f.$("cityFactorySection").scrolled,true);
   f.state();
   assert.equal(f.$("cityFactorySection").scrolled,undefined);
+  assert.equal(f.nodes.cityBack.textContent,"← กิลด์");
+});
+
+test("a selected city's production page waits for matching data and keeps the same return action", () => {
+  const f=fixture({marketSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  let returned=0;
+  f.ctx.activeMapId=moon;
+  f.state({site:river,miningSite:moon,cityName:"เวียงปากน้ำสามลาน"});
+  f.ctx.openCityProduction("warehouse",{site:moon,back:()=>returned++});
+  assert.equal(f.nodes.cityBack.textContent,"← ข้อมูลเมือง");
+  assert.equal(f.$("cityWarehouseSection"),undefined);
+  assert.equal(f.nodes.cityProductionContent.children[0].textContent,"กำลังโหลดข้อมูลเมือง…");
+  f.state({site:moon,miningSite:moon,cityName:"ด่านผนึกจันทรา"});
+  assert.equal(f.$("cityWarehouseSection").children[0].textContent,"ด่านผนึกจันทรา");
+  assert.equal(f.$("cityWarehouseSection").scrolled,true);
+  f.button("ตลาดประจำเมือง").onclick();
+  assert.equal(f.ctx.drawerActive,"cityMarket");
+  assert.equal(f.nodes.cityProductionContent.dataset.site,moon);
+  f.nodes.cityBack.onclick();
+  assert.equal(returned,1);
+  f.ctx.activeMapId=river;
+  f.ctx.openCityProduction("factory",{site:moon,back:()=>returned++});
+  assert.equal(f.$("cityFactorySection"),undefined);
+  assert(f.button("ดูเส้นทาง"));
+  f.nodes.cityBack.onclick();
+  assert.equal(returned,2);
+});
+
+test("a guild market shortcut puts the selected market first and retains both back paths", () => {
+  const f=fixture({marketSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  let returned=0, route;
+  f.ctx.openStrategicMap=(site,back)=>{route={site,back};};
+  f.ctx.openCityMarket({site:moon,back:()=>returned++});
+  f.ctx.cityReceiveMarkets({serverNow:1_000_000,history:[],markets:[
+    {site:river,epoch:1,status:"open",prices:[12]},
+    {site:moon,epoch:2,status:"open",prices:[15]},
+  ]});
+  const sections=f.nodes.cityProductionContent.children.filter(el=>el.tag==="section");
+  assert.match(sections[0].children[0].textContent,/^ด่านผนึกจันทรา/);
+  assert.match(sections[1].children[0].textContent,/^เวียงปากน้ำสามลาน/);
+  f.button("ดูเส้นทาง").onclick();
+  assert.equal(route.site,moon);
+  route.back();
+  assert.equal(f.nodes.cityProductionContent.dataset.site,moon);
+  f.nodes.cityBack.onclick();
+  assert.equal(returned,1);
+  f.ctx.openCityMarket();
+  assert.equal(f.nodes.cityBack.textContent,"← ตลาดโลก");
+  assert.equal(f.nodes.cityProductionContent.dataset.site,undefined);
+});
+
+test("the Sam Lan guild shortcut presents intercity work while the main board retains Moon Pass missions", () => {
+  const f=fixture({missionSupported:true});
+  const snapshot={serverNow:1_000_000,missions:[{name:"กิลด์จันทรา",progress:null,reward:10,slots:1,remaining:1,canAccept:true}],
+    item:metal,required:5,enabled:true};
+  f.ctx.openCityMission({site:"sam_lan_estuary",back(){}});
+  f.ctx.cityReceiveMission(snapshot);
+  assert.equal(f.ctx.drawerTitle,"งานระหว่างเมือง");
+  assert.equal(f.$("cityMissionOpen").children[1].textContent,"ยังไม่มีงานระหว่างเมืองที่เปิดให้ตัวละครนี้");
+  f.ctx.openCityMission();
+  f.ctx.cityReceiveMission(snapshot);
+  assert.match(f.$("cityMissionOpen").querySelector("h4").textContent,/งานเก็บแร่ · กิลด์จันทรา/);
+  assert.equal(f.nodes.cityBack.textContent,"← ตลาดโลก");
+});
+
+test("a delivery route returns through the selected city's mission board", () => {
+  const f=fixture({missionSupported:true}), river="sam_lan_estuary", moon="moon_pass";
+  let route,returned=0;
+  f.ctx.openStrategicMap=(site,back)=>{route={site,back};};
+  f.ctx.openCityMission({site:river,back:()=>returned++});
+  f.ctx.cityReceiveMission({serverNow:1_000_000,missions:[],hauls:{enabled:true,atCity:river,
+    jobs:[{id:"haul",source:river,destination:moon,name:"สามลาน",item:metal,amount:4,reward:15,
+      state:"carrying",carrying:true,audience:"guild",expires:2_000_000}]}});
+  f.button("ดูเส้นทางส่งเสบียง").onclick();
+  assert.equal(route.site,moon);
+  route.back();
+  assert.equal(f.ctx.drawerTitle,"งานระหว่างเมือง");
+  f.nodes.cityBack.onclick();
+  assert.equal(returned,1);
 });
 
 test("service NPCs dispatch to city panels and keep war actions on the war board", () => {
@@ -631,9 +776,15 @@ test("city hall shows reserved gold and only enables an on-site commander after 
     treasury:{available:30,held:40,missionHeld:20,purchaseHeld:20,rushHeld:0,earned:100,paid:30}};
   f.ctx.cityReceiveGovernance(state);
   assert.equal(f.button("เน้นผลิต"),undefined);
-  const ledger=f.nodes.cityProductionContent.children.find(group=>group.children[0].textContent==="ทองตลาดรวมของกิลด์");
-  assert.match(ledger.children[1].textContent,/พร้อมใช้ 30 ทอง · กันไว้ 40 ทอง/);
+  assert.equal(f.$("cityHallAvailable").textContent,"30");
+  assert.equal(f.$("cityHallHeld").textContent,"40");
+  assert.equal(f.$("cityHallCapacity").textContent,"7 / 60");
+  const ledger=f.$("cityHallLedger");
+  assert.match(ledger.children[1].textContent,/กันใบสั่งซื้อ 20 · ค่าจ้างภารกิจ 20/);
+  ledger.open=true;
   f.ctx.cityReceiveGovernance({...state,commander:true,nextAt:2_000_000});
+  assert.equal(f.$("cityHallLedger").open,true);
+  assert.equal(f.$("cityHallStorage").open,false);
   assert.equal(f.button("เน้นผลิต").disabled,true);
   f.ctx.cityReceiveGovernance({...state,commander:true,atMoon:false});
   assert.equal(f.button("เน้นผลิต").disabled,true);

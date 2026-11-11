@@ -518,39 +518,67 @@
     quartermasterRoot.setEnabled(visible);if(visible)quartermasterRoot.position.set(base.x+1,base.y || 0,base.z);
   }
   const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
-  function openWarPanel(){
-    openDrawer("war","ศึกชิงเมือง",`<section id="warSchedulePanel" hidden>
-      <h3>ตารางศึก</h3><label for="warScheduleCity">เมือง</label><select id="warScheduleCity"></select>
-      <p id="warScheduleTime" role="status"></p><form id="warRosterForm" hidden><fieldset id="warRoster"></fieldset>
-      <button class="primary" type="submit">บันทึกรายชื่อ</button><button id="warRosterWithdraw" class="secondary" type="button">ถอนรายชื่อ</button></form></section>
-      <section id="warTradePanel" hidden><h3>เส้นทางขนส่งกิลด์</h3><p id="warTradeStatus" role="status"></p><div id="warTradeActions" class="guild-actions"></div></section>
-      <h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
-      <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
-      <p id="warParticipation" role="status" hidden></p><section id="warCargoPanel" hidden><h3>พลเสบียงสนามรบ</h3><p id="warCargoStatus" role="status"></p><button id="warCargoPickup" type="button" class="secondary">รับเสบียงที่ฐาน</button><button id="warCargoDeliver" type="button" class="primary">ส่งเสบียงที่จุดยุทธศาสตร์</button></section>
-      <section id="estatePanel" hidden><h3>การปกครองด่าน</h3><p id="estateBalance" role="status"></p><p id="estateTerms"></p>
+  function openWarPanel(back){
+    openDrawer("war","ศึกชิงเมือง",`<div class="field-command">
+      <button class="secondary field-back" id="warBack" type="button" hidden>← ข้อมูลเมือง</button>
+      <section class="field-banner" aria-labelledby="warHeading">
+        <div class="field-banner-head"><h3 class="gx-with-emblem" data-guild-icon="war" id="warHeading"></h3><span id="warStatus" class="field-status" role="status"></span></div>
+        <p id="warOwner"></p>
+        <div id="warBattle" class="war-battle" hidden>
+          <div class="war-clock"><span class="gx-with-emblem" data-guild-icon="time">เวลาเหลือ</span><strong id="warClock"></strong></div>
+          <dl class="field-stats war-sides">
+            <div><dt>ฝ่ายบุก</dt><dd id="warAttackName"></dd><dd id="warAttackScore" hidden></dd></div>
+            <div><dt>ฝ่ายรับ</dt><dd id="warDefendName"></dd><dd id="warDefendScore" hidden></dd></div>
+          </dl>
+          <div id="warCapture" hidden><label for="warGauge" id="warCaptureLabel"></label><progress id="warGauge" max="60"></progress></div>
+        </div>
+        <p id="warHint" class="note" hidden></p>
+        <label class="field" id="castleFrontLabel" for="castleFront" hidden>แนวรวมพลครั้งแรก <select id="castleFront"></select></label>
+        <button id="warAction" class="primary" type="button" hidden></button>
+        <button id="warAtlasLink" class="secondary gx-with-emblem" data-guild-icon="map" type="button" hidden>แผนที่ยุทธศาสตร์</button>
+        <button id="castleRepair" class="secondary" type="button" hidden>ซ่อมประตู +10</button>
+      </section>
+      <p id="warParticipation" class="field-card" hidden></p>
+      <section id="warCargoPanel" class="field-card" hidden><h3 class="gx-with-emblem" data-guild-icon="haul">เสบียงสนามรบ</h3><p id="warCargoStatus" role="status"></p>
+        <div class="field-actions"><button id="warCargoPickup" type="button" class="secondary">รับเสบียงที่ฐาน</button><button id="warCargoDeliver" type="button" class="primary">ส่งเสบียงที่จุดยุทธศาสตร์</button></div></section>
+      <details id="castleSupply" class="field-card" hidden><summary id="supplyTitle">ค่ายหน้า</summary><p id="campHelp"></p>
+        <label class="field" for="respawnCamp">เกิดครั้งถัดไปที่ <select id="respawnCamp"><option value="0">ฐานรวมพลเดิม</option></select></label>
+        <button class="secondary" type="button" id="campMarch">ส่งกำลังจากฐานไปค่าย</button></details>
+      <details id="warDetails" class="field-card" hidden><summary>เป้าหมายและกติกาศึก</summary>
+        <p class="note war-field-report" id="warFlag"></p><p class="war-field-report" id="warCount" hidden></p>
+        <p class="note">สมาชิกกิลด์เข้าศึกได้ตั้งแต่ Lv.1 · ช่วยยึดจุด ประตู ฮีลหรือป้องกันเพื่อนที่กำลังรบใกล้จุดยุทธศาสตร์ และส่งเสบียงเพื่อรับผลงาน EXP กับวัสดุสงคราม</p>
+        <div id="warLegacyRules" hidden><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
+        <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p></div>
+      </details>
+      <section id="estatePanel" class="field-card" hidden><h3 class="gx-with-emblem" data-guild-icon="hall">การปกครองด่าน</h3>
+        <dl class="field-stats"><div data-guild-icon="warehouse"><dt>คลังกิลด์ (หน่วย)</dt><dd id="estateBalance"></dd></div><div data-guild-icon="gold"><dt>รายได้รอเก็บ (หน่วย)</dt><dd id="estateAvailable"></dd></div></dl>
+        <p id="estateRole"></p>
         <button class="primary" id="estateCollect" type="button">เก็บรายได้เข้าคลังกิลด์</button>
-        <p id="estateRole"></p><div class="party-actions"><button id="estateMarket" type="button"></button><button id="estateWarehouse" type="button"></button><button id="estateWorkshop" type="button"></button></div>
-        <label for="estateFocus">นโยบายเมือง</label><select id="estateFocus"><option value="balanced">สมดุล</option><option value="trade">ส่งเสริมการค้า · รายได้ +20%</option><option value="storage">สำรองเสบียง · ความจุ +4 ชั่วโมง</option></select><button id="estateFocusApply" type="button" class="secondary">เปลี่ยนนโยบาย</button><p id="estateHistory"></p>
-        <p id="estateDamage" hidden></p><button id="estateRepair" type="button" hidden></button></section>
-      <p class="note" id="warFlag"></p><p class="note" id="warEntryHelp">สมาชิกกิลด์เข้าศึกได้ตั้งแต่ Lv.1 · ช่วยยึดจุด ประตู ฮีลหรือป้องกันเพื่อนที่กำลังรบใกล้จุดยุทธศาสตร์ และส่งเสบียงเพื่อรับผลงาน EXP กับวัสดุสงคราม</p><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
-      <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p><button id="warAction" class="primary" type="button" hidden></button>`);
-    if(activeMapId==="tri_wiang_castle"){
-      const supplyPanel=document.createElement("details");supplyPanel.id="castleSupply";supplyPanel.hidden=true;
-      supplyPanel.innerHTML='<summary id="supplyTitle">ค่ายหน้า</summary><p id="campHelp"></p><label for="respawnCamp">เกิดครั้งถัดไปที่</label><select id="respawnCamp"><option value="0">ฐานรวมพลเดิม</option></select><button class="secondary" type="button" id="campMarch">ส่งกำลังจากฐานไปค่าย</button>';
-      $("warCount").after(supplyPanel);
-      for(const c of worldDefinitions[activeMapId].strategic.forwardCamps || [])$("respawnCamp").add(new Option(c.name,String(c.id)));
-      $("respawnCamp").onchange=e=>room?.send("territory_camp",{action:"select",campId:Number(e.target.value)});
-      $("campMarch").onclick=()=>room?.send("territory_camp",{action:"march",campId:Number($("respawnCamp").value)});
-      const label=document.createElement("label");label.textContent="แนวรวมพลครั้งแรกในศึกนี้ ";
-      const select=document.createElement("select");select.id="castleFront";
-      const local=territoryState?.local;
-      const choices=local?.phase==="battle" && local.pilot && !local.pilot.throne?[2,4,5]:[1,2,3];
-      for(const p of worldDefinitions[activeMapId].strategic.objectives.filter(p=>choices.includes(p.id)))select.add(new Option(p.id+" "+p.name,String(p.id)));
-      label.append(select);$("warAction").before(label);
-      const repair=document.createElement("button");repair.type="button";repair.id="castleRepair";repair.hidden=true;
-      repair.textContent="ซ่อมประตู +10";repair.onclick=()=>{const gateId=$("siegeGateButton").dataset.gate;if(gateId && room)room.send("territory_gate",{gateId,repair:true});};
-      $("warAction").before(repair);
+        <p id="estateDamage" hidden></p><button class="secondary" id="estateRepair" type="button" hidden></button>
+        <details><summary>อาคารและนโยบาย</summary><p id="estateTerms"></p>
+          <div class="field-actions"><button class="secondary gx-with-emblem" data-guild-icon="market" id="estateMarket" type="button"></button><button class="secondary gx-with-emblem" data-guild-icon="warehouse" id="estateWarehouse" type="button"></button><button class="secondary gx-with-emblem" data-guild-icon="forge" id="estateWorkshop" type="button"></button></div>
+          <label class="field" for="estateFocus">นโยบายเมือง <select id="estateFocus"><option value="balanced">สมดุล</option><option value="trade">ส่งเสริมการค้า · รายได้ +20%</option><option value="storage">สำรองเสบียง · ความจุ +4 ชั่วโมง</option></select></label>
+          <button id="estateFocusApply" type="button" class="secondary">เปลี่ยนนโยบาย</button><p id="estateHistory" class="note"></p>
+        </details>
+      </section>
+      <section id="warSchedulePanel" class="field-card" hidden>
+        <h3 class="gx-with-emblem" data-guild-icon="time">ตารางศึก</h3><label class="field" for="warScheduleCity">เมือง <select id="warScheduleCity"></select></label>
+        <p id="warScheduleTime" role="status"></p><form id="warRosterForm" hidden><fieldset id="warRoster"></fieldset>
+        <button class="primary" type="submit">บันทึกรายชื่อ</button><button id="warRosterWithdraw" class="secondary" type="button">ถอนรายชื่อ</button></form>
+      </section>
+      <section id="warTradePanel" class="field-card" hidden><h3 class="gx-with-emblem" data-guild-icon="haul">เส้นทางขนส่งกิลด์</h3><p id="warTradeStatus" role="status"></p><div id="warTradeActions" class="field-actions"></div></section>
+    </div>`);
+    if(typeof back==="function"){
+      $("warBack").hidden=false;
+      $("warBack").onclick=back;
     }
+    $("warAtlasLink").onclick=()=>openStrategicMap(activeMapId,back);
+    $("respawnCamp").onchange=e=>room?.send("territory_camp",{action:"select",campId:Number(e.target.value)});
+    $("campMarch").onclick=()=>room?.send("territory_camp",{action:"march",campId:Number($("respawnCamp").value)});
+    $("castleRepair").onclick=()=>{
+      const gateId=$("siegeGateButton").dataset.gate;
+      if(gateId)room?.send("territory_gate",{gateId,repair:true});
+    };
     renderWarPanel();
   }
   function warLocalDate(ms){
@@ -632,14 +660,18 @@
   }
   function renderGovernment(s){
     const panel=$("estatePanel"),g=s?.site===activeMapId && !s.inField?s.government:null;
-    panel.hidden=!g;if(!g)return;
+    const focus=$("estateFocus");
+    panel.hidden=!g;
+    if(!g){delete focus.dataset.policyKey;return;}
     const peace=s.phase!=="battle",send=action=>room?.send("territory_govern",{site:s.site,revision:g.revision,action});
-    $("estateBalance").textContent="คลังกิลด์ "+g.balance+" หน่วย · รายได้รอเก็บ "+g.available+" หน่วย";
+    $("estateBalance").textContent=g.balance;
+    $("estateAvailable").textContent=g.available;
     $("estateTerms").textContent="ตลาดผลิต "+g.rate+" หน่วย/ชั่วโมง · เก็บได้ "+g.hours+" ชั่วโมง ("+g.cap+" หน่วย)"+(g.upkeep?" · ค่าบำรุง "+g.upkeep+" หน่วย/ชั่วโมง":"")+" · ตลาดเพิ่มรายได้ คลังเสบียงเพิ่มความจุ โรงช่างลดค่าซ่อม";
     $("estateRole").textContent=!peace?"กำลังรบ · เปิดให้ทำรายการอีกครั้งเมื่อศึกจบ":g.commander?"ผู้บัญชาการ · เก็บรายได้ พัฒนาอาคาร และซ่อมคลังได้":g.officer?"นายทหาร · เก็บรายได้เข้าคลังกิลด์ได้":"สมาชิกกิลด์ · ดูรายได้และระดับอาคารได้";
-    const focus=$("estateFocus"),apply=$("estateFocusApply");focus.value=g.focus || "balanced";
+    const apply=$("estateFocusApply"),policy=g.focus || "balanced",policyKey=s.site+":"+policy;
+    if(focus.dataset.policyKey!==policyKey){focus.dataset.policyKey=policyKey;focus.value=policy;}
     focus.disabled=!peace || !g.commander;apply.textContent="เปลี่ยนนโยบาย · "+g.focusCost+" หน่วย";
-    const syncFocus=()=>{apply.disabled=!peace || !g.commander || focus.value===(g.focus || "balanced") || g.balance<g.focusCost;};
+    const syncFocus=()=>{apply.disabled=!peace || !g.commander || focus.value===policy || g.balance<g.focusCost;};
     focus.onchange=syncFocus;syncFocus();apply.onclick=()=>{if(window.confirm("เปลี่ยนนโยบายเมือง ใช้ "+g.focusCost+" หน่วยจากคลังกิลด์?"))send("focus_"+focus.value);};
     const labels={collect:"เก็บรายได้",repair:"ซ่อมคลัง",market:"พัฒนาตลาด",warehouse:"พัฒนาคลัง",workshop:"พัฒนาโรงช่าง",handover:"รายได้ก่อนเปลี่ยนผู้ครอง",war_supply:"เสบียงศึกที่ชนะ",route_dispatch:"ค่าจัดขบวน",route_delivery:"ส่งขบวน",focus_trade:"นโยบายการค้า",focus_storage:"นโยบายสำรอง",focus_balanced:"นโยบายสมดุล"};
     $("estateHistory").textContent=(g.history?.length?"รายการล่าสุด: "+g.history.map(h=>(labels[h.reason] || h.reason)+" "+(h.amount>0?"+":"")+h.amount).join(" · "):"ยังไม่มีรายการคลังในด่านนี้");
@@ -656,13 +688,53 @@
     repair.onclick=()=>{if(window.confirm("ซ่อมคลังเสบียงโดยใช้ "+g.repairCost+" หน่วยจากคลังกิลด์?"))send("repair");};
   }
   function renderWarPanel(){
-    const s=territoryState?.local,button=$("warAction");if(!button)return;
+    const button=$("warAction");if(!button)return;
+    const local=territoryState?.local,s=local?.site===activeMapId?local:null,map=worldDefinitions?.[activeMapId];
+    const battle=s?.phase==="battle",isCastle=s?.site==="tri_wiang_castle",actionable=!!(s?.inField || s?.canStart || s?.canJoin);
+    const status=$("warStatus"),hint=$("warHint");
+    $("warHeading").textContent=map?.name || "ด่านกิลด์";
+    const phaseLabel=s?warPhase(s.phase):"ไม่มีข้อมูลศึกในพื้นที่";
+    if(status.textContent!==phaseLabel)status.textContent=phaseLabel;
+    status.dataset.tone=s?.phase || "";
+    $("warOwner").hidden=!s;
+    $("warBattle").hidden=!battle;
+    $("warDetails").hidden=!s;
+    $("castleSupply").hidden=!(isCastle && s.supply);
+    $("castleFrontLabel").hidden=!(isCastle && !s.inField && actionable);
+    if(!(isCastle && battle && s.inField))$("castleRepair").hidden=true;
+    $("warAtlasLink").hidden=actionable || !map;
+    button.hidden=!actionable;
+    button.onclick=null;
+    hint.textContent=!s?"เลือกด่านสงครามในแผนที่เพื่อดูเส้นทาง":
+      battle?"สนามรบนี้ยังไม่เปิดให้ตัวละครของคุณเข้าร่วม":
+      s.phase==="protected"?"รอพ้นช่วงคุ้มครองก่อนเปิดศึก":
+      s.phase==="open"?"กิลด์ผู้ท้าชิงต้องให้ผู้บัญชาการหรือนายทหารเปิดศึกที่จุดท้าชิง":"";
+    hint.hidden=actionable || !hint.textContent;
     renderGovernment(s);
     renderWarSchedule();
     renderWarRoutes();
-    if(!s || s.site!==activeMapId){$("warStatus").textContent="เดินทางไปเมืองเพื่อเข้าศึก";button.hidden=true;return;}
-    const cargo=s.cargo,panel=$("warCargoPanel");panel.hidden=!cargo;
-    const contribution=s.participation;$("warParticipation").hidden=!contribution;
+    const cargo=s?.cargo,panel=$("warCargoPanel");panel.hidden=!cargo;
+    const contribution=s?.participation;$("warParticipation").hidden=!contribution;
+    if(!s)return;
+    $("warOwner").textContent="ผู้ครอง · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
+    if(battle){
+      const seconds=Math.max(0,Math.floor(s.seconds || 0)),clock=$("warClock"),score=isCastle?s.pilot?.score:null;
+      clock.textContent=String(Math.floor(seconds/60)).padStart(2,"0")+":"+String(seconds%60).padStart(2,"0");
+      clock.setAttribute("aria-label",warTime(seconds));
+      $("warAttackName").textContent=s.attackName || "ไม่ทราบกิลด์";
+      $("warDefendName").textContent=s.defendName || "รอคู่ชิง";
+      for(const [id,value] of [["warAttackScore",score?.attack],["warDefendScore",score?.defend]]){
+        const metric=$(id);metric.hidden=value===undefined;
+        if(!metric.hidden)metric.textContent=value+" คะแนน";
+      }
+      $("warCapture").hidden=isCastle;
+      if(!isCastle){
+        const gauge=$("warGauge"),progress=Math.abs(s.progress);
+        gauge.max=s.goal;gauge.value=progress;
+        gauge.dataset.side=s.progress<0?"defend":s.progress>0?"attack":"";
+        $("warCaptureLabel").textContent=(s.progress<0?"ฝ่ายรับยึดธง":s.progress>0?"ฝ่ายบุกยึดธง":"ยึดธง")+" · "+progress+"/"+s.goal;
+      }
+    }
     if(contribution)$("warParticipation").textContent=`ผลงานรอบรางวัล ${contribution.progressSeconds}/${contribution.goalSeconds} วินาที`+(contribution.supportActive?" · กำลังนับการสนับสนุนเพื่อน":"");
     if(cargo){
       const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):Date.now();
@@ -674,38 +746,29 @@
       $("warCargoPickup").onclick=()=>room?.send("territory_supply",{action:"pickup"});
       $("warCargoDeliver").onclick=()=>room?.send("territory_supply",{action:"deliver"});
     }
-    $("warHeading").textContent=worldDefinitions?.[s.site]?.name || "ด่านกิลด์";
-    $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
-    $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
-    const fort=s.civic?.flag || worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
+    const fort=s.civic?.flag || map?.strategic?.sites?.find(site=>site.kind==="fort"),riverCity=map?.strategic?.riverCity;
     $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม."+(s.civic?" · สนามแยกจากห้องโลก":" · ดูบันไดและประตูบนแผนที่"+(s.inField?" · "+warGateText(s):"")):"";
-    const isCastle=s.site==="tri_wiang_castle";
-    const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
-    $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
-    const relay=s.civic?.relay || worldDefinitions[s.site].strategic?.relay;
+    $("warCount").textContent=battle && s.inField?"ในวงธง · บุก "+s.attack+" รับ "+s.defend:"";
+    const relay=s.civic?.relay || map?.strategic?.relay;
     if(relay){
       const state=s.relay;
       const status=state?(state.contested?"กำลังแย่งชิง":state.side==="attack"?"ฝ่ายบุกคุม":state.side==="defend"?"ฝ่ายรับคุม":"วงว่าง"):"";
       const rule=relay.effect==="gate"?"ฝ่ายบุกคุม แรงทุบประตูเพิ่มเป็น 30 · ฝ่ายรับคุม ลดเหลือ 10 · ปกติ 15":"เมื่อฝ่ายที่คุมมีคนมากกว่าที่ธงหลัก เกจธงเดินเพิ่ม 1 หน่วยต่อวินาที";
       $("warFlag").textContent+=" · "+relay.name+" ("+relay.x+", "+relay.z+")"+(status?" · "+status:"")+"\n"+rule+" · ทั้งสองฝ่ายอยู่จุดเสริมพร้อมกัน โบนัสหยุด";
-      $("warFlag").style.whiteSpace="pre-line";
     }
-    if(territoryState?.schedule || s.civic)
-      for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag):not(#warEntryHelp)"))note.hidden=true;
-    button.hidden=!(s.inField || s.canStart || s.canJoin);
+    $("warLegacyRules").hidden=!!(territoryState?.schedule || s.civic || riverCity || isCastle);
     const duration=s.civic && Number.isFinite(s.civic.durationMs)?Math.round(s.civic.durationMs/60000)+" นาที":null;
     const details=duration && Number.isInteger(s.civic.seatsPerSide)
       ?s.civic.seatsPerSide+" ต่อ "+s.civic.seatsPerSide+" · "+duration:duration;
     if(details)$("warFlag").textContent+=" · "+details;
     button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · "+(details || "5 นาที"):"เข้าร่วมสนามรบ";
-    if(worldDefinitions[s.site].strategic?.riverCity){
+    if(riverCity){
       $("warFlag").textContent="B01 · เปิดศึกที่ค่ายใต้ (0, 176) · 5 ต่อ 5 · 10 นาที · คุมตลาดหรือคลังให้ได้ก่อนชิงลานบัญชาการ กองบุกต้องมีช่องผ่านทั้งสองวงกำแพง คุมโรงช่างเพื่อทุบประตูแรงขึ้น";
       if(s.canStart)button.textContent="เปิดศึกที่ค่ายใต้ · 10 นาที";
-      if(s.river && s.phase==="battle"){
-        const status=s.river.posts.map((p,i)=>worldDefinitions[s.site].strategic.riverCity.posts[i].name+" · "+(p.contested?"แย่งชิง":p.owner==="attack"?"ฝ่ายบุก":p.owner==="defend"?"ฝ่ายรับ":Math.abs(p.progress)>0?"กำลังยึด "+Math.trunc(Math.abs(p.progress))+"/6":"เป็นกลาง"));
-        $("warCount").textContent+="\n"+(s.river.supplied?"เสบียงถึงลานบัญชาการ · ยึดธงได้":"เสบียงยังไม่ถึง · ตรวจจุดที่ครองและทางผ่านประตู")+"\n"+status.join(" · ");$("warCount").style.whiteSpace="pre-line";
+      if(s.river && battle){
+        const posts=s.river.posts.map((p,i)=>riverCity.posts[i].name+" · "+(p.contested?"แย่งชิง":p.owner==="attack"?"ฝ่ายบุก":p.owner==="defend"?"ฝ่ายรับ":Math.abs(p.progress)>0?"กำลังยึด "+Math.trunc(Math.abs(p.progress))+"/6":"เป็นกลาง"));
+        $("warCount").textContent+="\n"+(s.river.supplied?"เสบียงถึงลานบัญชาการ · ยึดธงได้":"เสบียงยังไม่ถึง · ตรวจจุดที่ครองและทางผ่านประตู")+"\n"+posts.join(" · ");
       }
-      for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag):not(#warEntryHelp)"))note.hidden=true;
     }
     if(isCastle){
       $("warFlag").textContent="ธงท้าชิงอยู่ที่ประตูใต้"+(fort?" ("+fort.x+", "+fort.z+")":"")+" · แตะบันไดด้านในเพื่อขึ้นหรือลงกำแพง";
@@ -713,7 +776,7 @@
       const sideName=side=>side==="attack"?"บุก":side==="defend"?"รับ":"กลาง";
       const lines=[];
       if(v && s.phase!=="open"){
-        lines.push("คะแนนรวม   บุก "+v.score.attack+"   ·   รับ "+v.score.defend);
+        if(!battle)lines.push("คะแนนรวม   บุก "+v.score.attack+"   ·   รับ "+v.score.defend);
         if(v.throne){
           const th=v.throne;
           if(s.phase==="battle")lines.push(s.seconds>2100?"ช่วงเปิดแนวรบ":s.seconds>900?"ช่วงชิงเส้นส่งกำลัง":"ช่วงชิงบัลลังก์");
@@ -731,20 +794,25 @@
         lines.push("ยึดจุด 1–6 เพื่อเก็บคะแนน กลุ่มที่เชื่อมกันตั้งแต่ 3 จุดได้เพิ่ม 20%",
           "นาทีที่ 30 เปิดท้องพระโรง ยึดจุดนอก 2 จุดและจุดกลาง 2 จุด เปิดทางเข้าพระราชฐาน แล้วยืนบัลลังก์ 120 วินาที");
       }
-      const supply=s.supply,panel=$("castleSupply");
-      if(panel)panel.hidden=!supply;
-      if(supply && panel){
-        const camps=worldDefinitions[activeMapId].strategic.forwardCamps;
+      const supply=s.supply,front=$("castleFront"),respawn=$("respawnCamp");
+      const choices=battle && v && !v.throne?[2,4,5]:[1,2,3],frontKey=choices.join(",");
+      if(front.dataset.choices!==frontKey){
+        front.dataset.choices=frontKey;
+        front.replaceChildren(...map.strategic.objectives.filter(p=>choices.includes(p.id)).map(p=>new Option(p.id+" "+p.name,String(p.id))));
+      }
+      if(supply){
+        const camps=map.strategic.forwardCamps || [];
+        if(respawn.options.length===1)for(const c of camps)respawn.add(new Option(c.name,String(c.id)));
         const ready=supply.camps.filter(c=>c.status==="ready");
         $("supplyTitle").textContent="ค่ายหน้า · เปิด "+ready.length+"/"+camps.length;
         for(const c of supply.camps){
-          const opt=$("respawnCamp").querySelector('option[value="'+c.id+'"]');
+          const opt=respawn.querySelector('option[value="'+c.id+'"]');
           if(!opt)continue;
           const label=c.id+" "+camps.find(p=>p.id===c.id).name+" · "+campStatus[c.status];
           if(opt.textContent!==label)opt.textContent=label;
           opt.disabled=c.status!=="ready";
         }
-        if($("respawnCamp").value!==String(supply.selected))$("respawnCamp").value=String(supply.selected);
+        if(respawn.value!==String(supply.selected))respawn.value=String(supply.selected);
         const chosen=ready.some(c=>c.id===supply.selected);
         $("campMarch").disabled=!supply.atBase || !chosen;
         $("campHelp").textContent=supply.selected && !chosen?"ค่ายที่เลือกใช้ไม่ได้ หากล้มจะกลับฐานรวมพล":supply.atBase?"อยู่ที่ฐาน เลือกค่ายที่เปิดเพื่อส่งกำลังได้ทันที":"เลือกค่ายสำหรับเกิดใหม่ได้ที่นี่ หากจะส่งกำลังขณะมีชีวิต ให้กลับฐานรวมพลประจำตัว";
@@ -752,12 +820,11 @@
         else if(v.points.find(p=>p.id===5)?.owner===s.side)lines.push("กลองพร้อม · จุดกลางของฝ่ายเรายังสงบ");
       }
       $("warCount").textContent=lines.join("\n");
-      $("warCount").style.whiteSpace="pre-line";
-      for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag):not(#warEntryHelp)"))note.hidden=true;
-      if($("castleFront"))$("castleFront").parentElement.hidden=s.inField || !(s.canStart || s.canJoin);
       if(s.canStart)button.textContent="เปิดสนามทดลอง 10 ต่อ 10 · 45 นาที";
     }
-    button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
+    $("warFlag").hidden=!$("warFlag").textContent;
+    $("warCount").hidden=!$("warCount").textContent;
+    if(actionable)button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
       else if(room)room.send(s.canStart?"territory_start":"territory_join",isCastle?{objectiveId:Number($("castleFront").value)}:{});};
   }
   function updateAtlasOwner(){
@@ -953,7 +1020,7 @@
       note("ดีลล่าสุด "+amount+" ชิ้น · "+total+" ทอง · "+new Date(at).toLocaleString("th-TH"));
     }
   }
-  function openStrategicMap(destination){
+  function openStrategicMap(destination,back){
     const maps=worldDefinitions,origin=activeMapId;
     if(!maps?.[origin])return;
     openDrawer("strategy","แผนที่ยุทธศาสตร์",`<button class="atlas-back" id="backLocalMap">‹ แผนที่พื้นที่ปัจจุบัน</button>
@@ -962,7 +1029,9 @@
       <p class="note">แตะพื้นที่เพื่อหาเส้นทาง · เลื่อนเพื่อดูอาณาจักรทั้งหมด</p>
       <div class="atlas-scroll"><div class="atlas-board" id="atlasBoard"></div></div>
       <div class="legend"><span>♛ เมืองหลวง</span><span>⚑ ด่านสงคราม</span><span>◆ เขตล่า</span><span>● จุดที่ยืน</span></div>`);
-    $("backLocalMap").onclick=openMap;
+    const backButton=$("backLocalMap");
+    if(typeof back==="function")backButton.textContent="← กลับหน้าก่อน";
+    backButton.onclick=typeof back==="function"?back:openMap;
     const board=$("atlasBoard"),detail=$("atlasDetail"),cells=new Map(),lines=[];
     const ids=Object.keys(maps).filter(id=>atlasCells[id]);
     const linkLayer=document.createElementNS("http://www.w3.org/2000/svg","svg");
