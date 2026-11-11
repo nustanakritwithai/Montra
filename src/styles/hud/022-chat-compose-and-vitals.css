@@ -34,6 +34,8 @@
 .learned-bar .ghost-field-actions .orb-action:disabled { opacity: .5; }
 .learned-bar[data-wide] .ghost-field-actions { position: relative; bottom: auto; order: 3; }
 .ghost-field-status { position: absolute; right: 0; bottom: calc(100% + 4px); width: max-content; max-width: min(190px,45vw); padding: 3px 6px; border-radius: 6px; background: #0c1825f5; color: #dff4ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
+.ghost-field-skills { position: absolute; right: 0; bottom: calc(100% + 27px); display: grid; gap: 4px; padding: 4px; width: max-content; max-width: 80vw; border-radius: 10px; background: #0c1825f5; }
+.ghost-field-skills[hidden] { display: none; }
 .ghost-pool { display: grid; gap: 10px; }
 .ghost-pool h3, .ghost-pool p { margin: 0; }
 .ghost-pool-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }

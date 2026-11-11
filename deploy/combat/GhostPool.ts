@@ -17,8 +17,9 @@ type Placement =
 export type GhostCombatCommand =
   | {action: "attack"; combatId: string; targetId: string}
   | {action: "follow"; combatId: string};
+export type GhostSkillCommand = {action: "skill"; combatId: string; targetId: string; skillId: string};
 export type GhostCommand = Placement
-  | GhostCombatCommand
+  | GhostCombatCommand | GhostSkillCommand
   | {action: "read" | "summon" | "recall" | "switch"}
   | {action: "capture"; targetId: string};
 
@@ -54,6 +55,10 @@ export function parseGhostCommand(message: unknown): GhostCommand | null {
     case "attack":
       return count === 3 && isInstanceId(input.combatId) && isTargetId(input.targetId)
         ? {action: "attack", combatId: input.combatId, targetId: input.targetId} : null;
+    case "skill":
+      return count === 4 && isInstanceId(input.combatId) && isTargetId(input.targetId) &&
+        typeof input.skillId === "string" && /^SK_[A-Z0-9_]{1,32}$/.test(input.skillId)
+        ? {action: "skill", combatId: input.combatId, targetId: input.targetId, skillId: input.skillId} : null;
     case "follow":
       return count === 2 && isInstanceId(input.combatId) ? {action: "follow", combatId: input.combatId} : null;
     case "select":

@@ -588,7 +588,7 @@
   ],
   "dynamicClientSends": 15,
   "dynamicClientReceives": 2,
-  "dynamicServerSends": 5,
+  "dynamicServerSends": 6,
   "protectedSources": {
     "MyRoomState.ts": "be99c2a621e393c60fccb842875f8d1992903e2512713c195f2d4f05dd25712c",
     "CharacterStore.ts": "84906066c1dd17b0cddc84ee23192141a226debe8b084f7fdc0b0db62a199046",

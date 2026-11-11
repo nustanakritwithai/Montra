@@ -6,20 +6,28 @@ import {createInterface} from "node:readline";
 import {pathToFileURL} from "node:url";
 
 export type PotGhost = {instanceId: string; name: string; level: number};
+export type LegacyGhostSkill = {skillId: string; range: number; cooldownMs: number; maxUses: number};
 type Position = {x: number; y: number; z: number};
 type Command = {
-  commandId: string; instanceId: string; zone: string; kind: "summon" | "recall" | "switch";
+  commandId: string; instanceId: string; zone: string; kind: "summon" | "recall" | "switch" | "skill";
   targetPoint?: Position; expectedActiveInstanceId?: string; expectedActiveGeneration?: number;
+  skillId?: string; targetActorId?: string;
 };
+type SkillFrame = {origin: Position; targetId: string; targetPosition: Position;
+  targetLevel: number; targetHp: number; targetMaxHp: number; targetDefenseScale: number};
 type Result = {
   accepted: boolean; code: string; replay?: boolean;
   active?: (Position & {actorId: string; instanceId: string; generation: number;
-    hpScale: number; defenseScale: number; magicDefenseScale: number}) | null;
+    hpScale: number; defenseScale: number; magicDefenseScale: number; attackScale: number;
+    basicRange: number; basicCooldownMs: number; skills: LegacyGhostSkill[]}) | null;
+  skill?: {targetId: string; skillId: string; hit: boolean; critical: boolean; damageScale: number} | null;
 };
 type PartyGhost = Pick<PotGhost, "instanceId" | "level"> & {speciesId: string; slot: number};
-type Request = {owner: string; position: Position; party: PartyGhost[]; command: Command}
+type Request = {owner: string; position: Position; party: PartyGhost[]; command: Command; skill?: SkillFrame}
   | {owner: string; disconnect: true};
 type Pending = {resolve: (result: Result) => void; reject: (error: Error) => void; timer: NodeJS.Timeout};
+
+export class GhostWorkerBusy extends Error {}
 
 export const POT_CAPTURE_PROFILE = "MON_001";
 
@@ -79,7 +87,8 @@ export class LegacyGhostWorker {
   }
 
   send(request: Request): Promise<Result> {
-    if (this.closed || this.pending.length >= 16) return Promise.reject(new Error("ghost_worker_unavailable"));
+    if (this.closed) return Promise.reject(new Error("ghost_worker_unavailable"));
+    if (!("disconnect" in request) && this.pending.length >= 16) return Promise.reject(new GhostWorkerBusy("ghost_worker_busy"));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => this.close(), 5000);
       timer.unref();

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const read = path => readFileSync(path, 'utf8');
 const html = read('index.html');
 const bar = html.slice(html.indexOf('class="skill-bar learned-bar"'), html.indexOf('id="fishingPanel"'));
-for (const id of ['fly', 'ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostPoolButton']) {
+for (const id of ['fly', 'ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostPoolButton']) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
   assert.match(bar, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
 }
@@ -26,6 +26,7 @@ const nodes = new Map();
 function node() {
   return {hidden:true,dataset:{},children:[],textContent:"",
     append(child){this.children.push(child);},replaceChildren(...children){this.children=children;},
+    querySelector(){return this.children.find(child=>child.type==="button" && !child.disabled);},
     setAttribute(name,value){this[name]=value;},focus(){document.activeElement=this;}};
 }
 const document = {createElement:node,activeElement:null,addEventListener:(event,listener)=>{handlers[event]=listener;}};
@@ -135,7 +136,7 @@ assert.match(get("ghostFieldStatus").textContent,/HP 83\/100/);
 handlers["ghostAttackButton:click"]();
 assert.equal(context.targetedSkill,"ghostAttack");
 assert.equal(get("ghostAttackButton")["aria-pressed"],"true");
-assert.match(get("ghostFieldStatus").textContent,/แตะมอนสเตอร์/);
+assert.match(get("ghostFieldStatus").textContent,/แตะเป้าหมาย/);
 handlers.keydown({key:"Escape"});
 assert.equal(get("ghostAttackButton")["aria-pressed"],"false");
 handlers["ghostAttackButton:click"]();
@@ -160,9 +161,33 @@ assert.match(get("ghostFieldStatus").textContent,/กำลังเรียก
 handlers.ghost_combat_state({combatId:"current",status:"following"});
 assert.equal(get("ghostFollowButton").hidden,true);
 assert.match(get("ghostFieldStatus").textContent,/กลับมาตาม/);
+handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
+  pool:{...updated,selectedSlot:0,revision:7},skills:[
+    {skillId:"SK_NORMAL_01",remainingMs:0,usesLeft:28},
+    {skillId:"SK_NORMAL_02",remainingMs:4000,usesLeft:15},
+  ]});
+handlers["ghostSkillButton:click"]();
+const skillMenu = get("ghostSkillMenu");
+assert.equal(skillMenu.hidden,false);
+assert.equal(document.activeElement,skillMenu.children[0]);
+assert.match(skillMenu.children[0].textContent,/พุ่งชน.*28/);
+assert.match(skillMenu.children[1].textContent,/จู่โจมเร็ว.*4 วิ/);
+assert.equal(skillMenu.children[1].disabled,true);
+skillMenu.children[0].onclick();
+assert.equal(skillMenu.hidden,true);
+assert.match(get("ghostFieldStatus").textContent,/พุ่งชน.*แตะเป้าหมาย/);
+context.orderGhostAttack("opponent");
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"skill","combatId":"current","targetId":"opponent","skillId":"SK_NORMAL_01"}']);
+assert.match(get("ghostFieldStatus").textContent,/กำลังใช้วิชาผี/);
+handlers.ghost_combat_state({...confirmed,status:"skill",skillId:"SK_NORMAL_01",hit:true,damage:11,hp:40,remainingMs:1800,usesLeft:27});
+assert.match(get("ghostFieldStatus").textContent,/พุ่งชน.*คู่ต่อสู้.*11/);
+handlers["ghostSkillButton:click"]();
+assert.equal(skillMenu.children[0].disabled,true);
+handlers.keydown({key:"Escape"});
+assert.equal(skillMenu.hidden,true);
 handlers.ghost_pot_state({active:false,pool:{...updated,selectedSlot:0,revision:7},
   fainted:["ghost-7"],combatId:null,status:"defeated"});
 assert.equal(get("ghostAttackButton").hidden,true);
 assert.match(find("ghost-ghost-7").children.at(-1).textContent,/ต้องพักฟื้น/);
 assert.equal(notices.at(-1),"ผีพ่ายแพ้และกลับเข้าหม้อ");
-console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits and follow");
+console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits, follow and legacy skills");

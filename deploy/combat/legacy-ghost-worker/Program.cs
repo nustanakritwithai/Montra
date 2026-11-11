@@ -8,7 +8,9 @@ var roster = new Roster();
 var presence = new Dictionary<string, OwnedMonsterOwnerPresence>(StringComparer.Ordinal);
 var world = new OwnedMonsterWorldSource(roster, id => presence.GetValueOrDefault(id), _ => null,
     combatEnabled: () => false);
-var runtime = new OwnedMonsterControlRuntime(world);
+var skillSource = new GhostSkillSource(world, roster);
+// Node creates each request ID once and closes the pipe after its five-second timeout.
+var runtime = new OwnedMonsterControlRuntime(skillSource, TimeSpan.FromSeconds(15));
 
 while (Console.ReadLine() is { } line)
 {
@@ -37,7 +39,7 @@ object Handle(Request input)
     }
 
     var command = input.Command ?? throw new ArgumentException();
-    if (command.Kind is not ("summon" or "recall" or "switch") ||
+    if (command.Kind is not ("summon" or "recall" or "switch" or "skill") ||
         input.Party is not { Length: >= 1 and <= 3 } party || input.Position is not { } position ||
         !double.IsFinite(position.X) || !double.IsFinite(position.Y) || !double.IsFinite(position.Z) ||
         string.IsNullOrWhiteSpace(command.Zone) ||
@@ -52,24 +54,39 @@ object Handle(Request input)
     presence[input.Owner] = new(command.Zone, position, now);
     roster.Set(input.Owner, party);
     world.RefreshParty(input.Owner);
+    if (command.Kind == "skill")
+    {
+        var (cast, strike) = skillSource.Cast(runtime, input.Owner, command, input.Skill ?? throw new ArgumentException(), now);
+        return new { cast.Accepted, cast.Code, cast.Replay, skill = strike };
+    }
     var result = runtime.Handle(input.Owner, command, now);
     var active = world.CaptureOwnedActors(command.Zone, now)
         .SingleOrDefault(actor => actor.OwnerId == input.Owner);
     var monster = result.Monster;
-    var stats = monster is null ? null : roster.ReadParty(input.Owner)
-        .SingleOrDefault(ghost => ghost.InstanceId == monster.InstanceId)?.Profile.Stats;
+    var definition = monster is null ? null : roster.ReadParty(input.Owner)
+        .SingleOrDefault(ghost => ghost.InstanceId == monster.InstanceId);
+    var stats = definition?.Profile.Stats;
     return new { result.Accepted, result.Code, result.Replay, active = active is null || stats is null ? null : new
         { active.ActorId, monster!.InstanceId, active.Generation, active.Pose.X, active.Pose.Y, active.Pose.Z,
             hpScale = stats.HpMax / Roster.BaseStats.HpMax, defenseScale = stats.Def / Roster.BaseStats.Def,
-            magicDefenseScale = stats.SpDef / Roster.BaseStats.SpDef } };
+            magicDefenseScale = stats.SpDef / Roster.BaseStats.SpDef, attackScale = stats.Atk / Roster.BaseStats.Atk,
+            basicRange = Roster.BasicAttack.Range, basicCooldownMs = Roster.BasicAttack.CooldownSeconds * 1000,
+            skills = definition!.Actions.Select(action => new { skillId = action.ActionId, action.Range, action.MaxUses,
+                cooldownMs = action.CooldownSeconds * 1000 }) } };
 }
 
 sealed record Ghost(string InstanceId, string SpeciesId, int Level, int Slot);
-sealed record Request(string Owner, OwnedMonsterPoint? Position, Ghost[]? Party, OwnedMonsterCommand? Command, bool Disconnect);
+sealed record Request(string Owner, OwnedMonsterPoint? Position, Ghost[]? Party, OwnedMonsterCommand? Command,
+    bool Disconnect, GhostSkillFrame? Skill);
 
 sealed class Roster : IOwnedMonsterCanonicalReader
 {
-    private static readonly CombatActionDefinition BasicAttack = CombatActionCatalogProviderV91.LoadEmbedded().GetRequired("SK_FIRE_01").Definition;
+    // The normal owned basic attack from Pocket Monster's AccountService.OwnedMonsterCanonical.
+    public static CombatActionDefinition BasicAttack { get; } =
+        new CombatActionDefinition("basic_attack", "owned-basic-ai/v1", 1.35, 0, CombatAttackChannel.Physical,
+            CombatActionTargetKind.NearestEnemy, CombatElementType.Normal, 15, 100, 1, true, true, 0,
+            false, 1_000_000, .9, CentralCombatVersions.Rules, []).Validate();
+    private static readonly (int Level, CombatActionDefinition Action)[] Skills = LoadSkills();
     public static CombatStats BaseStats { get; } = CalculateProfile("montra-ghost-baseline", 1).Stats;
     private readonly Dictionary<string, OwnedMonsterDefinition[]> definitions = new(StringComparer.Ordinal);
 
@@ -87,8 +104,26 @@ sealed class Roster : IOwnedMonsterCanonicalReader
     }
 
     private static OwnedMonsterDefinition Create(string ownerId, Ghost ghost) =>
-        new(ghost.InstanceId, ownerId, ghost.SpeciesId, CalculateProfile(ghost.InstanceId, ghost.Level), [],
+        new(ghost.InstanceId, ownerId, ghost.SpeciesId, CalculateProfile(ghost.InstanceId, ghost.Level),
+            Skills.Where(skill => skill.Level <= ghost.Level).Select(skill => skill.Action).ToImmutableArray(),
             ghost.Slot, BasicAttack: BasicAttack);
+
+    private static (int Level, CombatActionDefinition Action)[] LoadSkills()
+    {
+        var catalog = CombatActionCatalogProviderV91.LoadEmbedded();
+        var assembly = typeof(Roster).Assembly;
+        var resource = assembly.GetManifestResourceNames().Single(name => name.EndsWith("catalog-seed-v8.4.0.json", StringComparison.Ordinal));
+        using var stream = assembly.GetManifestResourceStream(resource)!;
+        using var document = JsonDocument.Parse(stream);
+        var learnset = document.RootElement.GetProperty("resources").GetProperty("learnsets").EnumerateArray()
+            .Select(row => row.GetProperty("definition"))
+            .Where(row => row.GetProperty("monsterId").GetString() == "MON_001")
+            .ToArray();
+        // These starter actions have a single target and no Pocket-only status effect.
+        return new[] { "SK_NORMAL_01", "SK_NORMAL_02" }.Select(id => (
+            learnset.Single(row => row.GetProperty("skillId").GetString() == id).GetProperty("learnLevel").GetInt32(),
+            catalog.GetRequired(id).Definition)).ToArray();
+    }
 
     private static BaseCombatProfile CalculateProfile(string instanceId, int level) =>
         PocketMonsterCombatCalculator.Calculate(new PocketMonsterCombatInput(

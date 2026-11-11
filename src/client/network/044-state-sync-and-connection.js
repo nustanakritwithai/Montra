@@ -1697,14 +1697,15 @@
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
         else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
         else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
-        else if (info?.reason === "ghost_target_unavailable") toast("ต้องเป็นผีทั่วไปที่ยังมีชีวิตและอยู่ในระยะ");
         else if (typeof info?.reason === "string" && /^(ghost_|invalid_ghost_pot$)/.test(info.reason)) {
           clearGhostPoolPending();
           syncGhostPoolUi();
           const ghostErrors = {ghost_pot_busy:"รอสักครู่ก่อนใช้หม้ออาคม",ghost_pot_occupied:"เก็บผีที่เรียกอยู่ก่อนจับตัวถัดไป",
-            ghost_pot_empty:"เลือกผีในช่องเรียกก่อน",ghost_target_unavailable:"จับผีตัวนี้ไม่ได้หรืออยู่นอกระยะ",
+            ghost_pot_empty:"เลือกผีในช่องเรียกก่อน",ghost_target_unavailable:"ต้องเป็นผีทั่วไปที่ยังมีชีวิตและอยู่ในระยะ",
             ghost_pot_unavailable:"หม้ออาคมยังใช้ไม่ได้",invalid_ghost_pot:"คำสั่งหม้ออาคมไม่ถูกต้อง",
-            ghost_combat_inactive:"ผีที่เรียกไว้เปลี่ยนแล้ว",ghost_combat_target:"ผีโจมตีเป้าหมายนี้ไม่ได้ในตอนนี้"};
+            ghost_combat_inactive:"ผีที่เรียกไว้เปลี่ยนแล้ว",ghost_combat_target:"ผีโจมตีเป้าหมายนี้ไม่ได้ในตอนนี้",
+            ghost_skill_unlearned:"ผีตัวนี้ยังใช้วิชานี้ไม่ได้",ghost_skill_exhausted:"ผีใช้วิชานี้ครบแล้ว พักที่เขตปลอดภัย",
+            ghost_skill_cooldown:"รอให้วิชาผีพร้อมอีกครั้ง",ghost_skill_unavailable:"ใช้วิชาผีไม่สำเร็จ"};
           toast(ghostErrors[info.reason] || "ใช้หม้ออาคมไม่สำเร็จ");
         }
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
