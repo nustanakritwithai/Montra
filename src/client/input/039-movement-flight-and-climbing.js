@@ -370,10 +370,11 @@
     return JSON.stringify([guide?.title,hunt?.id,hunt?.need,active?.id,active?.progress,notes.campId,notes.boss,notes.shrine,notes.trial?.id]);
   }
   function syncQuestNavigationUi(message) {
-    const active=Boolean(questNavigation);
+    const active=Boolean(questNavigation),war=ui.quest.dataset?.warGuide==="true";
     ui.quest.setAttribute("aria-pressed",String(active));
-    ui.quest.setAttribute("aria-label",active?"หยุดเดินอัตโนมัติไปภารกิจ":"เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ");
-    const label=$("questNavigationStatus");if(label)label.textContent=message || (active?"กำลังเดิน · แตะเพื่อหยุด":"แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ");
+    ui.quest.setAttribute("aria-label",war?"ดูเป้าหมายศึกบนแผนที่":active?"หยุดเดินอัตโนมัติไปภารกิจ":"เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ");
+    const label=$("questNavigationStatus");if(label)label.textContent=war?"แตะเพื่อดูแผนที่สนาม":
+      message || (active?"กำลังเดิน · แตะเพื่อหยุด":"แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ");
   }
   function cancelQuestNavigation(message="", stop=true) {
     const previous=questNavigation;if(!previous)return;
@@ -387,8 +388,8 @@
     if(message)toast(message);
   }
   function startQuestNavigation() {
+    if(ui.quest.classList.contains("war-hud") || territoryState?.local?.inField || ui.quest.dataset?.warGuide==="true"){openMap();return;}
     if(questNavigation){cancelQuestNavigation("หยุดเดินอัตโนมัติแล้ว");return;}
-    if(ui.quest.classList.contains("war-hud") || territoryState?.local?.inField){toast("เขตสงครามต้องเลือกเส้นทางเอง");openCurrentQuest();return;}
     const me=ownServerCharacter(),guide=hudGuide(),target=guide?.to;
     if(mode!=="live" || !room || !me){toast("เข้า LIVE เพื่อเดินอัตโนมัติไปภารกิจ");return;}
     if(!me.alive || me.flying || Math.abs(playerLayer(me))>.15 || ["climbing","ascending","descending","dashing"].includes(me.combatState)){toast("ยืนบนพื้นและหยุดบิน ปีน หรือพุ่งก่อนนำทาง");return;}

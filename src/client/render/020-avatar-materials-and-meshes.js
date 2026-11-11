@@ -18,6 +18,11 @@
   waypointBeam.parent = marker;
   waypointBeam.rotation.x = -Math.PI / 2;
   waypointBeam.position.set(0, 0, 13);
+  const warObjectiveBeacon=B.MeshBuilder.CreateCylinder("warObjectiveBeacon",
+    {height:24,diameterTop:.2,diameterBottom:1.2,tessellation:12},scene);
+  warObjectiveBeacon.material=waypointBeamMat;
+  warObjectiveBeacon.isPickable=false;
+  warObjectiveBeacon.setEnabled(false);
   const weaponSteel = mat("weapon forged steel", "#b7c4cb", "#233d44");
   const weaponEdge = mat("weapon arcane edge", "#b9e8ee", "#5a99bc");
   const weaponWood = mat("weapon oak handle", "#71523e", "#2b1b0b");

@@ -476,29 +476,41 @@
     }
     syncAdvancedSkillUI();
     if(drawerActive==="fieldSkills" && $("fieldSkillGraph"))renderSkillGraph(fieldSkillKind(),$("fieldSkillGraph"));
-    // Guide tracker (the territory war owns this card while a battle is on).
-    if (!$("quest").classList.contains("war-hud")) {
-      const gd = hudGuide(), q = $("quest");
-      if (gd) {
-        hudSet(q.querySelector(".quest-content strong"), "qt", gd.title); hudSet(q.querySelector(".quest-content > span"), "qs", gd.step);
-        hudSet($("questProgress"), "qp", gd.progress || "");
-        if(drawerActive==="quest" && $("huntStep"))$("huntStep").textContent=gd.step+" · "+gd.progress;
-      }
-      const pointer = $("questPointer"), to = gd?.to;
-      if (!pointer) { /* older page markup: no pointer box */ }
-      else if (to && hero && Number.isFinite(to.x)) {
-        const dist = Math.hypot(to.x - hero.x, to.z - hero.z);
-        hudSet(pointer, "qph", dist < 3, "hidden");
-        if (dist >= 3) {
-          const vp = camera.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()), tm = scene.getTransformMatrix();
-          B.Vector3.ProjectToRef(new B.Vector3(hero.x, 0, hero.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjA);
-          B.Vector3.ProjectToRef(new B.Vector3(to.x, 0, to.z), B.Matrix.IdentityReadOnly, tm, vp, hudProjB);
-          const deg = Math.round(Math.atan2(hudProjB.y - hudProjA.y, hudProjB.x - hudProjA.x) * 180 / Math.PI);
-          if ($("questArrow")) $("questArrow").style.transform = "rotate(" + deg + "deg)";
-          hudSet($("questDistance"), "qd", Math.round(dist) + " ม.");
-        }
-      } else hudSet(pointer, "qph", true, "hidden");
+    const q=$("quest"),fighting=q.classList.contains("war-hud"),war=warObjectiveGuide(hero);
+    const guidingWar=Boolean(war || fighting);
+    if(q.dataset.warGuide!==String(guidingWar)){
+      q.dataset.warGuide=String(guidingWar);
+      hudCache.delete("qttextContent");
+      syncQuestNavigationUi();
     }
+    warObjectiveBeacon.setEnabled(!!war);
+    if(war){
+      const {x,z}=war.to,terrain=worldDefinitions?.[activeMapId]?.terrain;
+      warObjectiveBeacon.position.set(x,12+(terrain?terrainHeight(terrain,x,z):0),z);
+    }
+    const gd=war || (!fighting?hudGuide():null);
+    if(fighting){
+      hudSet(q.querySelector(".quest-content > span"),"qs",war?.step || "");
+      hudSet($("questProgress"),"qp",war?"⚑ "+war.title:"");
+    }else if(gd){
+      hudSet(q.querySelector(".quest-content strong"),"qt",gd.title);
+      hudSet(q.querySelector(".quest-content > span"),"qs",gd.step);
+      hudSet($("questProgress"),"qp",gd.progress || "");
+      if(drawerActive==="quest" && $("huntStep"))$("huntStep").textContent=gd.step+" · "+(gd.progress || "");
+    }
+    const pointer=$("questPointer"),to=gd?.to;
+    if(pointer && to && hero && Number.isFinite(to.x)){
+      const dist=Math.hypot(to.x-hero.x,to.z-hero.z),radius=war?.radius || 3;
+      hudSet(pointer,"qph",dist<radius,"hidden");
+      if(dist>=radius){
+        const vp=camera.viewport.toGlobal(engine.getRenderWidth(),engine.getRenderHeight()),tm=scene.getTransformMatrix();
+        B.Vector3.ProjectToRef(new B.Vector3(hero.x,0,hero.z),B.Matrix.IdentityReadOnly,tm,vp,hudProjA);
+        B.Vector3.ProjectToRef(new B.Vector3(to.x,0,to.z),B.Matrix.IdentityReadOnly,tm,vp,hudProjB);
+        const deg=Math.round(Math.atan2(hudProjB.y-hudProjA.y,hudProjB.x-hudProjA.x)*180/Math.PI);
+        if($("questArrow"))$("questArrow").style.transform="rotate("+deg+"deg)";
+        hudSet($("questDistance"),"qd",Math.round(dist)+" ม.");
+      }
+    }else hudSet(pointer,"qph",true,"hidden");
     if (!$("fieldMenu").hidden) renderJournalObjective();
     renderPartyFrames();
     renderStatusChip();

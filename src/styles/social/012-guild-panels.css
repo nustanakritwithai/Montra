@@ -190,6 +190,12 @@
 #warGauge[data-side="attack"] { accent-color: #ec9c7c; }
 #warGauge[data-side="defend"] { accent-color: #99ccef; }
 .war-field-report { white-space: pre-line; }
+.drawer-body .war-map-objective {
+  margin: 0 0 9px; padding: 8px 10px; border: 1px solid #a28249; border-radius: 7px;
+  background: #30291c; color: #ffe4a4; font-weight: 700; overflow-wrap: anywhere;
+}
+#quest[data-war-guide="true"] #questProgress { color: #ffe4a4; font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+#quest[data-war-guide="true"] .quest-pointer small { font-weight: 750; color: #fff0bc; }
 .field-command .note { color: var(--field-muted); opacity: 1; }
 .field-command .field-card > :last-child { margin-bottom: 0; }
 .field-command p.field-card { margin: 0; }

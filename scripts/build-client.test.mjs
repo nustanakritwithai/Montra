@@ -123,8 +123,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/020-avatar-materials-and-meshes.js",
-  "bytes": 26677,
-  "sha256": "5a6e483651235dd71c6a825e5c06b82bd6626ee86ce5bf373a710cbc96f793ef"
+  "bytes": 26955,
+  "sha256": "75837d0d6e707d81f78f29c3abce063425c8bea81798f007d4ff2a3a89764c07"
 },
 {
   "path": "render/006-materials-atmosphere.js",
@@ -184,13 +184,13 @@ const reviewedReleaseFragments = new Map([
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 33184,
-  "sha256": "5122072743137f8705523681b6bf398e2e4bc19e17751db579162a9b7b8a6a30"
+  "bytes": 33304,
+  "sha256": "1ad4a687943cfd9a4866d5c41766bff95f9c63071ec13ab2e101799b44bc71f1"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
-    "bytes": 97842,
-    "sha256": "9d43c8bed8e1863eb35ea96549cecab42f9d39973111c28d0b6c84d47f5aa29f"
+    "bytes": 103490,
+    "sha256": "cb3398e0d97000c6cf632650f97583ca9f80f1180e47fa3888fa8fa821851be9"
   },
   {
     "path": "ui/055-market-and-trade.js",
@@ -234,8 +234,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/042-vitals-chat-and-status.js",
-    "bytes": 41039,
-    "sha256": "01a9f4e46ddaf0d82eef2320db1b248c1742203dac8c04e059014260e5208bb6"
+    "bytes": 41481,
+    "sha256": "81d922a607cb892c5dfdda6c9bd53b020698c8c3885714d078707ce98b5d9aef"
   },
   {
     "path": "ui/056-party-guild-and-rebirth.js",
@@ -274,8 +274,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2058587);
-  assert.equal(hash(bytes), '0a379a7b78b481231af7dddf05123468cf60bd1a85087cc0ee82d81b5c37c726');
+  assert.equal(bytes.length, 2065075);
+  assert.equal(hash(bytes), '25366c894c7f811588411654558fab6d096ef688fe4c8a6ba64e7157a6570ec6');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
