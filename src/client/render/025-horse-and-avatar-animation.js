@@ -210,8 +210,12 @@
       // left blade low and back along the forearm, ready to cover.
       // The blades are aimed with the arms and elbows; the wrists turn only a little (a 1.9 rad wrist
       // roll twisted the skinned forearm like a candy wrapper).
-      set("RightArm", -.45, .15, 1.12); set("RightForeArm", 0, 1.6, 0); set("RightHand", 0, 0, -.35);
-      set("LeftArm", -.45, -.15, -1.12); set("LeftForeArm", 0, -1.6, 0); set("LeftHand", 0, 0, .35);
+      // Upper arms carried forward so the elbows bend only ~65 deg (a near-right-angle bend pinched the
+      // skinned elbow and flattened the forearm); wrists nearly straight.
+      // Twin swords face the opponent square on (krabi-krabong guard), so both arms read the same.
+      P.Hips[1] = -.22; P.Hips[2] = -.03; P.Spine[1] *= .2; P.Spine1[1] *= .2; P.Chest[1] *= .2;
+      set("RightArm", -.8, 0, 1.02); set("RightForeArm", 0, 1.15, 0); set("RightHand", 0, 0, -.12);
+      set("LeftArm", -.8, 0, -1.02); set("LeftForeArm", 0, -1.15, 0); set("LeftHand", 0, 0, .12);
       add("RightShoulder", 0, .08, -.06); off[1] = -.06;
       add("LeftLeg", .12, 0, 0); add("RightLeg", .14, 0, 0);
     } else if (weapon === "arcane_sword") {
