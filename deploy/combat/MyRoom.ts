@@ -7762,6 +7762,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // A valid guest token is a secret bearer credential, never sent in Schema.
     const required = process.env.MONTRA_ACCOUNTS_REQUIRED !== "0";
     const fields = options && typeof options === "object" && !Array.isArray(options) ? options as Record<string,unknown> : {};
+    if (process.env.MONTRA_REQUIRE_INVENTORY_CLIENT === "1" && fields.inventoryVersion !== 1) {
+      throw new Error("รีเฟรชหน้าเกมเพื่อใช้กระเป๋า 108 ช่อง");
+    }
     if(!this.prototypeGameplayEnabled())this.clearAllPrototypeEffects();
     if(this.prototypeGameplayEnabled() && this.requireAllPrototypeClients() &&
       (fields.prototypeProtocolVersion!==1 || fields.prototypeGameplayVersion!==1))throw new Error("prototype_client_required");

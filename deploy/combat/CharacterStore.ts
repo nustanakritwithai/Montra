@@ -171,7 +171,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   const bladeBook = value.bladeBook === undefined ? undefined : validateBladeBook(value.bladeBook,learning("blade"));
   const sentinelBook = value.sentinelBook === undefined ? undefined : validateSentinelBook(value.sentinelBook,learning("sentinel"));
   const mixedSkillLoadouts=value.mixedSkillLoadouts===undefined?undefined:validateMixedSkillLoadouts(value.mixedSkillLoadouts,{swordTree,muayBook,bladeBook,sentinelBook,occultBook});
-  if (value.inventory !== undefined) validateInventory(value.inventory);
+  const inventory = value.inventory === undefined ? undefined : validateInventory(value.inventory);
   const statAllocations = value.statAllocations === undefined ? emptyAllocations() :
     validateAllocations(value.statAllocations, value.level as number);
   if (value.stamina !== undefined && (typeof value.stamina !== "number" || !Number.isFinite(value.stamina) || value.stamina < 0 || value.stamina > PROGRESSION.maxStamina)) {
@@ -182,7 +182,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   }
   if(value.mapId===CASTLE_ID && !getWorldMap(CASTLE_ID)){
     const exit=getWorldMap("fallen_city") ?? getWorldMap(DEFAULT_MAP_ID)!;
-    return {...(value as CharacterSnapshot),...exit.spawn,mapId:exit.id,statAllocations,mixedSkillLoadouts,swordTree,muayCooldowns,muayBook,occultBook,bladeBook,sentinelBook};
+    return {...(value as CharacterSnapshot),...(inventory && {inventory}),...exit.spawn,mapId:exit.id,statAllocations,mixedSkillLoadouts,swordTree,muayCooldowns,muayBook,occultBook,bladeBook,sentinelBook};
   }
   if (value.mapId !== undefined &&
       (typeof value.mapId !== "string" || !getWorldMap(value.mapId))) {
@@ -191,7 +191,7 @@ function validateSnapshot(value: unknown, id: string): CharacterSnapshot {
   // Only unmarked castle saves use the previous 2 km coordinate system.
   const location=value.mapId===CASTLE_ID && value.castleLayout===undefined
     ? {x:value.x*35/100,z:value.z*35/100,castleLayout:2 as const} : {};
-  return { ...(value as CharacterSnapshot), ...location, mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, mixedSkillLoadouts, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
+  return { ...(value as CharacterSnapshot), ...(inventory && {inventory}), ...location, mapId: (value.mapId as string | undefined) ?? DEFAULT_MAP_ID, statAllocations, mixedSkillLoadouts, swordTree, muayCooldowns, muayBook, occultBook, bladeBook, sentinelBook };
 }
 
 export class CharacterStore {

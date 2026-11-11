@@ -117,7 +117,7 @@
     const owned=itemHuntCount(id,includeCopies);
     const low=meta.sourceBoss && meta.forge && ownServerCharacter()?.level<meta.level;
     button.textContent=same?"เลิกติดตาม "+meta.name:"ตามหา "+meta.name+(need>1?" · "+owned+"/"+need:"");
-    button.disabled=!same && (!itemHuntOwner || !source.open || low || !inventoryState || owned>=need || need>INVENTORY_SLOTS*99);
+    button.disabled=!same && (!itemHuntOwner || !source.open || low || !inventoryState || owned>=need || need>inventoryState.slots.length*99);
     if(!same)button.textContent+=!source.open?" · พื้นที่ยังไม่เปิด":low?" · ต้อง Lv."+meta.level:owned>=need?" · มีครบแล้ว":"";
     button.onclick=()=>{
       saveItemHunt(same?null:{id,need,guide,includeCopies});
