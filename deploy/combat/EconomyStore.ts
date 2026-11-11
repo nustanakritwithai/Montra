@@ -244,7 +244,7 @@ export class EconomyStore {
   cityHaulOrder(actor: string, member: CityMember | undefined, order: CityHaulOrder, cities: CityOwnerships,
     atCity: CitySite | null, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
-    return this.once<Record<string, number | string>>(actor, order.requestId, "city_haul", intent, () => {
+    return this.once(actor, order.requestId, "city_haul", intent, () => {
       const result = this.city.haulOrder(actor, member, order, cities, atCity, now);
       if (result.gold !== undefined) {
         const account = this.account(actor);
