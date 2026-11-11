@@ -10,6 +10,11 @@ const himmapan = [
   ["himmapan_matcha_naga", "lotus_basin", "มัจฉนาคา", 48],
   ["himmapan_garuda_scout", "twin_neck_pass", "ครุฑลาดตระเวน", 52],
   ["himmapan_stone_yaksha", "hex_ridge", "ยักษ์ศิลาด่าน", 45],
+  ["himmapan_kochasri", "naga_cavern", "คชสีห์", 50],
+  ["himmapan_hemaraj", "naga_cavern", "เหมราช", 54],
+  ["himmapan_durong_paksin", "hex_ridge", "ดุรงค์ปักษิณ", 45],
+  ["himmapan_kunchon_wari", "lotus_basin", "กุญชรวารี", 50],
+  ["himmapan_karavek", "hex_ridge", "นกการเวก", 45],
 ] as const;
 
 for (const [id, mapId, name, level] of himmapan) {

@@ -92,8 +92,13 @@ test('Himmapan monsters have distinct rigs and render the authoritative ground w
    ['himmapan_matcha_naga','lotus_basin','มัจฉนาคา','naga scaled body',4,1.05],
    ['himmapan_garuda_scout','twin_neck_pass','ครุฑลาดตระเวน','garuda flight feathers',5.2,.8],
    ['himmapan_stone_yaksha','hex_ridge','ยักษ์ศิลาด่าน','yaksha stone armour',2.8,0],
+   ['himmapan_kochasri','naga_cavern','คชสีห์','kochasri mane',4.6,1.45],
+   ['himmapan_hemaraj','naga_cavern','เหมราช','hemaraj head and beak',3.2,1.3],
+   ['himmapan_durong_paksin','hex_ridge','ดุรงค์ปักษิณ','durong horse head',5.6,.75],
+   ['himmapan_kunchon_wari','lotus_basin','กุญชรวารี','kunchon tail fin',3.45,0,'cyan'],
+   ['himmapan_karavek','hex_ridge','นกการเวก','karavek songbird body',3.95,0,'violet'],
   ];
-  for(const [id,mapId,displayName,part,specialRange,specialHalfWidth] of species){
+  for(const [id,mapId,displayName,part,specialRange,specialHalfWidth,impactTint] of species){
    const m=state({id,mapId,displayName,level:48},{tier:'normal',x:10,y:2,z:20,facing:Math.PI/2,specialRange,specialHalfWidth});
    const mesh=add(f,m);
    assert(mesh.getChildMeshes().some(child=>child.name===part));
@@ -106,8 +111,12 @@ test('Himmapan monsters have distinct rigs and render the authoritative ground w
    close(Math.min(...xs),m.x-specialRange,'forward reach');
    close(Math.max(...xs),m.x+(specialHalfWidth?0:specialRange),'rear reach');
    close(Math.max(...zs),m.z+(specialHalfWidth||specialRange),'lateral reach');
-   m.aiState='special_recovery';f.sync();
+   const beforeImpact=f.calls.length;
+   m.aiState='special_recovery';f.sync();f.sync();
    assert.equal(warning.isEnabled(),false);
+   const impacts=f.calls.slice(beforeImpact).filter(c=>c[0]==='spawnFx' && c[1]==='ring');
+   assert.deepEqual(impacts.map(c=>c[2]),impactTint?[impactTint]:[]);
+   if(impactTint)close(impacts[0][6].s1,2*specialRange,'impact reaches the warned boundary');
    f.at(1300);f.ctx.animateGhosts(.016,1300);
    assert(!mesh.metadata.ghost.phase2 && !mesh.metadata.ghost.enraged,'tall field monsters do not trigger boss phases');
    m.aiState='windup';f.sync();

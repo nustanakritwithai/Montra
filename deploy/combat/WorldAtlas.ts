@@ -215,5 +215,15 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"hunter", special:{ range:5.2, halfWidth:.8, windupMs:1000 } },
   { id:"himmapan_stone_yaksha", name:"ยักษ์ศิลาด่าน", mapId:"hex_ridge", x:71, z:0, level:45, tier:"normal",
     theme:"guard", special:{ range:2.8, halfWidth:0, windupMs:1300 } },
+  { id:"himmapan_kochasri", name:"คชสีห์", mapId:"naga_cavern", x:-56, z:22, level:50, tier:"normal",
+    theme:"guard", special:{ range:4.6, halfWidth:1.45, windupMs:1250 } },
+  { id:"himmapan_hemaraj", name:"เหมราช", mapId:"naga_cavern", x:-12, z:-43, level:54, tier:"normal",
+    theme:"hunter", special:{ range:3.2, halfWidth:1.3, windupMs:850 } },
+  { id:"himmapan_durong_paksin", name:"ดุรงค์ปักษิณ", mapId:"hex_ridge", x:55, z:25, level:45, tier:"normal",
+    theme:"hunter", special:{ range:5.6, halfWidth:.75, windupMs:1050 } },
+  { id:"himmapan_kunchon_wari", name:"กุญชรวารี", mapId:"lotus_basin", x:101, z:-55, level:50, tier:"normal",
+    theme:"grove", special:{ range:3.45, halfWidth:0, windupMs:1350 } },
+  { id:"himmapan_karavek", name:"นกการเวก", mapId:"hex_ridge", x:-26, z:-29, level:45, tier:"normal",
+    theme:"spirit", special:{ range:3.95, halfWidth:0, windupMs:1200 } },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);
 export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...HIMMAPAN_SPAWNS].map(s=>s.id));

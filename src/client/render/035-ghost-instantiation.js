@@ -22,6 +22,11 @@
     ["himmapan_matcha_naga", { kind: "matchaNaga", height: 1.9, width: 1.45, warningColor: "#77e4ff", warningText: "คลื่นน้ำ · หลบด้านข้าง" }],
     ["himmapan_garuda_scout", { kind: "garudaScout", height: 2.5, width: 2.25, warningColor: "#ffdb76", warningText: "เงาโฉบ · หลบด้านข้าง" }],
     ["himmapan_stone_yaksha", { kind: "stoneYaksha", height: 2.65, width: 1.7, warningColor: "#ff883b", warningText: "กระบองกระแทก · ถอยออกจากวง" }],
+    ["himmapan_kochasri", { kind: "kochasri", height: 2.35, width: 1.9, depth: 3.05, warningColor: "#ffac55", warningText: "พุ่งชน · หลบด้านข้าง" }],
+    ["himmapan_hemaraj", { kind: "hemaraj", height: 2.35, width: 1.5, depth: 2.85, warningColor: "#ffe787", warningText: "ตะปบ · หลบออกจากด้านหน้า" }],
+    ["himmapan_durong_paksin", { kind: "durongPaksin", height: 2.75, width: 2.7, depth: 3.2, warningColor: "#ffce5f", warningText: "โผพุ่ง · หลบด้านข้าง" }],
+    ["himmapan_kunchon_wari", { kind: "kunchonWari", height: 2.25, width: 2.2, depth: 3.3, warningColor: "#78e2ff", warningText: "ตวัดหาง · ถอยออกจากวงน้ำ", impactTint: "cyan" }],
+    ["himmapan_karavek", { kind: "karavek", height: 2.2, width: 2.6, depth: 2.25, warningColor: "#dcafff", warningText: "คลื่นเสียง · ถอยออกจากวง", impactTint: "violet" }],
   ]);
   function monsterName(monster, id) {
     if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
@@ -166,7 +171,7 @@
       krahang: 3.7, waterspirit: 3.9, phipop: 3.1, headless: 3.1, phitakhon: 4.2, preta: 4.4 };
     const tall = design.height ?? (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
     const pickHeight = design.boss ? tall * design.scale : tall;
-    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.width ?? (design.boss ? 2.1 : 1.3), height: pickHeight, depth: design.boss ? 2.1 : 1.3 }, scene);
+    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.width ?? (design.boss ? 2.1 : 1.3), height: pickHeight, depth: design.depth ?? (design.boss ? 2.1 : 1.3) }, scene);
     if (design.boss) root.bakeTransformIntoVertices(B.Matrix.Translation(0, (pickHeight - tall) / 2, 0));
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
