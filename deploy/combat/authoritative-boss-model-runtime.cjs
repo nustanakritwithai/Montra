@@ -86,6 +86,56 @@ test('unknown IDs, wrong maps and non-boss tiers never borrow a registered boss 
  }finally{f.dispose();}
 });
 
+test('Himmapan monsters have distinct rigs and render the authoritative ground warning',()=>{
+ const f=fixture();try{
+  const species=[
+   ['himmapan_matcha_naga','lotus_basin','มัจฉนาคา','naga scaled body',4,1.05],
+   ['himmapan_garuda_scout','twin_neck_pass','ครุฑลาดตระเวน','garuda flight feathers',5.2,.8],
+   ['himmapan_stone_yaksha','hex_ridge','ยักษ์ศิลาด่าน','yaksha stone armour',2.8,0],
+   ['himmapan_kochasri','naga_cavern','คชสีห์','kochasri mane',4.6,0,undefined,0,Math.PI/4],
+   ['himmapan_hemaraj','naga_cavern','เหมราช','hemaraj head and beak',3.2,1.3],
+   ['himmapan_durong_paksin','hex_ridge','ดุรงค์ปักษิณ','durong eagle head and hooked beak',5.6,.75],
+   ['himmapan_kunchon_wari','lotus_basin','กุญชรวารี','kunchon tail fin',3.45,0,'cyan',1.2],
+   ['himmapan_karavek','hex_ridge','นกการเวก','karavek peacock tail feathers',3.95,0,'gold'],
+  ];
+  for(const [id,mapId,displayName,part,specialRange,specialHalfWidth,impactTint,specialInnerRange=0,specialHalfAngle=0] of species){
+   const m=state({id,mapId,displayName,level:48},{tier:'normal',x:10,y:2,z:20,facing:Math.PI/2,specialRange,specialHalfWidth,specialInnerRange,specialHalfAngle});
+   const mesh=add(f,m);
+   assert(mesh.getChildMeshes().some(child=>child.name===part));
+   assert.equal(f.ctx.monsterName(m,id),displayName);
+   m.aiState='windup';f.sync();
+   const warning=mesh.metadata.specialWarning;
+   assert(warning?.isEnabled());assert.equal(warning.isPickable,false);
+   const positions=warning.getVerticesData(f.B.VertexBuffer.PositionKind);
+   const xs=positions.filter((_,i)=>i%3===0),zs=positions.filter((_,i)=>i%3===2);
+   close(Math.min(...xs),m.x-specialRange,'forward reach');
+   close(Math.max(...xs),m.x+(specialHalfWidth||specialHalfAngle?0:specialRange),'rear reach');
+   close(Math.max(...zs),m.z+(specialHalfWidth||specialRange*(specialHalfAngle?Math.sin(specialHalfAngle):1)),'lateral reach');
+   const fill=mesh.metadata.specialWarningFill;
+   if(specialInnerRange||specialHalfAngle) assert(fill?.isEnabled(),'new attack areas must be filled');
+   if(specialInnerRange){
+    const surface=fill.getVerticesData(f.B.VertexBuffer.PositionKind);
+    const radii=surface.filter((_,i)=>i%3===0).map((x,i)=>Math.hypot(x-m.x,surface[i*3+2]-m.z));
+    close(Math.min(...radii),specialInnerRange,'ring leaves the inner area clear');
+   }
+   const beforeImpact=f.calls.length;
+   m.aiState='special_recovery';f.sync();f.sync();
+   assert.equal(warning.isEnabled(),false);
+   if(fill)assert.equal(fill.isEnabled(),false);
+   const impacts=f.calls.slice(beforeImpact).filter(c=>c[0]==='spawnFx' && c[1]==='ring');
+   assert.deepEqual(impacts.map(c=>c[2]),impactTint?[impactTint]:[]);
+   if(impactTint)close(impacts[0][6].s1,2*specialRange,'impact reaches the warned boundary');
+   f.at(1300);f.ctx.animateGhosts(.016,1300);
+   assert(!mesh.metadata.ghost.phase2 && !mesh.metadata.ghost.enraged,'tall field monsters do not trigger boss phases');
+   m.aiState='windup';f.sync();
+   assert.equal(mesh.metadata.specialWarning,warning,'reuse the ground warning');
+   f.ctx.activeMapId='ritual_village';f.sync();
+   assert(warning.isDisposed(),'map exit disposes world-space warning');
+   if(fill)assert(fill.isDisposed(),'map exit disposes the warning fill');
+  }
+ }finally{f.dispose();}
+});
+
 test('pending shared asset retains fallback; failed load and late callbacks cannot resurrect removed bosses',()=>{
  const f=fixture();try{
   const entry=roster.find(e=>f.run(`HUMANOID_KINDS.has(bossDesign(${JSON.stringify(state(e))},${JSON.stringify(e.id)}).kind)`));assert(entry,'at least one humanoid boss');
@@ -105,6 +155,64 @@ test('repeated create/map-exit cycles release owned meshes and MultiMaterials wi
   const shared=f.run('gm.corpse');
   for(let cycle=0;cycle<4;cycle++)for(const entry of roster){const m=state(entry),mesh=add(f,m);f.ctx.activeMapId='ritual_village';f.sync();assert(mesh.isDisposed());assert.equal(f.scene.meshes.length,baseline.meshes,'mesh leak '+entry.id);assert.equal(f.scene.multiMaterials.length,baseline.multi,'MultiMaterial leak '+entry.id);assert(f.scene.materials.includes(shared),'shared corpse material disposed');}
   assert.equal(f.scene.materials.length,baseline.materials,'shared material count changed');
+ }finally{f.dispose();}
+});
+
+test('new Himmapan rigs follow the replicated strike stages, geometry and counter window',()=>{
+ const f=fixture();try{
+  for(const [id,mapId,tier,part,ranges,counter] of [
+   ['himmapan_phayak_nathi','drowned_marsh','normal','crowned feline tail',[1.9,1.85],false],
+   ['himmapan_hatsadiling','twin_neck_pass','normal','hatsadiling feathered breast',[5.2],true],
+   ['himmapan_kraisorn','asura_peak','elite','feline muzzle fangs and crown',[3.5,4.4],true],
+   ['himmapan_kilen','bamboo_frontier','normal','kilen split hooves',[1.4,1.4,1.55],false],
+  ]){
+   const m=state({id,mapId,displayName:id,level:50},{tier,x:10,y:2,z:20,facing:0,specialHalfWidth:0});
+   const mesh=add(f,m),g=mesh.metadata.ghost;
+   assert(mesh.getChildMeshes().some(child=>child.name===part));
+   const isTiger=id==='himmapan_phayak_nathi',isLion=tier==='elite';
+   const isKilen=id==='himmapan_kilen';
+   if(isKilen)m.specialMarks=[10,20,1.4,10,18,1.4,10,16,1.55];
+   let warning;
+   let previousPending=[];
+   const colors=new Set();
+   for(const [i,range] of ranges.entries()){
+    const stage=ranges.length===1?0:i+1;
+    Object.assign(m,{aiState:'windup',specialRange:range,specialStage:stage,
+      specialHalfAngle:counter?(isLion&&i===0?Math.PI/4:Math.PI/3):0,
+      specialOriginX:10,specialOriginZ:20-i*2});
+    f.at(1400+i*1000);f.sync();
+    const current=mesh.metadata.specialWarning;
+    assert(current.isEnabled());
+    if(warning)assert(warning.isDisposed(),'each stage replaces the previous outline');
+    warning=current;
+    colors.add(current.color.toHexString());
+    const centerZ=stage?m.specialOriginZ:m.z;
+    const positions=current.getVerticesData(f.B.VertexBuffer.PositionKind);
+    close(Math.min(...positions.filter((_,j)=>j%3===2)),centerZ-range,'ground marker starts at the replicated center');
+    assert.equal(mesh.metadata.specialWarningFill?.isEnabled()??false,!(isTiger&&i===0));
+    const pending=mesh.metadata.specialPending;
+    assert(previousPending.every(mark=>mark.isDisposed()));
+    assert.equal(pending.length,isKilen?2-i:0);
+    assert(pending.every(mark=>mark.isEnabled()&&!mark.isPickable));
+    previousPending=pending;
+    g.spawnAt=0;
+    f.at(1730+i*1000);f.ctx.animateGhosts(.016,1730+i*1000);
+    assert(g.rig.getChildMeshes().every(child=>child.getWorldMatrix().m.every(Number.isFinite)));
+   }
+   assert.equal(colors.size,ranges.length,'every phase has a distinct color');
+   const beforeImpact=f.calls.length;
+   m.aiState='special_recovery';f.sync();
+   const effects=f.calls.slice(beforeImpact).filter(call=>call[0]==='spawnFx').map(call=>call[1]);
+   assert.deepEqual(effects,isTiger?['ring','slash','slash','slash']:isKilen?['ring','yantra','star']:isLion?['arc','arc']:['arc','arc','arc']);
+   const opening=mesh.metadata.specialCounter;
+   assert.equal(opening?.isEnabled()??false,counter);
+   assert.equal(warning.isEnabled(),false);
+   m.aiState='chase';f.sync();
+   if(opening)assert.equal(opening.isEnabled(),false);
+   f.ctx.activeMapId='ritual_village';f.sync();
+   assert(warning.isDisposed());
+   if(opening)assert(opening.isDisposed());
+  }
  }finally{f.dispose();}
 });
 

@@ -1,8 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
-import { PROVINCES } from "./StrategicProvinces.js";
+import { PROVINCES, type Province, type ProvinceSite } from "./StrategicProvinces.js";
+import {CIVILIAN_WAR_FIELDS_ENABLED,hasWarSchedule,WAR_CITY_CAP,WarSchedule,warWindows,type WarRegistration} from "./WarSchedule.js";
+import {ALL_MAP_WARS_ENABLED,FRONTIER_WAR_FIELDS,FRONTIER_SIZES} from "./WarMapProfiles.js";
+import {getWorldMap} from "./WorldMaps.js";
+import {WAR_ROUTES_ENABLED,WarRoutes,type RouteOrder} from "./WarRoutes.js";
 import {TerritoryGovernment,type GovernmentOrder} from "./TerritoryGovernment.js";
-import {RIVER_CITY,RIVER_WAR_DURATION,newRiverBattle,changeRiverGate,sampleRiverPosts,riverSupplied,type RiverBattle,type RiverCensus} from "./RiverCity.js";
-import {CASTLE_ID,CASTLE_DURATION,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
+import {RIVER_CITY,RIVER_WAR_DURATION,riverNodes,newRiverBattle,changeRiverGate,sampleRiverPosts,riverSupplied,type RiverBattle,type RiverCensus} from "./RiverCity.js";
+import {CASTLE_ID,CASTLE_DURATION,CASTLE_SEATS,newPilot,tickPilot,pilotView,pilotWinner,changeCastleGate,type PilotPresence,type PilotState} from "./CastlePilot.js";
 
 export const WAR_DURATION=5*60_000, WAR_PROTECTION=8*60*60_000, WAR_HOLD=60, WAR_SIDE_SIZE=5;
 // Only direct player-versus-player damage inside an active war uses this floor.
@@ -22,16 +26,76 @@ export function warEntryDamageFactor(attackerLevel:number,defenderLevel:number):
   return (scale(Math.max(WAR_ENTRY_FLOOR_LEVEL,attackerLevel))/scale(attackerLevel)) *
     (scale(defenderLevel)/scale(Math.max(WAR_ENTRY_FLOOR_LEVEL,defenderLevel)));
 }
-const warDuration=(site:string)=>site===CASTLE_ID?CASTLE_DURATION:site===RIVER_CITY?RIVER_WAR_DURATION:WAR_DURATION;
-export const warSites=Object.fromEntries(Object.entries(PROVINCES).filter(([,p])=>p.kind==="territory")
-  .map(([id,p])=>[id,p.sites.find(s=>s.kind==="fort")!]));
+type FieldPoint=Readonly<{x:number;z:number}>;
+type IsolatedField=Readonly<{
+  flag:ProvinceSite;relay?:Province["relay"];attack:FieldPoint;defend:FieldPoint;
+}>;
+const civicFields:Readonly<Record<string,IsolatedField & {durationMs:number}>>={
+  mantra_capital:{
+    flag:{kind:"fort",name:"ธงลานพระนคร",x:-4,z:-14},
+    relay:{name:"หอกลองประกาศ",x:17,z:-14,radius:4,effect:"banner"},
+    attack:{x:0,z:18},defend:{x:0,z:-41},durationMs:8*60_000,
+  },
+  ritual_village:{
+    flag:{kind:"fort",name:"ธงลานนอกหมู่บ้าน",x:-34,z:25},
+    relay:{name:"จุดส่งเสบียงทุ่งนา",x:-36,z:12,radius:4,effect:"banner"},
+    attack:{x:-51,z:32},defend:{x:-17,z:35},durationMs:4*60_000,
+  },
+};
+const cityBattleModes = {
+  [RIVER_CITY]: "river",
+  [CASTLE_ID]: "castle",
+  moon_pass: "banner",
+  river_watch: "banner",
+  mantra_capital: "civic",
+  ritual_village: "civic",
+} as const;
+const warProfiles = {
+  banner: {durationMs:WAR_DURATION,seatsPerSide:WAR_SIDE_SIZE},
+  river: {durationMs:RIVER_WAR_DURATION,seatsPerSide:WAR_SIDE_SIZE},
+  castle: {durationMs:CASTLE_DURATION,seatsPerSide:CASTLE_SEATS},
+} as const;
+type WarDefinition=Readonly<{
+  mode:typeof cityBattleModes[keyof typeof cityBattleModes] | "frontier";durationMs:number;seatsPerSide:number|null;
+  flag:ProvinceSite;entry:FieldPoint;relay?:Province["relay"];isolated?:IsolatedField;goal?:number;
+}>;
+const warDefinitions=new Map<string,WarDefinition>();
+for(const [site,mode] of Object.entries(cityBattleModes)){
+  if(mode==="civic"){
+    if(CIVILIAN_WAR_FIELDS_ENABLED){
+      const civic=civicFields[site];
+      warDefinitions.set(site,{mode,isolated:civic,flag:civic.flag,entry:civic.flag,relay:civic.relay,
+        durationMs:civic.durationMs,seatsPerSide:WAR_SIDE_SIZE});
+    }
+    continue;
+  }
+  const province=PROVINCES[site];
+  if(province?.kind!=="territory")continue;
+  const flag=province.sites.find(s=>s.kind==="fort");
+  if(!flag)throw Error("war_missing_flag:"+site);
+  warDefinitions.set(site,{mode,...warProfiles[mode],flag,relay:province.relay,entry:mode==="river"?riverNodes.A:flag});
+}
+if(ALL_MAP_WARS_ENABLED){
+  const point=([x,z]:readonly [number,number])=>({x,z});
+  for(const [site,layout] of Object.entries(FRONTIER_WAR_FIELDS)){
+    const map=getWorldMap(site);
+    if(!map)continue;
+    const flag:ProvinceSite={kind:"fort",name:"ธง"+map.name,...point(layout.flag)};
+    const relay=layout.relay?{name:"จุดเสบียง",...point(layout.relay),radius:4,effect:"banner" as const}:undefined;
+    warDefinitions.set(site,{mode:"frontier",seatsPerSide:null,...FRONTIER_SIZES[layout.size],flag,entry:flag,relay,
+      isolated:{flag,relay,attack:point(layout.attack),defend:point(layout.defend)}});
+  }
+}
+export function getWarDefinition(site:string){return warDefinitions.get(site);}
+const warDuration=(site:string)=>warDefinitions.get(site)!.durationMs;
+export const warSites=Object.fromEntries([...warDefinitions].map(([site,{flag}])=>[site,flag]));
 export type WarMember={id:string;officer:boolean;commander?:boolean};
 type Battle={seq:number;site:string;incumbent:string|null;attacker:string;defender:string|null;started:number;
   progress:number;sample:number;ended:number|null;winner:string|null;gate_hp:number;gate_open:number;gates_json:string|null;pilot_json:string|null;city_json:string|null};
 export type FieldGate={hp:number;open:boolean};
 export type FieldGateView={hp:number;closed:boolean};
 const GATE_HP=120;
-const fieldGateIds=(site:string)=>PROVINCES[site]?.rampart?.gates.map(g=>g.id) ?? [];
+const fieldGateIds=(site:string)=>getWarDefinition(site)?.isolated?[]:(PROVINCES[site]?.rampart?.gates.map(g=>g.id) ?? []);
 /** Ordinary fields store one state per gate. Rows written before gates_json existed
  * seed every gate from the legacy single gate_hp/gate_open pair. */
 function fieldGates(b:Pick<Battle,"site"|"gate_hp"|"gate_open"|"gates_json">):Record<string,FieldGate>{
@@ -47,6 +111,8 @@ export type WarSide="attack"|"defend";
 
 export class TerritoryWar {
   readonly government:TerritoryGovernment;
+  private readonly schedule:WarSchedule;
+  private readonly routes:WarRoutes;
   private castleWriter:{seq:number;sample:number}|undefined;
   constructor(private readonly db:DatabaseSync){
     db.exec(`CREATE TABLE IF NOT EXISTS territory_battles(
@@ -68,34 +134,40 @@ export class TerritoryWar {
     if(!cols.some(c=>c.name==="pilot_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN pilot_json TEXT");
     if(!cols.some(c=>c.name==="city_json"))db.exec("ALTER TABLE territory_battles ADD COLUMN city_json TEXT");
     this.government=new TerritoryGovernment(db);
+    this.schedule=new WarSchedule(db);
+    this.routes=new WarRoutes(db,this.government);
   }
   private atomic<T>(work:()=>T):T {
     this.db.exec("BEGIN IMMEDIATE");
     try {const value=work();this.db.exec("COMMIT");return value;}
     catch(e){this.db.exec("ROLLBACK");throw e;}
   }
-  member(character:string):WarMember|undefined {
-    const row=this.db.prepare("SELECT g.id,g.leader=m.character_id AS commander,m.rank FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;commander:number;rank:string}|undefined;
-    return row && {id:row.id,officer:!!row.commander || row.rank==="officer",commander:!!row.commander};
+  member(character:string):(WarMember & {name:string;commander:boolean})|undefined {
+    const row=this.db.prepare("SELECT g.id,g.name,g.leader=m.character_id AS commander,m.rank FROM guild_members m JOIN guilds g ON g.id=m.guild_id WHERE m.character_id=?").get(character) as {id:string;name:string;commander:number;rank:string}|undefined;
+    return row && {id:row.id,name:row.name,officer:!!row.commander || row.rank==="officer",commander:!!row.commander};
   }
   private guildName(id:string|null|undefined):string|null {
     if(!id)return null;
     return (this.db.prepare("SELECT name FROM guilds WHERE id=?").get(id) as {name:string}|undefined)?.name ?? null;
   }
   private latest(site:string):Battle|undefined {
-    if(!Object.hasOwn(warSites,site))throw Error("war_unknown");
+    if(!warDefinitions.has(site))throw Error("war_unknown");
     return this.db.prepare("SELECT * FROM territory_battles WHERE site=? ORDER BY seq DESC LIMIT 1").get(site) as Battle|undefined;
   }
   private finish(b:Battle,winner:string|null,ended:number){
     // inspect() can finish an expired war outside an existing write transaction.
     this.db.exec("SAVEPOINT settle_territory");
     try{
+      const scheduled=!!this.schedule.forBattle(b.seq);
+      if(winner && winner!==b.incumbent && scheduled && this.schedule.ownedCities(winner)>=WAR_CITY_CAP)
+        winner=this.guildName(b.incumbent)?b.incumbent:null;
       const changed=this.db.prepare("UPDATE territory_battles SET ended=?,winner=? WHERE seq=? AND ended IS NULL").run(ended,winner,b.seq).changes;
       if(changed){
         const siege=b.pilot_json?(JSON.parse(b.pilot_json) as PilotState).siege:undefined;
         const gates=siege?.gates ?? (b.city_json?(JSON.parse(b.city_json) as RiverBattle).gates:undefined);
         const breached=gates?Object.values(gates).some(g=>g.hp===0):Object.values(fieldGates(b)).some(g=>g.hp===0);
-        this.government.settleVictory(b.site,winner,ended,breached);
+        this.government.settleVictory(b.site,winner,ended,breached,scheduled);
+        if(winner!==b.incumbent)this.routes.cancelAtHandover(b.site,winner);
         if(winner){
           const row=this.db.prepare("SELECT count(*) AS n FROM territory_supply_deliveries WHERE battle=? AND guild=?").get(b.seq,winner);
           this.government.creditWarSupplies(winner,b.site,ended,Number(row?.n ?? 0));
@@ -138,7 +210,7 @@ export class TerritoryWar {
       gateHp:views.length?Math.min(...views.map(g=>g.hp)):active?b.gate_hp:GATE_HP,gateClosed:views.some(g=>g.closed),gates,
       pilot:b?.pilot_json?pilotView(JSON.parse(b.pilot_json)):undefined,
       river:b?.city_json?JSON.parse(b.city_json) as RiverBattle:undefined,
-      progress:active?b.progress:0,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0,
+      progress:active?b.progress:0,goal:getWarDefinition(site)?.goal??WAR_HOLD,seconds:active?Math.max(0,Math.ceil((b.started+warDuration(site)-now)/1000)):0,
       phaseEndsAt:active?b.started+warDuration(site):phase==="protected" && b?.ended!=null?b.ended+WAR_PROTECTION:null};
   }
   govern(character:string,order:GovernmentOrder,now:number){
@@ -148,6 +220,24 @@ export class TerritoryWar {
       const member=this.member(character);
       if(!member || member.id!==s.ownerId)throw Error("war_not_owner");
       return this.government.apply(order,member,now);
+    });
+  }
+  routeView(character:string,site:string,now:number){
+    if(!WAR_ROUTES_ENABLED)return undefined;
+    const member=this.member(character);
+    if(member)return this.routes.view({character,guild:member.id,officer:member.officer},site,now);
+  }
+  routeOrder(character:string,site:string,order:RouteOrder,now:number){
+    if(!WAR_ROUTES_ENABLED)throw Error("war_route_unavailable");
+    return this.atomic(()=>{
+      const member=this.member(character);
+      if(!member)throw Error("war_guild");
+      if(order.action==="dispatch"){
+        this.inspect(site,now);
+        this.inspect(order.destination,now);
+      }
+      return this.routes.order({character,guild:member.id,officer:member.officer},site,order,now,
+        city=>{if(getWarDefinition(city))this.inspect(city,now);});
     });
   }
   supplyReadyAt(field:Battlefield,character:string):number {
@@ -162,29 +252,89 @@ export class TerritoryWar {
     if(!/^[0-9a-f-]{36}$/.test(token) || !Number.isSafeInteger(now) || now<0)throw Error("war_invalid_supply");
     this.atomic(()=>{
       const member=this.member(character);
-      if(!member || this.side(field,member,now)!==side)throw Error("war_supply_side");
+      if(!member || this.side(field,member,now,false,character)!==side)throw Error("war_supply_side");
       if(this.db.prepare("SELECT 1 FROM territory_supply_deliveries WHERE token=?").get(token))throw Error("war_supply_duplicate");
       if(now<this.supplyReadyAt(field,character))throw Error("war_supply_cooldown");
       this.db.prepare("INSERT INTO territory_supply_deliveries(battle,character,guild,side,at,token) VALUES(?,?,?,?,?,?)")
         .run(field.seq,character,member.id,side,now,token);
     });
   }
-  start(site:string,member:WarMember,now:number):Battlefield {
+  private createBattle(site:string,owner:string|null,attacker:string,defender:string|null,startsAt:number,now:number):Battlefield {
+    this.government.beginBattle(site,owner,now);
+    const row=this.db.prepare("INSERT INTO territory_battles(site,incumbent,attacker,defender,started,sample) VALUES(?,?,?,?,?,?)")
+      .run(site,owner,attacker,defender,startsAt,now);
+    const mode=warDefinitions.get(site)!.mode;
+    if(mode==="castle")this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(newPilot(!!owner)),row.lastInsertRowid);
+    if(mode==="river")this.db.prepare("UPDATE territory_battles SET city_json=? WHERE seq=?").run(JSON.stringify(newRiverBattle(!!owner)),row.lastInsertRowid);
+    return {site,seq:Number(row.lastInsertRowid)};
+  }
+
+  scheduleView(site:string,now:number,member?:WarMember|null) {
+    const seatsPerSide=getWarDefinition(site)?.seatsPerSide;
+    if(!hasWarSchedule(site) || seatsPerSide==null)return undefined;
+    const {current,next}=warWindows(site,now,warDuration(site));
+    return {current,next,cityCap:WAR_CITY_CAP,seatsPerSide,canRegister:member?.officer===true && now<next.locksAt,
+      memberIds:member?this.schedule.registration(site,next.startsAt,member.id):null};
+  }
+
+  register(character:string,order:WarRegistration,now:number) {
     return this.atomic(()=>{
-      const s=this.inspect(site,now);
-      if(!member.officer)throw Error("war_officer");
-      if(s.phase!=="open" || s.ownerId===member.id)throw Error("war_unavailable");
-      this.government.beginBattle(site,s.ownerId??null,now);
-      const row=this.db.prepare("INSERT INTO territory_battles(site,incumbent,attacker,defender,started,sample) VALUES(?,?,?,?,?,?)")
-        .run(site,s.ownerId??null,member.id,s.ownerId??null,now,now);
-      if(site===CASTLE_ID)this.db.prepare("UPDATE territory_battles SET pilot_json=? WHERE seq=?").run(JSON.stringify(newPilot(!!s.ownerId)),row.lastInsertRowid);
-      if(site===RIVER_CITY)this.db.prepare("UPDATE territory_battles SET city_json=? WHERE seq=?").run(JSON.stringify(newRiverBattle(!!s.ownerId)),row.lastInsertRowid);
-      return {site,seq:Number(row.lastInsertRowid)};
+      const member=this.member(character),window=this.scheduleView(order.site,now,member);
+      if(!window)throw Error("war_schedule_unavailable");
+      if(!member?.officer)throw Error("war_officer");
+      if(window.next.startsAt!==order.startsAt || !window.canRegister)throw Error("war_registration_locked");
+      if(order.memberIds.length>window.seatsPerSide)throw Error("war_roster_size");
+      this.schedule.register(order,member.id,now);
+      return this.scheduleView(order.site,now,member);
     });
   }
-  side(field:Battlefield,member:WarMember,now:number,enlist=false):WarSide {
+
+  openScheduled(site:string,now:number):void {
+    if(!hasWarSchedule(site))return;
+    const rules=getWarDefinition(site);
+    if(!rules)return;
+    const window=warWindows(site,now,rules.durationMs).current;
+    if(!window || this.schedule.round(site,window.startsAt))return;
+    this.atomic(()=>{
+      if(this.schedule.round(site,window.startsAt))return;
+      const state=this.inspect(site,now);
+      if(state.phase==="battle")return;
+      const signups=state.phase==="open"?this.schedule.signups(site,window.startsAt):[];
+      const challengers=signups.filter(s=>s.guild!==state.ownerId && s.held<WAR_CITY_CAP);
+      const attack=challengers[0];
+      if(!attack){this.schedule.lock(site,window.startsAt,null,null,null,null);return;}
+      const defend=state.ownerId?signups.find(s=>s.guild===state.ownerId):challengers[1];
+      const defender=state.ownerId??defend?.guild??null;
+      const field=this.createBattle(site,state.ownerId??null,attack.guild,defender,window.startsAt,now);
+      this.schedule.lock(site,window.startsAt,field.seq,attack,defender,defend??null);
+    });
+  }
+
+  resumeScheduledField(field:Battlefield,now:number):void {
+    const rules=getWarDefinition(field.site);
+    if(!rules || !this.schedule.forBattle(field.seq))return;
+    // A newly created room has no census for the time before its first tick.
+    this.db.prepare("UPDATE territory_battles SET sample=max(sample,?) WHERE seq=? AND site=? AND ended IS NULL AND started+?>?")
+      .run(now,field.seq,field.site,rules.durationMs,now);
+  }
+
+  start(site:string,member:WarMember,now:number):Battlefield {
+    return this.atomic(()=>{
+      const state=this.inspect(site,now);
+      if(!member.officer)throw Error("war_officer");
+      if(state.phase!=="open" || state.ownerId===member.id)throw Error("war_unavailable");
+      return this.createBattle(site,state.ownerId??null,member.id,state.ownerId??null,now,now);
+    });
+  }
+
+  rosterAllows(seq:number,member:WarMember,character?:string):boolean {
+    return !this.schedule.forBattle(seq) || !!character && this.schedule.isRostered(seq,character,member.id);
+  }
+
+  side(field:Battlefield,member:WarMember,now:number,enlist=false,character?:string):WarSide {
     const s=this.inspect(field.site,now);
     if(s.seq!==field.seq || s.phase!=="battle")throw Error("war_ended");
+    if(!this.rosterAllows(field.seq,member,character))throw Error("war_roster_locked");
     if(member.id===s.attacker)return "attack";
     if(member.id===s.defender)return "defend";
     if(!s.owner && !s.defendName && member.officer){
@@ -247,7 +397,11 @@ export class TerritoryWar {
     this.atomic(()=>{
       const b=field.site===CASTLE_ID?this.latest(field.site):this.current(field.site,now);
       if(!b || b.seq!==field.seq || b.ended!==null || now<=b.sample)return;
-      // Only sampled live seconds count. Never credit a vacant or stopped room for elapsed time.
+      // Scheduled rooms resume from their saved state and skip the time with no server census.
+      if(!b.pilot_json && now-b.sample>2000 && this.schedule.forBattle(b.seq)){
+        this.db.prepare("UPDATE territory_battles SET sample=? WHERE seq=?").run(now,b.seq);
+        return;
+      }
       const elapsed=Math.min(1,(now-b.sample)/1000);
       let net=Math.max(-2,Math.min(2,attack-defend));
       if(b.city_json){
@@ -276,13 +430,14 @@ export class TerritoryWar {
         }
         return;
       }
-      const min=b.incumbent?0:-WAR_HOLD;
-      const supported=PROVINCES[field.site].relay?.effect==="banner" && ((net>0 && relaySide==="attack") || (net<0 && relaySide==="defend"));
+      const goal=getWarDefinition(field.site)?.goal??WAR_HOLD;
+      const min=b.incumbent?0:-goal;
+      const supported=getWarDefinition(field.site)?.relay?.effect==="banner" && ((net>0 && relaySide==="attack") || (net<0 && relaySide==="defend"));
       const rate=supported?net+Math.sign(net):net;
-      const progress=Math.min(WAR_HOLD,Math.max(min,b.progress+rate*elapsed));
+      const progress=Math.min(goal,Math.max(min,b.progress+rate*elapsed));
       this.db.prepare("UPDATE territory_battles SET progress=?,sample=? WHERE seq=?").run(progress,now,b.seq);
-      if(progress>=WAR_HOLD)this.finish(b,b.attacker,now);
-      else if(progress<=-WAR_HOLD && b.defender && this.guildName(b.defender))this.finish(b,b.defender,now);
+      if(progress>=goal)this.finish(b,b.attacker,now);
+      else if(progress<=-goal && b.defender && this.guildName(b.defender))this.finish(b,b.defender,now);
     });
   }
 }

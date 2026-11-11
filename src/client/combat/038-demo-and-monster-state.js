@@ -120,11 +120,14 @@
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
     possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; swordStanceUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false; resetCentralMarket();
+    resetCombatFeatures();resetCraftQueue();resetAdvancedMarket();
     clearTimeout(economyTimer); tradeUnread = false; updateTradeBadge();
     partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+    resetCityProduction();
     clearChatHistory(true);
     switchWorld("ritual_village");
+    if (typeof resetHomeClient === "function") resetHomeClient();
     syncWorldDefinition(null);syncForestMonsters(null);
     clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
     inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;clearResourceView();

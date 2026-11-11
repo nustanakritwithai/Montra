@@ -5,8 +5,14 @@ node scripts/build-client.mjs --prepare
 # Generated sandbox only; never points at the VPS or existing player files.
 rm -rf combat-verify/src
 mkdir -p combat-verify/src/rooms/schema
-cp deploy/combat/MyRoom.ts combat-verify/src/rooms/MyRoom.ts
+cp deploy/combat/MyRoom.ts deploy/combat/LegacyGhostPot.ts combat-verify/src/rooms/
+cp deploy/combat/{MontraBoats,PirateBoatRules,PirateBoatSimulation}.ts combat-verify/src/rooms/
+cp deploy/combat/ghost-pot-integration.mjs deploy/combat/boat-integration.mjs combat-verify/
 cp deploy/combat/SkillHotbar.ts deploy/combat/skill-hotbar.test.ts deploy/combat/skill-hotbar-disabled.test.ts deploy/combat/rebirth-hotbar-room.test.ts combat-verify/src/rooms/
+cp deploy/combat/DamageEventLedger.ts deploy/combat/PrototypeCommandGate.ts deploy/combat/FlowingBladesPrototype.ts deploy/combat/ChaiyaCounterPrototype.ts deploy/combat/ShadowCutPrototype.ts deploy/combat/FirmGuardPrototype.ts deploy/combat/OccultPrototypeRules.ts combat-verify/src/rooms/
+cp deploy/combat/default-monster-occurrence-model.test.ts deploy/combat/damage-event-ledger.test.ts deploy/combat/prototype-command-gate.test.ts deploy/combat/prototype-protocol-room.test.ts deploy/combat/combat-prototypes.test.ts deploy/combat/shadow-firm-prototype.test.ts deploy/combat/occult-prototype-rules.test.ts combat-verify/src/rooms/
+cp deploy/combat/PrototypeTestRoom.ts deploy/combat/prototype-protocol-test-server.ts deploy/combat/prototype-gameplay-test-server.ts deploy/combat/isolated-class-test-server.ts combat-verify/src/rooms/
+cp deploy/combat/prototype-test-process.mjs deploy/combat/prototype-test-process.test.mjs deploy/combat/prototype-protocol-integration.mjs deploy/combat/prototype-gameplay-integration.mjs deploy/combat/prototype-gameplay-room.test.mjs deploy/combat/prototype-shadow-integration.mjs deploy/combat/prototype-shadow-room.test.mjs deploy/combat/isolated-class-integrations.mjs deploy/combat/prototype-ws-restore.mjs deploy/combat/prototype-reward-crash.test.mjs deploy/combat/check-monster-reward-rollback.mjs combat-verify/
 cp deploy/combat/mixed-hotbar-integration.mjs combat-verify/
 cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
 cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
@@ -121,8 +127,8 @@ cp deploy/combat/forest-monster-config.test.ts combat-verify/src/rooms/forest-mo
 cp deploy/combat/forest-guardian-integration.mjs combat-verify/forest-guardian-integration.mjs
 cp deploy/combat/forest-party-monster-integration.mjs combat-verify/forest-party-monster-integration.mjs
 cp deploy/combat/TerritoryGovernment.ts combat-verify/src/rooms/TerritoryGovernment.ts
-cp deploy/combat/TerritoryWar.ts combat-verify/src/rooms/TerritoryWar.ts
-cp deploy/combat/territory-war.test.ts deploy/combat/territory-gate-room.test.ts combat-verify/src/rooms/
+cp deploy/combat/TerritoryWar.ts deploy/combat/WarSchedule.ts deploy/combat/WarRoutes.ts deploy/combat/WarMapProfiles.ts combat-verify/src/rooms/
+cp deploy/combat/territory-war.test.ts deploy/combat/territory-gate-room.test.ts deploy/combat/scheduled-city-war.test.ts deploy/combat/all-map-war.test.ts combat-verify/src/rooms/
 cp deploy/combat/war-entry-check.mjs combat-verify/war-entry-check.mjs
 cp deploy/combat/forest-objective-check.mjs combat-verify/forest-objective-check.mjs
 cp deploy/combat/service-npcs-check.mjs combat-verify/service-npcs-check.mjs
@@ -137,13 +143,14 @@ cp deploy/combat/party-manager.test.ts combat-verify/src/rooms/party-manager.tes
 cp deploy/combat/party-experience.test.ts combat-verify/src/rooms/party-experience.test.ts
 cp deploy/combat/party-integration.mjs combat-verify/party-integration.mjs
 cp deploy/combat/EconomyStore.ts combat-verify/src/rooms/EconomyStore.ts
+cp deploy/combat/CityProduction.ts deploy/combat/CityProductionRules.ts deploy/combat/city-production.test.ts combat-verify/src/rooms/
 cp deploy/combat/Fishing.ts deploy/combat/fishing.test.ts combat-verify/src/rooms/
 cp deploy/combat/central-market.test.ts combat-verify/src/rooms/central-market.test.ts
 cp deploy/combat/central-market-integration.mjs combat-verify/central-market-integration.mjs
 cp deploy/combat/EconomyRules.ts combat-verify/src/rooms/EconomyRules.ts
 cp deploy/combat/economy-store.test.ts combat-verify/src/rooms/economy-store.test.ts
 cp deploy/combat/economy-migration.test.ts combat-verify/src/rooms/economy-migration.test.ts
-cp deploy/combat/economy-integration.mjs combat-verify/economy-integration.mjs
+cp deploy/combat/economy-integration.mjs deploy/combat/lifestyle-integration.mjs combat-verify/
 cp deploy/combat/progression.test.ts combat-verify/src/rooms/progression.test.ts
 cp deploy/combat/progression-transaction.test.ts combat-verify/src/rooms/progression-transaction.test.ts
 cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts

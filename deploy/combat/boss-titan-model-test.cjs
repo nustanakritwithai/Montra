@@ -16,4 +16,20 @@ for (const mode of ['demo', 'live']) {
 }
 assert.equal(h.ctx.hero.hp, 100); assert.equal(h.ctx.demoMonsterHp, 100);
 assert.equal(h.messages.length, 0); assert(h.effects.every(e => e[0] === 'toast' && e[1].includes('เร็ว ๆ นี้')));
-h.close(); console.log('PASS production Titan calls fail closed with no damage/attack feedback');
+console.log('PASS old servers have no Titan attack or damage feedback');
+const id='boss_wessuwan_titan', targets=[];
+h.ctx.requestForestAttack=value=>targets.push(value);
+h.ctx.activeMapId='asura_peak';
+h.ctx.room.state={monsters:new Map([[id,{mapId:'asura_peak',alive:true,hp:900,maxHp:1200}]])};
+boss.updateBoss();
+assert.equal(boss.getTitanStatus().hp,900);
+assert.equal(h.fields.get('bossEncounterButton').disabled,false);
+assert.equal(boss.toggleBoss(),true);
+assert.deepEqual(targets,[id]);
+h.ctx.room.state.monsters.get(id).alive=false;
+boss.updateBoss();
+assert.equal(h.fields.get('bossEncounterButton').disabled,true);
+h.ctx.activeMapId='ritual_village';
+boss.updateBoss();
+assert.equal(h.fields.get('bossEncounterButton').hidden,true);
+h.close(); console.log('PASS Titan HUD selects only the live server boss on the current map');

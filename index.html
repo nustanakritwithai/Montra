@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -82,6 +82,17 @@
     <div class="field-dock">
       <div class="field-prompts">
     <button id="warpButton" class="warp-button" type="button" hidden></button>
+    <div id="boatPanel" class="boat-panel" role="group" aria-label="ควบคุมเรือ" hidden>
+      <button id="boatLaunch" class="warp-button" type="button" hidden>ปล่อยเรือ</button>
+      <button id="boatBoard" class="warp-button" type="button" hidden>ขึ้นเรือ</button>
+      <button id="boatHelm" class="warp-button" type="button" hidden>จับหางเสือ</button>
+      <button id="boatExit" class="warp-button" type="button" hidden>ขึ้นฝั่ง</button>
+      <button id="boatAnchor" class="warp-button" type="button" hidden>ทิ้งสมอ</button>
+      <button class="warp-button" data-boat-drive="left" type="button" hidden>เลี้ยวซ้าย</button>
+      <button class="warp-button" data-boat-drive="forward" type="button" hidden>เดินหน้า</button>
+      <button class="warp-button" data-boat-drive="reverse" type="button" hidden>ถอย</button>
+      <button class="warp-button" data-boat-drive="right" type="button" hidden>เลี้ยวขวา</button>
+    </div>
     <button id="harvestButton" class="warp-button" type="button" hidden></button>
     <button id="fishButton" class="warp-button" type="button" hidden>🎣 ตกปลา</button>
     <button id="siegeGateButton" class="warp-button" type="button" hidden></button>
@@ -120,6 +131,7 @@
       <button id="chatButton" type="button" aria-label="เปิดแชท"><span class="hud-btn-icon" data-hud-icon="chat">✉</span>แชท <b id="chatUnread" hidden></b></button>
       <button id="bannerButton" type="button" disabled aria-pressed="false" title="ธงชัยอาคม: เร็ว ๆ นี้ · ยังไม่มีผลป้องกัน"><span class="hud-btn-icon" data-hud-icon="banner" aria-hidden="true">🚩</span><i>ธงชัย · เร็ว ๆ นี้</i></button>
       <button id="petButton" type="button" aria-pressed="false" title="ภูติตกแต่งเท่านั้น · ไม่มีผลต่อการต่อสู้ [P]"><span class="hud-btn-icon" data-hud-icon="pet" aria-hidden="true">✨</span><i>ภูติตกแต่ง</i></button>
+      <button id="meteorButton" type="button" hidden title="ทุบธรณี"><span class="hud-btn-icon" aria-hidden="true">☄</span><i>ทุบธรณี</i></button>
       <button id="flightButton" type="button" aria-pressed="false" title="สยายปีกทะยานเวหา [F]"><span class="hud-btn-icon" data-hud-icon="flight" aria-hidden="true">🪽</span><i>ทะยานฟ้า</i></button>
       <button id="bossEncounterButton" type="button" disabled aria-pressed="false" title="ท้าวเวสสุวรรณ: เร็ว ๆ นี้ · ยังไม่เปิดการต่อสู้"><span class="hud-btn-icon" data-hud-icon="boss" aria-hidden="true">👹</span><i>จอมอสูร · เร็ว ๆ นี้</i></button>
       <button id="mountButton" type="button" aria-pressed="false" hidden><span>♞</span><i>เรียกม้า</i></button>
@@ -146,6 +158,7 @@
         <section id="menu-character" data-journal-panel="character" aria-label="ตัวละครและวิชา"><div class="menu-tiles">
           <button id="menuCharacter" type="button"><span class="drawer-nav-icon" data-menu-icon="character" aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
           <button id="skillLoadoutButton" type="button" aria-label="จัดสกิล · ปรับแต่งช่องสกิล" aria-controls="drawer" hidden><span class="drawer-nav-icon" data-menu-icon="skills" aria-hidden="true">✧</span><strong>จัดสกิล<small>เลือกวิชาลง 4 ช่องลัด</small></strong></button>
+          <button id="menuHome" type="button"><span class="drawer-nav-icon" aria-hidden="true">⌂</span><strong>เรือนส่วนตัว<small>จัดเรือน ทำสวน ทำอาหาร และดูความหิว</small></strong></button>
           <button id="menuBag" type="button"><span class="drawer-nav-icon" data-menu-icon="bag" aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
           <button id="swordTreeButton" class="book-entry" type="button"><span class="drawer-nav-icon" data-menu-icon="skills">⚔</span><strong>ผังวิชาดาบ<small>Knowledge Graph 4 ทิศ</small></strong></button>
           <button id="muayBookButton" class="book-entry" type="button" hidden><span>✊</span>ตำราอาชีพ</button>
@@ -155,6 +168,7 @@
         </div></section>
         <section id="menu-travel" data-journal-panel="travel" aria-label="เดินทาง" hidden><div class="menu-tiles">
           <button id="mapButton" type="button"><span class="drawer-nav-icon" data-menu-icon="map" aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
+          <button id="menuGhostPot" type="button" hidden><span class="drawer-nav-icon" aria-hidden="true">🏺</span><strong id="menuGhostPotLabel">หม้ออาคม</strong></button>
           <button id="menuMount" type="button"><span class="drawer-nav-icon" data-menu-icon="mount" aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
         </div></section>
         <section id="menu-social" data-journal-panel="social" aria-label="ชุมชนและการค้า" hidden><div class="menu-tiles">
@@ -286,6 +300,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
-  <script src="./main.js?v=0.20.5-quest-autowalk" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>

@@ -72,7 +72,7 @@ try{
   await leave(c);c=await join(0);await until(()=>c.local?.government,"government after return");
   assert.ok(c.local.government.commander && c.local.government.damaged);
   console.log("PASS defended city captured, warehouse breached and ownership transferred");
-  // Returning from a battlefield restores the character's saved court position in the world.
-  for(const [x,z] of [[16,-24],[16,20],[0,38],[0,120],[112,120],[112,176],[0,176]])await walk(c,x,z);
+  // The civilian character entered from the south wharf. Battle movement must not replace it.
+  assert.ok(Math.hypot(c.me().x,c.me().z-176)<2,"civilian wharf position restored");
   c.r.send("warp",{portalId:exit});await until(()=>c.me().mapId==="river_watch","return wharf");console.log("PASS B01 two breaches, stair ascent/crest/descent, supply, capture, treasury transfer, return sailing");
 }finally{await Promise.allSettled([...rooms].map(r=>r.leave()));db.close();}

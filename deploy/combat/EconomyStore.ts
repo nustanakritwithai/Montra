@@ -7,12 +7,31 @@ import type {FishItem} from "./Fishing.js";
 /** Single-process transactional economy. This store must own inventories before it is wired to gameplay. */
 import { DatabaseSync } from "node:sqlite";
 import { createHash, randomUUID } from "node:crypto";
-import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type PersonalId } from "./PersonalItems.js";
+import { PERSONAL_ITEMS, personalItem, type BodySlot, type BodyItemId, type FurnitureId, type HomePartId, type ItemStats, type PersonalId } from "./PersonalItems.js";
 import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem, matchesGearStamp, validateInventory, type InventorySnapshot, type InventoryStack, type WeaponItemId } from "./ItemRules.js";
-import type {SalvageOrder} from "./EconomyRules.js";
+import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js";
+import {CityProduction} from "./CityProduction.js";
+import {
+  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
+  type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
+} from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
+export const MAX_CRAFT_QUANTITY = 10;
+export const CRAFT_QUEUE_LIMIT = 3;
+export const CRAFT_QUEUE_MS_PER_ITEM = 5_000;
+export const MARKET_FAVORITE_LIMIT = 50;
 const MAX_GOLD = 1_000_000_000;
+const HUNGER_POINT_MS = 240_000;
+const THIRST_POINT_MS = 120_000;
+const GARDEN_GROWTH_MS = 120_000;
+const HOME_PRICES = [0, 100, 200] as const;
+
+function cookingLevel(xp: number) {
+  return xp >= 15 ? 3 : xp >= 5 ? 2 : 1;
+}
 export const STARTER_SUPPLIES = Object.freeze({
   health_potion:{price:15,dailyLimit:20,worldLimit:500},
   mat_raw_wood_1:{price:10,dailyLimit:20,worldLimit:500},
@@ -26,17 +45,25 @@ const legacyMarketItems:Record<string,{name:string;kind:string}>={
   ritual_dagger:{name:"มีดหมอ",kind:"mainHand"},arcane_sword:{name:"กระบี่อาคม",kind:"mainHand"},muay_wraps:{name:"ผ้าคาดเชือก",kind:"mainHand"},
   spirit_staff:{name:"คทาวิญญาณ",kind:"mainHand"},shrine_glaive:{name:"ง้าวจันทร์ผู้พิทักษ์",kind:"mainHand"},
 };
-function marketItemIds(query:string,category:MarketCategory):string[]|null {
-  const word=query.normalize("NFC").trim().toLocaleLowerCase();
-  if(!word && category==="all")return null;
-  const catalog:Record<string,{name:string;kind:string}>={...legacyMarketItems,...PERSONAL_ITEMS};
-  return Object.entries(catalog).filter(([id,item])=>{
+const marketCatalog: Record<string, {name: string; kind: string; stats?: ItemStats}> = {
+  ...legacyMarketItems, ...PERSONAL_ITEMS,
+};
+
+export function isMarketItemId(value: unknown): value is string {
+  return typeof value === "string" && Object.hasOwn(marketCatalog, value);
+}
+
+function marketItemIds(query: string, category: MarketCategory, minStat?: MarketFilters["minStat"]): string[] | null {
+  const word = query.normalize("NFC").trim().toLocaleLowerCase();
+  if (!word && category === "all" && !minStat) return null;
+  return Object.entries(marketCatalog).filter(([id,item])=>{
+    if (minStat && (item.stats?.[minStat.stat] ?? 0) < minStat.value) return false;
     const kind=item.kind==="material" || item.kind==="catalyst"?"material":item.kind==="card"?"card":item.kind==="consumable"?"consumable":"equipment";
     return (category==="all" || kind===category) && (!word || id.toLocaleLowerCase().includes(word) || item.name.normalize("NFC").toLocaleLowerCase().includes(word));
   }).map(([id])=>id);
 }
 type Account = { gold: number; inventory: InventorySnapshot };
-type Listing = { id: string; seller: string; item: InventoryStack; price: number; state: string };
+type Listing = { id: string; seller: string; sellerGuild?: string; item: InventoryStack; price: number; state: string };
 export type TradeOffer = { slot: number | null; amount: number; gold: number };
 
 function characterId(id: string): void { if (!/^[a-f0-9]{64}$/.test(id)) throw new Error("invalid_character_id"); }
@@ -81,7 +108,7 @@ function add(inventory: InventorySnapshot, item: InventoryStack): InventorySnaps
   return validateInventory({ ...original, slots });
 }
 
-function consume(account:Account,item:string,qty:number){
+function consume(account:Account,item:string,qty:number,missingMaterial="craft_missing_material"){
   for(const [slot,stack] of account.inventory.slots.entries()){
     if(stack?.itemId!==item)continue;
     const used=Math.min(qty,stack.quantity);
@@ -89,7 +116,43 @@ function consume(account:Account,item:string,qty:number){
     qty-=used;
     if(!qty)return;
   }
-  throw Error("craft_missing_material");
+  throw Error(missingMaterial);
+}
+
+type CraftOutput = PersonalId | typeof SHRINE_RECIPE.output;
+function craftRecipe(output: CraftOutput) {
+  if (output === SHRINE_RECIPE.output) {
+    return {gold: SHRINE_RECIPE.gold, level: 1, ingredients: [{item: SHRINE_RECIPE.ingredient, qty: SHRINE_RECIPE.quantity}],
+      missingMaterial: "craft_missing_shard"};
+  }
+  const item = personalItem(output);
+  if (!item?.recipe) throw Error("invalid_recipe");
+  return {gold: item.craftGold!, level: item.level ?? 1, ingredients: item.recipe};
+}
+
+function payForCraft(account: Account, recipe: ReturnType<typeof craftRecipe>, quantity: number) {
+  const cost = recipe.gold * quantity;
+  if (account.gold < cost) throw Error("insufficient_gold");
+  for (const ingredient of recipe.ingredients) consume(account, ingredient.item, ingredient.qty * quantity, recipe.missingMaterial);
+  account.gold -= cost;
+  return cost;
+}
+
+function craftItems(output: CraftOutput, quantity: number): InventoryStack[] {
+  return Array.from({length: quantity}, () => {
+    const forge = output === SHRINE_RECIPE.output ? undefined : birthForge(output);
+    return {itemId: output, quantity: 1, ...(forge ? {forge} : {})};
+  });
+}
+
+function deliverCraft(account: Account, items: InventoryStack[]) {
+  let bankedQuantity = 0;
+  for (const item of items) {
+    const received = receiveCraft(account.inventory, item);
+    account.inventory = received.inventory;
+    bankedQuantity += Number(received.banked);
+  }
+  return bankedQuantity;
 }
 
 function receiveCraft(bag:InventorySnapshot,item:InventoryStack){
@@ -112,14 +175,16 @@ function spendForgeCopies(bag:InventorySnapshot,gear:string,qty:number){
 
 export class EconomyStore {
   private readonly db: DatabaseSync;
+  private readonly city: CityProduction;
   private auctionTimer:ReturnType<typeof setInterval>|undefined;
+  private cityTimer:ReturnType<typeof setInterval>|undefined;
   constructor(file:string,private readonly forgeDraw?:()=>number) {
     this.db = new DatabaseSync(file);
     this.db.exec(`PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON;
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, gold INTEGER NOT NULL, inventory TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS listings(id TEXT PRIMARY KEY, seller TEXT NOT NULL REFERENCES accounts(id), item TEXT NOT NULL, price INTEGER NOT NULL, state TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS receipts(request_id TEXT PRIMARY KEY, actor TEXT NOT NULL, kind TEXT NOT NULL, intent TEXT NOT NULL, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS characters(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS pending_monster_rewards(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_stock(map TEXT NOT NULL,node TEXT NOT NULL,stock INTEGER NOT NULL,nextAt INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_periods(map TEXT NOT NULL,node TEXT NOT NULL,periodMs INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_workers(actor TEXT PRIMARY KEY,lastAt INTEGER NOT NULL);
@@ -131,9 +196,59 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS auction_credits(actor TEXT PRIMARY KEY,amount INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS starter_supply_used(actor TEXT NOT NULL,day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(actor,day,item));
       CREATE TABLE IF NOT EXISTS starter_supply_world(day TEXT NOT NULL,item TEXT NOT NULL,quantity INTEGER NOT NULL,PRIMARY KEY(day,item));
-      CREATE INDEX IF NOT EXISTS listings_state ON listings(state);
-      CREATE INDEX IF NOT EXISTS listings_seller_state ON listings(seller,state);
+      CREATE TABLE IF NOT EXISTS market_sales(
+        market TEXT NOT NULL, listing TEXT NOT NULL, item TEXT NOT NULL, quantity INTEGER NOT NULL,
+        total INTEGER NOT NULL, sold_at INTEGER NOT NULL, PRIMARY KEY(market,listing));
+      CREATE INDEX IF NOT EXISTS market_sales_item_date ON market_sales(item,sold_at DESC);
+      CREATE TABLE IF NOT EXISTS craft_jobs(
+        id TEXT PRIMARY KEY, actor TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+        recipe TEXT NOT NULL, quantity INTEGER NOT NULL, gold INTEGER NOT NULL, items TEXT NOT NULL,
+        starts_at INTEGER NOT NULL, ready_at INTEGER NOT NULL);
+      CREATE INDEX IF NOT EXISTS craft_jobs_actor_start ON craft_jobs(actor,starts_at);
+      CREATE TABLE IF NOT EXISTS cooking(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, xp INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS needs(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
+        food REAL NOT NULL, water REAL NOT NULL, updated_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS homes(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, level INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS furniture(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE,
+        cell INTEGER NOT NULL, item TEXT NOT NULL, PRIMARY KEY(actor,cell));
+      CREATE TABLE IF NOT EXISTS home_parts(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE, cell INTEGER NOT NULL,
+        layer TEXT NOT NULL, item TEXT NOT NULL, rotation INTEGER NOT NULL, PRIMARY KEY(actor,cell,layer));
+      CREATE TABLE IF NOT EXISTS garden(
+        actor TEXT NOT NULL REFERENCES homes(actor) ON DELETE CASCADE,
+        plot INTEGER NOT NULL, ready_at INTEGER, PRIMARY KEY(actor,plot));
+      CREATE TABLE IF NOT EXISTS water_supply(
+        actor TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE, ready_at INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS market_favorites(
+        actor TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, item TEXT NOT NULL, PRIMARY KEY(actor,item));
     `);
+    this.initListings();
+    this.city = new CityProduction(this.db);
+  }
+  private initListings(): void {
+    const schema = `CREATE TABLE IF NOT EXISTS listings (
+      id TEXT PRIMARY KEY, seller TEXT REFERENCES accounts(id), item TEXT NOT NULL, price INTEGER NOT NULL, state TEXT NOT NULL,
+      seller_guild TEXT, seller_name TEXT, city_epoch INTEGER,
+      CHECK((seller IS NOT NULL AND seller_guild IS NULL AND seller_name IS NULL AND city_epoch IS NULL)
+        OR (seller IS NULL AND seller_guild IS NOT NULL AND seller_name IS NOT NULL AND city_epoch IS NOT NULL)));`;
+    this.transaction(() => {
+      const columns = this.db.prepare("PRAGMA table_info(listings)").all();
+      if (columns.length && !columns.some(column => column.name === "seller_guild")) {
+        this.db.exec("ALTER TABLE listings RENAME TO listings_legacy");
+        this.db.exec(schema);
+        this.db.exec(`INSERT INTO listings(rowid,id,seller,item,price,state)
+          SELECT rowid,id,seller,item,price,state FROM listings_legacy;
+          DROP TABLE listings_legacy;`);
+      } else this.db.exec(schema);
+      this.db.exec(`CREATE INDEX IF NOT EXISTS listings_state ON listings(state);
+        CREATE INDEX IF NOT EXISTS listings_seller_state ON listings(seller,state);
+        CREATE INDEX IF NOT EXISTS listings_guild_state ON listings(seller_guild,state) WHERE seller_guild IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS listings_city_open ON listings(city_epoch) WHERE state='open' AND city_epoch IS NOT NULL;`);
+    });
   }
   startAuctionSweeper():void {
     if(this.auctionTimer)return;
@@ -141,7 +256,231 @@ export class EconomyStore {
     this.auctionTimer=setInterval(()=>{try{this.settleExpiredAuctions();}catch(error){console.error("MONTRA auction settlement failed",error);}},15000);
     this.auctionTimer.unref();
   }
-  close(): void { if(this.auctionTimer)clearInterval(this.auctionTimer);this.auctionTimer=undefined;this.db.close(); }
+  close(): void {
+    if (this.auctionTimer) clearInterval(this.auctionTimer);
+    if (this.cityTimer) clearInterval(this.cityTimer);
+    this.auctionTimer = this.cityTimer = undefined;
+    this.db.close();
+  }
+  startCityProductionSweeper(sweepCity: (now: number) => void): void {
+    if (this.cityTimer) return;
+    const sweep = () => {
+      const now = Date.now();
+      try { sweepCity(now); }
+      catch (error) { console.error("MONTRA city production settlement failed", error); }
+    };
+    sweep();
+    this.cityTimer = setInterval(sweep, 5000);
+    this.cityTimer.unref();
+  }
+  syncCity(readOwnership: (previous: number | null, now: number) => CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE): CityOwnership {
+    const ownership = readOwnership(this.city.epoch(site), now);
+    this.transaction(() => this.city.reconcile(ownership, now, site));
+    return ownership;
+  }
+  viewCity(member: CityMember, ownership: CityOwnership, site: CitySite = CITY_PRODUCTION_SITE) {
+    return this.city.view(member, ownership, site);
+  }
+  viewCityWorkshop(actor: string, ownership: CityOwnership, now: number) {
+    return this.city.workshopView(actor, ownership, now);
+  }
+  viewCityPurchase(member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.purchaseView(member, ownership);
+  }
+  hasOpenCityPurchase(): boolean {
+    return this.city.hasOpenPurchase();
+  }
+  hasOpenCityMission(): boolean {
+    return this.city.hasOpenMission();
+  }
+  hasOpenCityHaul(): boolean {
+    return this.city.hasOpenHaul();
+  }
+  viewCityHauls(actor: string, member: CityMember | undefined, cities: CityOwnerships, atCity: CitySite | null) {
+    return this.city.haulView(actor, member, cities, atCity);
+  }
+  cityHaulOrder(actor: string, member: CityMember | undefined, order: CityHaulOrder, cities: CityOwnerships,
+    atCity: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_haul", intent, () => {
+      const result = this.city.haulOrder(actor, member, order, cities, atCity, now);
+      if (result.gold !== undefined) {
+        const account = this.account(actor);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.gold += result.gold;
+        this.put(actor, account);
+      }
+      return result;
+    });
+  }
+  viewCityMissions(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.missionView(actor, member, ownership);
+  }
+  viewCityGovernance(member: CityMember, ownership: CityOwnership) {
+    return this.city.governanceView(member, ownership);
+  }
+  setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
+    return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.setPolicy(member, ownership, order.epoch, order.policy, now);
+    });
+  }
+  citySupplyOrder(actor: string, member: CityMember, order: CitySupplyOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_supply", intent, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.supplyOrder(member, order, ownership, now);
+    });
+  }
+  finishCitySupplyRepairs(repair: (pending: CitySupplyRepair) => boolean): void {
+    for (const pending of this.city.pendingSupplyRepairs()) {
+      const repaired = repair(pending);
+      this.transaction(() => this.city.finishSupplyRepair(pending.id, repaired));
+    }
+  }
+  citySupplyRepairSucceeded(id: string): boolean {
+    return this.city.supplyRepairSucceeded(id);
+  }
+  cityMissionOrder(actor: string, member: CityMember | undefined, order: CityMissionOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_mission", intent, () => {
+      if (order.action === "mission_accept") return this.city.missionAccept(actor, member, order.missionId, ownership, now);
+      if (order.action === "mission_abandon") return this.city.missionAbandon(actor, order.missionId);
+      if (order.action === "mission_submit") {
+        const account = this.account(actor);
+        const result = this.city.missionSubmit(actor, order.missionId, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        consume(account, CITY_MINING_ORE, result.amount, "city_mission_ore_short");
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "mission_open") return this.city.missionOpen(member, ownership, order, now);
+      return this.city.missionCancel(member, order.missionId, now);
+    });
+  }
+  cityPurchaseOrder(actor: string, member: CityMember | undefined, order: CityPurchaseOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_purchase", intent, () => {
+      if (order.action === "purchase_fill") {
+        const account = this.account(actor);
+        if (account.inventory.slots[order.slot]?.itemId !== CITY_PRODUCT) throw Error("item_unavailable");
+        const result = this.city.purchaseFill(order.orderId, order.amount, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.inventory = take(account.inventory, order.slot, order.amount).inventory;
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId, now);
+      return this.city.purchaseOpen(member, ownership, order.epoch, order.amount, order.unitPrice, now);
+    });
+  }
+  hasCityWorkshopJob(actor: string): boolean {
+    return this.city.hasWorkshopJob(actor);
+  }
+  startCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_start"}>,
+    ownership: CityOwnership, now: number) {
+    const {requestId, epoch, woodSlot, stoneSlot} = order;
+    return this.once(actor, requestId, "city_workshop_start", {epoch, woodSlot, stoneSlot}, () => {
+      const account = this.account(actor);
+      const result = this.city.workshopStart(actor, epoch, ownership, now);
+      if (account.gold < result.fee) throw Error("city_workshop_funds");
+      if (account.inventory.slots[woodSlot]?.itemId !== CITY_RAW_ITEMS[0] ||
+          account.inventory.slots[stoneSlot]?.itemId !== CITY_RAW_ITEMS[1]) throw Error("item_unavailable");
+      const wood = take(account.inventory, woodSlot, CITY_RECIPE.wood);
+      account.inventory = take(wood.inventory, stoneSlot, CITY_RECIPE.stone).inventory;
+      account.gold -= result.fee;
+      this.put(actor, account);
+      return result;
+    });
+  }
+  claimCityWorkshop(actor: string, order: Extract<CityWorkshopOrder, {action: "workshop_claim"}>, now: number) {
+    const {requestId, jobId} = order;
+    return this.once(actor, requestId, "city_workshop_claim", {jobId}, () => {
+      const account = this.account(actor);
+      const {item, quantity} = this.city.workshopClaim(actor, jobId, now);
+      account.inventory = add(account.inventory, {itemId: item, quantity});
+      this.put(actor, account);
+      return {jobId, item, quantity};
+    });
+  }
+  hasCityAssets(guild: string): boolean {
+    return this.city.hasAssets(guild);
+  }
+  cityDisbandClosed(actor: string, guild: string): boolean {
+    return this.city.closureActor(guild) === actor;
+  }
+  closeCityGuild(disband: CityDisband, readOwnership: (previous: number | null, site: CitySite) => CityOwnership): void {
+    const ownerships = new Map(CITY_SITES.map(site => [site, readOwnership(this.city.epoch(site), site)] as const));
+    this.transaction(() => {
+      this.account(disband.actor);
+      this.city.disband(disband, ownerships);
+    });
+  }
+  cityDisbandClaims(actor: string) {
+    return this.city.claims(actor);
+  }
+  hasCityDisbandClaims(actor: string): boolean {
+    return this.city.hasClaims(actor);
+  }
+  claimCityDisband(actor: string, order: Extract<CityOrder, {action: "claim_disband"}>) {
+    const {requestId, guildId, item, amount} = order;
+    return this.once(actor, requestId, "city_disband_claim", {guildId, item, amount}, () => {
+      const account = this.account(actor);
+      this.city.claim(actor, guildId, item, amount);
+      if (item === "gold") {
+        if (account.gold + amount > MAX_GOLD) throw Error("city_wallet_full");
+        account.gold += amount;
+      } else account.inventory = add(account.inventory, {itemId: item, quantity: amount});
+      this.put(actor, account);
+      return {guildId, item, amount};
+    });
+  }
+  cityOrder(actor: string, member: CityMember, order: CityFactoryOrder, ownership: CityOwnership, now: number,
+    site: CitySite = CITY_PRODUCTION_SITE) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_production", intent, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "cancel") return this.city.cancel(member, order.listingId);
+      if (order.action === "reclaim") {
+        const account = this.account(actor);
+        this.city.reclaim(order.epoch, member, order.item, order.amount);
+        account.inventory = add(account.inventory, {itemId: order.item, quantity: order.amount});
+        this.put(actor, account);
+        return {quantity: order.amount};
+      }
+      this.city.requireCity(member, order.epoch, ownership, site);
+      switch (order.action) {
+        case "build": return this.city.build(order.epoch, member, site);
+        case "start":
+        case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site, order.item);
+        case "warehouse_start": return this.city.warehouseStart(site, order.epoch, member, ownership);
+        case "warehouse_allocate":
+          return this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "stock");
+        case "deposit":
+        case "warehouse_contribute": {
+          const account = this.account(actor);
+          if (account.inventory.slots[order.slot]?.itemId !== order.item) throw Error("item_unavailable");
+          const removed = take(account.inventory, order.slot, order.amount);
+          let result: Record<string, string | number> = {quantity: order.amount};
+          if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount, site);
+          else result = this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "bag");
+          account.inventory = removed.inventory;
+          this.put(actor, account);
+          return result;
+        }
+      }
+    });
+  }
   catchFish(actor:string,request:string,item:FishItem){
     return this.once(actor,request,"fish",{item},()=>{
       const account=this.account(actor);
@@ -209,6 +548,8 @@ export class EconomyStore {
       this.db.prepare("INSERT OR REPLACE INTO resource_stock VALUES(?,?,?,?)").run(n.mapId,n.id,s.stock-quantity,nextAt);
       this.db.prepare("INSERT OR REPLACE INTO resource_periods VALUES(?,?,?)").run(n.mapId,n.id,period);
       this.db.prepare("INSERT OR REPLACE INTO resource_workers VALUES(?,?)").run(actor,now);
+      if (n.mapId === CITY_MINING_SITE && item === CITY_MINING_ORE && n.id.startsWith(CITY_MINING_SITE+"/moon-ore-"))
+        this.city.recordMissionHarvest(actor,quantity,now);
       return {item,quantity,...(equipped?{tool:equipped.name}:{})};
     });
   }
@@ -236,13 +577,15 @@ export class EconomyStore {
     goldAmount(row.gold);
     return { gold: row.gold, inventory: validateInventory(JSON.parse(row.inventory) as unknown) };
   }
-  private put(id: string, account: Account): void {
+  private put(id: string, account: Account, health?: {hp: number; mana: number}): void {
+    this.requireSettledMonsterReward(id);
     goldAmount(account.gold);
     this.db.prepare("UPDATE accounts SET gold=?, inventory=? WHERE id=?").run(account.gold, JSON.stringify(validateInventory(account.inventory)), id);
     const row = this.db.prepare("SELECT snapshot FROM characters WHERE id=?").get(id);
     if (row && typeof row.snapshot === "string") {
       const snapshot = JSON.parse(row.snapshot) as Record<string, unknown>;
       snapshot.inventory = account.inventory;
+      if (health) Object.assign(snapshot, health);
       this.db.prepare("UPDATE characters SET snapshot=? WHERE id=?").run(JSON.stringify(snapshot), id);
     }
   }
@@ -251,13 +594,42 @@ export class EconomyStore {
     const row=this.db.prepare("SELECT snapshot FROM characters WHERE id=?").get(id);
     return row && typeof row.snapshot === "string" ? JSON.parse(row.snapshot) as unknown : null;
   }
+  private requireSettledMonsterReward(id:string):void {
+    if(this.db.prepare("SELECT 1 FROM pending_monster_rewards WHERE id=?").get(id))throw new Error("monster_reward_pending");
+  }
+
+  private writeCharacter(id:string,snapshot:object,inventory:InventorySnapshot):void {
+    const bag=JSON.stringify(validateInventory(inventory));
+    this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id,STARTER_GOLD,bag);
+    this.db.prepare("INSERT INTO characters(id,snapshot) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot").run(id,JSON.stringify(snapshot));
+    this.db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(bag,id);
+  }
+
   /** Commit the entire character and its inventory together with the wallet. */
-  saveCharacter(id: string, snapshot: object, inventory: InventorySnapshot): void {
-    characterId(id); const bag = validateInventory(inventory);
-    this.transaction(() => {
-      this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id,STARTER_GOLD,JSON.stringify(bag));
-      this.db.prepare("INSERT INTO characters(id,snapshot) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot").run(id,JSON.stringify(snapshot));
-      this.db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
+  saveCharacter(id:string,snapshot:object,inventory:InventorySnapshot):void {
+    characterId(id);
+    this.transaction(()=>{
+      this.requireSettledMonsterReward(id);
+      this.writeCharacter(id,snapshot,inventory);
+    });
+  }
+
+  /** Stage a fully computed reward before attempting to replace the character. */
+  stageMonsterReward(id:string,snapshot:object):void {
+    characterId(id);
+    const result=this.db.prepare("INSERT OR IGNORE INTO pending_monster_rewards(id,snapshot) VALUES(?,?)").run(id,JSON.stringify(snapshot));
+    if(result.changes!==1)throw new Error("monster_reward_pending");
+  }
+
+  commitMonsterReward(id:string,validate:(record:unknown)=>{snapshot:object;inventory:InventorySnapshot}):void {
+    characterId(id);
+    if(!this.db.prepare("SELECT 1 FROM pending_monster_rewards WHERE id=?").get(id))return;
+    this.transaction(()=>{
+      const row=this.db.prepare("SELECT snapshot FROM pending_monster_rewards WHERE id=?").get(id);
+      if(!row)return;
+      const {snapshot,inventory}=validate(JSON.parse(String(row.snapshot)) as unknown);
+      this.writeCharacter(id,snapshot,inventory);
+      this.db.prepare("DELETE FROM pending_monster_rewards WHERE id=?").run(id);
     });
   }
   private once<T>(actor: string, request: string, kind: string, args: unknown, operation: () => T): T {
@@ -278,6 +650,7 @@ export class EconomyStore {
   /** One-time import; reconnects cannot re-grant gold or replace inventory. */
   register(id: string, inventory: InventorySnapshot): Account {
     characterId(id);
+    this.requireSettledMonsterReward(id);
     const data = JSON.stringify(validateInventory(inventory));
     this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id, STARTER_GOLD, data);
     return this.account(id);
@@ -293,34 +666,76 @@ export class EconomyStore {
   eraseCharacter(id:string):void {
     characterId(id);
     this.transaction(()=>{
+      this.requireSettledMonsterReward(id);
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
+      if(this.hasCityDisbandClaims(id))throw new Error("character_has_city_claims");
+      if(this.hasCityWorkshopJob(id))throw new Error("character_has_city_job");
       this.db.prepare("DELETE FROM listings WHERE seller=?").run(id);
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM receipts WHERE actor=?").run(id);
+      this.db.prepare("DELETE FROM city_mission_workers WHERE actor=? AND state='active'").run(id);
       this.db.prepare("DELETE FROM characters WHERE id=?").run(id);
       this.db.prepare("DELETE FROM accounts WHERE id=?").run(id);
     });
   }
   list(id?: string): Listing[] {
     if (id !== undefined) characterId(id);
-    const latest=this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
-    const own=id ? this.db.prepare("SELECT id,seller,item,price,state FROM listings WHERE state='open' AND seller=? ORDER BY rowid DESC").all(id) : [];
+    const latest=this.db.prepare("SELECT id,seller,seller_guild,seller_name,item,price,state FROM listings WHERE state='open' ORDER BY rowid DESC LIMIT 100").all();
+    const own=id ? this.db.prepare("SELECT id,seller,seller_guild,seller_name,item,price,state FROM listings WHERE state='open' AND seller=? ORDER BY rowid DESC").all(id) : [];
     const seen=new Set<string>();
     return [...own,...latest].filter(row=>{const key=String(row.id); if (seen.has(key)) return false; seen.add(key); return true;}).map(row => ({
-      id: String(row.id), seller: String(row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
+      id: String(row.id), seller: String(row.seller_name ?? row.seller), item: JSON.parse(String(row.item)) as InventoryStack,
+      ...(typeof row.seller_guild === "string" ? {sellerGuild: row.seller_guild} : {}),
       price: Number(row.price), state: String(row.state),
     }));
   }
-  browseMarket(id:string,query:string,category:MarketCategory,before:number|null,ownOnly=false){
-    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {listings:[],nextCursor:null};
+  browseMarket(id:string,query:string,category:MarketCategory,before:number|null,ownOnly=false,filters:MarketFilters={}){
+    characterId(id);const ids=marketItemIds(query,category,filters.minStat);if(ids && !ids.length)return {listings:[],nextCursor:null};
     const where=["state='open'"],args:(string|number)[]=[];
     if(before!==null){where.push("rowid<?");args.push(before);}
     if(ownOnly){where.push("seller=?");args.push(id);}
+    if(filters.favoritesOnly){where.push("json_extract(item,'$.itemId') IN (SELECT item FROM market_favorites WHERE actor=?)");args.push(id);}
     if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
-    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
+    const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,seller_guild,seller_name,item,price FROM listings WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
     const page=rows.slice(0,30);
-    return {listings:page.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+    return {listings:page.map(row=>({id:String(row.id),seller:typeof row.seller_name==="string"?row.seller_name:String(row.seller).slice(0,12),
+      ...(typeof row.seller_guild==="string"?{sellerGuild:row.seller_guild}:{}),
+      isMine:row.seller===id,item:JSON.parse(String(row.item)) as InventoryStack,price:Number(row.price)})),nextCursor:rows.length>30?Number(page[page.length-1].seq):null};
+  }
+
+  marketHistory(itemId: string) {
+    if (!isMarketItemId(itemId)) throw Error("item_unavailable");
+    return this.db.prepare(
+      "SELECT market,quantity,total,sold_at FROM market_sales WHERE item=? ORDER BY sold_at DESC,rowid DESC LIMIT 30",
+    ).all(itemId).map(row => ({
+      market: row.market as "fixed" | "auction", quantity: Number(row.quantity),
+      total: Number(row.total), soldAt: Number(row.sold_at),
+    }));
+  }
+
+  marketFavorites(id: string): string[] {
+    characterId(id);
+    return this.db.prepare("SELECT item FROM market_favorites WHERE actor=? ORDER BY item")
+      .all(id).map(row => String(row.item));
+  }
+
+  setMarketFavorite(id: string, request: string, itemId: string, favorite: boolean) {
+    if (!isMarketItemId(itemId)) throw Error("item_unavailable");
+    return this.once(id, request, "market_favorite", {itemId, favorite}, () => {
+      if (favorite) {
+        this.db.prepare("INSERT OR IGNORE INTO market_favorites(actor,item) VALUES(?,?)").run(id,itemId);
+        if (this.marketFavorites(id).length > MARKET_FAVORITE_LIMIT) throw Error("market_favorite_limit");
+      } else {
+        this.db.prepare("DELETE FROM market_favorites WHERE actor=? AND item=?").run(id,itemId);
+      }
+      return {itemId, favorite};
+    });
+  }
+
+  private recordMarketSale(market: "fixed" | "auction", listingId: string, item: InventoryStack, total: number, soldAt: number) {
+    this.db.prepare("INSERT INTO market_sales(market,listing,item,quantity,total,sold_at) VALUES(?,?,?,?,?,?)")
+      .run(market,listingId,item.itemId,item.quantity,total,soldAt);
   }
 
   /** NPC reserve has both a per-character and a shared daily limit; resets at 00:00 UTC. */
@@ -400,10 +815,14 @@ export class EconomyStore {
   }
   settleExpiredAuctions(now=Date.now()):number {
     return this.transaction(()=>{
-      const rows=this.db.prepare("SELECT id,seller,bidder,bid FROM auctions WHERE state='open' AND ends_at<=? ORDER BY ends_at LIMIT 50").all(now);
+      const rows=this.db.prepare("SELECT id,seller,bidder,bid,item,ends_at FROM auctions WHERE state='open' AND ends_at<=? ORDER BY ends_at LIMIT 50").all(now);
       for(const row of rows){
         const bidder=typeof row.bidder==="string"?row.bidder:null,seller=String(row.seller);
-        if(bidder)this.creditOrHold(seller,Number(row.bid));
+        if (bidder) {
+          const total = Number(row.bid);
+          this.creditOrHold(seller,total);
+          this.recordMarketSale("auction",String(row.id),JSON.parse(String(row.item)) as InventoryStack,total,Number(row.ends_at));
+        }
         this.db.prepare("UPDATE auctions SET state='settled',claimant=? WHERE id=? AND state='open'").run(bidder??seller,String(row.id));
       }
       return rows.length;
@@ -425,10 +844,11 @@ export class EconomyStore {
       this.db.prepare("UPDATE auctions SET state='cancelled',claimed=1 WHERE id=?").run(auctionId);return {auctionId};
     });
   }
-  browseAuctions(id:string,query:string,category:MarketCategory,before:number|null){
-    characterId(id);const ids=marketItemIds(query,category);if(ids && !ids.length)return {auctions:[],nextCursor:null};
+  browseAuctions(id:string,query:string,category:MarketCategory,before:number|null,filters:MarketFilters={}){
+    characterId(id);const ids=marketItemIds(query,category,filters.minStat);if(ids && !ids.length)return {auctions:[],nextCursor:null};
     const where=["state='open'","ends_at>?"],args:(string|number)[]=[Date.now()];
     if(before!==null){where.push("rowid<?");args.push(before);}
+    if(filters.favoritesOnly){where.push("json_extract(item,'$.itemId') IN (SELECT item FROM market_favorites WHERE actor=?)");args.push(id);}
     if(ids){where.push(`json_extract(item,'$.itemId') IN (${ids.map(()=>"?").join(",")})`);args.push(...ids);}
     const rows=this.db.prepare(`SELECT rowid AS seq,id,seller,item,opening,bidder,bid,ends_at FROM auctions WHERE ${where.join(" AND ")} ORDER BY rowid DESC LIMIT 31`).all(...args);
     const page=rows.slice(0,30);
@@ -442,43 +862,268 @@ export class EconomyStore {
     const seen=new Set<string>(),rows=[...pending,...history].filter(row=>{const key=String(row.id);if(seen.has(key))return false;seen.add(key);return true;});
     return {auctions:rows.map(row=>({id:String(row.id),seller:String(row.seller).slice(0,12),isMine:row.seller===id,isBidder:row.bidder===id,item:JSON.parse(String(row.item)) as InventoryStack,opening:Number(row.opening),bid:Number(row.bid),bidder:typeof row.bidder==="string"?row.bidder.slice(0,12):null,endsAt:Number(row.ends_at),state:String(row.state),canClaim:row.state==="settled" && row.claimant===id && Number(row.claimed)===0})),credit:this.auctionCredit(id)};
   }
-  craftShrineGlaive(id: string, request: string) {
-    const recipe = SHRINE_RECIPE;
-    return this.once(id, request, "craft", {recipe: recipe.id}, () => {
-      const account = this.account(id);
-      if (account.gold < recipe.gold) throw Error("insufficient_gold");
-      let remaining = recipe.quantity;
-      for (const [index, stack] of account.inventory.slots.entries()) {
-        if (stack?.itemId !== recipe.ingredient) continue;
-        const used = Math.min(remaining, stack.quantity);
-        account.inventory = take(account.inventory, index, used).inventory;
-        remaining -= used;
-        if (remaining === 0) break;
-      }
-      if (remaining > 0) throw Error("craft_missing_shard");
-      const received=receiveCraft(account.inventory,{itemId:recipe.output,quantity:1});
-      account.inventory=received.inventory;
-      account.gold -= recipe.gold;
+  craftShrineGlaive(id: string, request: string, quantity = 1) {
+    return this.craft(id, request, SHRINE_RECIPE.output, 1, quantity);
+  }
+
+  craftPersonal(id: string, request: string, output: PersonalId, level = 1, quantity = 1) {
+    return this.craft(id, request, output, level, quantity);
+  }
+
+  private craft(id: string, request: string, output: CraftOutput, level: number, quantity: number) {
+    const recipe = craftRecipe(output);
+    positiveInteger(quantity, MAX_CRAFT_QUANTITY);
+    // Keep the intent and reply identical for requests saved by older server builds.
+    const intent = quantity === 1 ? {recipe: output} : {recipe: output, quantity};
+    return this.once(id, request, "craft", intent, () => {
+      if (level < recipe.level) throw Error("item_level_required");
+      this.checkCooking(id, output);
+      const account = this.account(id), spentGold = payForCraft(account, recipe, quantity);
+      const bankedQuantity = deliverCraft(account, craftItems(output, quantity));
       this.put(id, account);
-      return {itemId: recipe.output, spentGold: recipe.gold,banked:received.banked};
+      this.creditCooking(id, output, quantity);
+      const result = {itemId: output, spentGold, banked: bankedQuantity > 0};
+      return quantity === 1 ? result : {...result, quantity, bankedQuantity};
     });
   }
 
-  craftPersonal(id:string,request:string,output:PersonalId,level=1) {
-    const def=personalItem(output);
-    if(!def?.recipe)throw Error("invalid_recipe");
-    return this.once(id,request,"craft",{recipe:output},()=>{
-      if(level<(def.level??1))throw Error("item_level_required");
-      const account=this.account(id),cost=def.craftGold!;
-      if(account.gold<cost)throw Error("insufficient_gold");
-      for(const ingredient of def.recipe!)consume(account,ingredient.item,ingredient.qty);
-      const forge=birthForge(output);
-      const received=receiveCraft(account.inventory,{itemId:output,quantity:1,...(forge?{forge}:{})});
-      account.inventory=received.inventory;
-      account.gold-=cost;
-      this.put(id,account);
-      return {itemId:output,spentGold:cost,banked:received.banked};
+  craftQueue(id: string, now = Date.now()) {
+    characterId(id);
+    const rows = this.db.prepare(
+      "SELECT id,recipe,quantity,gold,starts_at,ready_at FROM craft_jobs WHERE actor=? ORDER BY starts_at,rowid",
+    ).all(id);
+    return {serverNow: now, jobs: rows.map(row => {
+      const startsAt = Number(row.starts_at), readyAt = Number(row.ready_at);
+      const status = now >= readyAt ? "ready" : now >= startsAt ? "crafting" : "queued";
+      return {id: String(row.id), recipeId: String(row.recipe), quantity: Number(row.quantity),
+        spentGold: Number(row.gold), startsAt, readyAt, status};
+    })};
+  }
+
+  enqueueCraft(id: string, request: string, output: CraftOutput, level: number, quantity: number, now = Date.now()) {
+    positiveInteger(quantity, MAX_CRAFT_QUANTITY);
+    return this.once(id, request, "craft_enqueue", {recipe: output, quantity}, () => {
+      const recipe = craftRecipe(output);
+      if (level < recipe.level) throw Error("item_level_required");
+      this.checkCooking(id, output);
+      const pending = this.db.prepare("SELECT COUNT(*) AS total, MAX(ready_at) AS last FROM craft_jobs WHERE actor=?").get(id)!;
+      if (Number(pending.total) >= CRAFT_QUEUE_LIMIT) throw Error("craft_queue_full");
+      const account = this.account(id), spentGold = payForCraft(account, recipe, quantity);
+      const startsAt = Math.max(now, Number(pending.last ?? 0)), readyAt = startsAt + quantity * CRAFT_QUEUE_MS_PER_ITEM;
+      const jobId = randomUUID(), items = craftItems(output, quantity);
+      this.put(id, account);
+      this.db.prepare("INSERT INTO craft_jobs(id,actor,recipe,quantity,gold,items,starts_at,ready_at) VALUES(?,?,?,?,?,?,?,?)")
+        .run(jobId, id, output, quantity, spentGold, JSON.stringify(items), startsAt, readyAt);
+      return {jobId};
     });
+  }
+
+  claimCraft(id: string, request: string, jobId: string, now = Date.now()) {
+    return this.once(id, request, "craft_claim", {jobId}, () => {
+      const row = this.db.prepare("SELECT recipe,quantity,items,ready_at FROM craft_jobs WHERE id=? AND actor=?").get(jobId, id);
+      if (!row) throw Error("craft_job_unavailable");
+      if (now < Number(row.ready_at)) throw Error("craft_job_not_ready");
+      const account = this.account(id);
+      const bankedQuantity = deliverCraft(account, JSON.parse(String(row.items)) as InventoryStack[]);
+      this.put(id, account);
+      this.creditCooking(id, String(row.recipe), Number(row.quantity));
+      this.db.prepare("DELETE FROM craft_jobs WHERE id=? AND actor=?").run(jobId, id);
+      return {jobId, itemId: String(row.recipe), quantity: Number(row.quantity), bankedQuantity};
+    });
+  }
+
+  cookingState(id: string) {
+    characterId(id);
+    const xp = Number(this.db.prepare("SELECT xp FROM cooking WHERE actor=?").get(id)?.xp ?? 0);
+    return {xp, level: cookingLevel(xp), kitchen: Boolean(this.db.prepare(
+      "SELECT 1 FROM furniture WHERE actor=? AND item='furniture_kitchen' LIMIT 1",
+    ).get(id))};
+  }
+
+  private checkCooking(id: string, itemId: string) {
+    const required = personalItem(itemId)?.cookingLevel;
+    if (!required || required === 1) return;
+    const state = this.cookingState(id);
+    if (state.level < required) throw Error("cooking_level_required");
+    if (!state.kitchen) throw Error("cooking_kitchen_required");
+  }
+
+  private creditCooking(id: string, itemId: string, quantity: number) {
+    if (!personalItem(itemId)?.food) return;
+    this.db.prepare(
+      "INSERT INTO cooking VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET xp=MIN(15,cooking.xp+excluded.xp)",
+    ).run(id, Math.min(15, quantity));
+  }
+
+  private needValues(id: string, now: number) {
+    characterId(id);
+    const row = this.db.prepare("SELECT food,water,updated_at FROM needs WHERE actor=?").get(id);
+    if (!row) {
+      this.db.prepare("INSERT INTO needs VALUES(?,100,100,?)").run(id, now);
+      return {food: 100, water: 100, updatedAt: now};
+    }
+    const updatedAt = Number(row.updated_at), elapsed = Math.max(0, now - updatedAt);
+    return {food: Math.max(0, Number(row.food) - elapsed / HUNGER_POINT_MS),
+      water: Math.max(0, Number(row.water) - elapsed / THIRST_POINT_MS), updatedAt: Math.max(now, updatedAt)};
+  }
+
+  needsState(id: string, now = Date.now()) {
+    const {food, water, updatedAt} = this.needValues(id, now);
+    return {food: Math.ceil(food), water: Math.ceil(water), max: 100, serverNow: now,
+      hungryAt: Math.round(updatedAt + food * HUNGER_POINT_MS), thirstyAt: Math.round(updatedAt + water * THIRST_POINT_MS)};
+  }
+
+  consumeNutrition(id: string, slot: number, expected: string, health: {hp: number; mana: number},
+                   recovered: boolean, now = Date.now()) {
+    return this.transaction(() => {
+      const account = this.account(id), item = account.inventory.slots[slot];
+      const nutrition = personalItem(expected)?.nutrition;
+      if (!nutrition || item?.itemId !== expected) throw Error("item_unavailable");
+      const current = this.needValues(id, now);
+      const food = Math.min(100, current.food + (nutrition.food ?? 0));
+      const water = Math.min(100, current.water + (nutrition.water ?? 0));
+      if (Math.ceil(food) === Math.ceil(current.food) && Math.ceil(water) === Math.ceil(current.water) && !recovered) throw Error("needs_full");
+      account.inventory = take(account.inventory, slot, 1).inventory;
+      this.put(id, account, health);
+      this.db.prepare("UPDATE needs SET food=?,water=?,updated_at=? WHERE actor=?")
+        .run(food, water, current.updatedAt, id);
+      return this.needsState(id, now);
+    });
+  }
+
+  collectWater(id: string, request: string, now = Date.now()) {
+    return this.once(id, request, "collect_water", {}, () => {
+      const prior = Number(this.db.prepare("SELECT ready_at FROM water_supply WHERE actor=?").get(id)?.ready_at ?? 0);
+      if (now < prior) throw Error("water_cooldown");
+      const account = this.account(id), readyAt = now + 15_000, itemId = "drink_clean_water";
+      account.inventory = add(account.inventory, {itemId, quantity: 1});
+      this.put(id, account);
+      this.db.prepare("INSERT INTO water_supply VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET ready_at=excluded.ready_at")
+        .run(id, readyAt);
+      return {itemId, quantity: 1, readyAt};
+    });
+  }
+
+  homeState(id: string, now = Date.now()) {
+    characterId(id);
+    const level = Number(this.db.prepare("SELECT level FROM homes WHERE actor=?").get(id)?.level ?? 0);
+    const furniture = this.db.prepare("SELECT cell,item AS itemId FROM furniture WHERE actor=? ORDER BY cell").all(id);
+    const parts = this.db.prepare("SELECT cell,layer,item AS itemId,rotation FROM home_parts WHERE actor=? ORDER BY cell,layer")
+      .all(id).map(row=>({cell:Number(row.cell),layer:row.layer as "floor" | "structure",
+        itemId:String(row.itemId),rotation:Number(row.rotation) as 0 | 1}));
+    const garden = this.db.prepare("SELECT plot,ready_at AS readyAt FROM garden WHERE actor=? ORDER BY plot").all(id);
+    return {level, width: level === 2 ? 8 : level === 1 ? 4 : 0, stride: 8, plotCount: level * 2,
+      furniture, parts, garden, serverNow: now, cooking: this.cookingState(id)};
+  }
+
+  homeAction(id: string, order: HomeAction, now = Date.now(), mayPlaceWall?: (cell:number,rotation:0|1)=>boolean) {
+    const {requestId, ...intent} = order;
+    return this.once(id, requestId, "home_action", intent, () => {
+      const account = this.account(id), level = Number(this.db.prepare("SELECT level FROM homes WHERE actor=?").get(id)?.level ?? 0);
+      if (order.action === "buy" || order.action === "upgrade") {
+        const targetLevel = order.action === "buy" ? 1 : 2;
+        if (level !== targetLevel - 1) throw Error("home_level_unavailable");
+        const cost = HOME_PRICES[targetLevel];
+        if (account.gold < cost) throw Error("insufficient_gold");
+        account.gold -= cost;
+        this.put(id, account);
+        this.db.prepare("INSERT INTO homes VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET level=excluded.level").run(id,targetLevel);
+      } else {
+        if (level === 0) throw Error("home_required");
+        if ("plot" in order) this.tendGarden(id, order, level, account, now);
+        else if (order.action === "place_part" || order.action === "move_part" || order.action === "remove_part") {
+          this.arrangeHomePart(id,order,level,account,mayPlaceWall);
+        } else if ("cell" in order) this.arrangeFurniture(id, order, level, account);
+      }
+      return {action: order.action};
+    });
+  }
+
+  private requireHomeCell(cell: number, level: number) {
+    const width = level === 1 ? 4 : 8;
+    if (!Number.isInteger(cell) || cell < 0 || cell % 8 >= width || Math.floor(cell / 8) >= width) throw Error("home_cell_invalid");
+  }
+
+  private arrangeFurniture(id: string, order: Extract<HomeAction,{action:"place"|"move"|"remove"}>, level: number, account: Account) {
+    const {cell} = order;
+    this.requireHomeCell(cell,level);
+    const furnitureAt = (index: number) => this.db.prepare("SELECT item FROM furniture WHERE actor=? AND cell=?").get(id,index)?.item;
+    if (order.action === "remove") {
+      const itemId = furnitureAt(cell);
+      if (typeof itemId !== "string" || !personalItem(itemId)?.furniture) throw Error("home_furniture_unavailable");
+      account.inventory = add(account.inventory, {itemId: itemId as FurnitureId, quantity: 1});
+      this.put(id, account);
+      this.db.prepare("DELETE FROM furniture WHERE actor=? AND cell=?").run(id,cell);
+      return;
+    }
+    if (furnitureAt(cell) || this.db.prepare("SELECT 1 FROM home_parts WHERE actor=? AND cell=? AND layer='structure'").get(id,cell)) {
+      throw Error("home_cell_occupied");
+    }
+    if (order.action === "move") {
+      if (!furnitureAt(order.from)) throw Error("home_furniture_unavailable");
+      this.db.prepare("UPDATE furniture SET cell=? WHERE actor=? AND cell=?").run(cell,id,order.from);
+      return;
+    }
+    if (!personalItem(order.itemId)?.furniture || personalItem(order.itemId)?.homeLayer) throw Error("home_furniture_unavailable");
+    consume(account, order.itemId, 1, "home_furniture_unavailable");
+    this.put(id, account);
+    this.db.prepare("INSERT INTO furniture VALUES(?,?,?)").run(id,cell,order.itemId);
+  }
+
+  private arrangeHomePart(id: string, order: Extract<HomeAction,{action:"place_part"|"move_part"|"remove_part"}>,
+                          level: number, account: Account, mayPlaceWall?: (cell:number,rotation:0|1)=>boolean) {
+    const {cell} = order;
+    this.requireHomeCell(cell,level);
+    const layer = order.action === "place_part" ? personalItem(order.itemId)?.homeLayer : order.layer;
+    if (!layer) throw Error("home_furniture_unavailable");
+    const at = (index:number) => this.db.prepare("SELECT item FROM home_parts WHERE actor=? AND cell=? AND layer=?")
+      .get(id,index,layer)?.item;
+    if (order.action === "remove_part") {
+      const itemId = at(cell);
+      if (typeof itemId !== "string" || personalItem(itemId)?.homeLayer !== layer) throw Error("home_furniture_unavailable");
+      account.inventory = add(account.inventory,{itemId:itemId as HomePartId,quantity:1});
+      this.put(id,account);
+      this.db.prepare("DELETE FROM home_parts WHERE actor=? AND cell=? AND layer=?").run(id,cell,layer);
+      return;
+    }
+    if (order.action === "place_part" || order.from !== cell) {
+      if (at(cell) || (layer === "structure" &&
+          this.db.prepare("SELECT 1 FROM furniture WHERE actor=? AND cell=?").get(id,cell))) throw Error("home_cell_occupied");
+    }
+    const itemId = order.action === "place_part" ? order.itemId : at(order.from);
+    if (typeof itemId !== "string" || personalItem(itemId)?.homeLayer !== layer) throw Error("home_furniture_unavailable");
+    const rotation = layer === "structure" ? order.rotation : 0;
+    if (itemId === "furniture_wood_wall" && mayPlaceWall && !mayPlaceWall(cell,rotation)) throw Error("home_wall_blocked");
+    if (order.action === "move_part") {
+      this.db.prepare("UPDATE home_parts SET cell=?,rotation=? WHERE actor=? AND cell=? AND layer=?")
+        .run(cell,rotation,id,order.from,layer);
+      return;
+    }
+    consume(account,itemId,1,"home_furniture_unavailable");
+    this.put(id,account);
+    this.db.prepare("INSERT INTO home_parts VALUES(?,?,?,?,?)").run(id,cell,layer,itemId,rotation);
+  }
+
+  private tendGarden(id: string, order: Extract<HomeAction,{plot:number}>, level: number, account: Account, now: number) {
+    const {plot} = order;
+    if (!Number.isInteger(plot) || plot < 0 || plot >= level * 2) throw Error("garden_plot_invalid");
+    const crop = this.db.prepare("SELECT ready_at FROM garden WHERE actor=? AND plot=?").get(id,plot);
+    if (order.action === "plant") {
+      if (crop) throw Error("garden_occupied");
+      consume(account, "mat_herb_1", 1);
+      this.put(id, account);
+      this.db.prepare("INSERT INTO garden VALUES(?,?,NULL)").run(id,plot);
+    } else if (order.action === "water") {
+      if (!crop || crop.ready_at !== null) throw Error("garden_water_unavailable");
+      consume(account, "drink_clean_water", 1);
+      this.put(id, account);
+      this.db.prepare("UPDATE garden SET ready_at=? WHERE actor=? AND plot=?").run(now + GARDEN_GROWTH_MS,id,plot);
+    } else {
+      if (!crop || crop.ready_at === null || now < Number(crop.ready_at)) throw Error("garden_not_ready");
+      account.inventory = add(account.inventory, {itemId: "mat_herb_1", quantity: 3});
+      this.put(id, account);
+      this.db.prepare("DELETE FROM garden WHERE actor=? AND plot=?").run(id,plot);
+    }
   }
 
   sellMaterial(id:string,request:string,slot:number,expected:string,quantity:number){
@@ -609,15 +1254,23 @@ export class EconomyStore {
   }
   buy(id: string, request: string, listingId: string): { listingId: string } {
     return this.once(id, request, "buy", { listingId }, () => {
-      const row = this.db.prepare("SELECT seller,item,price,state FROM listings WHERE id=?").get(listingId);
-      if (!row || row.state !== "open" || typeof row.seller !== "string" || typeof row.price !== "number") throw new Error("listing_unavailable");
+      const row = this.db.prepare("SELECT seller,seller_guild,item,price,state FROM listings WHERE id=?").get(listingId);
+      if (!row || row.state !== "open" || typeof row.price !== "number") throw new Error("listing_unavailable");
       if (row.seller === id) throw new Error("cannot_buy_own_listing");
-      const buyer = this.account(id), seller = this.account(row.seller);
+      const buyer = this.account(id);
       if (buyer.gold < row.price) throw new Error("insufficient_gold");
-      buyer.inventory = add(buyer.inventory, JSON.parse(String(row.item)) as InventoryStack);
-      buyer.gold -= row.price; seller.gold += row.price;
-      this.put(id,buyer); this.put(row.seller,seller);
+      const item = JSON.parse(String(row.item)) as InventoryStack;
+      buyer.inventory = add(buyer.inventory, item);
+      buyer.gold -= row.price;
+      this.put(id,buyer);
+      if (typeof row.seller === "string") {
+        const seller = this.account(row.seller);
+        seller.gold += row.price;
+        this.put(row.seller,seller);
+      } else if (typeof row.seller_guild === "string") this.city.creditSale(listingId, row.seller_guild, row.price);
+      else throw Error("listing_unavailable");
       this.db.prepare("UPDATE listings SET state='sold' WHERE id=?").run(listingId);
+      this.recordMarketSale("fixed",listingId,item,row.price,Date.now());
       return { listingId };
     });
   }

@@ -4,6 +4,8 @@ import path from "node:path";
 import { TerritoryWar } from "./TerritoryWar.js";
 import { DatabaseSync } from "node:sqlite";
 import { characterStore } from "./CharacterStore.js";
+import type {CityDisband} from "./CityProductionRules.js";
+import type {EconomyStore} from "./EconomyStore.js";
 
 export const GUILD_MAX_MEMBERS = 30;
 export const GUILD_SQUADS = 6;
@@ -44,7 +46,10 @@ export class GuildStore {
     this.db.exec(`CREATE TABLE IF NOT EXISTS guild_applications(
       id TEXT PRIMARY KEY, guild_id TEXT NOT NULL REFERENCES guilds(id) ON DELETE CASCADE,
       character_id TEXT NOT NULL UNIQUE, name TEXT NOT NULL, created INTEGER NOT NULL);
-      CREATE INDEX IF NOT EXISTS guild_applications_guild ON guild_applications(guild_id,created);`);
+      CREATE INDEX IF NOT EXISTS guild_applications_guild ON guild_applications(guild_id,created);
+      CREATE TABLE IF NOT EXISTS guild_city_disbands (
+        guild TEXT PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
+        actor TEXT NOT NULL, name TEXT NOT NULL, requested INTEGER NOT NULL);`);
     // Existing databases contain only the original member columns.
     this.transaction(()=>{
       const columns=this.db.prepare("PRAGMA table_info(guild_members)").all() as {name:string}[];
@@ -65,6 +70,35 @@ export class GuildStore {
     return this.db.prepare("SELECT g.id,g.name,g.leader FROM guilds g JOIN guild_members m ON m.guild_id=g.id WHERE m.character_id=?").get(character) as GuildRow | undefined;
   }
   hasMember(character:string):boolean { return Boolean(this.guild(character)); }
+  cityDisbandPending(guild: string): boolean {
+    return Boolean(this.db.prepare("SELECT 1 FROM guild_city_disbands WHERE guild=?").get(guild));
+  }
+  pendingCityDisbands(): CityDisband[] {
+    return this.db.prepare("SELECT * FROM guild_city_disbands ORDER BY requested,guild").all() as CityDisband[];
+  }
+  canDisbandCityGuild(actor: string, guild: string): boolean {
+    return Boolean(this.db.prepare(`SELECT 1 FROM guilds WHERE id=? AND leader=?
+      AND (SELECT count(*) FROM guild_members WHERE guild_id=?)=1`).get(guild, actor, guild));
+  }
+  beginCityDisband(actor: string, guildId: string, now: number): CityDisband {
+    return this.transaction(() => {
+      const guild = this.guild(actor);
+      if (guild?.id !== guildId || !this.canDisbandCityGuild(actor, guildId)) throw Error("city_disband_unavailable");
+      this.db.prepare("INSERT OR IGNORE INTO guild_city_disbands(guild,actor,name,requested) VALUES(?,?,?,?)")
+        .run(guildId, actor, guild.name, now);
+      return this.db.prepare("SELECT * FROM guild_city_disbands WHERE guild=?").get(guildId) as CityDisband;
+    });
+  }
+  settleCityDisband(economy: EconomyStore, disband: CityDisband): void {
+    // Resolve accepted repairs before collecting the former guild's remaining materials.
+    economy.finishCitySupplyRepairs(pending => this.war.government.repairWithCitySupply(pending, disband.requested));
+    // The market seal is idempotent by guild ID. Keep the intent if either database fails.
+    economy.closeCityGuild(disband, (previous, site) => this.war.government.cityOwnership(previous, site));
+    this.transaction(() => {
+      this.db.prepare(`DELETE FROM guilds WHERE id=? AND EXISTS
+        (SELECT 1 FROM guild_city_disbands WHERE guild=? AND actor=?)`).run(disband.guild, disband.guild, disband.actor);
+    });
+  }
   view(character:string,online:(id:string)=>boolean):GuildView | null {
     const guild=this.guild(character);if(!guild)return null;
     const members=this.db.prepare("SELECT member_id,character_id,name,rank,squad,specialty FROM guild_members WHERE guild_id=? ORDER BY rowid").all(guild.id) as MemberRow[];
@@ -91,6 +125,7 @@ export class GuildStore {
       const guild=this.guild(leader);
       const actor=this.db.prepare("SELECT rank FROM guild_members WHERE character_id=?").get(leader) as {rank:string}|undefined;
       if(!guild || (guild.leader!==leader && actor?.rank!=="officer"))throw new Error("guild_officer_required");
+      if(this.cityDisbandPending(guild.id))throw new Error("guild_city_disband_pending");
       if(this.guild(member))throw new Error("guild_already_member");
       const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guild.id) as {n:number};
       if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
@@ -103,7 +138,8 @@ export class GuildStore {
       EXISTS(SELECT 1 FROM guild_applications a WHERE a.guild_id=g.id AND a.character_id=?) AS applied
       FROM guilds g JOIN guild_members m ON m.guild_id=g.id
       JOIN guild_members leader ON leader.guild_id=g.id AND leader.character_id=g.leader
-      WHERE instr(lower(g.name),lower(?))>0 GROUP BY g.id ORDER BY g.name_key LIMIT 50`).all(character,query) as {id:string;name:string;leader:string;members:number;applied:number}[];
+      WHERE instr(lower(g.name),lower(?))>0 AND NOT EXISTS (SELECT 1 FROM guild_city_disbands d WHERE d.guild=g.id)
+      GROUP BY g.id ORDER BY g.name_key LIMIT 50`).all(character,query) as {id:string;name:string;leader:string;members:number;applied:number}[];
     return rows.map(row=>({...row,applied:Boolean(row.applied)}));
   }
   applications(actor:string) {
@@ -120,6 +156,7 @@ export class GuildStore {
     this.transaction(()=>{
       if(this.guild(character))throw new Error("guild_already_member");
       if(!this.db.prepare("SELECT id FROM guilds WHERE id=?").get(guildId))throw new Error("guild_not_found");
+      if(this.cityDisbandPending(guildId))throw new Error("guild_city_disband_pending");
       const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guildId) as {n:number};
       if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
       if(this.db.prepare("SELECT id FROM guild_applications WHERE character_id=?").get(character))throw new Error("guild_application_exists");
@@ -136,6 +173,7 @@ export class GuildStore {
       const application=this.db.prepare("SELECT character_id,name FROM guild_applications WHERE id=? AND guild_id=?").get(id,guild.id) as {character_id:string;name:string}|undefined;
       if(!application)throw new Error("guild_application_missing");
       if(accept){
+        if(this.cityDisbandPending(guild.id))throw new Error("guild_city_disband_pending");
         if(this.guild(application.character_id))throw new Error("guild_already_member");
         const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guild.id) as {n:number};
         if(count.n>=GUILD_MAX_MEMBERS)throw new Error("guild_full");
@@ -144,13 +182,16 @@ export class GuildStore {
       this.db.prepare("DELETE FROM guild_applications WHERE id=?").run(id);
     });
   }
-  leave(character:string):void {
+  leave(character:string, hasCityAssets?: (guild: string) => boolean):void {
     this.transaction(()=>{
       const guild=this.guild(character);if(!guild)throw new Error("guild_not_member");
       const count=this.db.prepare("SELECT COUNT(*) AS n FROM guild_members WHERE guild_id=?").get(guild.id) as {n:number};
       if(guild.leader===character && count.n>1)throw new Error("guild_transfer_first");
-      if(guild.leader===character)this.db.prepare("DELETE FROM guilds WHERE id=?").run(guild.id);
-      else this.db.prepare("DELETE FROM guild_members WHERE character_id=?").run(character);
+      if(guild.leader===character){
+        if(this.cityDisbandPending(guild.id))throw new Error("guild_city_disband_pending");
+        if(hasCityAssets?.(guild.id))throw new Error("guild_city_assets");
+        this.db.prepare("DELETE FROM guilds WHERE id=?").run(guild.id);
+      } else this.db.prepare("DELETE FROM guild_members WHERE character_id=?").run(character);
     });
   }
   assign(actorId:string,memberId:string,kind:"rank"|"squad"|"specialty",value:unknown):void {

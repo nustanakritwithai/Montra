@@ -136,8 +136,181 @@
     closeForgePicker(false);
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
     clearSyncPoll();
+    ghostPotState = null;
+    if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
     if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
   }
+
+  const REPLACEMENT_SKILLS = Object.freeze({
+    flowing_blades: {target: true, description: "ฟันหนึ่งครั้ง กดช่องเดิมเมื่อขึ้นว่าฟันต่อ ถ้าไม่กดจะตั้งรับด้านหน้า"},
+    chaiya_advanced_counter: {target: true, description: "สวนเป้าหมายที่เพิ่งรับการโจมตีได้ และทิ้งรอยบนมอนสเตอร์ทั่วไป"},
+    shadow_cut: {target: true, description: "ฟันและจำตำแหน่งเดิม กดช่องเดิมเพื่อย้อนกลับภายใน 3 วินาที"},
+    firm_guard: {target: false, description: "ตั้งรับด้านหน้าเพื่อคุ้มกันตนเองหรือสมาชิกปาร์ตี้ที่อยู่ด้านหลัง การเดินหรือหมุนตัวจะยกเลิกท่า"},
+    seer_ash_rice: {target: true, description: "วางกับดักข้าวสารใต้เป้าหมาย กับดักทำงานเมื่อมอนสเตอร์เคลื่อนผ่านหลังพร้อมทำงาน"},
+    seer_spirit_rain: {target: true, description: "ใช้ตราบนเป้าหมาย แล้วโจมตีต่อระหว่างมอนสเตอร์ใกล้กันได้สูงสุด 3 ตัว"},
+    mender_deep_heal: {target: true, description: "วางยันต์ให้ตนเองหรือสมาชิกปาร์ตี้ ฟื้นพลังชีวิตหลังรับดาเมจจนเลือดต่ำหรือเมื่อยันต์หมดเวลา"},
+    mender_deep_circle: {target: false, description: "สร้างวงฮีลเคลื่อนตามผู้ร่าย ฟื้นพลังชีวิตเป็นจังหวะให้คนในปาร์ตี้ที่เลือดต่ำก่อน"},
+  });
+  let replacementSkillSession = null;
+  function createReplacementSkillSession(joined, {currentActor, target, redraw, notify, feedback}) {
+    let nonce, confirmed = false, closed = false, sequence = 0;
+    let shadow, flow, refreshTimer, nextFollowup = 0;
+    const now = () => performance.now();
+    const deadline = (expiry, serverNow) => {
+      if (!Number.isFinite(expiry) || !Number.isFinite(serverNow) || expiry <= serverNow) return 0;
+      return now() + Math.min(3000, expiry - serverNow);
+    };
+    function validContinuation(state, actor, time) {
+      return state && actor?.alive && !actor.stunned && state.path === actor.pathId &&
+        state.map === (actor.mapId || "ritual_village") && state.until > time;
+    }
+    function continuation(id) {
+      const actor = currentActor(), time = now();
+      if (id === "shadow_cut" && validContinuation(shadow, actor, time)) return "ย้อนเงา";
+      if (id === "flowing_blades" && validContinuation(flow, actor, time) &&
+        flow.readyAt <= time && target(flow.targetId)?.alive) return "ฟันต่อ";
+    }
+    function redrawAtBoundary() {
+      clearTimeout(refreshTimer);
+      if (closed) return;
+      const actor = currentActor(), time = now();
+      if (!validContinuation(shadow, actor, time)) shadow = undefined;
+      if (!validContinuation(flow, actor, time)) flow = undefined;
+      redraw();
+      const next = Math.min(...[shadow?.until, flow?.readyAt, flow?.until].filter(value => value > time));
+      if (Number.isFinite(next)) refreshTimer = setTimeout(redrawAtBoundary, Math.ceil(next - time) + 1);
+    }
+    function send(action, targetId) {
+      joined.send("prototype_protocol_v1", {
+        action, seq: ++sequence, ...(targetId === undefined ? {} : {targetId}),
+      });
+    }
+    joined.onMessage("prototype_protocol_v1_ready", data => {
+      if (closed || nonce || data?.version !== 1 || data.gameplayEnabled !== true ||
+        typeof data.nonce !== "string" || !data.nonce || data.nonce.length > 128) return;
+      nonce = data.nonce;
+      joined.send("prototype_protocol_v1", {action: "confirm_gameplay", nonce});
+    });
+    joined.onMessage("prototype_protocol_v1_confirmed", data => {
+      if (closed || !nonce || confirmed || data?.version !== 1) return;
+      confirmed = true;
+      joined.send("prototype_protocol_v1", {action: "shadow_state"});
+      redraw();
+    });
+    joined.onMessage("prototype_shadow_v1_state", data => {
+      if (closed || !confirmed || data?.version !== 1 || !Array.isArray(data.marks)) return;
+      const actor = currentActor(), map = actor?.mapId || "ritual_village";
+      const mark = data.marks.find(entry => entry?.playerId === joined.sessionId && entry.origin?.mapId === map);
+      const until = deadline(mark?.expiresAtServerMs, data.serverNowMs);
+      shadow = until ? {path:"blade", map, until, markSeq:mark.markSeq} : undefined;
+      redrawAtBoundary();
+    });
+    joined.onMessage("prototype_skill_v1", data => {
+      if (closed || !confirmed || data?.version !== 1 || !Object.hasOwn(REPLACEMENT_SKILLS, data.skillId)) return;
+      const actor = currentActor();
+      if (!actor) return;
+      if (data.playerId === joined.sessionId && data.skillId === "shadow_cut") {
+        if (data.phase === "marked") {
+          const until = deadline(data.expiresAtServerMs, data.serverNowMs);
+          if (until) shadow = {path:"blade", map:data.origin?.mapId, until, markSeq:data.markSeq};
+        } else if ((data.phase === "return" || data.phase === "cleared") && shadow?.markSeq === data.markSeq) {
+          shadow = undefined;
+        }
+        redrawAtBoundary();
+      }
+      if (data.playerId === joined.sessionId && data.skillId === "flowing_blades") {
+        if (data.phase === "first" && typeof data.targetId === "string" && data.targetId) {
+          const time = now();
+          flow = {path:"phutthaisawan", map:actor.mapId || "ritual_village", targetId:data.targetId,
+            readyAt:time+300, until:time+1200};
+        } else if (data.phase === "followup") {
+          flow = undefined;
+        }
+        redrawAtBoundary();
+      }
+      feedback(data);
+    });
+    return {
+      room: joined,
+      continuation,
+      description: id => confirmed && Object.hasOwn(REPLACEMENT_SKILLS, id) ? REPLACEMENT_SKILLS[id].description : undefined,
+      cast(id, targetId) {
+        if (closed || !nonce || !Object.hasOwn(REPLACEMENT_SKILLS, id)) return false;
+        if (!confirmed) {
+          notify("กำลังเชื่อมสกิลกับเซิร์ฟเวอร์");
+          return true;
+        }
+        const needsTarget = REPLACEMENT_SKILLS[id].target;
+        if (needsTarget && (typeof targetId !== "string" || !targetId || targetId.length > 256)) {
+          notify("เลือกเป้าหมายก่อนใช้สกิล");
+          return true;
+        }
+        send(id, needsTarget ? targetId : undefined);
+        return true;
+      },
+      continueSkill(id) {
+        if (closed || !confirmed || !continuation(id)) return false;
+        const time = now();
+        if (time < nextFollowup) return true;
+        nextFollowup = time + 250;
+        if (id === "shadow_cut") send("shadow_cut_return");
+        else send(id, flow.targetId);
+        return true;
+      },
+      close() {
+        closed = true;
+        confirmed = false;
+        shadow = flow = undefined;
+        clearTimeout(refreshTimer);
+      },
+    };
+  }
+  function replacementSkillDescription(id) {
+    if (replacementSkillSession?.room === room) return replacementSkillSession.description(id);
+  }
+  function replacementSkillContinuation(id) {
+    if (replacementSkillSession?.room === room) return replacementSkillSession.continuation(id);
+  }
+  function tryReplacementSkillCast(id, targetId) {
+    return replacementSkillSession?.room === room && replacementSkillSession.cast(id, targetId);
+  }
+  function tryReplacementSkillContinue(id) {
+    return replacementSkillSession?.room === room && replacementSkillSession.continueSkill(id);
+  }
+  function playReplacementSkillFeedback(data, joined) {
+    const caster = joined.state?.players?.get?.(data.playerId);
+    if (!caster || (caster.mapId || "ritual_village") !== activeMapId) return;
+    const actions = {first:"slash", followup:"slash", counter:"counter", return:"lunge",
+      braced:"guard", protected:"guard", placed:"cast", chained:"cast"};
+    if (Object.hasOwn(actions, data.phase)) playAction(avatars.get(data.playerId), actions[data.phase]);
+    // Shadow's initial hit already plays through blade_skill_used.
+    if (["first","followup","counter","braced","placed","chained"].includes(data.phase)) {
+      if (data.phase !== "followup") recordPracticeCast(data);
+      SFX(data.skillId, {x:caster.x, z:caster.z});
+    }
+    if (data.skillId === "seer_ash_rice" && data.phase === "placed" && data.origin) {
+      eventFx("bolt", data.origin, {color:"orange"});
+    }
+    if (["triggered","chained","pulse"].includes(data.phase) || (data.phase === "expired" && data.amount > 0)) {
+      const ids = Array.isArray(data.targetIds) && data.targetIds.length ? data.targetIds : [data.targetId];
+      const color = data.skillId.startsWith("mender_") ? "cyan" : "gold";
+      for (const id of ids) {
+        const target = skillVfxTarget(id);
+        if (target) eventFx("bolt", target, {color, y:target.y + 1});
+      }
+    }
+    if (data.playerId !== localId && data.targetId !== localId && !data.targetIds?.includes?.(localId)) return;
+    const notes = {first:"กดช่องเดิมเมื่อขึ้นว่าฟันต่อ", followup:"ฟันต่อสำเร็จ", counter:"สวนผู้โจมตีสำเร็จ",
+      marked:"กดช่องเดิมเพื่อย้อนเงา", return:"ย้อนกลับสู่จุดเงา", braced:"ตั้งรับด้านหน้า", protected:"รับการโจมตีสำเร็จ",
+      pulse:"วงยันต์ฟื้นพลังชีวิต", triggered:data.skillId === "seer_ash_rice" ? "กับดักข้าวสารทำงาน" : "ยันต์ฟื้นพลังชีวิต",
+      chained:"ข้าวสารโจมตีต่อ "+(Array.isArray(data.targetIds)?data.targetIds.length:1)+" เป้าหมาย"};
+    const placed = {seer_ash_rice:"วางกับดักข้าวสารแล้ว", mender_deep_heal:"วางยันต์ประคองชีพแล้ว",
+      mender_deep_circle:"วงยันต์เคลื่อนตามผู้ร่าย"};
+    const message = data.phase === "placed" ? placed[data.skillId] : Object.hasOwn(notes,data.phase) ? notes[data.phase] : undefined;
+    if (message) toast(message);
+    else if (data.phase === "expired" && data.skillId === "mender_deep_heal" && data.amount > 0) toast("ยันต์ฟื้นพลังชีวิตเมื่อหมดเวลา");
+  }
+
   let connectionPending = false;
   let refreshCharacterSlotCards = null;
   async function verifyJoinedSlot(joined, desiredSlot) {
@@ -196,13 +369,29 @@
       const client = new window.Colyseus.Client(endpoint);
       const accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
-      const opts={accountSession,characterSlot:requestedSlot,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1};
+      const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
         try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      const skillSession = createReplacementSkillSession(joined, {
+        currentActor: () => room === joined ? ownServerCharacter() : null,
+        target: skillVfxTarget,
+        redraw: () => {
+          if (room !== joined) return;
+          syncAdvancedSkillUI();
+          const actor = ownServerCharacter();
+          if (actor?.pathId === "blade" && !mixedSkillData()) syncBladeUI(actor);
+        },
+        notify: text => { if (room === joined) toast(text); },
+        feedback: data => { if (room === joined) playReplacementSkillFeedback(data, joined); },
+      });
+      joined.onLeave(() => {
+        skillSession.close();
+        if (replacementSkillSession === skillSession) replacementSkillSession = null;
+      });
       // The server sends guild and territory status as soon as we join, before
       // the slot check below finishes; keep those first messages and replay
       // them once their handlers exist, or the panels stay empty until a change.
@@ -212,10 +401,16 @@
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       clearCombatVfx();
       room = joined;
+      replacementSkillSession = skillSession;
+      resetHomeClient();
+      resetCombatFeatures();
+      resetCraftQueue();
+      resetAdvancedMarket();
       clearChatHistory(true);
       economyGold=null; economyListings=[]; activeTrade=null; economyPending=false; resetCentralMarket(); tradeUnread=false; updateTradeBadge();
       partyState=null; partyInvitation=null; partyUnread=false;
     guildState=null; guildInvitation=null; guildUnread=false;guildDirectory=null;guildRecruitment={pending:null,applications:[]}; updatePartyBadge();
+    resetCityProduction();
       resetLootFeed();
       inventoryState = null; personalItems=Object.create(null);cardDrill=null;gearGuides=null;resources=null;seerBoundTarget="";seerPoisoned=false;clearResourceView();
       characterStatus = null; lastCharacterStatusRequest = 0;
@@ -239,7 +434,28 @@
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
-      joined.onStateChange(state => syncState(state));
+      let ghostPotRequested = false;
+      const requestGhostPot = state => {
+        if (state?.ghostPotAvailable && !ghostPotRequested && room === joined) {
+          ghostPotRequested = true;
+          joined.send("ghost_pot", {action: "read"});
+        }
+      };
+      ghostPotState = null;
+      if ($("menuGhostPot")) $("menuGhostPot").hidden = true;
+      joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
+      joined.onMessage("ghost_pot_state", payload => {
+        if (room !== joined || !payload || typeof payload.active !== "boolean") return;
+        const label = $("menuGhostPotLabel"), button = $("menuGhostPot");
+        if (!label || !button) return;
+        ghostPotState = payload;
+        button.hidden = false;
+        label.textContent = payload.active ? "เก็บผีกลับหม้อ" : payload.ghost ? "เรียก" + payload.ghost.name : "จับผีใส่หม้อ";
+        const notice = {captured:"จับ" + (payload.ghost?.name || "ผี") + "ใส่หม้อแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
+          summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", unavailable:"หม้ออาคมยังใช้ไม่ได้",
+          target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่"};
+        if (Object.hasOwn(notice, payload.status)) toast(notice[payload.status]);
+      });
       joined.onMessage("chat_message", message => {
         if (room !== joined || !message || !["map", "world", "party", "private"].includes(message.channel) ||
             typeof message.text !== "string" || typeof message.name !== "string" ||
@@ -263,7 +479,8 @@
       });
       const onTerritoryState=message=>{
         if(room!==joined)return;
-        const oldDrums=territoryState?.local?.supply?.drums || [],previousOwners=territoryState?.owners;
+        const previousLocal=territoryState?.local,previousOwners=territoryState?.owners;
+        const oldDrums=previousLocal?.supply?.drums || [];
         territoryState=message;territoryReceivedAt=performance.now();syncGateVisual();syncCastleRings();syncWarQuartermaster();
         checkTerritoryWarEvents(message.local);
         if(drawerActive==="guild" && previousOwners && guildReady() &&
@@ -275,7 +492,15 @@
         if(drawerActive==="strategy"){updateAtlasOwner();updateAtlasWarTimes();}
         if(drawerActive==="guild")renderGuild();
         const local=message.local;
-        if(local?.site===activeMapId){
+        if(drawerActive==="cityProduction" && (cityState || cityWorkshop?.enabled) && cityRecoveryReady()){
+          const observed=[cityState?.site,cityWorkshop?.site].filter(Boolean);
+          const moved=local?.site!==previousLocal?.site &&
+            [local?.site,previousLocal?.site].some(site=>site && site===cityState?.miningSite);
+          if(moved || observed.some(site=>previousOwners?.[site]!==message.owners?.[site] ||
+             (local?.site===site && local.phase!==(previousLocal?.site===site ? previousLocal.phase : undefined))))
+            joined.send("get_city_production",{});
+        }
+        if(local?.site===activeMapId && (!local.civic || local.inField)){
           const title=ui.quest.querySelector("strong");
           const fighting=local.inField && local.phase==="battle";
           ui.quest.classList.toggle("war-hud",fighting);
@@ -298,6 +523,12 @@
       joined.onMessage("territory_error",message=>{
         if(room!==joined)return;
         toast(activeMapId==="sam_lan_estuary" && message?.reason==="war_flag"?"เดินเข้าค่ายใต้ A เพื่อเปิดศึก":warErrors[message?.reason] || "ทำรายการที่ด่านไม่ได้ในขณะนี้");
+      });
+      joined.onMessage("territory_registered",message=>{
+        if(room===joined)toast(message?.schedule?.memberIds?.length?"บันทึกรายชื่อศึกแล้ว":"ถอนการลงทะเบียนศึกแล้ว");
+      });
+      joined.onMessage("territory_route_result",message=>{
+        if(room===joined)toast(message?.status==="delivered"?"ส่งขบวนเสบียงแล้ว":message?.status==="cancelled"?"ยุติขบวนเสบียงแล้ว":"ออกขบวนเสบียงแล้ว");
       });
       joined.onMessage("territory_governed",message=>{
         if(room!==joined || !Number.isFinite(message?.delta))return;
@@ -322,6 +553,7 @@
       });
       const onGuildState=message => {
         if(room!==joined)return;
+        const previousGuild=guildState;
         const wasGuildMember=!!guildState;
         if(message===null)guildState=null;
         else if(typeof message?.id==="string" && typeof message.name==="string" &&
@@ -331,13 +563,19 @@
             treasury:Number.isFinite(message.treasury)?message.treasury:0,
             members:message.members.filter(m=>m && typeof m.id==="string" && typeof m.name==="string")};
         else return;
+        if(previousGuild?.id!==guildState?.id)cityState=null;
         if(guildState){guildInvitation=null;guildUnread=false;updatePartyBadge();}
         else if(wasGuildMember && drawerActive==="guild" && guildReady()){
           guildDirectory=null;room.send("guild_search",{query:""});
         }
         renderGuild();
+        if(drawerActive==="cityProduction" && (previousGuild?.id!==guildState?.id ||
+          previousGuild?.leaderId!==guildState?.leaderId || previousGuild?.members.length!==guildState?.members.length ||
+          previousGuild?.members.find(m=>m.id===previousGuild.ownId)?.rank!==guildState?.members.find(m=>m.id===guildState.ownId)?.rank)){
+          renderCityProduction();refreshCityProduction();
+        }
       };
-      joined.onMessage("guild_state",onGuildState);
+      joined.onMessage("guild_state",message=>{onGuildState(message);if(room===joined)requestWarBanner();});
       earlyHandlers.set("guild_state",onGuildState);
       const onGuildRecruitment=message=>{
         if(room!==joined || !Array.isArray(message?.applications))return;
@@ -376,9 +614,20 @@
           guild_squad_leader_exists:"หน่วยนี้มีหัวหน้าอยู่แล้ว",guild_invalid_member:"ไม่พบสมาชิก",guild_invite_expired:"คำเชิญหมดอายุ",guild_invalid_target:"ไม่พบผู้เล่นที่ชวนได้",
           guild_not_found:"ไม่พบกิลด์นี้แล้ว",guild_application_exists:"คุณมีคำขอสมัครอยู่แล้ว ยกเลิกก่อนสมัครกิลด์อื่น",guild_applications_full:"คำขอสมัครของกิลด์นี้เต็มแล้ว",guild_application_missing:"คำขอนี้ไม่มีแล้ว"};
         if(message?.reason==="guild_invite_expired"){guildInvitation=null;guildUnread=false;updatePartyBadge();}
+        if(message?.reason==="guild_city_assets" && cityRecoveryReady()){openCityProduction();return;}
+        if(message?.reason==="guild_city_disband_pending"){toast("ระบบกำลังจัดการทรัพย์สินก่อนยุบกิลด์");return;}
         toast(reasons[message?.reason]||"ทำรายการกิลด์ไม่สำเร็จ");guildRenderKey="";renderGuild();
       });
+      joined.onMessage("city_production_state", data=>{if(room===joined)cityReceiveState(data);});
+      joined.onMessage("city_workshop_state", data=>{if(room===joined)cityReceiveWorkshop(data);});
+      joined.onMessage("city_purchase_state", data=>{if(room===joined)cityReceivePurchase(data);});
+      joined.onMessage("city_mission_state", data=>{if(room===joined)cityReceiveMission(data);});
+      joined.onMessage("city_governance_state", data=>{if(room===joined)cityReceiveGovernance(data);});
+      joined.onMessage("city_production_result", data=>{if(room===joined)cityReceiveResult(data);});
+      joined.onMessage("city_production_error", data=>{if(room===joined)cityReceiveError(data);});
+      joined.onMessage("city_disband_claims", data=>{if(room===joined)cityReceiveClaims(data);});
       joined.onMessage("party_state", message => {
+        if(room===joined)requestWarBanner();
         if (room!==joined || !Array.isArray(message?.members) || message.members.length>4) return;
         partyState=typeof message.partyId==="string" ? {partyId:message.partyId,leaderId:message.leaderId,members:message.members.filter(m=>m && typeof m.sessionId==="string" && typeof m.name==="string")} : null;
         if (partyState) { partyInvitation=null; partyUnread=false; updatePartyBadge(); }
@@ -398,21 +647,39 @@
         if(message?.reason==="party_invite_expired") partyInvitation=null;
         toast(reasons[message?.reason] || "ทำรายการปาร์ตี้ไม่สำเร็จ");renderParty();
       });
+      joined.onMessage("war_banner_state",message=>{if(room===joined)applyWarBannerState(message);});
+      joined.onMessage("meteor_impact",message=>{if(room===joined)showMeteorImpact(message);});
+      joined.onMessage("home_state", message => {
+        if (room === joined) applyHomeState(message);
+      });
+      joined.onMessage("needs_state", message => {
+        if (room !== joined || !Number.isFinite(message?.food) || !Number.isFinite(message?.water)) return;
+        homeNeeds = message;
+        renderHomePanel();
+      });
+      joined.onMessage("water_collected", message => {
+        if (room === joined) finishHomeAction(message?.requestId,"collect_water","เก็บน้ำเข้ากระเป๋าแล้ว");
+      });
       joined.onMessage("economy_state", message => {
         if (room !== joined || !Number.isSafeInteger(message?.gold) || message.gold < 0) return;
-        economyGold=message.gold; renderEconomy(); renderBag();
+        economyGold=message.gold;applyCraftCapabilities(message); renderEconomy(); renderBag();
       });
       joined.onMessage("market_state", message => {
         if (room !== joined || centralMarketVersion || !Array.isArray(message?.listings)) return;
-        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || bagMeta(x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
+        economyListings=message.listings.filter(x => x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && validMarketSeller(x) && x.item && (x.item.itemId===POTION_ITEM_ID || x.item.itemId===SHRINE_SHARD || bagMeta(x.item.itemId)) && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 && Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000).slice(0,120);
         renderEconomy();
       });
       joined.onMessage("market_features",message=>{
         if(room!==joined || message?.version!==1)return;
         const first=!centralMarketVersion;centralMarketVersion=1;
+        marketCapabilities={history:message.history===true,baseStatFilter:message.baseStatFilter===true,
+          favoriteLimit:Number.isSafeInteger(message.favoriteLimit) && message.favoriteLimit>=1 && message.favoriteLimit<=50?message.favoriteLimit:0};
+        if(marketCapabilities.favoriteLimit && favoriteMarketItems===null)requestMarketFavorites();
         if(first && drawerActive==="economy"){requestMarketOverview();requestMarketPage(true);}
         renderEconomy();
       });
+      joined.onMessage("market_history",message=>{if(room===joined)applyMarketHistory(message);});
+      joined.onMessage("market_favorites",message=>{if(room===joined)applyMarketFavorites(message);});
       joined.onMessage("market_overview",message=>{
         if(room!==joined || !Array.isArray(message?.auctions) || !message?.supply || !Array.isArray(message.supply.items))return;
         centralMine=message.auctions.slice(0,100);centralSupply=message.supply;
@@ -422,19 +689,25 @@
         if(room!==joined || !marketPageRequest || message?.tag!==marketPageRequest.tag || message.market!==marketPageRequest.market)return;
         const rows=message.market==="fixed"?message.listings:message.auctions;
         if(!Array.isArray(rows))return;
-        const valid=rows.filter(x=>x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && typeof x.seller==="string" && /^[a-f0-9]{12}$/.test(x.seller) && x.item && typeof x.item.itemId==="string" && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 &&
+        const valid=rows.filter(x=>x && typeof x.id==="string" && /^[a-f0-9-]{36}$/.test(x.id) && validMarketSeller(x,message.market==="fixed") && x.item && typeof x.item.itemId==="string" && Number.isSafeInteger(x.item.quantity) && x.item.quantity>0 && x.item.quantity<=99 &&
           (message.market==="fixed"?Number.isSafeInteger(x.price) && x.price>0 && x.price<=1_000_000_000:Number.isSafeInteger(x.opening) && x.opening>0 && x.opening<=1_000_000_000 && Number.isSafeInteger(x.bid) && x.bid>=0 && x.bid<=1_000_000_000 && Number.isSafeInteger(x.endsAt))).slice(0,30);
         if(message.market==="fixed")economyListings=marketPageRequest.append?economyListings.concat(valid):valid;
         else centralAuctions=marketPageRequest.append?centralAuctions.concat(valid):valid;
         marketNextCursor=Number.isSafeInteger(message.nextCursor) && message.nextCursor>0?message.nextCursor:null;clearTimeout(marketPageTimer);marketPageRequest=null;marketPageError="";renderEconomy();
       });
+      joined.onMessage("craft_queue",message=>{if(room===joined)applyCraftQueue(message);});
       joined.onMessage("craft_result", result => {
         if (room !== joined) return;
-        finishEconomyPending();
+        if (typeof finishHomeAction === "function" && finishHomeAction(result?.requestId,"craft_weapon","สร้างไอเท็มแล้ว")) readHomeState(false,true);
+        else if(!finishCraftMutation(result?.requestId) &&
+          !["craft_weapon","craft_enqueue","craft_claim","market_favorite_set"].includes(economyPendingRequest?.command))finishEconomyPending();
         const item=bagMeta(result.itemId);
         craftResultRoom=joined;
         craftResultMessage=result.banked?"เก็บ"+(item?.name||"ของซ้ำ")+" เข้าคลังช่าง 1 ชิ้น":item?.station==="kiln"?benchAction(item)+"สำเร็จ · ได้ "+item.name+" × 1":"คราฟต์"+(item?.name || "ไอเทม")+"สำเร็จ · ใช้ "+result.spentGold+" ทอง";
+        if(Number.isSafeInteger(result.quantity) && result.quantity>1)craftResultMessage="คราฟต์"+(item?.name||"ไอเท็ม")+" × "+result.quantity+
+          (result.bankedQuantity?" · เข้าคลังช่าง "+result.bankedQuantity+" ชิ้น":"")+" · ใช้ "+result.spentGold+" ทอง";
         toast(craftResultMessage);
+        if(drawerActive==="crafting")renderCraftingPage();
         renderBag();
       });
       joined.onMessage("card_socket_result", result => {
@@ -531,9 +804,10 @@
       });
       joined.onMessage("economy_error", message => {
         if (room !== joined) return;
+        if (typeof homeCommandError === "function" && homeCommandError(message?.reason)) return;
         if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอถูกปฏิเสธ · ตรวจอุปกรณ์และค่าใช้จ่ายอีกครั้ง");
         finishEconomyPending(true);
-        const reasons={forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
+        const reasons={craft_queue_full:"คิวคราฟต์เต็ม",craft_job_unavailable:"งานนี้รับไปแล้วหรือไม่มีในคิว",craft_job_not_ready:"งานยังไม่เสร็จ",market_favorite_limit:"รายการโปรดเต็ม",forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
@@ -681,19 +955,19 @@
         if (room !== joined) return;
         if(notice?.kind==="pot_spirit")recordPracticeCast({playerId:notice.ownerId,skillId:"seer_pot"});
         playAction(avatars.get(notice?.ownerId), "summon");
-        if (notice?.ownerId === localId) toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        if (notice?.ownerId === localId && notice.kind !== "captured_ghost") toast("อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
         syncSummons(joined.state);
         const spirit = joined.state.summons?.get(notice?.ownerId);
-        if (notice?.kind === "pot_spirit" && spirit && summonAvatars.has(notice.ownerId)) {
+        if ((notice?.kind === "pot_spirit" || notice?.kind === "captured_ghost") && spirit && summonAvatars.has(notice.ownerId)) {
           showSpiritPot(spirit);
           summonAvatars.get(notice.ownerId).emergingUntil = performance.now() + 500;
         }
-        if (notice?.ownerId === localId) toast(notice.kind === "pot_spirit" ? "เสกผีจากหม้อแล้ว · ผีจะช่วยโจมตีมอนสเตอร์ใกล้ตัว" : "อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
+        if (notice?.ownerId === localId && notice.kind !== "captured_ghost") toast(notice.kind === "pot_spirit" ? "เสกผีจากหม้อแล้ว · ผีจะช่วยโจมตีมอนสเตอร์ใกล้ตัว" : "อัญเชิญวิญญาณผู้พิทักษ์สำเร็จ");
       });
       joined.onMessage("summon_despawn", notice => {
         if (room !== joined) return;
         { const s=summonAvatars.get(notice?.ownerId); if (s) eventFx("unsummon",{x:s.x??s.node?.position.x,z:s.z??s.node?.position.z,y:s.y||0}); }
-        if (notice?.ownerId === localId && notice.reason !== "possessed") {
+        if (notice?.ownerId === localId && notice.reason !== "possessed" && notice.reason !== "ghost_recalled") {
           toast(notice.reason === "owner_dead"
             ? "วิญญาณกลับภพเมื่อเจ้าของหมดสติ"
             : "เก็บวิญญาณผู้พิทักษ์แล้ว");
@@ -1273,6 +1547,7 @@
         const equipmentSockets=Object.fromEntries(Object.entries(payload.equipmentSockets||{}).filter(([key,card])=>equipment[key] && (card===null || personalItems[card]?.kind==="card")));
         observeLootInventory(payload);
         inventoryState={version:1,slots,equippedWeaponSlot,equipment,equipmentSockets,equipmentForges:payload.equipmentForges||{},forgeCopies:payload.forgeCopies||{},starterHuntKills:payload.starterHuntKills??0};
+        if(drawerActive==="cityProduction" || drawerActive==="cityPurchase" || drawerActive==="cityMission")renderCityProduction();
         refreshOpenFieldQuest();
         itemUsePending = false;
         renderBag();
@@ -1290,6 +1565,7 @@
       });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
+        if (typeof finishHomeItemUse === "function") finishHomeItemUse(event?.slot);
         playAction(getLocalAvatar(), "drink");
         if (Number(event?.healed) > 0) { floatAtPlayer(localId, "+" + Math.round(event.healed), "heal", { big: true, drift: 0 }); auraFx(getLocalAvatar(), "heal"); }
         toast((personalItems[event?.itemId]?.name || "ใช้ยาเลือดแล้ว")+" · +"+(event?.restoredMana?Math.round(event.restoredMana)+" MP":Number(event?.healed||0)+" HP"));
@@ -1314,7 +1590,13 @@
       });
       joined.onMessage("skill_hotbar_changed",()=>{if(room===joined){skillLoadoutKey="";syncAdvancedSkillUI();}});
       joined.onMessage("command_rejected", info => {
+        if(room===joined && showCombatFeatureError(info?.reason))return;
         if (room !== joined) return;
+        if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
+        if (info?.reason === "boat_action_unavailable") {toast("เข้าใกล้ท่าเรือ หรือหยุดเรือชิดฝั่งก่อนขึ้นลง");return;}
+        if (info?.reason === "boat_disembark_first") {toast("ขึ้นฝั่งก่อนใช้คำสั่งนี้");return;}
+        if (info?.reason === "boat_deck_only") {toast("แตะบนดาดฟ้าเพื่อเดิน หรือกดขึ้นฝั่ง");return;}
+        if (info?.reason === "boat_unavailable") return;
         if(info?.reason==="skill_learning_in_combat"){toast("รอให้พ้นการต่อสู้ 5 วินาทีก่อนเรียนหรืออัปขั้น · ทำได้ทุกที่");return;}
         if(typeof info?.reason==="string" && (info.reason.startsWith("skill_hotbar_") || info.reason==="invalid_skill_hotbar")){
           skillLoadoutPending=null;skillLoadoutKey="";syncAdvancedSkillUI();
@@ -1351,6 +1633,15 @@
         const buildReasons = {occult_class_required:"เลือกอาชีพจอมอาคมก่อนใช้วิชานี้", build_needs_shrine:"กลับไปที่ลานพักกลางหมู่บ้านและออกจากการต่อสู้ก่อน", build_save_failed:"บันทึกสายอาชีพไม่สำเร็จ", build_unavailable:"ต้องใช้ตัวละครที่มีเซฟและยังมีชีวิต", build_required:"เลือกสายอาชีพที่ลานพักก่อน", invalid_build:"สายอาชีพหรือเผ่าไม่ถูกต้อง", build_rate_limited:"รอสักครู่ก่อนกดอีกครั้ง", class_skill_cooldown:"รอให้วิชาพร้อมก่อน", class_skill_no_target:"HP ของสมาชิกที่อยู่ในระยะเต็มแล้ว"};
         Object.assign(buildReasons,{use_learned_skill:"เรียนและจัดวิชาในช่องลัดก่อน",invalid_occult_book:"คำสั่งตำราอาคมไม่ถูกต้อง",invalid_occult_skill:"คำสั่งวิชาอาคมไม่ถูกต้อง",occult_rate_limited:"กดตำราถี่เกินไป รอสักครู่",occult_book_needs_shrine:"จัดช่อง เปลี่ยนสำนัก หรือคืนแต้มที่ลานพักกลางหมู่บ้าน บนพื้นใกล้จุดเกิด หลังพ้นการต่อสู้ 5 วินาที",occult_wrong_path:"เลือกสายนี้ก่อนเรียน",occult_already_learned:"เรียนวิชานี้แล้ว",occult_level:"เลเวลยังไม่ถึง",occult_no_points:"แต้มวิชาไม่พอ",occult_prerequisite:"เรียนวิชาก่อนหน้าก่อน",occult_training:"ฝึกวิชาอาคมให้ครบก่อน",occult_mastery:"ฝึกวิชาตามหมวดในตำราให้ครบก่อน",occult_skill_locked:"เรียนและจัดวิชาในช่องลัดก่อน",occult_book_empty:"ไม่มีแต้มวิชาที่ต้องคืน",occult_book_save_failed:"บันทึกตำราอาคมไม่สำเร็จ",occult_cooldown:"วิชาอาคมกำลังฟื้น",occult_out_of_range:"เข้าใกล้เป้าหมายก่อน",occult_blocked:"มีสิ่งกีดขวางระหว่างเป้าหมาย",occult_mark_required:"ติดยันต์ตีตราที่เป้าหมายก่อน",occult_curse_required:"สาปเป้าหมายก่อนใช้วิชานี้",occult_party_required:"เลือกตนเองหรือสมาชิกปาร์ตี้",occult_trance_required:"เข้าทรงก่อนใช้วิชานี้",occult_no_curse:"เป้าหมายไม่มีคำสาปที่ถอนได้",occult_effect_limit:"เป้าหมายมีบัพเต็มแล้ว"});
         Object.assign(buildReasons,{seer_binding_immune:"เป้าหมายต้านยันต์สะกด หรือถูกสะกดอยู่แล้ว",seer_poison_busy:"เป้าหมายติดพิษของนักเวทคนอื่นอยู่",seer_casting:"กำลังร่ายควายธนู"});
+        Object.assign(buildReasons, {
+          prototype_protocol_required: "กำลังเชื่อมสกิลกับเซิร์ฟเวอร์",
+          prototype_unavailable: "ยังใช้ท่านี้ในตำแหน่งหรือสถานะปัจจุบันไม่ได้",
+          prototype_shadow_active: "กดช่องเดิมเพื่อย้อนเงา",
+          prototype_return_unavailable: "จุดย้อนเงาใช้ไม่ได้หรือหมดเวลา",
+          too_early: "รอให้ปุ่มขึ้นว่าฟันต่อ",
+          wrong_target: "ท่าฟันต่อต้องใช้กับเป้าหมายเดิม",
+          guard_active: "กำลังตั้งรับหลังเพลงดาบ",
+        });
         if (Object.hasOwn(buildReasons, info?.reason)) { toast(buildReasons[info.reason]); return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("guild_")) { const reason={guild_invalid_name:"ชื่อกิลด์ต้องมี 2–24 ตัวอักษร และใช้ตัวอักษรหรือตัวเลข",guild_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",guild_unavailable:"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว"};toast(reason[info.reason] || "ไม่สามารถทำรายการกิลด์ได้");return; }
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
@@ -1430,6 +1721,9 @@
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
         else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
         else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
+        else if (info?.reason === "ghost_target_unavailable") toast("ต้องเป็นผีทั่วไปที่ยังมีชีวิตและอยู่ในระยะ");
+        else if (info?.reason === "ghost_pot_busy") toast("รอสักครู่ก่อนใช้หม้ออาคม");
+        else if (info?.reason === "ghost_pot_occupied") toast("มีผีในหม้อหรือมีผีที่เรียกไว้อยู่แล้ว");
         else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
         else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
@@ -1452,11 +1746,16 @@
       });
       joined.onMessage("warp_complete", () => {
         if(room!==joined)return;
+        if (typeof finishHomeAction === "function" &&
+            (finishHomeAction(null,"enter_home","") || finishHomeAction(null,"leave_home",""))) closeDrawer();
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("เดินทางสำเร็จ");playAction(getLocalAvatar(),"arrive");
       });
       joined.onMessage("warp_failed", () => {
         if(room!==joined)return;
+        if (typeof finishHomeAction === "function") {
+          finishHomeAction(null,"enter_home","เดินทางไม่สำเร็จ") || finishHomeAction(null,"leave_home","เดินทางไม่สำเร็จ");
+        }
         cancelQuestNavigation("หยุดนำทาง · เดินทางไม่สำเร็จ",false);
         clearTimeout(warpTimer);warpPending=false;$("warpLoading").hidden=true;
         toast("บันทึกไม่สำเร็จ · ยังอยู่แผนที่เดิม");
@@ -1500,6 +1799,7 @@
         localStorage.setItem("montra_endpoint", endpoint);
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
+      requestGhostPot(joined.state);
       if(joined.state?.territoryWarAvailable)joined.send("get_territories",{});
       if(joined.state?.forestObjectivesAvailable){joined.send("get_forest_objective",{});joined.send("get_director_event",{});}
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }

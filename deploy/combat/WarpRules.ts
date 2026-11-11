@@ -23,6 +23,10 @@ export function checkWarp(payload: unknown, ctx: WarpContext): WarpResult {
   if (!source) return { ok: false, reason: "unknown_source_map" };
   const portal = source.portals.find(p => p.id === id);
   if (!portal) return { ok: false, reason: "portal_not_in_map" };
+  return checkWarpDestination(portal, ctx);
+}
+
+export function checkWarpDestination(portal: WorldPortal, ctx: WarpContext): WarpResult {
   if (!ctx.alive) return { ok: false, reason: "not_alive" };
   if (ctx.flying || ctx.climbing || ctx.dashing || ctx.changingHeight) {
     return { ok: false, reason: "movement_busy" };

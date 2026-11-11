@@ -167,3 +167,18 @@ test("level-10 temple guardian advances its matching NPC hunt and completes afte
     assert.equal(f.events.filter(e=>e.data.forestObjectiveCompleted==="temple_forecourt").length,1);
   }finally{characterStore.save=save;}
 });
+
+test("queued defense reward uses the defeated position even if the monster moves before saving",async()=>{
+  const f=fixture(),area=FOREST_OBJECTIVES.defense_forbidden_forest.defense!;
+  f.actor("solo",21,{id:"defense_forbidden_forest",progress:0},{x:area.x,z:area.z});
+  Object.assign(f.monster,{x:area.x,z:area.z});
+  f.inside.forestDefenses.set("solo",{id:"defense_forbidden_forest",hp:120,nextAttack:10000});
+  const save=characterStore.save;
+  characterStore.save=async()=>{};
+  try{
+    f.inside.awardMonsterExperience("solo",f.monster,"normal");
+    f.monster.x=area.x+area.radius+1;
+    await Promise.all(f.inside.pendingRewards.values());
+    assert.equal(f.inside.forestObjectives.get("solo")?.progress,1);
+  }finally{characterStore.save=save;}
+});

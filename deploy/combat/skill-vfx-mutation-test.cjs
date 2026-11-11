@@ -23,7 +23,7 @@ try {
  fs.cpSync(path.join(root,'src/client'),path.join(temp,'src/client'),{recursive:true});
  fs.mkdirSync(path.join(temp,'deploy/combat'),{recursive:true});
  for(const file of ['skill-vfx-test.cjs','SkillCatalog.ts','MuayRules.ts','BladeRules.ts','SentinelRules.ts','OccultRules.ts'])fs.copyFileSync(path.join(__dirname,file),path.join(temp,'deploy/combat',file));
- const run=()=>spawnSync(process.execPath,['deploy/combat/skill-vfx-test.cjs'],{cwd:temp,encoding:'utf8',timeout:15000});
+ const run=()=>spawnSync(process.execPath,['--test','--test-reporter=tap','deploy/combat/skill-vfx-test.cjs'],{cwd:temp,encoding:'utf8',timeout:15000});
  const baseline=run();assert.equal(baseline.status,0,baseline.stdout+baseline.stderr);
  for(const [name,file,mutate] of mutants) {
   const target=path.join(temp,file),original=fs.readFileSync(target,'utf8'),changed=mutate(original);assert.notEqual(original,changed,name);

@@ -69,7 +69,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     format: 2,
     scope: 'Static message-name inventory, schema and persistence-source fingerprints. Dynamic commands and payload semantics require integration tests.',
     ...inventory,
-    protectedSources: Object.fromEntries(['MyRoomState.ts', 'CharacterStore.ts', 'AccountStore.ts', 'EconomyStore.ts'].map(file => [file, sha256(readFileSync(join(root, 'deploy/combat', file)))]))
+    protectedSources: Object.fromEntries(['MyRoomState.ts', 'CharacterStore.ts', 'AccountStore.ts', 'EconomyStore.ts'].map(file => {
+      const source = readFileSync(join(root, 'deploy/combat', file), 'utf8').replace(/\r\n/g, '\n');
+      return [file, sha256(source)];
+    }))
   };
   const baseline = join(root, 'deploy/combat/verify/contract-baseline.json');
   if (process.argv.includes('--write')) {

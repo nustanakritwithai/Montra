@@ -20,7 +20,7 @@ export const MONSTER_CONFIG = Object.freeze({
   respawnMs:25_000,
   minRespawnMs:20_000, respawnReductionPerAdditionalPlayerMs:1_500,
   populationRadius:20,
-  maxSpawnPointsPerRoom:173, // Includes all 14 regional bosses and the village graves when optional maps are enabled.
+  maxSpawnPointsPerRoom:182, // Includes all regional bosses and Titan, village graves and Himmapan spawns with optional maps enabled.
 });
 // The monster-design document gives ranges; Elite 3x and Boss 10x are
 // conservative starting points. No Elite/Boss abilities or spawns are implied.

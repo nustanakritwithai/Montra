@@ -181,7 +181,7 @@ export const MUAY_LESSONS = {
   lopburi_advanced_angle:{school:"lopburi",level:40,requires:["lopburi_angle"],training:{strikes:90,blocks:12},description:"ฉากเข้าทำ พลัง 115%"},
   lopburi_master_counter:{school:"lopburi",level:80,requires:["lopburi_advanced_angle","lopburi_counter"],training:{strikes:150,blocks:20},description:"ฉากสวนหลังรับสำเร็จ พลัง 195%"},
   thasao_advanced_flurry:{school:"thasao",level:40,requires:["thasao_flurry"],training:{strikes:90,blocks:12},description:"ชกสองครั้ง ครั้งละ 75%"},
-  thasao_master_rush:{school:"thasao",level:80,requires:["thasao_advanced_flurry","thasao_step"],training:{strikes:150,blocks:20},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 80%"},
+  thasao_master_rush:{school:"thasao",level:80,requires:["thasao_advanced_flurry"],training:{strikes:150,blocks:20},description:"ก้าวเข้าทำแล้วชกสองครั้ง ครั้งละ 80%"},
   chaiya_final_counter:{school:"chaiya",level:95,requires:["chaiya_master_counter"],training:{strikes:200,blocks:25},description:"ศอกสวนหลังรับสำเร็จ พลัง 215%"},
   korat_final_strike:{school:"korat",level:95,requires:["korat_master_strike"],training:{strikes:200,blocks:25},description:"หมัดหนักเดี่ยว พลัง 235%"},
   lopburi_final_counter:{school:"lopburi",level:95,requires:["lopburi_master_counter"],training:{strikes:200,blocks:25},description:"ฉากสวนหลังรับสำเร็จ พลัง 210%"},

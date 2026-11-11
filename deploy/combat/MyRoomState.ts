@@ -56,6 +56,7 @@ export const Player = schema({
   gearLook: t.string().default(""), // append-only: visible worn gear "slot=family:tier;…", never bag contents
   skillHotbarVersion: t.number().default(MIXED_SKILLS_ENABLED?1:0),
   skillHotbarData: t.string().default(""),
+  boatId: t.string().default(""),
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;
@@ -73,13 +74,22 @@ export const Monster = schema({
   alive: t.boolean().default(true),
   hitSeq: t.number().default(0),
   facing: t.number().default(0),
-  aiState: t.string().default("patrol"), // patrol|chase|attack|return|dead
+  aiState: t.string().default("patrol"),
   targetId: t.string().default(""),
   mapId: t.string().default("ritual_village"),
   level: t.number().default(1),
   displayName: t.string().default("ผีสิง"),
   defense: t.number().default(100),
   tier: t.string().default("normal"),
+  specialRange: t.number().default(0),
+  specialHalfWidth: t.number().default(0),
+  specialInnerRange: t.number().default(0),
+  specialHalfAngle: t.number().default(0),
+  specialStage: t.number().default(0),
+  specialOriginX: t.number().default(0),
+  specialOriginZ: t.number().default(0),
+  // Consecutive (x, z, radius) triples for a strike that marks all its phases up front.
+  specialMarks: t.array("number"),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;
@@ -120,6 +130,19 @@ export const Fortification = schema({
 }, "MontraFortification");
 export type Fortification = SchemaType<typeof Fortification>;
 
+export const SailingBoat = schema({
+  mapId: t.string().default(""),
+  x: t.number().default(0),
+  z: t.number().default(0),
+  heading: t.number().default(0),
+  speed: t.number().default(0),
+  hp: t.number().default(0),
+  maxHp: t.number().default(0),
+  anchored: t.boolean().default(true),
+  sunk: t.boolean().default(false),
+  helmId: t.string().default(""),
+}, "MontraSailingBoat");
+
 export const MyRoomState = schema({
   // A per-client view permits server-side concealment without sending hidden positions.
   players: t.map(Player).view(),
@@ -139,6 +162,12 @@ export const MyRoomState = schema({
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
   guildRolesAvailable: t.boolean().default(true),
+  cityProductionAvailable: t.boolean().default(false),
+  cityRecoveryAvailable: t.boolean().default(false),
+  cityWorkshopSupported: t.boolean().default(false),
+  cityPurchaseSupported: t.boolean().default(false),
+  cityMissionSupported: t.boolean().default(false),
+  cityGovernanceAvailable: t.boolean().default(false),
   extendedChatAvailable: t.boolean().default(true),
   buffsAvailable: t.boolean().default(true),
   forgeCatalog: t.string().default(""),
@@ -153,6 +182,9 @@ export const MyRoomState = schema({
   sentinelAvailable: t.boolean().default(true), // append-only for staged client/server rollout
   mountAvailable: t.boolean().default(true), // append-only; older servers do not expose horse mounts
   forestObjectivesAvailable: t.boolean().default(false),
+  ghostPotAvailable: t.boolean().default(false),
+  boatsAvailable: t.boolean().default(false),
+  boats: t.map(SailingBoat),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

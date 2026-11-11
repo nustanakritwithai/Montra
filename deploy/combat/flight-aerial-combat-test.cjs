@@ -50,11 +50,11 @@ function button() {
 function setup() {
   const hero = avatar();
   const player = { alive: true, flying: false, pathId: 'seer', combatState: 'idle', x: 0, y: 0, z: 0, mapId: 'ritual_village' };
-  const sends = [], notices = [], effects = [], buttons = new Map([['fly', button()], ['flightButton', button()]]);
+  const sends = [], notices = [], effects = [], buttons = new Map([['fly', button()], ['flightButton', button()], ['meteorButton', button()]]);
   const context = {
     B, scene, window: {}, console, performance: { now: () => 20000 }, mode: 'live', localId: 'local',
     avatars: new Map([['local', hero]]), room: { state: { flightAvailable: true, players: new Map([['local', player]]) }, send: (...args) => sends.push(args) },
-    worldDefinitions: { ritual_village: {} }, activeMapId: 'ritual_village', activeFort: { x: 10, z: 10, width: 4, length: 4, height: 4 },
+    worldCombatFeatures: {}, partyState: null, guildState: null, worldDefinitions: { ritual_village: {} }, activeMapId: 'ritual_village', activeFort: { x: 10, z: 10, width: 4, length: 4, height: 4 },
     demoFlying: false, demoFlightTarget: null, demoMonsterHp: 100, DEMO_FLIGHT_HEIGHT: 6,
     pendingClimb: null, demoDest: null, demoDash: null, demoAutoAttack: false, marker: { setEnabled() {} },
     $: id => buttons.get(id), toast: value => notices.push(value), SFX: (...args) => effects.push(args),
@@ -162,6 +162,45 @@ test('unsupported meteor fails closed with no simulated damage, VFX or server me
     assert.equal(t.flight.meteorSlam(), false); assert.equal(t.sends.length, 0); assert.equal(t.effects.length, 0); assert.equal(t.context.demoMonsterHp, 100);
     assert.match(t.notices.at(-1), /ยังไม่เปิดใช้งาน/);
   }
+});
+
+test('Meteor is available only while the caster leads a party and belongs to a guild', () => {
+  const t = setup();
+  t.context.worldCombatFeatures.meteor = true;
+  t.player.flying = true;
+  const meteor = t.buttons.get('meteorButton');
+  const update = () => t.flight.updateFlight(1 / 60, 20);
+  for (const [party, guild] of [[null, { id: 'guild' }], [{ leaderId: 'local' }, null], [{ leaderId: 'peer' }, { id: 'guild' }]]) {
+    t.context.partyState = party;
+    t.context.guildState = guild;
+    update();
+    assert.equal(meteor.hidden, true);
+    assert.equal(t.flight.meteorSlam(), false);
+    assert.match(t.notices.at(-1), /หัวหน้าปาร์ตี้ที่สังกัดกิลด์/);
+  }
+  assert.equal(t.sends.length, 0);
+  t.context.partyState.leaderId = 'local';
+  update();
+  assert.equal(meteor.hidden, false);
+  t.context.guildState = null;
+  update();
+  assert.equal(meteor.hidden, true);
+});
+
+test('supported Meteor sends once and displays effects only for the confirmed same-map impact',()=>{
+  const t=setup();
+  t.context.worldCombatFeatures={meteor:true};
+  t.context.partyState={leaderId:'local'};
+  t.context.guildState={id:'guild'};
+  t.player.flying=true;
+  assert.equal(t.flight.meteorSlam(),true);
+  assert.deepEqual(t.sends.map(value=>value[0]),['meteor_slam']);
+  assert.equal(t.flight.meteorSlam(),false);
+  assert.equal(t.effects.length,0);
+  t.context.showMeteorImpact({ownerId:'local',mapId:'another',x:0,y:0,z:0});
+  assert.equal(t.effects.length,0);
+  t.context.showMeteorImpact({ownerId:'local',mapId:'ritual_village',x:0,y:0,z:0});
+  assert.equal(t.effects.length,1);
 });
 
 if (realBabylon) { scene.render(); engine.dispose(); }

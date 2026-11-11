@@ -20,10 +20,10 @@ export const SENTINEL_LESSONS={
   ward:{name:"คุ้มกันสหาย",description:"เพิ่มป้องกันให้ตนหรือสมาชิกปาร์ตี้ในระยะ",branch:"support",level:3,requires:["taunt"],practice:{},effect:"ward",stamina:20,cooldownMs:14000,range:10,power:0.15},
   intercept:{name:"ยืนเคียงป้องกัน",description:"เข้าหาเพื่อนและรับความเสียหายบางส่วนแทนชั่วคราว",branch:"support",level:7,requires:["ward"],practice:{assist:3},effect:"intercept",stamina:25,cooldownMs:20000,range:6,power:0.3},
   party_ward:{name:"แนวพิทักษ์",description:"เพิ่มป้องกันให้สมาชิกปาร์ตี้ใกล้เคียง",branch:"support",level:13,requires:["intercept","guard"],practice:{assist:8,guard:4},effect:"party_ward",stamina:32,cooldownMs:25000,range:8,power:0.12},
-  firm_guard:{name:"มั่นคงรับศึก",description:"ตั้งรับด้านหน้าชั่วครู่เพื่อลดแรงโจมตี",branch:"defense",level:35,requires:["guard","fortitude"],practice:{guard:15},effect:"guard",stamina:22,cooldownMs:13000,range:0,power:0.35},
+  firm_guard:{name:"มั่นคงรับศึก",description:"ตั้งรับด้านหน้าชั่วครู่เพื่อลดแรงโจมตี",branch:"defense",level:35,requires:["fortitude"],practice:{guard:15},effect:"guard",stamina:22,cooldownMs:13000,range:0,power:0.35},
   line_sweep:{name:"กวาดพิทักษ์แนว",description:"กวาดมอนสเตอร์ด้านหน้าสูงสุดสามตัว",branch:"control",level:55,requires:["sweep","firm_guard"],practice:{stun:12,guard:10},effect:"sweep",stamina:28,cooldownMs:14000,range:3.5,power:1.05},
   steadfast_counter:{name:"ง้าวสวนรักษาแนว",description:"สวนอย่างหนักหลังตั้งรับหรือสกัดสำเร็จ",branch:"control",level:75,requires:["counter","line_sweep"],practice:{guard:20,stun:18},effect:"counter",stamina:32,cooldownMs:18000,range:3,power:2.0},
-  enduring_ward:{name:"แนวคุ้มครองมั่นคง",description:"เพิ่มป้องกันให้ปาร์ตี้ใกล้เคียงชั่วคราว",branch:"support",level:95,requires:["ward","firm_guard","steadfast_counter"],practice:{guard:25,stun:15},effect:"party_ward",stamina:34,cooldownMs:30000,range:8,power:0.16},
+  enduring_ward:{name:"แนวคุ้มครองมั่นคง",description:"เพิ่มป้องกันให้ปาร์ตี้ใกล้เคียงชั่วคราว",branch:"support",level:95,requires:["ward","steadfast_counter"],practice:{guard:25,stun:15},effect:"party_ward",stamina:34,cooldownMs:30000,range:8,power:0.16},
 } as const satisfies Record<string,SentinelLesson>;
 export const SENTINEL_CONTROL=Object.freeze({monsterStunMs:700,playerStunMs:450,immunityMs:4000,tauntMs:3000,tauntImmunityMs:8000});
 import { skillRankCost, validateSkillRanks, type SkillRanks } from "./Progression.js";

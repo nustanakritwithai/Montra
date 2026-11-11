@@ -278,7 +278,8 @@
       mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
       if(large)mapText(ctx,String(obj.id),sx(obj.x),sy(obj.z)+3,10,"#ffffff");
     }
-    const relay=map?.strategic?.relay;
+    const isolated=territoryState?.local?.site===activeMapId?territoryState.local.civic:null;
+    const relay=isolated?.relay || map?.strategic?.relay;
     if(relay){
       const control=territoryState?.local?.relay;
       const color=control?.contested?"#ffb984":control?.side==="attack"?"#ff9181":control?.side==="defend"?"#83dfd2":"#ffe2a1";
@@ -286,14 +287,17 @@
       ctx.strokeStyle=color;ctx.lineWidth=large?2:1.3;ctx.beginPath();ctx.arc(x,y,large?7:3,0,Math.PI*2);ctx.stroke();
       if(large)mapText(ctx,relay.name,x,y+17,11,color);
     }
-    for (const site of map?.strategic?.sites || []) {
-      if(map.strategic.objectives)continue;
+    const sites=map?.strategic?.sites || [];
+    const flag=isolated?.flag;
+    const landmarks=flag && !sites.some(s=>s.kind==="fort" && s.x===flag.x && s.z===flag.z)?[...sites,flag]:sites;
+    for (const site of landmarks) {
+      if(map?.strategic?.objectives)continue;
       const major=site.kind==="fort" || site.kind==="palace";
       if(!large && !major)continue;
       const x=sx(site.x),y=sy(site.z);
       mapDot(ctx,x,y,major?5*u:2.8*u,major?"#ffcf76":"#c3e0b1","#263732");
       if(large && site.kind!=="bridge" && (!relay || Math.hypot(site.x-relay.x,site.z-relay.z)>12)){
-        const code=Object.entries(map.strategic.riverCity?.nodes || {}).find(([,p])=>p.x===site.x && p.z===site.z)?.[0];
+        const code=Object.entries(map?.strategic?.riverCity?.nodes || {}).find(([,p])=>p.x===site.x && p.z===site.z)?.[0];
         mapText(ctx,code || (relay && site.kind==="fort"?"ธงหลัก":site.name),x,y-7,(code || relay && major)?12:10,major?"#ffe5ab":"#dfebd4");
       }
     }
@@ -483,7 +487,13 @@
     fallen_city:[107,637], tri_wiang_castle:[321,635], asura_peak:[222,710], spirit_rift:[112,780]
   };
   const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
-  const warErrors={war_supply_unavailable:"ส่งเสบียงไม่ได้ในขณะนี้",war_supply_side:"สิทธิฝ่ายรบเปลี่ยนไป",war_supply_cooldown:"รอ 60 วินาทีหลังส่งเสบียงครั้งก่อน",war_supply_base:"กลับไปหาพลเสบียงที่ฐานและพ้นการต่อสู้ก่อน",war_supply_carrying:"กำลังถือเสบียงอยู่",war_supply_missing:"รับเสบียงที่ฐานก่อน",war_supply_destination:"นำเสบียงเดินจากฐานอย่างน้อย 15 เมตรและ 8 วินาทีไปยังจุดยุทธศาสตร์",war_supply_duplicate:"เสบียงชุดนี้ส่งไปแล้ว",war_supply_march:"ถือเสบียงอยู่ ต้องเดินทางไปเอง",war_focus_unchanged:"นโยบายนี้ใช้อยู่แล้ว",
+  const warErrors={
+    war_schedule_required:"สนามนี้เปิดตามเวลาที่ประกาศ",war_schedule_unavailable:"ยังไม่มีรอบศึกสำหรับพื้นที่นี้",
+    war_registration_locked:"รอบนี้ล็อกรายชื่อแล้ว",war_roster_locked:"ตัวละครนี้ไม่อยู่ในรายชื่อที่ล็อกไว้",
+    war_roster_size:"รายชื่อเกินจำนวนที่นั่งของฝ่าย",war_roster_member:"รายชื่อมีตัวละครนอกกิลด์",
+    war_route_unavailable:"ขบวนนี้ใช้ไม่ได้",war_route_destination:"กิลด์ต้องครองเมืองปลายทางและมีเส้นทางเชื่อม",
+    war_route_cooldown:"กิลด์เปิดขบวนใหม่ได้วันละครั้ง",war_route_delivery:"ไปถึงเมืองปลายทางและรออย่างน้อย 30 วินาที",
+    war_supply_unavailable:"ส่งเสบียงไม่ได้ในขณะนี้",war_supply_side:"สิทธิฝ่ายรบเปลี่ยนไป",war_supply_cooldown:"รอ 60 วินาทีหลังส่งเสบียงครั้งก่อน",war_supply_base:"กลับไปหาพลเสบียงที่ฐานและพ้นการต่อสู้ก่อน",war_supply_carrying:"กำลังถือเสบียงอยู่",war_supply_missing:"รับเสบียงที่ฐานก่อน",war_supply_destination:"นำเสบียงเดินจากฐานอย่างน้อย 15 เมตรและ 8 วินาทีไปยังจุดยุทธศาสตร์",war_supply_duplicate:"เสบียงชุดนี้ส่งไปแล้ว",war_supply_march:"ถือเสบียงอยู่ ต้องเดินทางไปเอง",war_focus_unchanged:"นโยบายนี้ใช้อยู่แล้ว",
     war_camp_cut:"ส่งกำลังไม่ได้ ตรวจธง ประตู และผู้ท้าชิงในวง",war_camp_base:"เลือกค่ายที่เปิดแล้วยืนที่ฐานรวมพลโดยพ้นการต่อสู้",war_camp_fallback:"ค่ายหน้าใช้ไม่ได้ คุณเกิดที่ฐานรวมพลเดิม",
     war_guild:"ต้องเป็นสมาชิกกิลด์ก่อนเข้าศึก",war_flag:"เดินเข้าวงธงกลางป้อมก่อนเปิดศึก",war_officer:"ให้ผู้บัญชาการหรือนายทหารเปิดศึก",
     war_other_guild:"สนามนี้มีฝ่ายบุกและฝ่ายรับแล้ว",war_side_full:"ผู้เล่นฝ่ายของคุณเต็มแล้ว",war_busy:"รอให้พ้นการต่อสู้และยืนบนพื้นในด่าน",
@@ -508,7 +518,12 @@
   }
   const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
   function openWarPanel(){
-    openDrawer("war","สงครามยึดด่าน",`<h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
+    openDrawer("war","ศึกชิงเมือง",`<section id="warSchedulePanel" hidden>
+      <h3>ตารางศึก</h3><label for="warScheduleCity">เมือง</label><select id="warScheduleCity"></select>
+      <p id="warScheduleTime" role="status"></p><form id="warRosterForm" hidden><fieldset id="warRoster"></fieldset>
+      <button class="primary" type="submit">บันทึกรายชื่อ</button><button id="warRosterWithdraw" class="secondary" type="button">ถอนรายชื่อ</button></form></section>
+      <section id="warTradePanel" hidden><h3>เส้นทางขนส่งกิลด์</h3><p id="warTradeStatus" role="status"></p><div id="warTradeActions" class="guild-actions"></div></section>
+      <h3 id="warHeading"></h3><p id="warOwner"></p><p id="warStatus" role="status"></p>
       <progress id="warGauge" max="60" aria-label="ความคืบหน้าการยึดธง"></progress><p id="warCount"></p>
       <p id="warParticipation" role="status" hidden></p><section id="warCargoPanel" hidden><h3>พลเสบียงสนามรบ</h3><p id="warCargoStatus" role="status"></p><button id="warCargoPickup" type="button" class="secondary">รับเสบียงที่ฐาน</button><button id="warCargoDeliver" type="button" class="primary">ส่งเสบียงที่จุดยุทธศาสตร์</button></section>
       <section id="estatePanel" hidden><h3>การปกครองด่าน</h3><p id="estateBalance" role="status"></p><p id="estateTerms"></p>
@@ -537,18 +552,95 @@
     }
     renderWarPanel();
   }
+  function warLocalDate(ms){
+    return new Date(ms).toLocaleString("th-TH",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
+  }
+  function renderWarSchedule(){
+    const panel=$("warSchedulePanel"),schedule=territoryState?.schedule;
+    if(!panel)return;
+    panel.hidden=!schedule;
+    if(!schedule)return;
+    const picker=$("warScheduleCity"),cities=Object.keys(schedule);
+    if(picker.options.length!==cities.length || Array.from(picker.options).some((o,i)=>o.value!==cities[i])){
+      const preferred=picker.value || activeMapId;
+      picker.replaceChildren(...cities.map(site=>new Option(worldDefinitions?.[site]?.name || site,site)));
+      if(cities.includes(preferred))picker.value=preferred;
+    }
+    picker.onchange=renderWarSchedule;
+    const site=picker.value,window=schedule[site];
+    if(!window)return;
+    $("warScheduleTime").textContent=(window.current?"หน้าต่างศึกปัจจุบันถึง "+warLocalDate(window.current.endsAt)+" · ":"")+
+      "รอบถัดไป "+warLocalDate(window.next.startsAt)+" · ล็อกรายชื่อ "+warLocalDate(window.next.locksAt)+" (เวลาเครื่อง)";
+    const form=$("warRosterForm"),field=$("warRoster"),members=guildState?.members || [];
+    form.hidden=!window.canRegister || !members.length;
+    if(form.hidden)return;
+    const key=JSON.stringify([site,window.next.startsAt,guildState?.id,window.memberIds,members.map(m=>[m.id,m.name])]);
+    if(field.dataset.key!==key){
+      field.dataset.key=key;
+      const selected=new Set(window.memberIds || [guildState.ownId]);
+      const legend=document.createElement("legend");legend.textContent="เลือกผู้ร่วมศึก สูงสุด "+window.seatsPerSide+" คน";
+      field.replaceChildren(legend);
+      for(const member of members){
+        const label=document.createElement("label"),box=document.createElement("input");
+        label.className="war-roster-choice";
+        box.type="checkbox";box.value=member.id;box.checked=selected.has(member.id);
+        label.append(box,document.createTextNode(member.name));field.append(label);
+      }
+    }
+    const send=memberIds=>room?.send("territory_register",{site,startsAt:window.next.startsAt,memberIds});
+    form.onsubmit=event=>{
+      event.preventDefault();
+      const selected=Array.from(field.querySelectorAll("input:checked"),input=>input.value);
+      if(!selected.length || selected.length>window.seatsPerSide){toast("เลือกผู้ร่วมศึก 1–"+window.seatsPerSide+" คน");return;}
+      send(selected);
+    };
+    $("warRosterWithdraw").hidden=!window.memberIds?.length;
+    $("warRosterWithdraw").onclick=()=>send([]);
+  }
+  function renderWarRoutes(){
+    const panel=$("warTradePanel"),state=territoryState?.routes;
+    if(!panel)return;
+    panel.hidden=!state || (!state.route && !state.destinations?.length);
+    if(panel.hidden)return;
+    const actions=$("warTradeActions"),status=$("warTradeStatus"),route=state.route;
+    const waiting=state.nextDispatchAt>territoryState.serverNow;
+    const key=JSON.stringify([state,activeMapId,waiting]);
+    if(actions.dataset.key===key)return;
+    actions.dataset.key=key;
+    actions.replaceChildren();
+    const city=site=>worldDefinitions?.[site]?.name || site;
+    const add=(label,run)=>{
+      const button=document.createElement("button");button.type="button";button.className="secondary";
+      button.textContent=label;button.onclick=run;actions.append(button);
+    };
+    if(route){
+      status.textContent="นำเสบียงไป "+city(route.destination)+" · ส่งได้ถึง "+warLocalDate(route.expires)+" (เวลาเครื่อง)";
+      if(route.destination===activeMapId)add("ส่งขบวน",()=>room?.send("territory_route",{id:route.id,action:"deliver"}));
+      add("ยกเลิกขบวน",()=>{if(window.confirm("ยกเลิกขบวนและเสียค่าจัดส่งที่จ่ายแล้ว?"))room?.send("territory_route",{id:route.id,action:"cancel"});});
+      return;
+    }
+    if(waiting){
+      status.textContent="เริ่มขบวนถัดไปได้ "+warLocalDate(state.nextDispatchAt)+" (เวลาเครื่อง)";
+      return;
+    }
+    status.textContent="ค่าจัดส่ง "+state.fee+" · ส่งสำเร็จรับ "+state.reward+" หน่วยเข้าคลังกิลด์";
+    for(const destination of state.destinations)add("ส่งไป "+city(destination),()=>{
+      if(window.confirm("ใช้ "+state.fee+" หน่วยจากคลังกิลด์เพื่อเริ่มขบวน?"))
+        room?.send("territory_route",{id:economyRequestId(),action:"dispatch",destination});
+    });
+  }
   function renderGovernment(s){
     const panel=$("estatePanel"),g=s?.site===activeMapId && !s.inField?s.government:null;
     panel.hidden=!g;if(!g)return;
     const peace=s.phase!=="battle",send=action=>room?.send("territory_govern",{site:s.site,revision:g.revision,action});
     $("estateBalance").textContent="คลังกิลด์ "+g.balance+" หน่วย · รายได้รอเก็บ "+g.available+" หน่วย";
-    $("estateTerms").textContent="ตลาดผลิต "+g.rate+" หน่วย/ชั่วโมง · เก็บได้ "+g.hours+" ชั่วโมง ("+g.cap+" หน่วย) · ตลาดเพิ่มรายได้ คลังเสบียงเพิ่มความจุ โรงช่างลดค่าซ่อม";
+    $("estateTerms").textContent="ตลาดผลิต "+g.rate+" หน่วย/ชั่วโมง · เก็บได้ "+g.hours+" ชั่วโมง ("+g.cap+" หน่วย)"+(g.upkeep?" · ค่าบำรุง "+g.upkeep+" หน่วย/ชั่วโมง":"")+" · ตลาดเพิ่มรายได้ คลังเสบียงเพิ่มความจุ โรงช่างลดค่าซ่อม";
     $("estateRole").textContent=!peace?"กำลังรบ · เปิดให้ทำรายการอีกครั้งเมื่อศึกจบ":g.commander?"ผู้บัญชาการ · เก็บรายได้ พัฒนาอาคาร และซ่อมคลังได้":g.officer?"นายทหาร · เก็บรายได้เข้าคลังกิลด์ได้":"สมาชิกกิลด์ · ดูรายได้และระดับอาคารได้";
     const focus=$("estateFocus"),apply=$("estateFocusApply");focus.value=g.focus || "balanced";
     focus.disabled=!peace || !g.commander;apply.textContent="เปลี่ยนนโยบาย · "+g.focusCost+" หน่วย";
     const syncFocus=()=>{apply.disabled=!peace || !g.commander || focus.value===(g.focus || "balanced") || g.balance<g.focusCost;};
     focus.onchange=syncFocus;syncFocus();apply.onclick=()=>{if(window.confirm("เปลี่ยนนโยบายเมือง ใช้ "+g.focusCost+" หน่วยจากคลังกิลด์?"))send("focus_"+focus.value);};
-    const labels={collect:"เก็บรายได้",repair:"ซ่อมคลัง",market:"พัฒนาตลาด",warehouse:"พัฒนาคลัง",workshop:"พัฒนาโรงช่าง",handover:"รายได้ก่อนเปลี่ยนผู้ครอง",war_supply:"เสบียงศึกที่ชนะ",focus_trade:"นโยบายการค้า",focus_storage:"นโยบายสำรอง",focus_balanced:"นโยบายสมดุล"};
+    const labels={collect:"เก็บรายได้",repair:"ซ่อมคลัง",market:"พัฒนาตลาด",warehouse:"พัฒนาคลัง",workshop:"พัฒนาโรงช่าง",handover:"รายได้ก่อนเปลี่ยนผู้ครอง",war_supply:"เสบียงศึกที่ชนะ",route_dispatch:"ค่าจัดขบวน",route_delivery:"ส่งขบวน",focus_trade:"นโยบายการค้า",focus_storage:"นโยบายสำรอง",focus_balanced:"นโยบายสมดุล"};
     $("estateHistory").textContent=(g.history?.length?"รายการล่าสุด: "+g.history.map(h=>(labels[h.reason] || h.reason)+" "+(h.amount>0?"+":"")+h.amount).join(" · "):"ยังไม่มีรายการคลังในด่านนี้");
     $("estateCollect").disabled=!peace || !g.officer || g.available<1;$("estateCollect").onclick=()=>send("collect");
     for(const [kind,id,label] of [["market","estateMarket","ตลาด"],["warehouse","estateWarehouse","คลังเสบียง"],["workshop","estateWorkshop","โรงช่าง"]]){
@@ -565,7 +657,9 @@
   function renderWarPanel(){
     const s=territoryState?.local,button=$("warAction");if(!button)return;
     renderGovernment(s);
-    if(!s || s.site!==activeMapId){$("warStatus").textContent="ออกจากพื้นที่ด่านแล้ว";button.hidden=true;return;}
+    renderWarSchedule();
+    renderWarRoutes();
+    if(!s || s.site!==activeMapId){$("warStatus").textContent="เดินทางไปเมืองเพื่อเข้าศึก";button.hidden=true;return;}
     const cargo=s.cargo,panel=$("warCargoPanel");panel.hidden=!cargo;
     const contribution=s.participation;$("warParticipation").hidden=!contribution;
     if(contribution)$("warParticipation").textContent=`ผลงานรอบรางวัล ${contribution.progressSeconds}/${contribution.goalSeconds} วินาที`+(contribution.supportActive?" · กำลังนับการสนับสนุนเพื่อน":"");
@@ -582,12 +676,12 @@
     $("warHeading").textContent=worldDefinitions?.[s.site]?.name || "ด่านกิลด์";
     $("warOwner").textContent="ธงครองด่าน · "+(s.owner || "เป็นกลาง")+(s.inField?" · คุณอยู่ฝ่าย"+(s.side==="attack"?"บุก":"รับ"):"");
     $("warStatus").textContent=warPhase(s.phase)+(s.phase==="battle"?" · เหลือ "+warTime(s.seconds)+" · "+s.attackName+" บุก / "+(s.defendName || "รอคู่ชิง")+" รับ":"");
-    const fort=worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
-    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม. · บันไดขึ้นลง 2 ทาง ดูจุดสีฟ้าบนแผนที่"+(s.inField?" · "+warGateText(s):""):"";
+    const fort=s.civic?.flag || worldDefinitions?.[s.site]?.strategic?.sites?.find(site=>site.kind==="fort");
+    $("warFlag").textContent=fort?"ธง ("+fort.x+", "+fort.z+") · รัศมี 5 ม."+(s.civic?" · สนามแยกจากห้องโลก":" · ดูบันไดและประตูบนแผนที่"+(s.inField?" · "+warGateText(s):"")):"";
     const isCastle=s.site==="tri_wiang_castle";
     const gauge=$("warGauge");gauge.hidden=isCastle || s.phase!=="battle";gauge.max=s.goal;gauge.value=Math.abs(s.progress);
     $("warCount").textContent=s.phase==="battle"?((s.progress<0?"ฝ่ายรับ":"ฝ่ายบุก")+" ยึดธง "+Math.abs(s.progress)+"/"+s.goal+(s.inField?" · ในวง บุก "+s.attack+" รับ "+s.defend:"")):"";
-    const relay=worldDefinitions[s.site].strategic?.relay;
+    const relay=s.civic?.relay || worldDefinitions[s.site].strategic?.relay;
     if(relay){
       const state=s.relay;
       const status=state?(state.contested?"กำลังแย่งชิง":state.side==="attack"?"ฝ่ายบุกคุม":state.side==="defend"?"ฝ่ายรับคุม":"วงว่าง"):"";
@@ -595,8 +689,14 @@
       $("warFlag").textContent+=" · "+relay.name+" ("+relay.x+", "+relay.z+")"+(status?" · "+status:"")+"\n"+rule+" · ทั้งสองฝ่ายอยู่จุดเสริมพร้อมกัน โบนัสหยุด";
       $("warFlag").style.whiteSpace="pre-line";
     }
+    if(territoryState?.schedule || s.civic)
+      for(const note of ui.drawerBody.querySelectorAll("p.note:not(#warFlag):not(#warEntryHelp)"))note.hidden=true;
     button.hidden=!(s.inField || s.canStart || s.canJoin);
-    button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · 5 นาที":"เข้าร่วมสนามรบ";
+    const duration=s.civic && Number.isFinite(s.civic.durationMs)?Math.round(s.civic.durationMs/60000)+" นาที":null;
+    const details=duration && Number.isInteger(s.civic.seatsPerSide)
+      ?s.civic.seatsPerSide+" ต่อ "+s.civic.seatsPerSide+" · "+duration:duration;
+    if(details)$("warFlag").textContent+=" · "+details;
+    button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · "+(details || "5 นาที"):"เข้าร่วมสนามรบ";
     if(worldDefinitions[s.site].strategic?.riverCity){
       $("warFlag").textContent="B01 · เปิดศึกที่ค่ายใต้ (0, 176) · 5 ต่อ 5 · 10 นาที · คุมตลาดหรือคลังให้ได้ก่อนชิงลานบัญชาการ กองบุกต้องมีช่องผ่านทั้งสองวงกำแพง คุมโรงช่างเพื่อทุบประตูแรงขึ้น";
       if(s.canStart)button.textContent="เปิดศึกที่ค่ายใต้ · 10 นาที";
@@ -677,11 +777,14 @@
     if(drawerActive!=="strategy")return;
     const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
     for(const node of ui.drawerBody.querySelectorAll("[data-war-site]")){
-      const entry=territoryState?.warTimes?.[node.dataset.warSite],button=node.closest(".atlas-cell");
+      const site=node.dataset.warSite,entry=territoryState?.warTimes?.[site],button=node.closest(".atlas-cell");
+      const schedule=territoryState?.schedule?.[site];
       node.textContent=strategicWarLabel(entry,now,Boolean(button));
+      if(schedule && !button && entry?.phase==="open")
+        node.textContent+=" · รอบนัดถัดไป "+warLocalDate(schedule.next.startsAt)+" (เวลาเครื่อง)";
       if(!button && Number.isFinite(entry?.phaseEndsAt) && entry.phaseEndsAt>now){
         const when=new Date(entry.phaseEndsAt).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
-        node.textContent+=" · "+(entry.phase==="battle"?"จบไม่เกิน ":"เปิดตีได้ ")+when+" (เวลาเครื่อง)";
+        node.textContent+=" · "+(entry.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ")+when+" (เวลาเครื่อง)";
       }
       if(button)button.setAttribute("aria-label",button.dataset.baseLabel+" · "+strategicWarLabel(entry,now));
     }
@@ -714,7 +817,7 @@
       const icon=document.createElement("b");icon.setAttribute("aria-hidden","true");
       icon.textContent=kind==="capital"?"♛":kind==="territory"?"⚑":kind==="village"?"⌂":"◆";
       const label=document.createElement("span");label.textContent=map.name;button.append(icon,label);
-      if(kind==="territory"){const timer=document.createElement("small");timer.className="atlas-war-time";timer.dataset.warSite=id;button.append(timer);}
+      if(kind==="territory" || territoryState?.warTimes?.[id]){const timer=document.createElement("small");timer.className="atlas-war-time";timer.dataset.warSite=id;button.append(timer);}
       button.dataset.baseLabel=map.name+(id===origin?" · คุณอยู่ที่นี่":"");button.setAttribute("aria-label",button.dataset.baseLabel);
       if(id===origin)button.classList.add("here");
       board.append(button);cells.set(id,button);button.onclick=()=>select(id);
@@ -731,7 +834,7 @@
       const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
       directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
       detail.replaceChildren(title,description,directions);
-      if(map.strategic?.kind==="territory" && territoryState){
+      if(territoryState && (map.strategic?.kind==="territory" || territoryState.warTimes?.[id])){
         const owner=document.createElement("p");owner.id="atlasOwner";owner.dataset.site=id;detail.append(owner);updateAtlasOwner();
         const timer=document.createElement("p");timer.dataset.warSite=id;timer.setAttribute("aria-live","off");detail.append(timer);updateAtlasWarTimes();
       }

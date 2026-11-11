@@ -232,6 +232,78 @@ jobs:
           node --check deploy/combat/occult-integration.mjs
           node --check deploy/combat/occult-depth-integration.mjs
 
+      - name: Verify isolated skill prototype rules
+        working-directory: combat-verify
+        run: node --import tsx --test src/rooms/default-monster-occurrence-model.test.ts src/rooms/damage-event-ledger.test.ts src/rooms/prototype-command-gate.test.ts src/rooms/prototype-protocol-room.test.ts src/rooms/combat-prototypes.test.ts src/rooms/shadow-firm-prototype.test.ts src/rooms/occult-prototype-rules.test.ts
+
+      - name: Verify isolated prototype protocol over WebSocket
+        working-directory: combat-verify
+        run: node prototype-protocol-integration.mjs
+
+      - name: Characterize player damage paths
+        env:
+          NODE_ENV: test
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/player-damage-characterization.cjs
+
+      - name: Verify synthetic monster scheduler model
+        run: node --test deploy/combat/synthetic-monster-scheduler.cjs
+
+      - name: Characterize additional player damage paths
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '0'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/player-damage-paths.cjs
+
+      - name: Verify forest trace differential
+        run: bash deploy/combat/forest-trace-verify.sh
+
+      - name: Characterize monster movement and attack order
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/monster-movement-order-characterization.cjs
+
+      - name: Exercise test-only forest hook experiment
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/forest-hook-experiment.cjs
+
+      - name: Compare test-only monster occurrence adapter
+        env:
+          NODE_ENV: test
+          MONTRA_ECONOMY_ENABLED: '0'
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/default-monster-occurrence-adapter.cjs
+
+      - name: Characterize default monster damage
+        env:
+          NODE_ENV: test
+          MONTRA_WORLD_EXPANSION: '1'
+          MONTRA_ECONOMY_ENABLED: '0'
+          MONTRA_CHARACTER_DIR: ${{ runner.temp }}/montra-characterization-unused
+        run: node --import ./combat-verify/node_modules/tsx/dist/loader.mjs --test deploy/combat/default-monster-characterization.cjs
+
+      - name: Verify skill replacements and save recovery over WebSocket
+        working-directory: combat-verify
+        run: |
+          node --test prototype-test-process.test.mjs
+          node --import tsx --test prototype-gameplay-room.test.mjs prototype-shadow-room.test.mjs
+          node prototype-gameplay-integration.mjs
+          node prototype-shadow-integration.mjs
+          node prototype-gameplay-integration.mjs --standard-room
+          node prototype-shadow-integration.mjs --standard-room
+          node prototype-ws-restore.mjs
+          node prototype-ws-restore.mjs --crash
+          node --import tsx --test prototype-reward-crash.test.mjs
+
       - name: Service NPC dialogue actions
         run: |
           node deploy/combat/service-npcs-ui-check.cjs
@@ -337,6 +409,7 @@ jobs:
           MONTRA_ATLAS_STAGE=ridge-naga timeout 300s node world-atlas-integration.mjs
           MONTRA_ATLAS_STAGE=endgame timeout 300s node world-atlas-integration.mjs
           npx tsx --test src/rooms/river-city.test.ts
+          npx tsx boat-integration.mjs
           timeout 85s node temple-integration.mjs
           timeout 50s node forest-guardian-integration.mjs
           kill "$SERVER_PID"
@@ -379,7 +452,7 @@ jobs:
         run: |
           export PORT=4117 MONTRA_RIDGE_TERRAIN=1 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
           export MONTRA_TEST_URL=http://127.0.0.1:4117 MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-terrain-test-XXXXXX)"
-          npx tsx --test src/rooms/terrain.test.ts
+          npx tsx --test src/rooms/terrain.test.ts src/rooms/forest-monster-config.test.ts
           node --import tsx src/index.ts > terrain-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
@@ -394,7 +467,7 @@ jobs:
           export MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ECONOMY_ENABLED=0 PORT=4110
           export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-world-test-expansion-XXXXXX)"
           export MONTRA_TEST_URL=http://127.0.0.1:4110
-          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/territory-gate-room.test.ts src/rooms/territory-government.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
+          npx tsx --test src/rooms/map-expansion.test.ts src/rooms/forest-monster-config.test.ts src/rooms/temple-map.test.ts src/rooms/world-atlas.test.ts src/rooms/territory-war.test.ts src/rooms/territory-gate-room.test.ts src/rooms/scheduled-city-war.test.ts src/rooms/all-map-war.test.ts src/rooms/territory-government.test.ts src/rooms/muay-combo.test.ts src/rooms/muay-mastery.test.ts
           node --import tsx src/index.ts > expansion-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
@@ -532,6 +605,23 @@ jobs:
           SERVER_PID=$!
           for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/4109) 2>/dev/null; then break; fi; sleep 0.25; done
           MONTRA_ECONOMY_TEST_STAGE=read timeout 30s node economy-integration.mjs || { cat economy-server.log; exit 1; }
+
+      - name: Isolated home, cooking and water
+        shell: bash
+        working-directory: combat-verify
+        run: |
+          export PORT=14301 MONTRA_ECONOMY_ENABLED=1 MONTRA_WORLD_EXPANSION=1 MONTRA_HUNT_EVENTS=0 MONTRA_ACCOUNTS_REQUIRED=0 MONTRA_DIRECTOR_ENABLED=0
+          export MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-lifestyle-test-XXXXXX)"
+          export MONTRA_TEST_URL=http://127.0.0.1:14301
+          trap 'kill "${SERVER_PID:-}" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT
+          for stage in write read; do
+            node --import tsx src/index.ts > lifestyle-server.log 2>&1 &
+            SERVER_PID=$!
+            for attempt in $(seq 1 60); do if (echo > /dev/tcp/127.0.0.1/14301) 2>/dev/null; then break; fi; sleep 0.25; done
+            MONTRA_LIFESTYLE_STAGE="$stage" timeout 50s node lifestyle-integration.mjs || { cat lifestyle-server.log; exit 1; }
+            kill "$SERVER_PID"
+            wait "$SERVER_PID" 2>/dev/null || true
+          done
 
       - name: Two-player server-authoritative combat integration test
         shell: bash
@@ -726,6 +816,10 @@ jobs:
       - name: Test strict message validation and movement math
         working-directory: combat-verify
         run: npx tsx --test src/rooms/skill-hotbar.test.ts src/rooms/skill-hotbar-disabled.test.ts src/rooms/rebirth-hotbar-room.test.ts src/rooms/s1-rules.test.ts src/rooms/height-rules.test.ts src/rooms/monster-rrt.test.ts src/rooms/character-store.test.ts src/rooms/rebirth.test.ts src/rooms/forest-objectives.test.ts src/rooms/sword-tree-concurrency.test.ts src/rooms/sword-gap-geometry.test.ts src/rooms/dash-rules.test.ts src/rooms/item-rules.test.ts src/rooms/world-warp-rules.test.ts src/rooms/chat-rules.test.ts src/rooms/progression.test.ts src/rooms/progression-transaction.test.ts src/rooms/economy-store.test.ts src/rooms/gear-progression.test.ts src/rooms/economy-migration.test.ts src/rooms/party-manager.test.ts src/rooms/party-experience.test.ts src/rooms/monster-profiles.test.ts src/rooms/party-monster-rewards.test.ts src/rooms/buffs.test.ts src/rooms/stat-modifiers.test.ts src/rooms/buff-ledger.test.ts src/rooms/balance-estimates.test.ts src/rooms/forge.test.ts src/rooms/guild-store.test.ts
+
+      - name: Test guild city production, market settlement, and takeover recovery
+        working-directory: combat-verify
+        run: npx tsx --test src/rooms/city-production.test.ts
 
       - name: Learn skills anywhere without weakening progression safeguards
         working-directory: combat-verify

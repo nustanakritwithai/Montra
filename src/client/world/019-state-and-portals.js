@@ -1,15 +1,23 @@
+  let homeMapTemplate = null;
   function syncWorldDefinition(state, mapId=activeMapId) {
     const key=state?.worldDefinition || "";
     if(key!==worldDefinitionKey){
-      let definitions=null;
+      let definitions=null, home=null, combat={};
       if(key){try{const data=JSON.parse(key);
         if(data.version!==1||!data.maps?.ritual_village||!data.maps?.forbidden_forest)throw Error("unsupported map definition");
-        for(const map of Object.values(data.maps)){
+        combat=data.combatFeatures || {};
+        if (data.homeMap?.id === "personal_home") home=data.homeMap;
+        for(const map of [...Object.values(data.maps), ...(home?[home]:[])]){
           const b=map.bounds;
           if(!b||![b.minX,b.maxX,b.minZ,b.maxZ].every(Number.isFinite)||b.maxX<=b.minX||b.maxZ<=b.minZ||b.maxX-b.minX>2000||b.maxZ-b.minZ>2000)throw Error("invalid map bounds");
         }definitions=data.maps;
       }catch(error){console.error("MONTRA map definition",error);toast("อ่านข้อมูลแผนที่ไม่สำเร็จ");return;}}
-      worldDefinitionKey=key;worldDefinitions=definitions;expandedMapKey="";
+      worldDefinitionKey=key;worldDefinitions=definitions;homeMapTemplate=home;expandedMapKey="";
+      resetCombatFeatures(combat);
+      requestWarBanner();
+    }
+    if (homeMapTemplate && isPrivateHomeMap(mapId) && !Object.hasOwn(worldDefinitions,mapId)) {
+      Object.defineProperty(worldDefinitions,mapId,{value:{...homeMapTemplate,id:mapId},configurable:true});
     }
     switchWorld(mapId);
     const buildKey=worldDefinitionKey+":"+activeMapId;
@@ -34,6 +42,12 @@
       t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(bounds.maxZ-bounds.minZ)/groundTile;}
     const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
     ground.setEnabled(!map?.terrain);if(!map)return;
+    if (isPrivateHomeMap(activeMapId)) {
+      renderHomeScene();
+      readHomeState();
+      renderHomePanel();
+      return;
+    }
     buildServiceNpcs(map);
     for(const p of map.portals||[])addLightSpot(p.x,2.6,p.z,"#7ff5e0",1.25);
     // Soft occlusion where trees, rocks, buildings and walls meet the ground.
@@ -95,9 +109,10 @@
     }
   }
   function makeForestMonster(monster,id) {
+    if (id==="boss_wessuwan_titan") return makeGhostMonster(monster,id,{kind:"titan",boss:true,scale:1,height:4.5,width:2.6});
     const boss = bossDesign(monster, id);
     if (boss) return makeGhostMonster(monster, id, boss);
-    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]))return makeGhostMonster(monster,id);
+    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]||HIMMAPAN_VISUALS.has(id)))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
@@ -173,7 +188,28 @@
           ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
+        if(ghost.design.himmapan){
+          const stage=Number(monster.specialStage)||0, nextPhase=monster.aiState==="windup" && stage!==ghost.specialStage;
+          const recovery=ghost.ai!==monster.aiState && monster.aiState==="special_recovery";
+          if(recovery)ghost.specialAt=performance.now();
+          if(ghost.windup && (nextPhase || recovery) && ghost.strikeArea){
+            playHimmapanImpact(ghost.strikeArea);
+          }
+          if(nextPhase || (monster.aiState==="windup" && !ghost.windup)){
+            ghost.stageAt=performance.now();
+            const x=stage?Number(monster.specialOriginX):ghost.tx,z=stage?Number(monster.specialOriginZ):ghost.tz;
+            const terrain=worldDefinitions?.[monster.mapId]?.terrain;
+            const style=ghost.design.stages?.[stage-1];
+            ghost.strikeArea={x,y:terrain?terrainHeight(terrain,x,z):ghost.ty,z,inner:Number(monster.specialInnerRange),
+              range:Number(monster.specialRange),facing:ghost.tf,terrain,tint:style?.impact||ghost.design.impactTint,
+              effect:style?.effect||ghost.design.effect};
+            if(ghost.design.leap && stage===2)ghost.leapDistance=Math.hypot(x-ghost.tx,z-ghost.tz);
+          }
+          if(recovery && ghost.windup && ghost.design.leap && stage===2)mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);
+          ghost.specialStage=stage;
+        }
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
+        if(ghost.design.himmapan)updateHimmapanWarning(mesh,monster);
         if(ghost.tx0===undefined){ghost.tx0=1;mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);mesh.rotation.y=ghost.tf;}
       }else mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
@@ -187,7 +223,7 @@
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
-    const area=map?.strategic?.kind==="capital" || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
+    const area=(!map?.battlefield && map?.strategic?.kind==="capital") || map?.restAreas?.some(a=>me&&Math.hypot(me.x-a.x,me.z-a.z)<=a.radius) ||
       (me && map?.strategic?.safeRoads?.some(index=>map.paths[index].some((b,i,route)=>{
         if(!i)return false;const a=route[i-1],dx=b.x-a.x,dz=b.z-a.z;
         const t=Math.max(0,Math.min(1,((me.x-a.x)*dx+(me.z-a.z)*dz)/(dx*dx+dz*dz)));

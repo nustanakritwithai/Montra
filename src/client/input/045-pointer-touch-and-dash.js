@@ -78,7 +78,7 @@
     // Depth-sorted pick includes the climbable wall, its crest, players,
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
-      mesh.metadata?.walkable === true ||
+      mesh.metadata?.walkable === true || mesh.metadata?.sailingBoatId ||
       mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
       (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
       (mesh === enemy && enemy.isEnabled()) ||
@@ -87,9 +87,10 @@
       (mode === "live" && mesh.metadata?.pkPlayerId &&
        mesh.metadata.pkPlayerId !== localId)
     ));
-    if (!picked?.hit) return;
+    if (!picked?.hit) {steerSailingAt(px,py);return;}
     cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;
+    if (hitMesh?.metadata?.sailingBoatId) {clickSailingDeck(hitMesh.metadata.sailingBoatId,picked.pickedPoint);return;}
     if(hitMesh?.metadata?.stairId){requestClimb(hitMesh.metadata.stairId);return;}
     if(hitMesh?.metadata?.resourceId){
       const node=nearbyResources(ownServerCharacter()).find(n=>n.id===hitMesh.metadata.resourceId);
@@ -157,6 +158,8 @@
       } else {
         requestClimb();
       }
+    } else if (boatAtHelm()) {
+      steerSailingAt(px,py);
     } else if(hitMesh?.metadata?.walkable && picked.pickedPoint) {
       pointMove(picked.pickedPoint.x,picked.pickedPoint.z);
     }

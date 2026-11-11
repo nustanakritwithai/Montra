@@ -47,6 +47,7 @@ function fixture({central=true}={}){
     slice('  let economyPendingRequest=','  function updatePartyBadge()'));
   ctx.room={state:{economyAvailable:true,players:new Map([['me',player],['near',{persistent:true,alive:true,characterName:'เพื่อน',mapId:'village',x:2,y:0,z:0}]])},send:(command,payload)=>wire.push({command,payload:plain(payload)})};
   ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>callbacks[name]=handler;
+  ctx.applyCraftCapabilities=()=>{};
   run(slice('      joined.onMessage("economy_state",','      joined.onMessage("craft_result",')+
     slice('      joined.onMessage("market_result",','      let resourcePage=null;')+
     slice('      joined.onMessage("economy_error",','      joined.onMessage("combat_hit",'));
@@ -74,6 +75,22 @@ test('catalog uses accessible 50px inventory tiles, exact item metadata and iner
 test('new catalog revisions refresh a product label without replacing its listing identity',()=>{
   const f=fixture();f.page([f.row(1)]);f.items.wood.name='ไม้ชื่อใหม่';f.ctx.catalogRevision++;f.ctx.renderEconomy();
   assert.match(f.$('marketListings').textContent,/ไม้ชื่อใหม่/);assert.equal(f.$('marketListings').children[0].dataset.listingId,uuid(1));
+});
+
+test('guild sales use the same market and keep the guild name, not the player cancellation action',()=>{
+  const f=fixture(), guildId=uuid(900);
+  const guild={...f.row(6),seller:"ช่างสามลาน",sellerGuild:guildId};
+  const malformed={...f.row(7),seller:"ชื่อกิลด์",sellerGuild:"invalid"};
+  f.page([guild,malformed,f.row(8)]);
+  assert.deepEqual(f.status().economyListings.map(x=>x.id),[guild.id,uuid(8)]);
+  assert.match(f.$('wmRowsBody').textContent,/กิลด์ ช่างสามลาน/);
+  f.$('wmRowsBody').children[0].click();f.$('wmBuy').click();f.$('wmBuy').click();
+  assert.equal(f.wire.filter(x=>x.command==="market_buy").at(-1).payload.listingId,guild.id);
+  const legacy=fixture({central:false});
+  const namedLikePlayer={...legacy.row(9),seller:legacy.player.characterId,sellerGuild:guildId,isMine:undefined};
+  legacy.callbacks.market_state({listings:[namedLikePlayer,malformed]});
+  assert.deepEqual(legacy.status().economyListings.map(x=>x.id),[namedLikePlayer.id]);
+  assert.equal(legacy.run("ownsMarketListing(economyListings[0], ownServerCharacter().characterId)"),false);
 });
 
 test('fixed whole-listing purchase has review, cancellation and one pending durable mutation',()=>{
@@ -283,3 +300,19 @@ test('market loading, empty, offline, timeout and rejection messages stay Thai',
 });
 
 console.log(`PASS marketplace catalog: ${groups} regression groups`);
+
+test('advanced market sends base-stat filters and ignores a superseded history reply',()=>{
+  const f=fixture();
+  f.callbacks.market_features({version:1,history:true,baseStatFilter:true,favoriteLimit:50});
+  f.callbacks.market_favorites({items:['wood']});
+  f.$('wmBaseStat').value='atk';f.$('wmBaseValue').value='5';f.$('wmFavoritesOnly').checked=true;
+  f.$('wmFilterForm').onsubmit({preventDefault(){}});
+  assert.deepEqual(f.lastBrowse().payload.minStat,{stat:'atk',value:5});
+  assert.equal(f.lastBrowse().payload.favoritesOnly,true);
+  f.run('requestMarketHistory("wood");requestMarketHistory("weapon");');
+  const requests=f.wire.filter(msg=>msg.command==='market_history');
+  f.callbacks.market_history({itemId:'wood',tag:requests[0].payload.tag,sales:[]});
+  assert.equal(f.run('marketPriceState.sales'),null);
+  f.callbacks.market_history({itemId:'weapon',tag:requests[1].payload.tag,sales:[]});
+  assert.equal(f.run('marketPriceState.sales.length'),0);
+});
