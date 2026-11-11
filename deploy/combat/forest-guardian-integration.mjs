@@ -7,6 +7,7 @@ import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if (!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !dir || !path.basename(dir).startsWith("montra-monster-test-")) throw Error("Isolated SQLite test required");
 const guardianId="forest_shrine_keeper",members=[];
+const fullInventorySlots=108;
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function waitFor(read,label,timeout=8000) {
   const until=Date.now()+timeout;
@@ -17,7 +18,8 @@ async function member(i,restore=false) {
   const token="mt1_"+["c","d","e","f"][i].repeat(64);
   if(!restore){
     const id=createHash("sha256").update(token).digest("hex");
-    const full=i===3,slots=Array.from({length:12},()=>full?{itemId:"health_potion",quantity:99}:null);
+    // Keep the other members as legacy saves; only the full-bag case fills current capacity.
+    const full=i===3,slots=Array.from({length:full?fullInventorySlots:12},()=>full?{itemId:"health_potion",quantity:99}:null);
     slots[0]={itemId:"health_potion",quantity:full?99:2};
     for(const [j,itemId] of ["ritual_dagger","arcane_sword","spirit_staff"].entries())slots[j+1]={itemId,quantity:1};
     await writeFile(path.join(dir,id+".json"),JSON.stringify({version:1,id,name:"นักทดสอบ",level:12,experience:0,pkKills:0,pkDeaths:0,x:-14+i*.2,y:0,z:-89,hp:416,mapId:"forbidden_forest",inventory:{version:1,slots,equippedWeaponSlot:1},updatedAt:new Date().toISOString()}),{flag:"wx"});
@@ -27,6 +29,12 @@ async function member(i,restore=false) {
   const events=[];room.onMessage("*",(type,data)=>events.push({type,data}));
   const entry={room,events};members.push(entry);
   await waitFor(()=>room.state?.players?.get(room.sessionId),"join");
+  if(!restore && i===3){
+    room.send("get_inventory",{});
+    const bag=await waitFor(()=>events.find(e=>e.type==="inventory_state")?.data,"full inventory before rewards");
+    assert.equal(bag.slots.length,fullInventorySlots);
+    assert.ok(bag.slots.every(item=>item!==null),"reward-denial fixture must fill every current slot");
+  }
   return entry;
 }
 const craft = {recipeId:"shrine_glaive",requestId:"integration_craft_shrine_guardian"};
@@ -37,6 +45,7 @@ try{
       assert.equal(room.state.players.get(room.sessionId).experience,1462);
       room.send("get_inventory",{});
       const bag=await waitFor(()=>events.find(e=>e.type==="inventory_state")?.data,"durable inventory");
+      assert.equal(bag.slots.length,fullInventorySlots);
       assert.equal(bag.slots[0].quantity,i===3?99:3);
       const count = itemId => bag.slots.filter(item => item?.itemId === itemId).reduce((sum,item) => sum + item.quantity,0);
       assert.equal(count("shrine_shard"),i === 1 || i === 2 ? 1 : 0);

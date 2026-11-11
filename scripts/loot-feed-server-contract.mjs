@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
-import {makeClassInventory,validateInventory,grantStackReward,grantRewardPotion,bankForgeCopy,equipBody,practiceLoot} from '../combat-verify/src/rooms/ItemRules.ts';
+import {INVENTORY_SLOT_COUNT,makeClassInventory,validateInventory,grantStackReward,grantRewardPotion,bankForgeCopy,equipBody,practiceLoot} from '../combat-verify/src/rooms/ItemRules.ts';
 import {personalItem,startingWeapon,firstChest} from '../combat-verify/src/rooms/PersonalItems.ts';
 const source=readFileSync(new URL('../src/client/ui/030-item-art-and-comparison.js',import.meta.url),'utf8');
 const ctx={$:()=>null,bagMeta:personalItem,POTION_ITEM_ID:'health_potion',SHRINE_SHARD:'shrine_shard',clearTimeout(){},Date};
@@ -22,6 +22,6 @@ for(const path of ['blade','seer','mender','sentinel','phutthaisawan','muay_bora
  const drop=practiceLoot(bag,path,1,'normal',1,'possessed-1',()=>0);observe(drop.bag);const after=history();observe(drop.bag);assert.deepEqual(history(),after,'repeated server state does not repeat a reward');
  ctx.resetLootFeed();observe(drop.bag);assert.equal(history().length,0,'reconnect is baseline only');
 }
-const full={version:1,equippedWeaponSlot:null,slots:Array.from({length:12},()=>({itemId:'mat_raw_wood_1',quantity:99}))};
+const full={version:1,equippedWeaponSlot:null,slots:Array.from({length:INVENTORY_SLOT_COUNT},()=>({itemId:'mat_raw_wood_1',quantity:99}))};
 ctx.resetLootFeed();observe(full);assert.equal(grantStackReward(full,'shrine_shard'),null);observe(full);assert.equal(history().length,0);
 console.log('PASS loot feed server contract: six classes, material/potion/smith grants, equip/unequip, practice loot, full bag, repeated snapshot/reconnect');
