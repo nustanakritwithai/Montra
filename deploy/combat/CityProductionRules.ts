@@ -8,7 +8,12 @@ export const CITY_PRODUCTION_ENABLED = process.env.MONTRA_CITY_PRODUCTION === "1
 export const CITY_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_CONSTRUCTION === "1";
 export const CITY_WORKSHOP_ENABLED = process.env.MONTRA_CITY_WORKSHOP === "1";
 export const CITY_MINING_ENABLED = process.env.MONTRA_CITY_MINING === "1";
+export const CITY_MINING_CONSTRUCTION_ENABLED = process.env.MONTRA_CITY_MINING_CONSTRUCTION === "1";
 export const CITY_PURCHASE_ENABLED = process.env.MONTRA_CITY_PURCHASE_ORDERS === "1";
+export const CITY_MISSIONS_ENABLED = process.env.MONTRA_CITY_MISSIONS === "1";
+export const CITY_GOVERNANCE_ENABLED = process.env.MONTRA_CITY_GOVERNANCE === "1";
+export const CITY_SUPPLY_ENABLED = process.env.MONTRA_CITY_SUPPLY_RESERVE === "1";
+export const CITY_HAUL_ENABLED = process.env.MONTRA_CITY_HAULS === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
@@ -31,13 +36,36 @@ export const CITY_WAREHOUSE_MATERIALS = [
   {item: CITY_RAW_ITEMS[1], column: "stone", amount: 16},
   {item: CITY_PRODUCT, column: "metal", amount: 4},
 ] as const;
+export const CITY_MINING_WAREHOUSE_MATERIALS = [
+  {item: CITY_MINING_ORE, column: "stone", amount: 12},
+  {item: CITY_MINING_PRODUCT, column: "metal", amount: 6},
+] as const;
+export const CITY_WAREHOUSE_REQUIREMENTS = {
+  [CITY_PRODUCTION_SITE]: CITY_WAREHOUSE_MATERIALS,
+  [CITY_MINING_SITE]: CITY_MINING_WAREHOUSE_MATERIALS,
+};
 export const CITY_DURATION_MS = [0, 120_000, 60_000] as const;
 export const CITY_RUSH_GOLD = 15;
 export const CITY_WORKSHOP_FEE = 5;
 export const CITY_WORKSHOP_SLOTS = 4;
 export const CITY_PURCHASE_AMOUNT = 20;
+export const CITY_POLICY_PURCHASE_AMOUNT = 24;
+export const CITY_POLICY_COOLDOWN_MS = 86_400_000;
+export const CITY_POLICY_SPEED = .85;
+export type CityPolicy = "industry" | "procurement";
 export const CITY_PURCHASE_MAX_PRICE = 1_000_000;
 export const CITY_PURCHASE_DURATION_MS = 86_400_000;
+export const CITY_MISSION_ORE_COUNT = 3;
+export const CITY_MISSION_POST_LIMIT = 3;
+export const CITY_MISSION_WORKERS = 5;
+export const CITY_MISSION_MAX_REWARD = 1_000_000;
+export const CITY_MISSION_HOURS = [1, 6, 24] as const;
+export const CITY_HAUL_AMOUNT = 12;
+export const CITY_HAUL_DURATION_MS = 86_400_000;
+export const CITY_SUPPLY_MATERIALS = [
+  {item: CITY_MINING_ORE, amount: 6}, {item: CITY_MINING_PRODUCT, amount: 3},
+] as const;
+export const CITY_SUPPLY_RECOVERY_SPEED = .5;
 export const CITY_LINES = {
   [CITY_PRODUCTION_SITE]: {inputs: CITY_RAW_ITEMS, output: CITY_PRODUCT, recipe: CITY_RECIPE},
   [CITY_MINING_SITE]: {inputs: [CITY_PRODUCT, CITY_MINING_ORE], output: CITY_MINING_PRODUCT,
@@ -59,16 +87,31 @@ export type CityPurchaseOrder = {requestId: string} & (
   {action: "purchase_cancel"; orderId: string} |
   {action: "purchase_fill"; orderId: string; slot: number; amount: number}
 );
+export type CityMissionOrder = {requestId: string} & (
+  {action: "mission_open"; epoch: number; audience: "guild" | "public"; slots: number; reward: number; hours: number; purpose?: "warehouse"} |
+  {action: "mission_accept" | "mission_submit" | "mission_abandon" | "mission_cancel"; missionId: string}
+);
+export type CityPolicyOrder = {requestId: string; action: "policy_set"; epoch: number; policy: CityPolicy};
+export type CitySupplyOrder = {requestId: string; epoch: number} & (
+  {action: "supply_reserve"} |
+  {action: "supply_cancel" | "supply_repair" | "supply_recover"; supplyId: string}
+);
+export type CitySupplyRepair = {id: string; epoch: number; guild: string; battle: number};
+export type CityHaulOrder = {requestId: string} & (
+  {action: "haul_open"; epoch: number; destination: CitySite; destinationEpoch: number;
+    amount: number; reward: number; audience: "guild" | "public"} |
+  {action: "haul_approve" | "haul_decline" | "haul_cancel" | "haul_pickup" | "haul_deliver" | "haul_abandon"; haulId: string}
+);
 
 export type CityFactoryOrder = {requestId: string} & (
   WarehouseOrder |
   {action: "build" | "start" | "start_fast"; epoch: number} |
   {action: "deposit"; epoch: number; slot: number; item: CityInput; amount: number} |
-  {action: "list"; epoch: number; amount: number; price: number} |
+  {action: "list"; epoch: number; amount: number; price: number; item?: typeof CITY_MINING_PRODUCT} |
   {action: "cancel"; listingId: string} |
   {action: "reclaim"; epoch: number; item: CityItem; amount: number}
 );
-export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | ({requestId: string} & (
+export type CityOrder = CityFactoryOrder | CityWorkshopOrder | CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CitySupplyOrder | CityHaulOrder | ({requestId: string} & (
   {action: "disband"; guildId: string} |
   {action: "claim_disband"; guildId: string; item: CityAsset; amount: number}
 ));
@@ -80,7 +123,13 @@ export type CityOwnership = {
   active: CityTenure | null;
   previous: {guild: string; ended: number; siegeStarted?: number} | null;
   siegeStarted?: number;
+  defense?: {seq: number; started: number; damaged: boolean};
 };
+export type CityOwnerships = Readonly<Record<CitySite, CityOwnership>>;
+
+export function otherCity(site: CitySite): CitySite {
+  return site === CITY_PRODUCTION_SITE ? CITY_MINING_SITE : CITY_PRODUCTION_SITE;
+}
 
 export function isWarehouseOrder(order: CityOrder): order is WarehouseOrder & {requestId: string} {
   return order.action === "warehouse_start" || order.action === "warehouse_contribute" ||
@@ -89,6 +138,21 @@ export function isWarehouseOrder(order: CityOrder): order is WarehouseOrder & {r
 
 export function isCityPurchaseOrder(order: CityOrder): order is CityPurchaseOrder {
   return order.action === "purchase_open" || order.action === "purchase_cancel" || order.action === "purchase_fill";
+}
+
+export function isCityMissionOrder(order: CityOrder): order is CityMissionOrder {
+  return order.action === "mission_open" || order.action === "mission_accept" || order.action === "mission_submit" ||
+    order.action === "mission_abandon" || order.action === "mission_cancel";
+}
+
+export function isCitySupplyOrder(order: CityOrder): order is CitySupplyOrder {
+  return order.action === "supply_reserve" || order.action === "supply_cancel" ||
+    order.action === "supply_repair" || order.action === "supply_recover";
+}
+
+export function isCityHaulOrder(order: CityOrder): order is CityHaulOrder {
+  return order.action === "haul_open" || order.action === "haul_approve" || order.action === "haul_decline" ||
+    order.action === "haul_cancel" || order.action === "haul_pickup" || order.action === "haul_deliver" || order.action === "haul_abandon";
 }
 
 export function parseCityOrder(input: unknown): CityOrder | null {
@@ -108,9 +172,14 @@ export function parseCityOrder(input: unknown): CityOrder | null {
     return keys("jobId") && uuid(order.jobId) ? order as CityOrder : null;
   if (order.action === "purchase_cancel")
     return keys("orderId") && uuid(order.orderId) ? order as CityOrder : null;
+  if (order.action === "mission_accept" || order.action === "mission_submit" || order.action === "mission_abandon" ||
+      order.action === "mission_cancel") return keys("missionId") && uuid(order.missionId) ? order as CityOrder : null;
+  if (order.action === "haul_approve" || order.action === "haul_decline" || order.action === "haul_cancel" ||
+      order.action === "haul_pickup" || order.action === "haul_deliver" || order.action === "haul_abandon")
+    return keys("haulId") && uuid(order.haulId) ? order as CityOrder : null;
   if (order.action === "purchase_fill")
     return keys("orderId", "slot", "amount") && uuid(order.orderId) && integer(order.slot, 0, 11) &&
-      integer(order.amount, 1, CITY_PURCHASE_AMOUNT) ? order as CityOrder : null;
+      integer(order.amount, 1, CITY_POLICY_PURCHASE_AMOUNT) ? order as CityOrder : null;
   if (order.action === "disband")
     return keys("guildId") && uuid(order.guildId) ? order as CityOrder : null;
   if (order.action === "claim_disband")
@@ -119,8 +188,26 @@ export function parseCityOrder(input: unknown): CityOrder | null {
       integer(order.amount, 1, order.item === "gold" ? 1_000_000_000 : 99) ? order as CityOrder : null;
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
+    case "supply_reserve":
+      return keys("epoch") ? order as CityOrder : null;
+    case "supply_cancel":
+    case "supply_repair":
+    case "supply_recover":
+      return keys("epoch", "supplyId") && uuid(order.supplyId) ? order as CityOrder : null;
+    case "haul_open":
+      return keys("epoch", "destination", "destinationEpoch", "amount", "reward", "audience") &&
+        CITY_SITES.some(site => site === order.destination) && integer(order.destinationEpoch, 1) &&
+        integer(order.amount, 1, CITY_HAUL_AMOUNT) && integer(order.reward, 1, CITY_MISSION_MAX_REWARD) &&
+        (order.audience === "guild" || order.audience === "public") ? order as CityOrder : null;
+    case "policy_set":
+      return keys("epoch", "policy") && (order.policy === "industry" || order.policy === "procurement") ? order as CityOrder : null;
+    case "mission_open":
+      return (keys("epoch", "audience", "slots", "reward", "hours") ||
+        (keys("epoch", "audience", "slots", "reward", "hours", "purpose") && order.purpose === "warehouse" && order.audience === "guild")) &&
+        (order.audience === "guild" || order.audience === "public") && integer(order.slots, 1, CITY_MISSION_WORKERS) &&
+        integer(order.reward, 1, CITY_MISSION_MAX_REWARD) && CITY_MISSION_HOURS.some(hours => hours === order.hours) ? order as CityOrder : null;
     case "purchase_open":
-      return keys("epoch", "amount", "unitPrice") && integer(order.amount, 1, CITY_PURCHASE_AMOUNT) &&
+      return keys("epoch", "amount", "unitPrice") && integer(order.amount, 1, CITY_POLICY_PURCHASE_AMOUNT) &&
         integer(order.unitPrice, 1, CITY_PURCHASE_MAX_PRICE) ? order as CityOrder : null;
     case "workshop_start":
       return keys("epoch", "woodSlot", "stoneSlot") && integer(order.woodSlot, 0, 11) &&
@@ -135,7 +222,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
         (CITY_RAW_ITEMS.some(item => item === order.item) || order.item === CITY_PRODUCT || order.item === CITY_MINING_ORE) &&
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "list":
-      return keys("epoch", "amount", "price") && integer(order.amount, 1, 99) &&
+      return (keys("epoch", "amount", "price") || (keys("epoch", "amount", "price", "item") && order.item === CITY_MINING_PRODUCT)) &&
+        integer(order.amount, 1, 99) &&
         integer(order.price, 1, 1_000_000_000) ? order as CityOrder : null;
     case "reclaim":
     case "warehouse_allocate":
@@ -143,7 +231,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
         integer(order.amount, 1, 99) ? order as CityOrder : null;
     case "warehouse_contribute":
       return keys("epoch", "slot", "item", "amount") && integer(order.slot, 0, 11) &&
-        CITY_WAREHOUSE_MATERIALS.some(({item}) => item === order.item) && integer(order.amount, 1, 99) ? order as CityOrder : null;
+        [...CITY_WAREHOUSE_MATERIALS, ...CITY_MINING_WAREHOUSE_MATERIALS].some(({item}) => item === order.item) &&
+        integer(order.amount, 1, 99) ? order as CityOrder : null;
     default:
       return null;
   }

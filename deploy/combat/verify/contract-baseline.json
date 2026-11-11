@@ -31,6 +31,8 @@
     "get_character_slots",
     "get_character_status",
     "get_city_disband_claims",
+    "get_city_governance",
+    "get_city_missions",
     "get_city_production",
     "get_city_purchase_orders",
     "get_director_event",
@@ -158,6 +160,8 @@
     "get_character_slots",
     "get_character_status",
     "get_city_disband_claims",
+    "get_city_governance",
+    "get_city_missions",
     "get_city_production",
     "get_city_purchase_orders",
     "get_director_event",
@@ -270,6 +274,8 @@
     "chat_message",
     "chat_report_result",
     "city_disband_claims",
+    "city_governance_state",
+    "city_mission_state",
     "city_production_error",
     "city_production_result",
     "city_production_state",
@@ -423,6 +429,8 @@
     "chat_message",
     "chat_report_result",
     "city_disband_claims",
+    "city_governance_state",
+    "city_mission_state",
     "city_production_error",
     "city_production_result",
     "city_production_state",
@@ -549,9 +557,9 @@
   "dynamicClientReceives": 2,
   "dynamicServerSends": 5,
   "protectedSources": {
-    "MyRoomState.ts": "a48e3367b625285a9019d33ee174ea5bc6e90ae3efc5cb47d7bbe208d46da1a6",
+    "MyRoomState.ts": "0b017bf1fa56cb2af0eb769b7c6d05232961ea0be8a0b83141fcb41bdf518296",
     "CharacterStore.ts": "3453e4a7184325880006075cb5a11a1da7691e418f7991eacaeb8c6191b7b96b",
     "AccountStore.ts": "39f50bb2aac688f4e03cb78ca3a556b05a1d1745d6797d9339de666bb07d152e",
-    "EconomyStore.ts": "1c3ac0976a46b1e4a61eb4bbc5d474f6fc7d200bd9ac09fa238dfa0b989f2031"
+    "EconomyStore.ts": "83421618da4ed920e102ba112d331482af82c73488f0c7bc667b21f5df7ba154"
   }
 }

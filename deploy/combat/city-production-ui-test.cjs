@@ -24,7 +24,8 @@ function node(tag = "div") {
   };
 }
 
-function fixture({enabled = true, recovery = true, member = true, workshopSupported = false, purchaseSupported = false} = {}) {
+function fixture({enabled = true, recovery = true, member = true, workshopSupported = false,
+  purchaseSupported = false, missionSupported = false, governanceAvailable = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
@@ -32,7 +33,8 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
   const ctx = {
     $, document: {createElement: node}, performance: {now: () => now},
     room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
-      cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported},
+      cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported, cityMissionSupported: missionSupported,
+      cityGovernanceAvailable: governanceAvailable},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -252,4 +254,112 @@ test("officers can open only on site and cancel a paused order", () => {
   f.ctx.cityReceivePurchase({...purchase,enabled:false,canCancel:true});
   f.button("ยกเลิกใบสั่งซื้อ").onclick();
   assert.equal(f.wire.at(-1).payload.action,"purchase_cancel");
+});
+
+test("the mission board distinguishes accepting, gathering and handing in a public job", () => {
+  const f=fixture({member:false,missionSupported:true}), item="mat_raw_stone_2";
+  f.ctx.openCityMission();
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  const mission={id:"work",name:"กิลด์จันทรา",audience:"public",slots:1,remaining:1,reward:15,expiresAt:2_000_000,
+    canAccept:true,progress:null};
+  const board={enabled:true,required:3,item,serverNow:1_000_000};
+  f.ctx.cityReceiveMission({...board,missions:[mission]});
+  f.button("รับงาน").onclick();
+  const accepted=f.wire.at(-1).payload;
+  assert.equal(accepted.action,"mission_accept");
+  f.ctx.cityReceiveResult(accepted);
+  f.ctx.inventoryState.slots.push({itemId:item,quantity:3});
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:2}]});
+  assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,siege:true,missions:[{...mission,progress:3}]});
+  assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:3}]});
+  f.button("ส่งงานและรับทอง").onclick();
+  const submitted=f.wire.at(-1).payload;
+  assert.deepEqual(submitted,{requestId:submitted.requestId,action:"mission_submit",missionId:"work"});
+});
+
+test("the mission board can post guild-only warehouse work when regular stock is full", () => {
+  const f=fixture({missionSupported:true});
+  f.ctx.openCityMission();
+  const board={enabled:true,warehouseMissions:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,
+    maxSlots:4,maxReward:100,hours:[1],atMoon:true,missions:[],
+    manage:{epoch:2,canPost:true,gold:30,free:0,warehouseFree:6}};
+  f.ctx.cityReceiveMission(board);
+  const audience=f.nodes.cityProductionContent.children.find(el=>el.tag==="label" && el.textContent==="ผู้รับงาน").children[0];
+  assert.equal(audience.value,"guild");
+  assert.equal(audience.disabled,true);
+  f.submit("เปิดภารกิจ",3,5);
+  assert.equal(f.wire.at(-1).command,"get_city_missions");
+  f.submit("เปิดภารกิจ",2,5);
+  const order=f.wire.at(-1).payload;
+  assert.deepEqual(order,{requestId:order.requestId,action:"mission_open",epoch:2,
+    audience:"guild",slots:2,reward:5,hours:1,purpose:"warehouse"});
+});
+
+test("the freight board sends the selected scope, destination tenure and delivery only on site", () => {
+  const f=fixture({missionSupported:true}), moon="moon_pass", river="sam_lan_estuary";
+  f.ctx.openCityMission();
+  const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000,missions:[]};
+  const hauls={enabled:true,paused:false,atCity:moon,jobs:[],manage:{epoch:7,destination:river,destinationEpoch:8,
+    needsApproval:true,item:"mat_metal_2",amount:4,reward:30}};
+  f.ctx.cityReceiveMission({...board,hauls});
+  f.submit("เปิดงานขนเสบียง",3,12);
+  const opened=f.wire.at(-1).payload;
+  assert.deepEqual(opened,{requestId:opened.requestId,action:"haul_open",epoch:7,destination:river,destinationEpoch:8,
+    amount:3,reward:12,audience:"public"});
+  f.ctx.cityReceiveResult(opened);
+  const job={id:"freight",source:moon,destination:river,name:"กิลด์จันทรา",item:"mat_metal_2",amount:3,reward:12,
+    audience:"public",state:"carrying",carrying:true,expires:2_000_000};
+  const carrying={...hauls,jobs:[job],manage:null};
+  f.ctx.cityReceiveMission({...board,hauls:carrying});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river,paused:true}});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
+  f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river}});
+  assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,false);
+  f.button("ส่งเสบียงและรับทอง").onclick();
+  assert.equal(f.wire.at(-1).payload.action,"haul_deliver");
+  assert.equal(f.wire.at(-1).payload.haulId,"freight");
+});
+
+test("the city hall only permits spending reserved supplies after defense and binds the request to the set", () => {
+  const f=fixture({governanceAvailable:true});
+  f.state({site:"moon_pass",miningSite:"moon_pass"});
+  f.button("ศาลาว่าการเมือง").onclick();
+  const state={serverNow:1_000_000,epoch:2,nextAt:2_000_000,atMoon:true,commander:true,stock:[],history:[],used:9,capacity:60,
+    treasury:{available:30,held:0,missionHeld:0,purchaseHeld:0,rushHeld:0,earned:30,paid:0},supplyEnabled:true};
+  const supply={id:"reserve-1",status:"held",materials:[{item:"mat_metal_2",amount:3,stock:0}]};
+  f.ctx.cityReceiveGovernance({...state,supply});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,true);
+  assert.equal(f.button("เริ่มผลิตด้วยเสบียง").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,siege:true,supply:{...supply,canRepair:true,canRecover:true}});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,true);
+  assert.equal(f.button("คืนเสบียงเข้าคลัง").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,supply:{...supply,canRepair:true,canRecover:true}});
+  assert.equal(f.button("ซ่อมประตูหลังศึก").disabled,false);
+  f.button("ซ่อมประตูหลังศึก").onclick();
+  const request=f.wire.at(-1).payload;
+  assert.deepEqual(request,{requestId:request.requestId,action:"supply_repair",epoch:2,supplyId:"reserve-1"});
+});
+
+test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
+  const f=fixture({governanceAvailable:true});
+  f.state({site:"moon_pass",miningSite:"moon_pass"});
+  f.button("ศาลาว่าการเมือง").onclick();
+  assert.equal(f.wire.at(-1).command,"get_city_governance");
+  const state={serverNow:1_000_000,epoch:2,nextAt:0,atMoon:true,commander:false,stock:[],history:[],used:7,capacity:60,
+    treasury:{available:30,held:40,missionHeld:20,purchaseHeld:20,rushHeld:0,earned:100,paid:30}};
+  f.ctx.cityReceiveGovernance(state);
+  assert.equal(f.button("เน้นผลิต"),undefined);
+  const ledger=f.nodes.cityProductionContent.children.find(group=>group.children[0].textContent==="ทองตลาดรวมของกิลด์");
+  assert.match(ledger.children[1].textContent,/พร้อมใช้ 30 ทอง · กันไว้ 40 ทอง/);
+  f.ctx.cityReceiveGovernance({...state,commander:true,nextAt:2_000_000});
+  assert.equal(f.button("เน้นผลิต").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,commander:true,atMoon:false});
+  assert.equal(f.button("เน้นผลิต").disabled,true);
+  f.ctx.cityReceiveGovernance({...state,commander:true});
+  f.button("เน้นผลิต").onclick();
+  const request=f.wire.at(-1).payload;
+  assert.deepEqual(request,{requestId:request.requestId,action:"policy_set",epoch:2,policy:"industry"});
 });

@@ -12,9 +12,10 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type {HomeAction, SalvageOrder} from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES, isWarehouseOrder,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityMember, type CityOrder, type CityOwnership, type CityPurchaseOrder, type CitySite,
-  type CityWorkshopOrder,
+  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
+  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMember, type CityMissionOrder, type CityOrder,
+  type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
+  type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
 } from "./CityProductionRules.js";
 
 export const STARTER_GOLD = 1000;
@@ -231,6 +232,78 @@ export class EconomyStore {
   hasOpenCityPurchase(): boolean {
     return this.city.hasOpenPurchase();
   }
+  hasOpenCityMission(): boolean {
+    return this.city.hasOpenMission();
+  }
+  hasOpenCityHaul(): boolean {
+    return this.city.hasOpenHaul();
+  }
+  viewCityHauls(actor: string, member: CityMember | undefined, cities: CityOwnerships, atCity: CitySite | null) {
+    return this.city.haulView(actor, member, cities, atCity);
+  }
+  cityHaulOrder(actor: string, member: CityMember | undefined, order: CityHaulOrder, cities: CityOwnerships,
+    atCity: CitySite | null, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_haul", intent, () => {
+      const result = this.city.haulOrder(actor, member, order, cities, atCity, now);
+      if (result.gold !== undefined) {
+        const account = this.account(actor);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        account.gold += result.gold;
+        this.put(actor, account);
+      }
+      return result;
+    });
+  }
+  viewCityMissions(actor: string, member: CityMember | undefined, ownership: CityOwnership) {
+    return this.city.missionView(actor, member, ownership);
+  }
+  viewCityGovernance(member: CityMember, ownership: CityOwnership) {
+    return this.city.governanceView(member, ownership);
+  }
+  setCityPolicy(actor: string, member: CityMember, order: CityPolicyOrder, ownership: CityOwnership, now: number) {
+    return this.once(actor, order.requestId, "city_policy", {epoch: order.epoch, policy: order.policy}, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.setPolicy(member, ownership, order.epoch, order.policy, now);
+    });
+  }
+  citySupplyOrder(actor: string, member: CityMember, order: CitySupplyOrder, ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once(actor, order.requestId, "city_supply", intent, () => {
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      return this.city.supplyOrder(member, order, ownership, now);
+    });
+  }
+  finishCitySupplyRepairs(repair: (pending: CitySupplyRepair) => boolean): void {
+    for (const pending of this.city.pendingSupplyRepairs()) {
+      const repaired = repair(pending);
+      this.transaction(() => this.city.finishSupplyRepair(pending.id, repaired));
+    }
+  }
+  citySupplyRepairSucceeded(id: string): boolean {
+    return this.city.supplyRepairSucceeded(id);
+  }
+  cityMissionOrder(actor: string, member: CityMember | undefined, order: CityMissionOrder,
+    ownership: CityOwnership, now: number) {
+    const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
+    return this.once<Record<string, number | string>>(actor, order.requestId, "city_mission", intent, () => {
+      if (order.action === "mission_accept") return this.city.missionAccept(actor, member, order.missionId, ownership, now);
+      if (order.action === "mission_abandon") return this.city.missionAbandon(actor, order.missionId);
+      if (order.action === "mission_submit") {
+        const account = this.account(actor);
+        const result = this.city.missionSubmit(actor, order.missionId, ownership, now);
+        if (account.gold + result.gold > MAX_GOLD) throw Error("city_wallet_full");
+        consume(account, CITY_MINING_ORE, result.amount, "city_mission_ore_short");
+        account.gold += result.gold;
+        this.put(actor, account);
+        return result;
+      }
+      if (!member) throw Error("city_not_member");
+      if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
+      if (order.action === "mission_open") return this.city.missionOpen(member, ownership, order, now);
+      return this.city.missionCancel(member, order.missionId, now);
+    });
+  }
   cityPurchaseOrder(actor: string, member: CityMember | undefined, order: CityPurchaseOrder,
     ownership: CityOwnership, now: number) {
     const intent = Object.entries(order).sort(([a], [b]) => a.localeCompare(b));
@@ -247,7 +320,7 @@ export class EconomyStore {
       }
       if (!member) throw Error("city_not_member");
       if (this.city.closureActor(member.id)) throw Error("city_disband_pending");
-      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId);
+      if (order.action === "purchase_cancel") return this.city.purchaseCancel(member, order.orderId, now);
       return this.city.purchaseOpen(member, ownership, order.epoch, order.amount, order.unitPrice, now);
     });
   }
@@ -326,15 +399,14 @@ export class EconomyStore {
         return {quantity: order.amount};
       }
       this.city.requireCity(member, order.epoch, ownership, site);
-      if (isWarehouseOrder(order) && site !== CITY_PRODUCTION_SITE) throw Error("city_construction_unavailable");
       switch (order.action) {
         case "build": return this.city.build(order.epoch, member, site);
         case "start":
         case "start_fast": return this.city.start(order.epoch, member, now, order.action === "start_fast", site);
-        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site);
-        case "warehouse_start": return this.city.warehouseStart(order.epoch, member, ownership);
+        case "list": return this.city.list(order.epoch, member, order.amount, order.price, site, order.item);
+        case "warehouse_start": return this.city.warehouseStart(site, order.epoch, member, ownership);
         case "warehouse_allocate":
-          return this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "stock");
+          return this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "stock");
         case "deposit":
         case "warehouse_contribute": {
           const account = this.account(actor);
@@ -342,7 +414,7 @@ export class EconomyStore {
           const removed = take(account.inventory, order.slot, order.amount);
           let result: Record<string, string | number> = {quantity: order.amount};
           if (order.action === "deposit") this.city.deposit(order.epoch, member, order.item, order.amount, site);
-          else result = this.city.warehouseContribute(order.epoch, member, ownership, now, order.item, order.amount, "bag");
+          else result = this.city.warehouseContribute(site, order.epoch, member, ownership, now, order.item, order.amount, "bag");
           account.inventory = removed.inventory;
           this.put(actor, account);
           return result;
@@ -417,6 +489,8 @@ export class EconomyStore {
       this.db.prepare("INSERT OR REPLACE INTO resource_stock VALUES(?,?,?,?)").run(n.mapId,n.id,s.stock-quantity,nextAt);
       this.db.prepare("INSERT OR REPLACE INTO resource_periods VALUES(?,?,?)").run(n.mapId,n.id,period);
       this.db.prepare("INSERT OR REPLACE INTO resource_workers VALUES(?,?)").run(actor,now);
+      if (n.mapId === CITY_MINING_SITE && item === CITY_MINING_ORE && n.id.startsWith(CITY_MINING_SITE+"/moon-ore-"))
+        this.city.recordMissionHarvest(actor,quantity,now);
       return {item,quantity,...(equipped?{tool:equipped.name}:{})};
     });
   }
@@ -541,6 +615,7 @@ export class EconomyStore {
       this.db.prepare("DELETE FROM auction_credits WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM starter_supply_used WHERE actor=?").run(id);
       this.db.prepare("DELETE FROM receipts WHERE actor=?").run(id);
+      this.db.prepare("DELETE FROM city_mission_workers WHERE actor=? AND state='active'").run(id);
       this.db.prepare("DELETE FROM characters WHERE id=?").run(id);
       this.db.prepare("DELETE FROM accounts WHERE id=?").run(id);
     });

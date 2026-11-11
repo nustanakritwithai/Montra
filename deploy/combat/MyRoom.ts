@@ -87,9 +87,11 @@ import { parseSellMaterial, parseSalvage, parseCraft, parseHomeAction, parseEcon
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
-  CITY_PURCHASE_ENABLED, CITY_SITES, CITY_WORKSHOP_ENABLED, isCityPurchaseOrder, isWarehouseOrder, parseCityOrder,
-  type CityOrder, type CityPurchaseOrder, type CitySite,
+  CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE,
+  CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
+  CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
+  isCityHaulOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, isWarehouseOrder, parseCityOrder,
+  type CityHaulOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder, type CitySite, type CitySupplyOrder,
 } from "./CityProductionRules.js";
 import { PartyManager, PARTY_XP_RADIUS, type Party } from "./PartyManager.js";
 import { partyMonsterShares, type PartyRewardMember } from "./PartyMonsterRewards.js";
@@ -179,8 +181,12 @@ const mapsWithServices=Object.fromEntries(Object.entries(mapsWithServiceNpcs()).
 ]));
 const worldDefinition=WORLD_EXPANSION?JSON.stringify({version:1,maps:mapsWithServices,homeMap:characterStore.economyEnabled?{...HOME_MAP,buildGrid:HOME_BUILD_GRID}:undefined}):"";
 const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_PURCHASE_ENABLED;
+const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
+const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
+  if (site === CITY_MINING_SITE)
+    store.finishCitySupplyRepairs(repair => guilds.war.government.repairWithCitySupply(repair, now));
   const pending = guilds.pendingCityDisbands();
   for (const disband of pending) guilds.settleCityDisband(store, disband);
   if (pending.length) notifyGuilds();
@@ -4169,14 +4175,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       client.send("economy_error",{reason});
     }
   }
-  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder>, claimsOnly = false): void {
+  private cityProductionAction(client: Client, order?: Exclude<CityOrder, CityPurchaseOrder | CityMissionOrder | CityPolicyOrder | CityHaulOrder | CitySupplyOrder>, claimsOnly = false): void {
     const id = client.sessionId;
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const recovery = claimsOnly || order?.action === "disband" || order?.action === "claim_disband";
     const needsCity = order && !recovery && order.action !== "cancel" && order.action !== "reclaim" && order.action !== "workshop_claim";
     const construction = order && isWarehouseOrder(order);
     if (this.field || (needsCity && (!CITY_PRODUCTION_ENABLED || !WORLD_EXPANSION))) return fail("city_unavailable");
-    if (construction && !CITY_CONSTRUCTION_ENABLED) return fail("city_construction_unavailable");
     if (order?.action === "workshop_start" && !CITY_WORKSHOP_ENABLED) return fail("city_workshop_disabled");
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -4184,11 +4189,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const player = this.state.players.get(id)!;
     const miningAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED;
     const site = miningAvailable && player.mapId === CITY_MINING_SITE ? CITY_MINING_SITE : CITY_PRODUCTION_SITE;
+    const moonConstruction = site === CITY_MINING_SITE;
+    const constructionEnabled = moonConstruction ? CITY_MINING_CONSTRUCTION_ENABLED : CITY_CONSTRUCTION_ENABLED;
+    if (construction && !constructionEnabled) return fail("city_construction_unavailable");
     const grounded = !player.flying && !this.climbs.has(id) && onMapGround(player);
     const atCity = player.mapId === site && grounded;
     const atRiverCity = player.mapId === CITY_PRODUCTION_SITE && grounded;
     const plot = RIVER_WAREHOUSE_PLOT;
-    const atPlot = atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
+    const atPlot = moonConstruction ? atCity : atRiverCity && Math.hypot(player.x - plot.x, player.z - plot.z) <= plot.radius;
     if (needsCity && !atCity) return fail("city_location");
     if (order?.action === "workshop_start" && !atRiverCity) return fail("city_workshop_location");
     if (construction && !atPlot) return fail("city_construction_location");
@@ -4242,11 +4250,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       if (!member) return;
       const view = store.viewCity(member, ownership, site);
-      const constructionOpen = site === CITY_PRODUCTION_SITE && CITY_CONSTRUCTION_ENABLED && this.state.cityProductionAvailable;
+      const constructionOpen = constructionEnabled && this.state.cityProductionAvailable;
       client.send("city_production_state", {site, atCity, guildId: member.id, serverNow: now,
         cityName: WORLD_MAPS[site].name, miningSite: miningAvailable ? CITY_MINING_SITE : null,
         canDisband: member.commander && guilds.canDisbandCityGuild(actor, member.id),
-        ...view, construction: constructionOpen ? {...view.construction, plot: plot.name, atPlot} : null});
+        ...view, construction: constructionOpen ? {...view.construction,
+          plot: moonConstruction ? "ด่านผนึกจันทรา" : plot.name, atPlot} : null});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
       const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
@@ -4258,37 +4267,98 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       fail(reason);
     }
   }
-  private cityPurchaseAction(client: Client, order?: CityPurchaseOrder): void {
+  private cityBoardAction(client: Client, board: "purchase" | "mission", order?: CityPurchaseOrder | CityMissionOrder | CityHaulOrder): void {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
-    if (!this.state.cityPurchaseSupported) return fail("city_purchase_disabled");
-    if (order && order.action !== "purchase_cancel" && !cityPurchaseIntake) return fail("city_purchase_disabled");
+    const purchase = board === "purchase", enabled = purchase ? cityPurchaseIntake : cityMissionIntake;
+    const supported = purchase ? this.state.cityPurchaseSupported : this.state.cityMissionSupported;
+    const haulOrder = order && isCityHaulOrder(order);
+    const cleanup = order?.action === "purchase_cancel" || order?.action === "mission_cancel" || order?.action === "mission_abandon" ||
+      order?.action === "haul_cancel" || order?.action === "haul_decline" || order?.action === "haul_abandon";
+    if (!supported || (order && !cleanup && !(haulOrder ? cityHaulIntake : enabled)))
+      return fail(haulOrder ? "city_haul_disabled" : purchase ? "city_purchase_disabled" : "city_mission_disabled");
+    const id = client.sessionId;
+    if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
+    const actor = this.economyId(client, fail);
+    if (!actor) return;
+    const player = this.state.players.get(id)!;
+    const site = CITY_SITES.find(city => city === player.mapId);
+    const atCity = site && !player.flying && !this.climbs.has(id) && onMapGround(player) ? site : null;
+    const atMoon = atCity === CITY_MINING_SITE;
+    if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
+    if (order?.action === "mission_open" && !atMoon) return fail("city_mission_location");
+    if (order?.action === "mission_open" && order.purpose === "warehouse" && !CITY_MINING_CONSTRUCTION_ENABLED)
+      return fail("city_construction_unavailable");
+    try {
+      const now = Date.now(), store = characterStore.economy;
+      const ownership = syncCityProduction(now, CITY_MINING_SITE);
+      const withHauls = !purchase && (cityHaulIntake || haulOrder || store.hasOpenCityHaul());
+      const cities = withHauls ? {
+        [CITY_MINING_SITE]: ownership, [CITY_PRODUCTION_SITE]: syncCityProduction(now, CITY_PRODUCTION_SITE),
+      } : null;
+      const member = guildStore().war.member(actor);
+      if (order) {
+        let result;
+        if (isCityPurchaseOrder(order)) result = store.cityPurchaseOrder(actor, member, order, ownership, now);
+        else if (isCityMissionOrder(order)) result = store.cityMissionOrder(actor, member, order, ownership, now);
+        else if (cities) result = store.cityHaulOrder(actor, member, order, cities, atCity, now);
+        else return fail("city_haul_disabled");
+        if (order.action === "purchase_fill" || order.action === "mission_submit" || order.action === "haul_deliver")
+          this.syncEconomy(client, actor);
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      }
+      const location = {enabled, atMoon, serverNow: now};
+      if (purchase) client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership), ...location});
+      else client.send("city_mission_state", {...store.viewCityMissions(actor, member, ownership),
+        ...location, warehouseMissions: CITY_MINING_CONSTRUCTION_ENABLED,
+        hauls: cities ? {...store.viewCityHauls(actor, member, cities, atCity), enabled: cityHaulIntake} : null});
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "";
+      const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
+        "request_id_conflict", "invalid_request_id"];
+      if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
+        console.error("MONTRA city board action failed", board, error);
+        return fail("city_unavailable");
+      }
+      fail(reason);
+    }
+  }
+  private cityGovernanceAction(client: Client, order?: CityPolicyOrder | CitySupplyOrder): void {
+    const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
+    if (!this.state.cityGovernanceAvailable) return fail("city_policy_disabled");
+    if (order && isCitySupplyOrder(order) && order.action !== "supply_cancel" && !CITY_SUPPLY_ENABLED)
+      return fail("city_supply_disabled");
     const id = client.sessionId;
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
     if (!actor) return;
     const player = this.state.players.get(id)!;
     const atMoon = player.mapId === CITY_MINING_SITE && !player.flying && !this.climbs.has(id) && onMapGround(player);
-    if (order?.action === "purchase_open" && !atMoon) return fail("city_purchase_location");
+    if (order && !atMoon) return fail(order.action === "policy_set" ? "city_policy_location" : "city_supply_location");
     try {
-      const now = Date.now(), store = characterStore.economy;
-      const ownership = syncCityProduction(now, CITY_MINING_SITE);
       const member = guildStore().war.member(actor);
-      if (order) {
-        const result = store.cityPurchaseOrder(actor, member, order, ownership, now);
-        if (order.action === "purchase_fill") this.syncEconomy(client, actor);
+      if (!member) return fail("city_not_member");
+      const now = Date.now(), store = characterStore.economy;
+      let ownership = syncCityProduction(now, CITY_MINING_SITE);
+      if (order?.action === "policy_set") {
+        const result = store.setCityPolicy(actor, member, order, ownership, now);
         client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result});
+      } else if (order) {
+        const result = store.citySupplyOrder(actor, member, order, ownership, now);
+        let repaired: boolean | undefined;
+        if (order.action === "supply_repair") {
+          ownership = syncCityProduction(now, CITY_MINING_SITE);
+          repaired = store.citySupplyRepairSucceeded(order.supplyId);
+        }
+        client.send("city_production_result", {requestId: order.requestId, action: order.action, ...result, repaired});
       }
-      client.send("city_purchase_state", {...store.viewCityPurchase(member, ownership),
-        enabled: cityPurchaseIntake, atMoon, serverNow: now});
+      client.send("city_governance_state", {...store.viewCityGovernance(member, ownership),
+        atMoon, serverNow: now, supplyEnabled: CITY_SUPPLY_ENABLED});
     } catch (error) {
       const reason = error instanceof Error ? error.message : "";
-      const expected = ["invalid_slot", "invalid_amount", "item_unavailable", "item_equipped", "item_bound",
-        "request_id_conflict", "invalid_request_id"];
-      if (reason === "city_ownership_unavailable" || (!reason.startsWith("city_") && !expected.includes(reason))) {
-        console.error("MONTRA city purchase action failed", error);
-        return fail("city_unavailable");
-      }
-      fail(reason);
+      if (reason !== "city_ownership_unavailable" &&
+          (reason.startsWith("city_") || reason === "request_id_conflict" || reason === "invalid_request_id")) return fail(reason);
+      console.error("MONTRA city governance action failed", error);
+      fail("city_unavailable");
     }
   }
   private sendResourceMap(client:Client,view:ReturnType<typeof characterStore.economy.resourceMap>){
@@ -4900,12 +4970,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (parseEmptyCommand(message)) this.cityProductionAction(client, undefined, true);
     },
     get_city_purchase_orders:(client:Client,message:unknown)=>{
-      if (parseEmptyCommand(message)) this.cityPurchaseAction(client);
+      if (parseEmptyCommand(message)) this.cityBoardAction(client, "purchase");
+    },
+    get_city_missions:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityBoardAction(client, "mission");
+    },
+    get_city_governance:(client:Client,message:unknown)=>{
+      if (parseEmptyCommand(message)) this.cityGovernanceAction(client);
     },
     city_production:(client:Client,message:unknown)=>{
       const order = parseCityOrder(message);
       if (!order) return client.send("city_production_error", {reason: "city_invalid_request", requestId: null});
-      if (isCityPurchaseOrder(order)) this.cityPurchaseAction(client, order);
+      if (isCityPurchaseOrder(order)) this.cityBoardAction(client, "purchase", order);
+      else if (isCityMissionOrder(order) || isCityHaulOrder(order)) this.cityBoardAction(client, "mission", order);
+      else if (order.action === "policy_set" || isCitySupplyOrder(order)) this.cityGovernanceAction(client, order);
       else this.cityProductionAction(client, order);
     },
     get_territories:(client:Client,message:unknown)=>{
@@ -6530,6 +6608,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.state.cityWorkshopSupported = this.state.cityRecoveryAvailable;
     this.state.cityPurchaseSupported = this.state.cityRecoveryAvailable &&
       (cityPurchaseIntake || characterStore.economy.hasOpenCityPurchase());
+    this.state.cityMissionSupported = this.state.cityRecoveryAvailable &&
+      (cityMissionIntake || characterStore.economy.hasOpenCityMission() || characterStore.economy.hasOpenCityHaul());
+    this.state.cityGovernanceAvailable = this.state.cityProductionAvailable && CITY_MINING_ENABLED && CITY_GOVERNANCE_ENABLED;
     if(characterStore.economyEnabled && !this.field)this.clock.setInterval(()=>this.sendResources(),5000);
     if(characterStore.economyEnabled)this.clock.setInterval(()=>this.tickFishing(),500);
     if(!this.field || !isolatedBattleWorldDefinitions.has(this.field.site))this.forest.initialize(!this.field);
