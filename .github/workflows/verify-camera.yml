@@ -9,6 +9,15 @@ on:
       - '.nvmrc'
       - 'deploy/combat/camera-*.cjs'
       - '.github/workflows/verify-camera.yml'
+  pull_request:
+    paths:
+      - 'main.js'
+      - 'src/client/**'
+      - 'scripts/build-client*.mjs'
+      - 'package.json'
+      - '.nvmrc'
+      - 'deploy/combat/camera-*.cjs'
+      - '.github/workflows/verify-camera.yml'
   workflow_dispatch:
 permissions:
   contents: read

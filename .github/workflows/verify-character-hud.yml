@@ -20,6 +20,26 @@ on:
       - 'deploy/combat/quest-navigation-*'
       - 'deploy/combat/monster-nameplates-*.cjs'
       - '.github/workflows/verify-character-hud.yml'
+  pull_request:
+    paths:
+      - 'main.js'
+      - 'src/client/**'
+      - 'scripts/build-client*.mjs'
+      - 'package.json'
+      - '.nvmrc'
+      - 'styles.css'
+      - 'src/styles/**'
+      - 'scripts/build-styles*.mjs'
+      - 'deploy/combat/release-ui-browser-test.cjs'
+      - 'deploy/combat/market-catalog-ui-test.cjs'
+      - 'deploy/combat/crafting-pages-ui-test.cjs'
+      - 'deploy/combat/nested-recipes-*'
+      - 'index.html'
+      - 'deploy/combat/character-hud-*.cjs'
+      - 'deploy/combat/basic-attack-*.cjs'
+      - 'deploy/combat/quest-navigation-*'
+      - 'deploy/combat/monster-nameplates-*.cjs'
+      - '.github/workflows/verify-character-hud.yml'
   workflow_dispatch:
 permissions:
   contents: read
