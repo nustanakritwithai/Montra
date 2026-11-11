@@ -136,6 +136,7 @@ export class EconomyStore {
       CREATE TABLE IF NOT EXISTS accounts(id TEXT PRIMARY KEY, gold INTEGER NOT NULL, inventory TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS receipts(request_id TEXT PRIMARY KEY, actor TEXT NOT NULL, kind TEXT NOT NULL, intent TEXT NOT NULL, result TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS characters(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS pending_monster_rewards(id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS resource_stock(map TEXT NOT NULL,node TEXT NOT NULL,stock INTEGER NOT NULL,nextAt INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_periods(map TEXT NOT NULL,node TEXT NOT NULL,periodMs INTEGER NOT NULL,PRIMARY KEY(map,node));
       CREATE TABLE IF NOT EXISTS resource_workers(actor TEXT PRIMARY KEY,lastAt INTEGER NOT NULL);
@@ -518,6 +519,7 @@ export class EconomyStore {
     return { gold: row.gold, inventory: validateInventory(JSON.parse(row.inventory) as unknown) };
   }
   private put(id: string, account: Account, health?: {hp: number; mana: number}): void {
+    this.requireSettledMonsterReward(id);
     goldAmount(account.gold);
     this.db.prepare("UPDATE accounts SET gold=?, inventory=? WHERE id=?").run(account.gold, JSON.stringify(validateInventory(account.inventory)), id);
     const row = this.db.prepare("SELECT snapshot FROM characters WHERE id=?").get(id);
@@ -533,13 +535,42 @@ export class EconomyStore {
     const row=this.db.prepare("SELECT snapshot FROM characters WHERE id=?").get(id);
     return row && typeof row.snapshot === "string" ? JSON.parse(row.snapshot) as unknown : null;
   }
+  private requireSettledMonsterReward(id:string):void {
+    if(this.db.prepare("SELECT 1 FROM pending_monster_rewards WHERE id=?").get(id))throw new Error("monster_reward_pending");
+  }
+
+  private writeCharacter(id:string,snapshot:object,inventory:InventorySnapshot):void {
+    const bag=JSON.stringify(validateInventory(inventory));
+    this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id,STARTER_GOLD,bag);
+    this.db.prepare("INSERT INTO characters(id,snapshot) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot").run(id,JSON.stringify(snapshot));
+    this.db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(bag,id);
+  }
+
   /** Commit the entire character and its inventory together with the wallet. */
-  saveCharacter(id: string, snapshot: object, inventory: InventorySnapshot): void {
-    characterId(id); const bag = validateInventory(inventory);
-    this.transaction(() => {
-      this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id,STARTER_GOLD,JSON.stringify(bag));
-      this.db.prepare("INSERT INTO characters(id,snapshot) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot").run(id,JSON.stringify(snapshot));
-      this.db.prepare("UPDATE accounts SET inventory=? WHERE id=?").run(JSON.stringify(bag),id);
+  saveCharacter(id:string,snapshot:object,inventory:InventorySnapshot):void {
+    characterId(id);
+    this.transaction(()=>{
+      this.requireSettledMonsterReward(id);
+      this.writeCharacter(id,snapshot,inventory);
+    });
+  }
+
+  /** Stage a fully computed reward before attempting to replace the character. */
+  stageMonsterReward(id:string,snapshot:object):void {
+    characterId(id);
+    const result=this.db.prepare("INSERT OR IGNORE INTO pending_monster_rewards(id,snapshot) VALUES(?,?)").run(id,JSON.stringify(snapshot));
+    if(result.changes!==1)throw new Error("monster_reward_pending");
+  }
+
+  commitMonsterReward(id:string,validate:(record:unknown)=>{snapshot:object;inventory:InventorySnapshot}):void {
+    characterId(id);
+    if(!this.db.prepare("SELECT 1 FROM pending_monster_rewards WHERE id=?").get(id))return;
+    this.transaction(()=>{
+      const row=this.db.prepare("SELECT snapshot FROM pending_monster_rewards WHERE id=?").get(id);
+      if(!row)return;
+      const {snapshot,inventory}=validate(JSON.parse(String(row.snapshot)) as unknown);
+      this.writeCharacter(id,snapshot,inventory);
+      this.db.prepare("DELETE FROM pending_monster_rewards WHERE id=?").run(id);
     });
   }
   private once<T>(actor: string, request: string, kind: string, args: unknown, operation: () => T): T {
@@ -560,6 +591,7 @@ export class EconomyStore {
   /** One-time import; reconnects cannot re-grant gold or replace inventory. */
   register(id: string, inventory: InventorySnapshot): Account {
     characterId(id);
+    this.requireSettledMonsterReward(id);
     const data = JSON.stringify(validateInventory(inventory));
     this.db.prepare("INSERT OR IGNORE INTO accounts(id,gold,inventory) VALUES(?,?,?)").run(id, STARTER_GOLD, data);
     return this.account(id);
@@ -575,6 +607,7 @@ export class EconomyStore {
   eraseCharacter(id:string):void {
     characterId(id);
     this.transaction(()=>{
+      this.requireSettledMonsterReward(id);
       if(this.hasOpenListings(id))throw new Error("character_has_listings");
       if(this.hasCityDisbandClaims(id))throw new Error("character_has_city_claims");
       if(this.hasCityWorkshopJob(id))throw new Error("character_has_city_job");

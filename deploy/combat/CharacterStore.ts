@@ -221,18 +221,54 @@ export class CharacterStore {
     return path.join(this.directory, id + ".json");
   }
 
-  private async atomicWrite(character: CharacterSnapshot): Promise<void> {
+  private rewardPath(id:string):string {
+    return this.location(id)+".reward-pending";
+  }
+
+  private async atomicWrite(character:CharacterSnapshot,destination=this.location(character.id),flush=false):Promise<void> {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
-    const destination = this.location(character.id);
     const temporary = path.join(this.directory, "." + character.id + "." + randomUUID() + ".tmp");
     try {
-      await writeFile(temporary, JSON.stringify(character) + "\n", { flag: "wx", mode: 0o600 });
+      await writeFile(temporary, JSON.stringify(character) + "\n", { flag: "wx", mode: 0o600, flush });
       await rename(temporary, destination);
     } finally {
       await unlink(temporary).catch((error: NodeJS.ErrnoException) => {
         if (error.code !== "ENOENT") throw error;
       });
     }
+  }
+
+  private async queueJsonWrite(id:string,write:()=>Promise<void>):Promise<void> {
+    const previous=this.writes.get(id) ?? Promise.resolve();
+    const next=previous.catch(()=>{}).then(write);
+    this.writes.set(id,next);
+    try{await next;}finally{if(this.writes.get(id)===next)this.writes.delete(id);}
+  }
+
+  private commitJsonMonsterReward(id:string):Promise<void> {
+    return rename(this.rewardPath(id),this.location(id));
+  }
+
+  private commitSqlMonsterReward(id:string):void {
+    this.economy.commitMonsterReward(id,record=>{
+      const snapshot=validateSnapshot(record,id);
+      if(!snapshot.inventory)throw new Error("inventory_record_missing");
+      return {snapshot,inventory:snapshot.inventory};
+    });
+  }
+
+  private async recoverMonsterReward(id:string):Promise<void> {
+    if(this.economyEnabled){this.commitSqlMonsterReward(id);return;}
+    const pending=this.rewardPath(id);
+    if(!existsSync(pending))return;
+    await this.queueJsonWrite(id,async()=>{
+      let record:string;
+      try{record=await readFile(pending,"utf8");}
+      catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return;throw error;}
+      const snapshot=validateSnapshot(JSON.parse(record) as unknown,id);
+      if(!snapshot.inventory)throw new Error("inventory_record_missing");
+      await this.commitJsonMonsterReward(id);
+    });
   }
 
   async loadOrCreate(token: string, spawn: SpawnPoint, slot: CharacterSlot = 1): Promise<{ character: CharacterSnapshot; created: boolean }> {
@@ -244,6 +280,7 @@ export class CharacterStore {
   async loadOrCreateById(id: string, spawn: SpawnPoint, setup?: CharacterSetup, requireBuild = false): Promise<{ character: CharacterSnapshot; created: boolean }> {
     if (!/^[0-9a-f]{64}$/.test(id)) throw new Error("invalid_character_id");
     this.guardLegacyMode();
+    await this.recoverMonsterReward(id);
     if (this.economyEnabled) {
       const saved = this.economy.getCharacter(id);
       if (saved !== null) return { character: await this.prepareAdmission(validateSnapshot(saved, id), false, setup, requireBuild), created: false };
@@ -329,6 +366,7 @@ export class CharacterStore {
   /** Called after the online room finishes its final save and the account lease is claimed. */
   async rebirthAtShrine(id:string,path:PathId,fromPath:PathId,cycle:number){
     this.guardLegacyMode();
+    await this.recoverMonsterReward(id);
     const record=this.economyEnabled?this.economy.getCharacter(id):JSON.parse(await readFile(this.location(id),"utf8"));
     if(!record)throw Error("slot_changed");
     const saved=validateSnapshot(record,id);
@@ -366,28 +404,33 @@ export class CharacterStore {
   async eraseCharacter(id:string):Promise<void> {
     this.guardLegacyMode();
     if(this.economyEnabled)this.economy.eraseCharacter(id);
+    else if(existsSync(this.rewardPath(id)))throw new Error("monster_reward_pending");
     try { await unlink(this.location(id)); }
     catch(error) { if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error; }
   }
 
-  async save(character: CharacterSnapshot): Promise<void> {
+  async save(character:CharacterSnapshot,kind?:"monster_reward"):Promise<void> {
     const snapshot = validateSnapshot(character.mapId===CASTLE_ID ? {...character,castleLayout:2} : character, character.id);
     this.guardLegacyMode();
     // Upgraded servers must never overwrite a real inventory with a legacy
     // HP-only snapshot, which would re-grant starter potions on next login.
     if (snapshot.inventory === undefined) throw new Error("inventory_record_missing");
-    if (this.economyEnabled) {
-      this.economy.saveCharacter(snapshot.id, snapshot, snapshot.inventory);
+    const {id}=snapshot;
+    if(this.economyEnabled){
+      if(kind==="monster_reward"){
+        this.economy.stageMonsterReward(id,snapshot);
+        this.commitSqlMonsterReward(id);
+      }else this.economy.saveCharacter(id,snapshot,snapshot.inventory);
       return;
     }
-    const previous = this.writes.get(snapshot.id) || Promise.resolve();
-    const next = previous.catch(() => {}).then(() => this.atomicWrite(snapshot));
-    this.writes.set(snapshot.id, next);
-    try {
-      await next;
-    } finally {
-      if (this.writes.get(snapshot.id) === next) this.writes.delete(snapshot.id);
-    }
+    await this.queueJsonWrite(id,async()=>{
+      const pending=this.rewardPath(id);
+      if(existsSync(pending))throw new Error("monster_reward_pending");
+      if(kind==="monster_reward"){
+        await this.atomicWrite(snapshot,pending,true);
+        await this.commitJsonMonsterReward(id);
+      }else await this.atomicWrite(snapshot);
+    });
   }
 }
 

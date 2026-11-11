@@ -74,13 +74,15 @@ export const Monster = schema({
   alive: t.boolean().default(true),
   hitSeq: t.number().default(0),
   facing: t.number().default(0),
-  aiState: t.string().default("patrol"), // patrol|chase|attack|return|dead
+  aiState: t.string().default("patrol"),
   targetId: t.string().default(""),
   mapId: t.string().default("ritual_village"),
   level: t.number().default(1),
   displayName: t.string().default("ผีสิง"),
   defense: t.number().default(100),
   tier: t.string().default("normal"),
+  specialRange: t.number().default(0),
+  specialHalfWidth: t.number().default(0),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;

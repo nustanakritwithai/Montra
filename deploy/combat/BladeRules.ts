@@ -32,7 +32,7 @@ export const BLADE_LESSONS = {
   hidden_edge:{name:"คมซ่อนมนต์",description:"โจมตีเปิดฉากจากการพรางและทิ้งรอยอาคม",branch:"edge",level:3,requires:["cloak"],practice:{ambush:2},effect:"strike",stamina:16,cooldownMs:7000,range:3,power:1.4},
   marked_cut:{name:"ฟันรอยอาคม",description:"โจมตีและใช้รอยอาคมของตน",branch:"edge",level:7,requires:["hidden_edge"],practice:{ambush:4,mark:2},effect:"consume",stamina:20,cooldownMs:8000,range:3,power:1.6},
   piercing_edge:{name:"คมอาคมทะลวง",description:"ตั้งท่าก่อนโจมตีเป้าหมายเดี่ยวอย่างหนัก",branch:"edge",level:11,requires:["marked_cut"],practice:{mark:5},effect:"windup",stamina:26,cooldownMs:12000,range:3,power:1.9},
-  sever_mark:{name:"สะบั้นรอยแผล",description:"ใช้รอยอาคมของตนเพื่อปิดจังหวะอย่างรุนแรง",branch:"edge",level:17,requires:["marked_cut","piercing_edge"],practice:{mark:10,combo:5},effect:"consume",stamina:32,cooldownMs:18000,range:3,power:2.2},
+  sever_mark:{name:"สะบั้นรอยแผล",description:"ใช้รอยอาคมของตนเพื่อปิดจังหวะอย่างรุนแรง",branch:"edge",level:17,requires:["piercing_edge"],practice:{mark:10,combo:5},effect:"consume",stamina:32,cooldownMs:18000,range:3,power:2.2},
   evade:{name:"ก้าวหลบคม",description:"หลบระยะสั้นและลดความเสียหายในจังหวะหลบ",branch:"tempo",level:3,requires:["cloak"],practice:{},effect:"evade",stamina:16,cooldownMs:9000,range:0,power:0.25},
   counter:{name:"ฟันชิงจังหวะ",description:"สวนหลังหลบการโจมตีสำเร็จ",branch:"tempo",level:7,requires:["evade"],practice:{evade:3},effect:"counter",stamina:18,cooldownMs:8000,range:3,power:1.4},
   retreat:{name:"ถอนกาย",description:"ถอยออกจากเป้าหมายเพื่อจัดตำแหน่งใหม่",branch:"tempo",level:10,requires:["evade"],practice:{evade:5},effect:"retreat",stamina:18,cooldownMs:10000,range:0,power:0},

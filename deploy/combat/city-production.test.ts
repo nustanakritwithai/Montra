@@ -1441,3 +1441,26 @@ test("legacy player listings keep their order and settle normally after migratio
   assert.equal(store.getAccount(member).gold, 950);
   assert.equal(store.getAccount(leader).gold, 1050);
 });
+
+
+test("city deposits roll back while a monster reward is pending and can be retried", t => {
+  const f = fixture(t);
+  const inventory = f.economy.getAccount(leader).inventory;
+  const snapshot = {inventory, experience: 125};
+  const requestId = f.request();
+  f.economy.stageMonsterReward(leader, snapshot);
+
+  assert.throws(() => f.deposit(leader, 0, 3, requestId), /monster_reward_pending/);
+  assert.deepEqual(f.economy.getAccount(leader).inventory, inventory);
+  assert.deepEqual(f.view(leader).stock, []);
+
+  f.economy.commitMonsterReward(leader, record => {
+    assert.deepEqual(record, snapshot);
+    return {snapshot, inventory};
+  });
+  assert.deepEqual(f.deposit(leader, 0, 3, requestId), {quantity: 3});
+  assert.deepEqual(f.deposit(leader, 0, 3, requestId), {quantity: 3});
+  assert.equal(f.economy.getAccount(leader).inventory.slots[0]?.quantity, 96);
+  assert.equal(f.view(leader).stock.find(item => item.item === wood)?.quantity, 3);
+  assert.equal((f.economy.getCharacter(leader) as {experience: number}).experience, 125);
+});

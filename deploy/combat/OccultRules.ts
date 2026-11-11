@@ -54,7 +54,7 @@ export const OCCULT_LESSONS = {
   mender_spirit: {name:"ผีคุ้มครอง",description:"ให้ผีที่เรียกมาช่วยคุ้มครองสมาชิกปาร์ตี้",path:"mender",level:10,requires:["mender_ward"],training:15,effect:"spirit_ward",stamina:22,cooldownMs:18000,range:12,power:0.2},
   mender_ward_area: {name:"เขตอาคมคุ้มภัย",description:"เพิ่มป้องกันกายและเวทให้ปาร์ตี้ใกล้เคียง",path:"mender",level:10,requires:["mender_ward","mender_area"],training:15,effect:"ward_area",stamina:30,cooldownMs:22000,range:8,power:0.1},
   mender_cleanse_area: {name:"ข้าวสารปัดเคราะห์",description:"ถอนคำสาปอาคมจากตนและสมาชิกปาร์ตี้ใกล้เคียง",path:"mender",level:12,requires:["mender_cleanse","mender_area"],training:20,effect:"cleanse_area",stamina:28,cooldownMs:20000,range:8,power:0},
-  mender_spirit_heal: {name:"ผีประคอง",description:"ให้ผีจากหม้อช่วยฟื้น HP ตนเองหรือสมาชิกปาร์ตี้",path:"mender",level:12,requires:["mender_spirit","mender_heal"],training:20,effect:"spirit_heal",stamina:25,cooldownMs:16000,range:12,power:0.2},
+  mender_spirit_heal: {name:"ผีประคอง",description:"ให้ผีจากหม้อช่วยฟื้น HP ตนเองหรือสมาชิกปาร์ตี้",path:"mender",level:12,requires:["mender_spirit"],training:20,effect:"spirit_heal",stamina:25,cooldownMs:16000,range:12,power:0.2},
   mender_trance: {name:"ทรงผีฟื้นมานา",description:"ขณะเข้าทรงเพิ่มการป้องกันและฟื้นมานา 15 ให้ปาร์ตี้ใกล้เคียง",path:"mender",level:15,requires:["mender_area","mender_spirit"],training:25,effect:"trance",stamina:28,cooldownMs:25000,range:8,power:0.12},
   mender_pve_rice: {name:"ข้าวสารคุ้มชีพ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์ ช่วยพระเก็บเลเวลด้วยตนเอง",path:"mender",level:25,requires:["mender_heal"],training:8,effect:"pve_rice",stamina:16,cooldownMs:6000,range:12,power:1.3},
   seer_ash_rice: {name:"ข้าวสารเพลิงอาคม",description:"ซัดข้าวสารใส่มอนสเตอร์ และแรงขึ้นเมื่อเป้าหมายมีตราของตน",path:"seer",level:35,requires:["seer_rice"],training:35,effect:"rice",stamina:18,cooldownMs:9000,range:15,power:1.55},
@@ -63,7 +63,7 @@ export const OCCULT_LESSONS = {
   seer_spirit_rain: {name:"สายฝนข้าวสารอาคม",description:"ซัดข้าวสารใส่มอนสเตอร์ใกล้เป้าหมายสูงสุดสามตัว",path:"seer",level:95,requires:["seer_scatter","seer_ward_break"],training:130,effect:"rice_area",stamina:34,cooldownMs:17000,range:12,power:1.0},
   mender_deep_heal: {name:"ยันต์ประคองชีพ",description:"ฟื้น HP ตนเองหรือสมาชิกปาร์ตี้หนึ่งคน",path:"mender",level:35,requires:["mender_heal"],training:35,effect:"heal",stamina:18,cooldownMs:10000,range:12,power:0.17},
   mender_shelter: {name:"เขตยันต์คุ้มชีพ",description:"เพิ่มป้องกันกายและเวทให้ปาร์ตี้ใกล้เคียงชั่วคราว",path:"mender",level:55,requires:["mender_ward","mender_area"],training:60,effect:"ward_area",stamina:32,cooldownMs:26000,range:8,power:0.12},
-  mender_deep_circle: {name:"วงยันต์ต่อชีพ",description:"ฟื้น HP ทันทีและฟื้นอีกสามจังหวะในวงอาคม",path:"mender",level:75,requires:["mender_area","mender_shelter"],training:90,effect:"heal_area",stamina:30,cooldownMs:18000,range:8,power:0.1},
+  mender_deep_circle: {name:"วงยันต์ต่อชีพ",description:"ฟื้น HP ทันทีและฟื้นอีกสามจังหวะในวงอาคม",path:"mender",level:75,requires:["mender_shelter"],training:90,effect:"heal_area",stamina:30,cooldownMs:18000,range:8,power:0.1},
   mender_spirit_rice: {name:"ข้าวสารประคองวิญญาณ",description:"ซัดข้าวสารอาคมใส่มอนสเตอร์เป้าหมายเดียว",path:"mender",level:95,requires:["mender_pve_rice","mender_deep_heal"],training:130,effect:"pve_rice",stamina:26,cooldownMs:11000,range:12,power:1.75},
 } as const satisfies Record<string, OccultLesson>;
 export type OccultSkillId = keyof typeof OCCULT_LESSONS;

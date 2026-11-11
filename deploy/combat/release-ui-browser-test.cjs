@@ -6,7 +6,7 @@ const {chromium}=require('playwright');
 const root=path.resolve(__dirname,'../..'),out=path.join(root,'release-ui-browser-evidence');
 const source=fs.readFileSync(root+'/main.js','utf8'),css=fs.readFileSync(root+'/styles.css','utf8'),index=fs.readFileSync(root+'/index.html','utf8');
 function fixtureScript(type){
- let s=fs.readFileSync(root+'/deploy/combat/'+(type==='market'?'market-catalog-ui-test.cjs':'crafting-pages-ui-test.cjs'),'utf8');
+ let s=fs.readFileSync(root+'/deploy/combat/'+(type==='market'?'market-catalog-ui-test.cjs':'crafting-pages-ui-test.cjs'),'utf8').replace(/\r\n/g,'\n');
  const first=s.indexOf('const slice='),last=s.indexOf(type==='market'?"\ntest('catalog":'\nif(require.main');
  assert(first>=0&&last>first,'fixture setup boundaries');s=s.slice(first,last);
  // Real DOM replaces the deliberately simple node mocks in the repository fixtures.
@@ -38,7 +38,8 @@ async function marketCases(page,check){
  await page.evaluate(()=>{f.page([f.row(1),f.row(2,'weapon')]);f.callbacks.market_overview({credit:0,auctions:[],supply:{items:[{item:'wood',price:10,remaining:3}]}});});
  await check('market-search');
  assert.equal(await page.locator('.wm-header h2').textContent(),'ตลาดกลาง');
- assert.deepEqual(await page.locator('.wm-tabs button').allTextContents(),['ค้นหา','ราคาตลาด','รายการที่อยากได้','ขาย','รายการของฉัน','ประมูล','กฎตลาด','เทรดใกล้ตัว','ร้านค้าสำรอง']);
+ assert.deepEqual(await page.locator('.wm-tabs button:visible').allTextContents(),['ค้นหา','ราคาตลาด','รายการที่อยากได้','ขาย','รายการของฉัน','ประมูล','กฎตลาด','เทรดใกล้ตัว','ร้านค้าสำรอง']);
+ assert.equal(await page.locator('#wmCityPurchase').isVisible(),false);
  assert.equal(await page.locator('#wmBuy').textContent(),'ซื้อ');
  assert.equal(await page.locator('#wmPick').textContent(),'เลือกไอเท็มในรายการ');
  assert.equal(await page.locator('#wmShown').textContent(),'แสดง 2 รายการ');

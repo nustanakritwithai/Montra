@@ -1,9 +1,80 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { MyRoomState, Player } from "./schema/MyRoomState.js";
-import { SHRINE_GUARDIAN, getWorldMap, isSafeWorldPoint } from "./WorldMaps.js";
+import { SHRINE_GUARDIAN, getWorldMap, groundAt, isRestArea, isSafeWorldPoint } from "./WorldMaps.js";
+import { parseAttackCommand } from "./GameRules.js";
 import { grantRewardPotion, makeStarterInventory, INVENTORY_STACK_LIMIT } from "./ItemRules.js";
 import { ForestEncounters } from "./ForestEncounters.js";
+
+const himmapan = [
+  ["himmapan_matcha_naga", "lotus_basin", "มัจฉนาคา", 48],
+  ["himmapan_garuda_scout", "twin_neck_pass", "ครุฑลาดตระเวน", 52],
+  ["himmapan_stone_yaksha", "hex_ridge", "ยักษ์ศิลาด่าน", 45],
+  ["himmapan_kochasri", "naga_cavern", "คชสีห์", 50],
+  ["himmapan_hemaraj", "naga_cavern", "เหมราช", 54],
+  ["himmapan_durong_paksin", "hex_ridge", "ดุรงค์ปักษิณ", 45],
+  ["himmapan_kunchon_wari", "lotus_basin", "กุญชรวารี", 50],
+  ["himmapan_karavek", "hex_ridge", "นกการเวก", 45],
+] as const;
+
+for (const [id, mapId, name, level] of himmapan) {
+  test(`${id} spawns in the PvE map, winds up, can miss and respawns`, t => {
+    const map = getWorldMap(mapId);
+    if (!map) return t.skip("optional map disabled");
+    const state = new MyRoomState(), forest = new ForestEncounters(state.monsters);
+    const siege = new ForestEncounters(new MyRoomState().monsters);
+    forest.initialize();
+    siege.initialize(false);
+    assert.equal(siege.profile(id), null);
+    const player = new Player({ ...map.spawn, mapId });
+    state.players.set("hunter", player);
+    const hits: number[] = [];
+    const blocked = new Set<string>();
+    const tick = (now: number) => forest.update(now, 0, state.players, blocked,
+      (target, attacker, force = 1) => { if (target === "hunter" && attacker.id === id) hits.push(force); }, () => {});
+    tick(0);
+    const monster = state.monsters.get(id);
+    assert.ok(monster, id);
+    assert.equal(monster.displayName, name);
+    assert.equal(monster.level, level);
+    assert.equal(monster.tier, "normal");
+    assert.deepEqual(parseAttackCommand({ targetId: id }), { targetId: id });
+    assert.ok(isSafeWorldPoint(map, monster));
+    assert.ok(!isRestArea(mapId, monster));
+
+    const place = (x: number, z: number) => Object.assign(player, { x, y: groundAt(mapId, x, z), z });
+    place(monster.x, monster.z - 1.5);
+    tick(100);
+    assert.equal(monster.aiState, "windup");
+    assert.deepEqual(hits, []);
+    place(monster.x + 4, monster.z - 1.5);
+    tick(1500);
+    assert.deepEqual(hits, [], "stepping out of the warning avoids the attack");
+    place(monster.x, monster.z - 1.5);
+    tick(8100);
+    assert.equal(monster.aiState, "windup");
+    blocked.add("hunter");
+    tick(9600);
+    assert.deepEqual(hits, [], "a player in transit cannot be hit");
+    blocked.clear();
+    tick(16_100);
+    assert.equal(monster.aiState, "windup");
+    assert.equal(forest.interrupt(id, 16_200, 1500, 0), "applied");
+    tick(17_600);
+    assert.deepEqual(hits, [], "interrupt cancels the pending strike");
+    tick(24_100);
+    assert.equal(monster.aiState, "windup");
+    tick(25_600);
+    assert.deepEqual(hits, [1.25]);
+    assert.equal(monster.aiState, "special_recovery");
+    assert.ok(forest.kill(id, 26_000, state.players));
+    tick(50_999);
+    assert.equal(monster.alive, false);
+    tick(51_000);
+    assert.equal(monster.alive, true);
+    assert.equal(monster.hp, monster.maxHp);
+  });
+}
 
 test("forest monsters use the server profile and respawn independently with local population",()=>{
   const state=new MyRoomState(), forest=new ForestEncounters(state.monsters);

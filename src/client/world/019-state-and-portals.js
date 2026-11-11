@@ -108,7 +108,7 @@
   function makeForestMonster(monster,id) {
     const boss = bossDesign(monster, id);
     if (boss) return makeGhostMonster(monster, id, boss);
-    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]))return makeGhostMonster(monster,id);
+    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]||HIMMAPAN_VISUALS.has(id)))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);
@@ -184,7 +184,14 @@
           ghost.deathAt=0;ghost.spawnAt=performance.now();ghostVoice(ghost,mesh,"spawn",.8);eventFx("ghost_spawn",mesh,{y:ghost.ty??0});}
         ghost.wasAlive=alive;if(alive)mesh.setEnabled(true);else if(!ghost.deathAt)mesh.setEnabled(false);
         ghost.tx=Number(monster.x);ghost.tz=Number(monster.z);ghost.ty=Number(monster.y)||0;ghost.tf=Number(monster.facing)||0;
+        if(ghost.design.himmapan && ghost.ai!==monster.aiState && monster.aiState==="special_recovery"){
+          ghost.specialAt=performance.now();
+          const tint=ghost.design.impactTint;
+          if(tint)spawnFx("ring",tint,ghost.tx,ghost.ty+.14,ghost.tz,
+            {orient:"ground",life:420,s0:.7,s1:2*monster.specialRange,a0:.75,a1:0});
+        }
         ghost.windup=monster.aiState==="windup";ghost.ai=monster.aiState;
+        if(ghost.design.himmapan)updateHimmapanWarning(mesh,monster);
         if(ghost.tx0===undefined){ghost.tx0=1;mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);mesh.rotation.y=ghost.tf;}
       }else mesh.setEnabled(monster.mapId===activeMapId&&monster.alive);
       if(mesh.metadata.warning){
