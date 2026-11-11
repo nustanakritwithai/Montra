@@ -846,10 +846,7 @@
           if (dmg > 0) floatAtMonster(hit.targetId, String(dmg), isCrit ? "crit" : skill ? "skill" : "dealt", { big: isCrit });
           registerComboHit();
           hudTarget = { id: hit.targetId, until: performance.now() + 8000 };
-          if (Number(hit.hp) === 0) {
-            hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
-            if (struckState.tier === "boss") triggerCombatCallout("execute_finisher");
-          }
+          if (Number(hit.hp) === 0) hudKills[activeMapId] = (hudKills[activeMapId] || 0) + 1;
         }
         if (struck?.shieldActive && struck.shieldHp > 0) processBossShieldDamage(mesh, struck, dmg, hit.targetId);
         if (hit.source === "talisman" && hit.attackerId === localId) showTalisman(forestTarget ? mesh : enemy);
