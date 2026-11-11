@@ -13,7 +13,7 @@ import {
   CITY_MINING_ENABLED, CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_ENABLED, type CitySite,
   CITY_CONTRACT_DURATION_MS, CITY_HAUL_DURATION_MS, CITY_POLICY_COOLDOWN_MS, CITY_PURCHASE_DURATION_MS,
   cityMarketPrices, isCityContractOrder, isCityHaulOrder, isCityMarketOrder, isCityMissionOrder,
-  isCityNeutralMarketOrder, isCityPurchaseOrder,
+  isCityNeutralMarketOrder, isCityNeutralReturnOrder, isCityPurchaseOrder, CITY_NEUTRAL_RETURN_DURATION_MS,
   isCitySupplyOrder, type CityPolicy,
 } from "./CityProductionRules.js";
 import {RIVER_WAR_DURATION} from "./RiverCity.js";
@@ -64,7 +64,8 @@ function fixture(t: TestContext) {
       parsed.action !== "workshop_start" && parsed.action !== "workshop_claim" &&
       !isCityPurchaseOrder(parsed) && !isCityMissionOrder(parsed) && !isCityHaulOrder(parsed) &&
       !isCityMarketOrder(parsed) && !isCityContractOrder(parsed) && !isCitySupplyOrder(parsed) &&
-      !isCityNeutralMarketOrder(parsed) && parsed.action !== "policy_set" && parsed.action !== "market_contribute");
+      !isCityNeutralMarketOrder(parsed) && !isCityNeutralReturnOrder(parsed) &&
+      parsed.action !== "policy_set" && parsed.action !== "market_contribute");
     return economy.cityOrder(actor, guildMember(actor), parsed, sync(now, site), now, site);
   };
   const view = (actor: string, now = 1000, site: CitySite = CITY_PRODUCTION_SITE) => economy.viewCity(guildMember(actor), sync(now, site), site);
@@ -1260,6 +1261,105 @@ function neutralMarketFixture(t: TestContext) {
   const proposal={action:"contract_open",epoch:f.moonEpoch,amount:6,gold:96};
   return {...f,get economy(){return f.economy;},get guild(){return f.guild;},market,contract,view,board,route,listing,proposal};
 }
+
+function neutralReturnFixture(t: TestContext) {
+  const f=neutralMarketFixture(t), river=CITY_PRODUCTION_SITE, moon=CITY_MINING_SITE;
+  const epoch=f.listing.epoch!;
+  const act=(actor:string,fields:object,at=f.now,requestId=f.request(),atMarket:CitySite|null=river)=>{
+    const order=parseCityOrder({requestId,epoch,...fields});
+    assert.ok(order && isCityNeutralReturnOrder(order));
+    return f.economy.neutralReturnOrder(actor,order,f.sync(at,river),atMarket,at);
+  };
+  const open=(actor:string,amount:number,unitPrice:number,at=f.now)=>
+    act(actor,{action:"neutral_return_open",amount,unitPrice},at);
+  const recovery=(actor:string,action:"neutral_return_cancel"|"neutral_return_claim",orderId:string,at:number,amount?:number)=>{
+    const order=parseCityOrder({requestId:f.request(),action,orderId,...(amount===undefined?{}:{amount})});
+    assert.ok(order && isCityNeutralReturnOrder(order));
+    return f.economy.neutralReturnOrder(actor,order,f.sync(at,river),null,at);
+  };
+  const view=(actor:string,at=f.now,enabled=true)=>f.economy.viewCityMarkets(actor,f.guild.war.member(actor),
+    {[river]:f.sync(at,river),[moon]:f.sync(at,moon)},true,true,true,enabled).neutralReturnMarket;
+  const withMetal=(actor:string,amount:number)=>{
+    const inventory=bag();inventory.slots[2]={itemId:CITY_MINING_PRODUCT,quantity:amount};
+    f.economy.saveCharacter(actor,{},inventory);
+  };
+  return {...f,get economy(){return f.economy;},act,open,recovery,view,withMetal,epoch};
+}
+
+test("neutral return sales match the highest funded price then oldest and remain single settlements after restart", t=>{
+  const f=neutralReturnFixture(t), river=CITY_PRODUCTION_SITE;
+  f.withMetal(leader,4);
+  assert.equal(parseCityOrder({action:"neutral_return_open",epoch:f.epoch,amount:13,unitPrice:1,requestId:f.request()}),null);
+  assert.throws(()=>f.act(member,{action:"neutral_return_open",amount:1,unitPrice:45},f.now,f.request(),null),/city_market_location/);
+  assert.throws(()=>f.open(member,12,1000),/insufficient_gold/);
+  const oldest=f.open(member,3,40), newer=f.open(rival,2,40), highest=f.open(visitor,1,45);
+  assert.ok("orderId" in oldest && "orderId" in newer && "orderId" in highest);
+  assert.equal(f.economy.hasOpenListings(member),true);
+  assert.throws(()=>f.open(member,1,50),/city_neutral_return_exists/);
+  assert.deepEqual(f.view(member)?.prices,[45,40,40]);
+  assert.deepEqual(f.view(leader)?.orders,[]);
+  assert.deepEqual(f.view(leader)?.prices,[45,40,40,40,40,40]);
+  const sell={action:"neutral_return_sell",amount:3,total:125}, key=f.request();
+  assert.throws(()=>f.act(leader,{...sell,total:124},f.now,key),/city_market_price_changed/);
+  const sold=f.act(leader,sell,f.now,key);
+  assert.deepEqual(sold,{amount:3,total:125});
+  const gold=f.economy.getAccount(leader).gold;
+  f.restart();
+  assert.deepEqual(f.act(leader,sell,f.now,key),sold);
+  assert.equal(f.economy.getAccount(leader).gold,gold);
+  assert.equal(f.view(visitor)?.orders[0].pending,1);
+  assert.equal(f.view(member)?.orders[0].pending,2);
+  assert.equal(f.view(rival)?.orders[0].pending,0);
+  assert.throws(()=>f.recovery(rival,"neutral_return_claim",oldest.orderId,f.now,1),/city_neutral_return_claim_unavailable/);
+  f.economy.saveCharacter(member,{},bag(true));
+  assert.throws(()=>f.recovery(member,"neutral_return_claim",oldest.orderId,f.now,1),/inventory_full/);
+  assert.equal(f.view(member)?.orders[0].pending,2);
+  f.economy.saveCharacter(member,{},bag());
+  const before=f.economy.getAccount(member).gold;
+  f.capture(rival,f.now+1,river);
+  assert.equal(f.view(member,f.now+1,false)?.epoch,null);
+  assert.equal(f.economy.getAccount(member).gold,before+40);
+  assert.throws(()=>f.act(leader,{...sell,amount:1,total:40},f.now+1),/city_neutral_return_closed/);
+  const firstClaim=f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1);
+  assert.ok("amount" in firstClaim);
+  assert.equal(firstClaim.amount,1);
+  assert.equal(f.view(member,f.now+1,false)?.orders[0].pending,1);
+  const secondClaim=f.recovery(member,"neutral_return_claim",oldest.orderId,f.now+1,1);
+  assert.ok("amount" in secondClaim);
+  assert.equal(secondClaim.amount,1);
+  assert.equal(f.view(member,f.now+1,false),null);
+  assert.equal(f.economy.getAccount(member).inventory.slots.find(stack=>stack?.itemId===CITY_MINING_PRODUCT)?.quantity,2);
+});
+
+test("neutral return refunds survive cancellation, expiry, pending inventory rewards and a capped wallet", t=>{
+  const f=neutralReturnFixture(t);
+  const start=f.economy.getAccount(member).gold;
+  const cancelled=f.open(member,2,31);
+  assert.ok("orderId" in cancelled);
+  const refund=f.recovery(member,"neutral_return_cancel",cancelled.orderId,f.now);
+  assert.ok("gold" in refund);
+  assert.equal(refund.gold,62);
+  assert.equal(f.economy.getAccount(member).gold,start);
+  assert.throws(()=>f.recovery(member,"neutral_return_cancel",cancelled.orderId,f.now),/city_neutral_return_missing/);
+  f.open(member,3,30);
+  f.open(rival,1,50);
+  f.withMetal(member,2);
+  f.recovery(rival,"neutral_return_cancel",String(f.view(rival)?.orders[0].id),f.now);
+  assert.throws(()=>f.act(member,{action:"neutral_return_sell",amount:1,total:30}),/city_market_quantity/);
+  f.open(rival,1,50);
+  const db=new DatabaseSync(f.economyFile);
+  try {
+    db.prepare("INSERT INTO pending_monster_rewards(id,snapshot) VALUES(?,'{}')").run(member);
+    db.prepare("UPDATE accounts SET gold=1000000000 WHERE id=?").run(rival);
+    const expired=f.now+CITY_NEUTRAL_RETURN_DURATION_MS;
+    assert.equal(f.view(leader,expired)?.status,"no_bids");
+    assert.equal(f.economy.getAccount(member).gold,start);
+    assert.equal(f.economy.auctionCredit(rival),50);
+    assert.equal(f.view(member,expired+1)?.orders.length,0);
+    assert.equal(f.economy.getAccount(member).gold,start);
+    assert.equal(f.economy.auctionCredit(rival),50);
+  } finally {db.close();}
+});
 
 test("neutral consignments fund a six-ore contract from two sellers and honor it after origin conquest", t=>{
   const f=neutralMarketFixture(t), river=CITY_PRODUCTION_SITE, moon=CITY_MINING_SITE;

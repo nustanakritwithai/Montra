@@ -847,17 +847,43 @@
     const hours=Math.floor(remaining/3600),minutes=Math.floor(remaining%3600/60),seconds=remaining%60;
     node.textContent=remaining?"เหลือ "+hours+" ชม. "+minutes+" นาที "+seconds+" วิ":"สัญญาถึงกำหนดแล้ว · รีเฟรชสถานะ";
   }
+  function renderAtlasReturnRoute(panel,origin,destination,selected){
+    const section=marketText("section","gx-page");
+    const note=text=>section.append(marketText("p","note",text));
+    section.append(marketText("strong","","การค้า · "+citySiteNames[origin.site]+" → "+citySiteNames[destination.site]));
+    for(const market of [origin,destination])note(citySiteNames[market.site]+" · "+cityMarketSummary(market,false));
+    if(origin.prices.length && destination.prices.length){
+      const max=Math.min(origin.prices.length,destination.prices.length);
+      const label=marketText("label","field","จำนวนแร่เที่ยวกลับ"),amount=document.createElement("input");
+      amount.id="atlasReturnAmount";amount.type="number";amount.inputMode="numeric";amount.min="1";amount.max=String(max);
+      amount.value=String(cityPositive(selected,max)?selected:1);label.append(amount);section.append(label);
+      const estimate=marketText("p","note");estimate.setAttribute("aria-live","polite");section.append(estimate);
+      amount.oninput=()=>{
+        const quantity=amount.valueAsNumber;
+        if(!cityPositive(quantity,max)){estimate.textContent="เลือกจำนวน 1–"+max+" ชิ้น";return;}
+        const {cost,spot}=cityTradeEstimate(quantity,origin.prices,destination.prices,null,false);
+        const delta=spot-cost;
+        estimate.textContent="ซื้อ "+cost+" ทอง · ขายประมาณ "+spot+" ทอง · ส่วนต่าง "+(delta>0?"+":"")+delta+" ทอง";
+      };
+      amount.oninput();
+    }
+    for(const [market,label] of [[origin,"ปักหมุดไปซื้อที่จันทรา"],[destination,"ปักหมุดไปขายที่สามลาน"]]){
+      const button=marketText("button","secondary",label);
+      button.type="button";button.onclick=()=>pinCityTradeRoute(market.site);section.append(button);
+    }
+    panel.append(section);
+  }
   function renderAtlasTradeRoute(){
     const panel=$("atlasTradeRoute"),route=cityMarkets?.tradeRoute;
     if(!panel)return;
-    const selected=panel.querySelector("input")?.valueAsNumber;
+    const selected=$("atlasOutboundAmount")?.valueAsNumber,selectedReturn=$("atlasReturnAmount")?.valueAsNumber;
     panel.hidden=Boolean(cityMarkets && !route);
     panel.replaceChildren();
     if(!route){if(!panel.hidden)panel.textContent="กำลังโหลดสถานะการค้า…";return;}
     const {contracts,report}=route,{source,destination,job,manage,enabled}=contracts;
     const paused=cityTradeRoutePaused(contracts);
     panel.dataset.paused=String(paused);
-    const markets=cityMarketRows().filter(market=>(market.item??cityProduct)===cityProduct);
+    const rows=cityMarketRows(),markets=rows.filter(market=>(market.item??cityProduct)===cityProduct);
     const selling=markets.find(market=>market.site===source),buying=markets.find(market=>market.site===destination);
     const note=text=>panel.append(marketText("p","note",text));
     const button=(text,onclick)=>{
@@ -880,7 +906,7 @@
     const sourcePrices=selling?.prices??[],destinationPrices=buying?.prices??[];
     if(sourcePrices.length || open){
       const label=marketText("label","field","จำนวนแร่ที่เทียบราคา"),amount=document.createElement("input");
-      amount.type="number";amount.inputMode="numeric";amount.min="1";amount.max="12";
+      amount.id="atlasOutboundAmount";amount.type="number";amount.inputMode="numeric";amount.min="1";amount.max="12";
       amount.value=String(cityPositive(selected,12)?selected:open?job.amount:1);
       label.append(amount);panel.append(label);
       const estimate=marketText("p","note");estimate.setAttribute("aria-live","polite");panel.append(estimate);
@@ -910,6 +936,9 @@
     else button("ปักหมุดไปสามลาน",()=>pinCityTradeRoute(source,open?job:null));
     if(manage?.canOpen && contracts.atCity!==destination)
       button("ปักหมุดไปจันทรา",()=>pinCityTradeRoute(destination));
+    const returnDestination=rows.find(market=>market.neutralReturn);
+    const returnOrigin=rows.find(market=>market.site===destination && market.item===cityReturnProduct);
+    if(returnDestination && returnOrigin)renderAtlasReturnRoute(panel,returnOrigin,returnDestination,selectedReturn);
     const pin=currentCityTradePin();
     if(pin){
       note("ปักหมุด "+citySiteNames[pin.site]);
