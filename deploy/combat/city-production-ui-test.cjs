@@ -370,6 +370,31 @@ test("local market submits the selected batch total only at the broker and uses 
   assert.equal(f.wire.at(-1).payload.site,moon);
 });
 
+test("the return quote uses tier-two quantities and the disabled market can release its budget", () => {
+  const f=fixture({marketSupported:true});
+  const river="sam_lan_estuary", moon="moon_pass", item="mat_metal_2";
+  f.ctx.openCityMarket();
+  const inbound={site:river,item,side:"buy",epoch:1,status:"open",prices:[38,38],manage:null};
+  const outbound={site:moon,item,side:"sell",epoch:2,status:"open",prices:[36,37,37],manage:null};
+  const state={atSite:river,atMarket:river,markets:[],returnMarkets:[inbound,outbound],serverNow:1_000_000,
+    history:[],wallet:100,walletSpace:100,itemCount:12,bagSpace:12,returnInventory:{itemCount:1,bagSpace:4}};
+  f.ctx.cityReceiveMarkets(state);
+  assert.match(f.ctx.cityMarketRouteQuote(outbound,[inbound,outbound]),/เทียบ 2 ชิ้น · จ่าย 73 ทอง · ขายได้ประมาณ 76 ทอง/);
+  f.submit("ยืนยันขายแร่",2);
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.submit("ยืนยันขายแร่",1);
+  const sale=f.wire.at(-1).payload;
+  assert.deepEqual(sale,{requestId:sale.requestId,action:"local_market_trade",site:river,epoch:1,item,amount:1,total:38});
+  f.ctx.cityReceiveResult(sale);
+  assert.match(f.nodes.cityStatus.textContent,/ขายแร่แล้ว · ได้รับ 38 ทอง/);
+  f.ctx.cityReceiveMarkets({...state,enabled:true,returnMarkets:[{...inbound,enabled:false,prices:[],status:"disabled",
+    manage:{open:true,configured:true,commander:true,limit:12,stock:0,gold:70,budget:40,maxBudget:100,history:[]}}]});
+  assert.equal(f.button("กันงบรับซื้อ"),undefined);
+  f.submit("คืนงบรับซื้อ",40);
+  assert.equal(f.wire.at(-1).payload.item,item);
+  assert.equal(f.wire.at(-1).payload.amount,-40);
+});
+
 test("city hall shows reserved gold and only enables an on-site commander after the cooldown", () => {
   const f=fixture({governanceAvailable:true});
   f.state({site:"moon_pass",miningSite:"moon_pass"});

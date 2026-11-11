@@ -12,8 +12,9 @@ import { SHRINE_RECIPE, bankForgeCopy, gearCounts, isSocketGear, isStackableItem
 import type { HomeAction, MarketFilters, SalvageOrder } from "./EconomyRules.js";
 import {CityProduction} from "./CityProduction.js";
 import {
-  CITY_MINING_ORE, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
-  CITY_PRODUCT, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketOrder, type CityMember,
+  CITY_MINING_ORE, CITY_MINING_PRODUCT, CITY_MINING_SITE, CITY_PRODUCTION_SITE, CITY_RAW_ITEMS, CITY_RECIPE, CITY_SITES,
+  CITY_PRODUCT, cityMarketSide, type CityDisband, type CityFactoryOrder, type CityHaulOrder, type CityMarketItem,
+  type CityMarketOrder, type CityMember,
   type CityMissionOrder, type CityOrder,
   type CityOwnership, type CityOwnerships, type CityPolicyOrder, type CityPurchaseOrder, type CitySite,
   type CitySupplyOrder, type CitySupplyRepair, type CityWorkshopOrder,
@@ -324,20 +325,28 @@ export class EconomyStore {
   hasCityMarketAssets(): boolean {
     return this.city.hasLocalMarketAssets();
   }
-  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean) {
+  viewCityMarkets(actor: string, member: CityMember | undefined, cities: CityOwnerships, enabled: boolean, returnEnabled = false) {
     const account = this.account(actor);
-    let itemCount = 0, bagSpace = 0;
-    for (const stack of account.inventory.slots) {
-      if (!stack) bagSpace += 99;
-      else if (stack.itemId === CITY_PRODUCT) {
-        itemCount += stack.quantity;
-        bagSpace += 99 - stack.quantity;
+    const inventoryFor = (item: CityMarketItem) => {
+      let itemCount = 0, bagSpace = 0;
+      for (const stack of account.inventory.slots) {
+        if (!stack) bagSpace += 99;
+        else if (stack.itemId === item) {
+          itemCount += stack.quantity;
+          bagSpace += 99 - stack.quantity;
+        }
       }
-    }
+      return {itemCount, bagSpace};
+    };
+    const returnMarkets = CITY_SITES.map(site =>
+      this.city.localMarketView(site, CITY_MINING_PRODUCT, cities[site], member, enabled && returnEnabled))
+      .filter(market => returnEnabled || market.manage?.configured);
     return {
-      markets: CITY_SITES.map(site => this.city.localMarketView(site, cities[site], member, enabled)),
-      wallet: account.gold, walletSpace: MAX_GOLD - account.gold, itemCount, bagSpace,
-      history: this.city.localMarketHistory(actor),
+      markets: CITY_SITES.map(site => this.city.localMarketView(site, CITY_PRODUCT, cities[site], member, enabled)),
+      wallet: account.gold, walletSpace: MAX_GOLD - account.gold, ...inventoryFor(CITY_PRODUCT),
+      history: this.city.localMarketHistory(actor, CITY_PRODUCT),
+      returnMarkets, returnInventory: inventoryFor(CITY_MINING_PRODUCT),
+      returnHistory: this.city.localMarketHistory(actor, CITY_MINING_PRODUCT),
     };
   }
   cityMarketOrder(actor: string, member: CityMember | undefined, order: CityMarketOrder, ownership: CityOwnership, now: number) {
@@ -348,13 +357,14 @@ export class EconomyStore {
         return this.city.configureLocalMarket(member, order, ownership, now);
       }
       const account = this.account(actor), trade = this.city.tradeAtLocalMarket(actor, order, ownership, now);
-      if (order.site === CITY_PRODUCTION_SITE) {
+      const item = order.item ?? CITY_PRODUCT;
+      if (cityMarketSide(order.site, item) === "sell") {
         if (account.gold < trade.total) throw Error("insufficient_gold");
-        account.inventory = add(account.inventory, {itemId: CITY_PRODUCT, quantity: trade.amount});
+        account.inventory = add(account.inventory, {itemId: item, quantity: trade.amount});
         account.gold -= trade.total;
       } else {
         if (account.gold + trade.total > MAX_GOLD) throw Error("city_wallet_full");
-        consume(account, CITY_PRODUCT, trade.amount, "item_unavailable");
+        consume(account, item, trade.amount, "item_unavailable");
         account.gold += trade.total;
       }
       this.put(actor, account);

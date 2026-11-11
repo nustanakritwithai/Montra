@@ -258,7 +258,7 @@
     $("guildLeave").onclick=()=>{if(guildReady() && window.confirm("ออกจากกิลด์ใช่หรือไม่"))room.send("guild_leave",{});};
     renderGuild();if(guildReady()){room.send("get_guild",{});if(!guildState)room.send("guild_search",{query:""});}
   }
-  const cityProduct="mat_metal_1";
+  const cityProduct="mat_metal_1", cityReturnProduct="mat_metal_2";
   const cityAssets=["gold",cityProduct,"mat_raw_wood_1","mat_raw_stone_1","mat_raw_stone_2","mat_metal_2"];
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
@@ -337,7 +337,7 @@
       local_market_config:"บันทึกการตั้งค่าตลาดแล้ว",
       local_market_stock:data.amount>0?"นำแร่ขึ้นขายแล้ว":"คืนแร่เข้าคลังแล้ว",
       local_market_budget:data.amount>0?"กันงบรับซื้อแล้ว":"คืนงบให้กิลด์แล้ว",
-      local_market_trade:(data.site==="sam_lan_estuary"?"ซื้อแร่แล้ว · จ่าย ":"ขายแร่แล้ว · ได้รับ ")+data.total+" ทอง",
+      local_market_trade:(cityMarketPlayerBuys(data)?"ซื้อแร่แล้ว · จ่าย ":"ขายแร่แล้ว · ได้รับ ")+data.total+" ทอง",
       start_fast:"เริ่มเร่งผลิตแล้ว",list:"ตั้งขายในตลาดโลกแล้ว",cancel:"คืนสินค้าเข้าคลังแล้ว",
       reclaim:"รับของเข้ากระเป๋าแล้ว",disband:"ยุบกิลด์แล้ว · รับทรัพย์สินได้ด้านล่าง",claim_disband:"รับทรัพย์สินแล้ว"};
     clearTimeout(cityReplyTimer);cityPending=null;
@@ -492,20 +492,41 @@
     unowned:"เมืองยังไม่มีผู้ครอง",disabled:"พักเปิดรับคำสั่งใหม่",siege:"พักระหว่างศึก",
     paused:"ตลาดปิด",empty:"สินค้าในตลาดหมด",target:"แร่ในคลังถึงเป้าหมาย",capacity:"คลังเมืองเต็ม",budget:"งบรับซื้อไม่พอ"
   };
-  function cityMarketSummary(site){
-    const market=cityMarkets?.markets.find(row=>row.site===site);
-    if(!market)return "กำลังโหลดราคาตลาดเมือง…";
-    const label=site==="sam_lan_estuary"?"ราคาขายของเมือง":"ราคารับซื้อของเมือง";
+  function cityMarketRows(){
+    return cityMarkets ? [...cityMarkets.markets,...(cityMarkets.returnMarkets??[])] : [];
+  }
+  function cityMarketPlayerBuys(market){
+    return market.side ? market.side==="sell" : (market.site==="sam_lan_estuary")===(market.item!==cityReturnProduct);
+  }
+  function cityMarketFields(market){
+    const {site,epoch,item}=market;
+    return {site,epoch,...(item===cityReturnProduct?{item}:{})};
+  }
+  function cityMarketSummary(market){
+    const label=cityMarketPlayerBuys(market)?"ราคาขายของเมือง":"ราคารับซื้อของเมือง";
     if(!market.prices.length){
       const status=cityMarketStatuses[market.status] || "ตลาดปิด", latest=market.lastTrade;
-      return latest?status+" · รายการล่าสุดเฉลี่ย "+(latest.total/latest.amount).toLocaleString("th-TH",
-        {maximumFractionDigits:2})+" ทอง/ชิ้น · "+new Date(latest.at).toLocaleString("th-TH"):status;
+      return latest?label+" · "+status+" · รายการล่าสุดเฉลี่ย "+(latest.total/latest.amount).toLocaleString("th-TH",
+        {maximumFractionDigits:2})+" ทอง/ชิ้น · "+new Date(latest.at).toLocaleString("th-TH"):label+" · "+status;
     }
     return label+" "+market.prices[0]+" ทอง/ชิ้น · ซื้อขายได้ "+market.prices.length+" ชิ้น · อัปเดต "+
       new Date(cityMarkets.serverNow).toLocaleTimeString("th-TH");
   }
+  function cityMarketRouteQuote(origin,markets){
+    if(!cityMarketPlayerBuys(origin) || !origin.prices.length)return "";
+    const item=origin.item??cityProduct;
+    const destination=markets.find(market=>market.site!==origin.site && (market.item??cityProduct)===item);
+    if(!destination)return "";
+    const amount=Math.min(origin.prices.length,destination.prices.length);
+    if(!amount)return "ปลายทาง "+citySiteNames[destination.site]+" · "+cityMarketSummary(destination);
+    const total=market=>market.prices.slice(0,amount).reduce((sum,price)=>sum+price,0);
+    const cost=total(origin), proceeds=total(destination), difference=proceeds-cost;
+    return "ไป"+citySiteNames[destination.site]+" · เทียบ "+amount+" ชิ้น · จ่าย "+cost+" ทอง · ขายได้ประมาณ "+
+      proceeds+" ทอง · ส่วนต่าง "+(difference>0?"+":"")+difference+" ทอง · ปลายทางรับได้ "+destination.prices.length+" ชิ้น";
+  }
   function renderCityMarketTrade(target,market,note,locked){
-    const buy=market.site==="sam_lan_estuary", {wallet,walletSpace,itemCount,bagSpace}=cityMarkets;
+    const buy=cityMarketPlayerBuys(market), {wallet,walletSpace}=cityMarkets;
+    const {itemCount,bagSpace}=market.item===cityReturnProduct?cityMarkets.returnInventory:cityMarkets;
     note(target,"ทอง "+wallet+" · แร่ในกระเป๋า "+itemCount+" ชิ้น · พื้นที่รับแร่เพิ่ม "+bagSpace+" ชิ้น");
     const prices=market.prices.slice(0,buy?bagSpace:itemCount), totals=[];
     let total=0;
@@ -520,7 +541,7 @@
     }
     const [quantity]=cityAmountForm(target,buy?"ยืนยันซื้อแร่":"ยืนยันขายแร่",[["จำนวนชิ้น",totals.length]],amount=>{
       if(cityPositive(amount,totals.length))
-        sendCityProduction("local_market_trade",{site:market.site,epoch:market.epoch,amount,total:totals[amount-1]});
+        sendCityProduction("local_market_trade",{...cityMarketFields(market),amount,total:totals[amount-1]});
     },locked);
     const quote=marketText("p","note");quote.setAttribute("aria-live","polite");target.append(quote);
     quantity.oninput=()=>{
@@ -530,11 +551,13 @@
     quantity.oninput();
   }
   function renderCityMarketManagement(target,market,note,button,locked){
-    const manage=market.manage, buy=market.site==="sam_lan_estuary", fields={site:market.site,epoch:market.epoch};
-    const enabled=cityMarkets.enabled, blocked=locked || market.siege || cityMarkets.atSite!==market.site;
+    const manage=market.manage, buy=cityMarketPlayerBuys(market), fields=cityMarketFields(market);
+    const enabled=market.enabled??cityMarkets.enabled, blocked=locked || market.siege || cityMarkets.atSite!==market.site;
     note(target,buy?"แร่ในคลัง "+manage.stock+" ชิ้น · ขึ้นขาย "+manage.shelf+" / "+manage.limit+" ชิ้น":
       "แร่พร้อมใช้ "+manage.stock+" ชิ้น · รอส่งเข้า "+manage.incoming+" ชิ้น · เป้าหมาย "+manage.limit+" ชิ้น");
     note(target,"ทองตลาดพร้อมใช้ "+manage.gold+" ทอง"+(buy?"":" · งบรับซื้อที่กันไว้ "+manage.budget+" ทอง"));
+    if(Number.isFinite(manage.tradedGold))
+      note(target,(buy?"รายได้จากการขายสะสม ":"จ่ายรับซื้อสะสม ")+manage.tradedGold+" ทอง");
     if(cityMarkets.atSite!==market.site)note(target,"ไปที่เมืองแล้วกดรีเฟรชเพื่อจัดการตลาด");
     if(manage.commander){
       if(enabled){
@@ -575,11 +598,14 @@
     if(cityPending && !cityPending.waiting)button(body,"ส่งคำขอเดิมซ้ำ",transmitCityProduction,!ready);
     if(!ready)return;
     if(!cityMarkets){note(body,"กำลังโหลดราคาตลาดเมือง…");return;}
-    note(body,cityItemName(cityProduct)+" · ราคาของแต่ละชิ้นอาจเปลี่ยนตามสต็อก");
-    for(const market of cityMarkets.markets){
+    note(body,"ราคาของแต่ละชิ้นอาจเปลี่ยนตามสต็อก");
+    const markets=cityMarketRows();
+    for(const market of markets){
       const section=marketText("section","gx-page");body.append(section);
-      section.append(marketText("h3","cp-h",citySiteNames[market.site]));
-      note(section,cityMarketSummary(market.site));
+      section.append(marketText("h3","cp-h",citySiteNames[market.site]+" · "+cityItemName(market.item??cityProduct)));
+      note(section,cityMarketSummary(market));
+      const comparison=cityMarketRouteQuote(market,markets);
+      if(comparison)note(section,comparison);
       if(cityMarkets.atMarket===market.site && market.prices.length)renderCityMarketTrade(section,market,note,locked);
       else if(market.prices.length){
         note(section,"เข้าใกล้นายหน้าตลาดของเมืองนี้เพื่อซื้อขาย");
@@ -587,9 +613,11 @@
       }
       if(market.manage)renderCityMarketManagement(section,market,note,button,locked);
     }
-    if(cityMarkets.history.length)body.append(marketText("h3","cp-h","ประวัติซื้อขายของคุณ"));
-    for(const entry of cityMarkets.history)note(body,citySiteNames[entry.site]+" · "+
-      (entry.site==="sam_lan_estuary"?"ซื้อ ":"ขาย ")+entry.amount+" ชิ้น · "+entry.total+" ทอง · "+new Date(entry.at).toLocaleString("th-TH"));
+    const history=[...cityMarkets.history,...(cityMarkets.returnHistory??[])].sort((a,b)=>b.at-a.at);
+    if(history.length)body.append(marketText("h3","cp-h","ประวัติซื้อขายของคุณ"));
+    for(const entry of history.slice(0,10))note(body,citySiteNames[entry.site]+" · "+
+      (cityMarketPlayerBuys(entry)?"ซื้อ ":"ขาย ")+cityItemName(entry.item??cityProduct)+" "+entry.amount+" ชิ้น · "+
+      entry.total+" ทอง · "+new Date(entry.at).toLocaleString("th-TH"));
   }
   function openCityBoard(drawer,title,refresh,backLabel="ตลาดโลก",back=openEconomy){
     if(!cityPending)cityStatus="";

@@ -15,10 +15,13 @@ export const CITY_GOVERNANCE_ENABLED = process.env.MONTRA_CITY_GOVERNANCE === "1
 export const CITY_SUPPLY_ENABLED = process.env.MONTRA_CITY_SUPPLY_RESERVE === "1";
 export const CITY_HAUL_ENABLED = process.env.MONTRA_CITY_HAULS === "1";
 export const CITY_LOCAL_MARKET_ENABLED = process.env.MONTRA_CITY_LOCAL_MARKETS === "1";
+export const CITY_RETURN_MARKET_ENABLED = process.env.MONTRA_CITY_RETURN_MARKET === "1";
 export const CITY_RAW_ITEMS = ["mat_raw_wood_1", "mat_raw_stone_1"] as const;
 export const CITY_PRODUCT = "mat_metal_1";
 export const CITY_MINING_ORE = "mat_raw_stone_2";
 export const CITY_MINING_PRODUCT = "mat_metal_2";
+export const CITY_MARKET_ITEMS = [CITY_PRODUCT, CITY_MINING_PRODUCT] as const;
+export type CityMarketItem = typeof CITY_MARKET_ITEMS[number];
 export const CITY_ITEMS = [...CITY_RAW_ITEMS, CITY_PRODUCT, CITY_MINING_ORE, CITY_MINING_PRODUCT] as const;
 export type CityItem = typeof CITY_ITEMS[number];
 type CityInput = Exclude<CityItem, typeof CITY_MINING_PRODUCT>;
@@ -67,6 +70,10 @@ export const CITY_MARKET_QUANTITY = 12;
 export const CITY_MARKET_SHELF = 24;
 export const CITY_MARKET_TARGET = [12, 24, 36] as const;
 export const CITY_MARKET_BUDGET = 1_000_000_000;
+const cityMarketProfiles = {
+  [CITY_PRODUCT]: {shelf: CITY_MARKET_SHELF, target: CITY_MARKET_TARGET, sellPrice: 13, buyPrice: 11},
+  [CITY_MINING_PRODUCT]: {shelf: 12, target: [6, 12, 18], sellPrice: 36, buyPrice: 34},
+} as const;
 export const CITY_SUPPLY_MATERIALS = [
   {item: CITY_MINING_ORE, amount: 6}, {item: CITY_MINING_PRODUCT, amount: 3},
 ] as const;
@@ -102,11 +109,11 @@ export type CitySupplyOrder = {requestId: string; epoch: number} & (
   {action: "supply_cancel" | "supply_repair" | "supply_recover"; supplyId: string}
 );
 export type CitySupplyRepair = {id: string; epoch: number; guild: string; battle: number};
-export type CityMarketOrder = {requestId: string; epoch: number} & (
-  {action: "local_market_config"; site: CitySite; open: boolean; limit: number} |
-  {action: "local_market_stock"; site: typeof CITY_PRODUCTION_SITE; amount: number} |
-  {action: "local_market_budget"; site: typeof CITY_MINING_SITE; amount: number} |
-  {action: "local_market_trade"; site: CitySite; amount: number; total: number}
+export type CityMarketOrder = {requestId: string; epoch: number; site: CitySite; item?: CityMarketItem} & (
+  {action: "local_market_config"; open: boolean; limit: number} |
+  {action: "local_market_stock"; amount: number} |
+  {action: "local_market_budget"; amount: number} |
+  {action: "local_market_trade"; amount: number; total: number}
 );
 export type CityHaulOrder = {requestId: string} & (
   {action: "haul_open"; epoch: number; destination: CitySite; destinationEpoch: number;
@@ -172,15 +179,28 @@ export function isCityMarketOrder(order: CityOrder): order is CityMarketOrder {
     order.action === "local_market_budget" || order.action === "local_market_trade";
 }
 
-export function cityMarketPrices(site: CitySite, stock: number, target: number, budget: number, free: number): number[] {
-  if (site === CITY_PRODUCTION_SITE) {
+export function cityMarketSide(site: CitySite, item: CityMarketItem): "sell" | "buy" {
+  return (site === CITY_PRODUCTION_SITE) === (item === CITY_PRODUCT) ? "sell" : "buy";
+}
+
+export function cityMarketLimits(site: CitySite, item: CityMarketItem) {
+  const profile = cityMarketProfiles[item];
+  return cityMarketSide(site, item) === "sell" ?
+    {min: 1, initial: profile.shelf, max: profile.shelf} :
+    {min: profile.target[0], initial: profile.target[1], max: profile.target[2]};
+}
+
+export function cityMarketPrices(site: CitySite, stock: number, target: number, budget: number, free: number,
+  item: CityMarketItem = CITY_PRODUCT): number[] {
+  const profile = cityMarketProfiles[item];
+  if (cityMarketSide(site, item) === "sell") {
     return Array.from({length: Math.min(stock, CITY_MARKET_QUANTITY)},
-      (_, index) => 13 + Math.floor((12 - (stock - index)) / 4));
+      (_, index) => profile.sellPrice + Math.floor((profile.shelf / 2 - (stock - index)) / 4));
   }
   const prices: number[] = [];
   const available = Math.min(CITY_MARKET_QUANTITY, target - stock, free);
   for (let index = 0; index < available; index++) {
-    const price = 11 + Math.floor((target - (stock + index)) / 4);
+    const price = profile.buyPrice + Math.floor((target - (stock + index)) / 4);
     if (budget < price) break;
     budget -= price;
     prices.push(price);
@@ -194,6 +214,8 @@ export function parseCityOrder(input: unknown): CityOrder | null {
   if (typeof order.requestId !== "string" || !/^[A-Za-z0-9_-]{16,64}$/.test(order.requestId)) return null;
   const keys = (...fields: string[]) =>
     Object.keys(order).length === fields.length + 2 && fields.every(field => Object.hasOwn(order, field));
+  const marketKeys = (...fields: string[]) => keys("site", "epoch", ...fields,
+    ...(Object.hasOwn(order, "item") ? ["item"] : []));
   const integer = (value: unknown, min: number, max = Number.MAX_SAFE_INTEGER): value is number =>
     typeof value === "number" && Number.isSafeInteger(value) && value >= min && value <= max;
   const uuid = (value: unknown): value is string => typeof value === "string" &&
@@ -222,19 +244,28 @@ export function parseCityOrder(input: unknown): CityOrder | null {
   if (!integer(order.epoch, 1)) return null;
   switch (order.action) {
     case "local_market_config":
-      return keys("site", "epoch", "open", "limit") && typeof order.open === "boolean" &&
-        ((order.site === CITY_PRODUCTION_SITE && integer(order.limit, 1, CITY_MARKET_SHELF)) ||
-          (order.site === CITY_MINING_SITE && integer(order.limit, CITY_MARKET_TARGET[0], CITY_MARKET_TARGET[2])))
-        ? order as CityOrder : null;
     case "local_market_stock":
-      return keys("site", "epoch", "amount") && order.site === CITY_PRODUCTION_SITE &&
-        integer(order.amount, -CITY_MARKET_SHELF, CITY_MARKET_SHELF) && order.amount !== 0 ? order as CityOrder : null;
     case "local_market_budget":
-      return keys("site", "epoch", "amount") && order.site === CITY_MINING_SITE &&
-        integer(order.amount, -CITY_MARKET_BUDGET, CITY_MARKET_BUDGET) && order.amount !== 0 ? order as CityOrder : null;
-    case "local_market_trade":
-      return keys("site", "epoch", "amount", "total") && CITY_SITES.some(site => site === order.site) &&
-        integer(order.amount, 1, CITY_MARKET_QUANTITY) && integer(order.total, 1, CITY_MARKET_BUDGET) ? order as CityOrder : null;
+    case "local_market_trade": {
+      const site = CITY_SITES.find(site => site === order.site);
+      const item = Object.hasOwn(order, "item") ? CITY_MARKET_ITEMS.find(item => item === order.item) : CITY_PRODUCT;
+      if (!site || !item) return null;
+      const side = cityMarketSide(site, item), {min, max} = cityMarketLimits(site, item);
+      switch (order.action) {
+        case "local_market_config":
+          return marketKeys("open", "limit") && typeof order.open === "boolean" && integer(order.limit, min, max)
+            ? order as CityOrder : null;
+        case "local_market_stock":
+          return marketKeys("amount") && side === "sell" && integer(order.amount, -max, max) && order.amount !== 0
+            ? order as CityOrder : null;
+        case "local_market_budget":
+          return marketKeys("amount") && side === "buy" &&
+            integer(order.amount, -CITY_MARKET_BUDGET, CITY_MARKET_BUDGET) && order.amount !== 0 ? order as CityOrder : null;
+        case "local_market_trade":
+          return marketKeys("amount", "total") && integer(order.amount, 1, CITY_MARKET_QUANTITY) &&
+            integer(order.total, 1, CITY_MARKET_BUDGET) ? order as CityOrder : null;
+      }
+    }
     case "supply_reserve":
       return keys("epoch") ? order as CityOrder : null;
     case "supply_cancel":

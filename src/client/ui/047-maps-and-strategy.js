@@ -791,7 +791,15 @@
   }
   function updateAtlasCityMarket(){
     const price=$("atlasCityMarket");
-    if(drawerActive==="strategy" && price)price.textContent=cityMarketSummary(price.dataset.site);
+    if(drawerActive!=="strategy" || !price)return;
+    const markets=cityMarketRows();
+    if(!markets.length){price.textContent="กำลังโหลดราคาตลาดเมือง…";return;}
+    price.replaceChildren();
+    for(const market of markets.filter(row=>row.site===price.dataset.site)){
+      price.append(marketText("p","note",cityItemName(market.item??cityProduct)+" · "+cityMarketSummary(market)));
+      const comparison=cityMarketRouteQuote(market,markets);
+      if(comparison)price.append(marketText("p","note",comparison));
+    }
   }
   function openStrategicMap(destination){
     const maps=worldDefinitions,origin=activeMapId;
@@ -839,7 +847,7 @@
       directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
       detail.replaceChildren(title,description,directions);
       if(room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,id)){
-        const price=document.createElement("p");price.id="atlasCityMarket";price.dataset.site=id;
+        const price=document.createElement("div");price.id="atlasCityMarket";price.dataset.site=id;
         const market=document.createElement("button");market.type="button";market.className="secondary";
         market.textContent="เปิดตลาดประจำเมือง";market.onclick=openCityMarket;
         detail.append(price,market);updateAtlasCityMarket();

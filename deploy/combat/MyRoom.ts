@@ -89,10 +89,10 @@ import { parseMarketHistory, parseMarketFavorite, parseSellMaterial, parseSalvag
 import type { TradeOffer } from "./EconomyStore.js";
 import { guildStore, guildOnline, notifyGuilds, subscribeGuild, parseGuildName, GUILD_MAX_MEMBERS } from "./GuildStore.js";
 import {
-  CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE,
+  CITY_CONSTRUCTION_ENABLED, CITY_MINING_CONSTRUCTION_ENABLED, CITY_MINING_ENABLED, CITY_MINING_PRODUCT, CITY_MINING_SITE,
   CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE,
   CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_LOCAL_MARKET_ENABLED, CITY_MISSIONS_ENABLED, CITY_PURCHASE_ENABLED,
-  CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
+  CITY_RETURN_MARKET_ENABLED, CITY_SITES, CITY_SUPPLY_ENABLED, CITY_WORKSHOP_ENABLED,
   isCityHaulOrder, isCityMarketOrder, isCityMissionOrder, isCityPurchaseOrder, isCitySupplyOrder, isWarehouseOrder, parseCityOrder,
   type CityHaulOrder, type CityMarketOrder, type CityMissionOrder, type CityOrder, type CityPolicyOrder, type CityPurchaseOrder,
   type CitySite, type CitySupplyOrder,
@@ -188,6 +188,7 @@ const cityPurchaseIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MI
 const cityMissionIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_MISSIONS_ENABLED;
 const cityHaulIntake = cityMissionIntake && CITY_HAUL_ENABLED;
 const cityMarketIntake = WORLD_EXPANSION && CITY_PRODUCTION_ENABLED && CITY_MINING_ENABLED && CITY_LOCAL_MARKET_ENABLED;
+const cityReturnMarketIntake = cityMarketIntake && CITY_RETURN_MARKET_ENABLED;
 function syncCityProduction(now: number, site: CitySite = CITY_PRODUCTION_SITE) {
   const guilds = guildStore(), store = characterStore.economy;
   if (site === CITY_MINING_SITE)
@@ -4426,7 +4427,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const fail = (reason: string) => client.send("city_production_error", {reason, requestId: order?.requestId ?? null});
     const cleanup = order?.action === "local_market_config" ? !order.open :
       (order?.action === "local_market_stock" || order?.action === "local_market_budget") && order.amount < 0;
-    if (!this.state.cityMarketSupported || (order && !cleanup && !cityMarketIntake)) return fail("city_market_disabled");
+    const intake = order?.item === CITY_MINING_PRODUCT ? cityReturnMarketIntake : cityMarketIntake;
+    if (!this.state.cityMarketSupported || (order && !cleanup && !intake)) return fail("city_market_disabled");
     const id = client.sessionId;
     if (!this.gates.get(id)?.economy.consume(this.simulatedMs)) return fail("economy_rate_limited");
     const actor = this.economyId(client, fail);
@@ -4453,7 +4455,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           else throw error;
         }
       }
-      client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake),
+      client.send("city_markets_state", {...store.viewCityMarkets(actor, member, cities, cityMarketIntake, cityReturnMarketIntake),
         atSite, atMarket, enabled: cityMarketIntake, serverNow: now});
     } catch (error) {
       console.error("MONTRA city market action failed", error);
