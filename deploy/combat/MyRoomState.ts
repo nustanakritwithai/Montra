@@ -88,6 +88,8 @@ export const Monster = schema({
   specialStage: t.number().default(0),
   specialOriginX: t.number().default(0),
   specialOriginZ: t.number().default(0),
+  // Consecutive (x, z, radius) triples for a strike that marks all its phases up front.
+  specialMarks: t.array("number"),
 }, "MontraMonster");
 
 export type Monster = SchemaType<typeof Monster>;

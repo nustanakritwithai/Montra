@@ -106,6 +106,23 @@ try{
   await leave(marsh);
   console.log("PASS networked tiger ripple, landing warning, leap and damage");
 
+  const bamboo=await join(await seed("bamboo_frontier",-63,-25.6));
+  const kilen=()=>bamboo.state.monsters.get("himmapan_kilen");
+  await until(()=>kilen()?.specialStage===1 && kilen().specialMarks?.length===9,"three Kilen seals");
+  const marks=[...kilen().specialMarks];
+  assert.equal(new Set([marks[0]+","+marks[1],marks[3]+","+marks[4],marks[6]+","+marks[7]]).size,3);
+  for(let stage=1;stage<=3;stage++){
+    await until(()=>kilen()?.specialStage===stage,"Kilen seal "+stage);
+    const m=kilen(),offset=(stage-1)*3;
+    for(const [actual,expected] of [[m.specialOriginX,marks[offset]],[m.specialOriginZ,marks[offset+1]],[m.specialRange,marks[offset+2]]]){
+      assert.ok(Math.abs(actual-expected)<.001);
+    }
+    assert.deepEqual([...m.specialMarks],marks);
+  }
+  await until(()=>kilen()?.specialStage===0 && kilen().specialMarks?.length===0,"Kilen seal cleanup");
+  await leave(bamboo);
+  console.log("PASS all Kilen seals replicate up front and resolve in order");
+
   const hunters=await fillRoom(await Promise.all(Array.from({length:10},(_,i)=>seed("forbidden_forest",-33+(i%3)*.25,-17+Math.floor(i/3)*.25))));
   const targetId="forest_west_1",monster=()=>hunters[0].state.monsters.get(targetId);
   assert.ok([...hunters[0].state.players.values()].every(p=>p.alive && p.mapId==="forbidden_forest" && Math.hypot(p.x-monster().x,p.z-monster().z)<20));

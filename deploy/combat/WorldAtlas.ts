@@ -212,7 +212,7 @@ export type HimmapanPhase = {
   forward?:number; lateral?:number; cueOnly?:boolean; leap?:boolean; force?:number;
 };
 export type HimmapanAttack = HimmapanPhase & {
-  triggerRange?:number; followups?:readonly HimmapanPhase[]; recoveryMs?:number;
+  triggerRange?:number; followups?:readonly HimmapanPhase[]; recoveryMs?:number; markFollowups?:boolean;
 };
 export const HIMMAPAN_SPAWNS = ([
   { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
@@ -240,7 +240,7 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"guard", special:{ range:3.5, halfWidth:0, halfAngle:Math.PI/4, windupMs:950, force:.9, recoveryMs:1750,
       followups:[{range:4.4,halfWidth:0,halfAngle:Math.PI/3,windupMs:800,force:1.1}] } },
   { id:"himmapan_kilen", name:"กิเลน", mapId:"bamboo_frontier", x:-63, z:-24, level:33, tier:"normal",
-    theme:"spirit", special:{ range:1.4, halfWidth:0, windupMs:950, triggerRange:5.2, forward:1.6, force:1,
+    theme:"spirit", special:{ range:1.4, halfWidth:0, windupMs:950, triggerRange:5.2, forward:1.6, force:1, markFollowups:true,
       followups:[{range:1.4,halfWidth:0,windupMs:850,forward:3.25,lateral:1.2,force:1},
         {range:1.55,halfWidth:0,windupMs:850,forward:4.9,lateral:-1,force:1.15}] } },
 ] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);

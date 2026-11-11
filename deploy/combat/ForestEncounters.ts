@@ -42,27 +42,33 @@ function canPlaceSpecial(life:Life, to:{x:number;y:number;z:number}):boolean {
     isMonsterSegmentClear(actor,to,obstacles,MONSTER_NAV.radius,map.bounds) &&
     (!map.terrain || isWorldSegmentClear(map.id,actor,to));
 }
-function startSpecialPhase(life:Life, phase:HimmapanPhase, stage:number, now:number):void {
+function specialOrigin(life:Life, phase:HimmapanPhase):{x:number;z:number} {
   const m=life.actor;
-  m.specialRange=phase.range;m.specialHalfWidth=phase.halfWidth;
-  m.specialInnerRange=phase.innerRange??0;m.specialHalfAngle=phase.halfAngle??0;
-  m.specialStage=stage;
-  m.specialOriginX=m.x;m.specialOriginZ=m.z;
   const forward=phase.forward??0, lateral=phase.lateral??0;
   if(forward || lateral){
     const sin=Math.sin(m.facing),cos=Math.cos(m.facing);
     for(const scale of [1,.75,.5,.25]){
       const x=m.x+(lateral*cos-forward*sin)*scale,z=m.z-(lateral*sin+forward*cos)*scale;
-      if(!canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))continue;
-      m.specialOriginX=x;m.specialOriginZ=z;break;
+      if(canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))return {x,z};
     }
   }
+  return {x:m.x,z:m.z};
+}
+function startSpecialPhase(life:Life, phase:HimmapanPhase, stage:number, now:number):void {
+  const m=life.actor, offset=(stage-1)*3;
+  const origin=stage>0 && m.specialMarks.length>offset
+    ? {x:m.specialMarks[offset],z:m.specialMarks[offset+1]} : specialOrigin(life,phase);
+  m.specialRange=phase.range;m.specialHalfWidth=phase.halfWidth;
+  m.specialInnerRange=phase.innerRange??0;m.specialHalfAngle=phase.halfAngle??0;
+  m.specialStage=stage;
+  m.specialOriginX=origin.x;m.specialOriginZ=origin.z;
   m.aiState="windup";
   life.windupUntil=now+phase.windupMs;
 }
 function cancelSpecial(life:Life):void {
   life.windupUntil=0;
   life.actor.specialStage=0;
+  if(life.actor.specialMarks.length)life.actor.specialMarks.clear();
 }
 /** Bounded population, independent clocks and server-owned AI; no player-selected stats. */
 export class ForestEncounters {
@@ -274,6 +280,7 @@ export class ForestEncounters {
       if(special && m.aiState==="special_recovery"){
         if(now-life.lastAttack<(special.recoveryMs??650))continue;
         m.specialStage=0;
+        if(m.specialMarks.length)m.specialMarks.clear();
       }
       if(planarDistance(m,life)>=9)life.returning=true;
       let target=m.targetId?players.get(m.targetId):undefined;
@@ -290,6 +297,12 @@ export class ForestEncounters {
       else if(target){m.facing=facingTo(target.x-m.x,target.z-m.z);
         if(special && now>=life.nextChargeAt && now-life.lastAttack>=1500 &&
           planarDistance(m,target)<=(special.triggerRange??special.range) && clear(target)){
+          if(special.markFollowups){
+            for(const phase of [special,...(special.followups??[])]){
+              const origin=specialOrigin(life,phase);
+              m.specialMarks.push(origin.x,origin.z,phase.range);
+            }
+          }
           startSpecialPhase(life,special,special.followups?1:0,now);
           life.nextChargeAt=now+8000;
           continue;

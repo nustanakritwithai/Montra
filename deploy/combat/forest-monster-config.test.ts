@@ -51,10 +51,16 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
     let now=100;
     tick(now);
     const centers=new Set<string>();
+    const marks=[...m.specialMarks];
+    assert.equal(marks.length,id==="himmapan_kilen"?9:0);
     for(const [index,[windup,force]] of phases.entries()){
       assert.equal(m.aiState,"windup");
       assert.equal(m.specialStage,phases.length===1?0:index+1);
       const origin=m.specialStage?{x:m.specialOriginX,z:m.specialOriginZ}:home;
+      if(marks.length){
+        assert.deepEqual([...m.specialMarks],marks);
+        assert.deepEqual([origin.x,origin.z,m.specialRange],marks.slice(index*3,index*3+3));
+      }
       centers.add(`${origin.x},${origin.z}`);
       const front=m.specialHalfAngle ? .75 : 0;
       for(const player of [hunter,second,blocked])place(player,origin.x,origin.z-front);
@@ -77,6 +83,7 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
     tick(now+recovery);
     assert.notEqual(m.aiState,"special_recovery");
     assert.equal(m.specialStage,0);
+    assert.equal(m.specialMarks.length,0);
     if(id==="himmapan_kilen"){
       resetHunter();
       tick(8100);tick(9050);
@@ -86,6 +93,7 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
       tick(9900);
       assert.equal(m.aiState,"stagger");
       assert.equal(m.specialStage,0);
+      assert.equal(m.specialMarks.length,0);
       assert.equal(hits.length,before);
     }
     if(tier==="elite")assert.equal(forest.interrupt(id,8100,1500,0),"immune");

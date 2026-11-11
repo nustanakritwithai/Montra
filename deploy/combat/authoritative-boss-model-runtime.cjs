@@ -170,7 +170,10 @@ test('new Himmapan rigs follow the replicated strike stages, geometry and counte
    const mesh=add(f,m),g=mesh.metadata.ghost;
    assert(mesh.getChildMeshes().some(child=>child.name===part));
    const isTiger=id==='himmapan_phayak_nathi',isLion=tier==='elite';
+   const isKilen=id==='himmapan_kilen';
+   if(isKilen)m.specialMarks=[10,20,1.4,10,18,1.4,10,16,1.55];
    let warning;
+   let previousPending=[];
    const colors=new Set();
    for(const [i,range] of ranges.entries()){
     const stage=ranges.length===1?0:i+1;
@@ -187,12 +190,20 @@ test('new Himmapan rigs follow the replicated strike stages, geometry and counte
     const positions=current.getVerticesData(f.B.VertexBuffer.PositionKind);
     close(Math.min(...positions.filter((_,j)=>j%3===2)),centerZ-range,'ground marker starts at the replicated center');
     assert.equal(mesh.metadata.specialWarningFill?.isEnabled()??false,!(isTiger&&i===0));
+    const pending=mesh.metadata.specialPending;
+    assert(previousPending.every(mark=>mark.isDisposed()));
+    assert.equal(pending.length,isKilen?2-i:0);
+    assert(pending.every(mark=>mark.isEnabled()&&!mark.isPickable));
+    previousPending=pending;
     g.spawnAt=0;
     f.at(1730+i*1000);f.ctx.animateGhosts(.016,1730+i*1000);
     assert(g.rig.getChildMeshes().every(child=>child.getWorldMatrix().m.every(Number.isFinite)));
    }
    assert.equal(colors.size,ranges.length,'every phase has a distinct color');
+   const beforeImpact=f.calls.length;
    m.aiState='special_recovery';f.sync();
+   const effects=f.calls.slice(beforeImpact).filter(call=>call[0]==='spawnFx').map(call=>call[1]);
+   assert.deepEqual(effects,isTiger?['ring','slash','slash','slash']:isKilen?['ring','yantra','star']:isLion?['arc','arc']:['arc','arc','arc']);
    const opening=mesh.metadata.specialCounter;
    assert.equal(opening?.isEnabled()??false,counter);
    assert.equal(warning.isEnabled(),false);

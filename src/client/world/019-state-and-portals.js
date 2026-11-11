@@ -193,16 +193,16 @@
           const recovery=ghost.ai!==monster.aiState && monster.aiState==="special_recovery";
           if(recovery)ghost.specialAt=performance.now();
           if(ghost.windup && (nextPhase || recovery) && ghost.strikeArea){
-            const {tint,x,y,z,inner,range}=ghost.strikeArea;
-            if(tint)spawnFx("ring",tint,x,y+.14,z,
-              {orient:"ground",life:420,s0:2*(inner||.35),s1:2*range,a0:.75,a1:0});
+            playHimmapanImpact(ghost.strikeArea);
           }
           if(nextPhase || (monster.aiState==="windup" && !ghost.windup)){
             ghost.stageAt=performance.now();
             const x=stage?Number(monster.specialOriginX):ghost.tx,z=stage?Number(monster.specialOriginZ):ghost.tz;
             const terrain=worldDefinitions?.[monster.mapId]?.terrain;
+            const style=ghost.design.stages?.[stage-1];
             ghost.strikeArea={x,y:terrain?terrainHeight(terrain,x,z):ghost.ty,z,inner:Number(monster.specialInnerRange),
-              range:Number(monster.specialRange),tint:ghost.design.stages?.[stage-1]?.impact||ghost.design.impactTint};
+              range:Number(monster.specialRange),facing:ghost.tf,terrain,tint:style?.impact||ghost.design.impactTint,
+              effect:style?.effect||ghost.design.effect};
             if(ghost.design.leap && stage===2)ghost.leapDistance=Math.hypot(x-ghost.tx,z-ghost.tz);
           }
           if(recovery && ghost.windup && ghost.design.leap && stage===2)mesh.position.set(ghost.tx,ghost.ty+ghost.tall/2,ghost.tz);
