@@ -1,3 +1,221 @@
+  // Live boats use the village boat mesh and the server's Pirate Fruit deck dimensions.
+  const sailingMeshes = new Map();
+  const sailingKeys = new Set();
+  const sailingTouches = new Map();
+  const boatPanel = $("boatPanel");
+  const sailingInputKeys = new Map([
+    ["KeyW","forward"],["ArrowUp","forward"],["KeyS","reverse"],["ArrowDown","reverse"],
+    ["KeyA","left"],["ArrowLeft","left"],["KeyD","right"],["ArrowRight","right"],
+  ]);
+  let nextHelmInput = 0, requestedBoatAnchor = null, currentHelmBoat = "";
+  let sailingDestination = null, sailingMarker = null;
+
+  function sendBoatIntent(action, fields = {}) {
+    if (mode !== "live" || !room?.state?.boatsAvailable) return;
+    try { room.send("boat_intent", {action,...fields}); }
+    catch { if (action !== "input") toast("ส่งคำสั่งเรือไม่สำเร็จ"); }
+  }
+  function resetHelmControls() {
+    clearSailingDestination();
+    sailingKeys.clear();
+    sailingTouches.clear();
+    requestedBoatAnchor = null;
+  }
+  function ownBoatState() {
+    const player = ownServerCharacter();
+    return player?.boatId ? room.state.boats?.get(player.boatId) : null;
+  }
+  function boatAtHelm() {
+    const boat = ownBoatState();
+    return Boolean(boat && boat.helmId === localId);
+  }
+
+  function clearSailingDestination() {
+    sailingDestination = null;
+    sailingMarker?.setEnabled(false);
+  }
+  function sailingWaterDestination(x, z, map) {
+    if (!map?.boatDock || !Number.isFinite(x) || !Number.isFinite(z)) return null;
+    const bounds = map.bounds;
+    if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return null;
+    // The village river is drawn separately from the world map's walkable terrain.
+    const waters = map.id === "ritual_village" ? [{x:-80,z:48,width:160,length:40}] : (map.water || []);
+    const margin = map.boatDock.deck.length/2 + .1;
+    let destination = null, adjustment = Infinity;
+    for (const w of waters) {
+      if (x < w.x || x > w.x+w.width || z < w.z || z > w.z+w.length) continue;
+      const minX = Math.max(w.x,bounds.minX)+margin, maxX = Math.min(w.x+w.width,bounds.maxX)-margin;
+      const minZ = Math.max(w.z,bounds.minZ)+margin, maxZ = Math.min(w.z+w.length,bounds.maxZ)-margin;
+      if (minX > maxX || minZ > maxZ) continue;
+      const goal = {x:Math.max(minX,Math.min(maxX,x)),z:Math.max(minZ,Math.min(maxZ,z))};
+      const change = Math.hypot(goal.x-x,goal.z-z);
+      if (change < adjustment) {destination=goal;adjustment=change;}
+    }
+    return destination;
+  }
+  function steerSailingAt(px, py) {
+    if (!boatAtHelm()) return;
+    const ray = scene.createPickingRay(px,py,B.Matrix.Identity(),camera);
+    if (Math.abs(ray.direction.y) < .00001) return;
+    const t = -ray.origin.y/ray.direction.y;
+    if (t < 0) return;
+    const point = sailingWaterDestination(ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z,worldDefinitions?.[activeMapId]);
+    if (!point) return;
+    cancelQuestNavigation("",false);
+    const boat = ownBoatState();
+    sailingDestination = {...point,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    if (!sailingMarker) {
+      sailingMarker = marker.clone("sailing destination");
+      sailingMarker.isPickable = false;
+    }
+    sailingMarker.position.set(point.x,.15,point.z);
+    sailingMarker.setEnabled(true);
+    requestedBoatAnchor = false;
+  }
+  function wrapSailingAngle(angle) {
+    return Math.atan2(Math.sin(angle),Math.cos(angle));
+  }
+  function sailingInputForDestination(boat, now) {
+    const goal = sailingDestination;
+    if (!goal) return {throttle:0,steer:0};
+    const dx = goal.x-boat.x, dz = goal.z-boat.z;
+    const distance = Math.hypot(dx,dz);
+    const progress = goal.progress;
+    if (Math.hypot(boat.x-progress.x,boat.z-progress.z) >= .25 ||
+        Math.abs(wrapSailingAngle(boat.heading-progress.heading)) >= .16) {
+      goal.progress = {x:boat.x,z:boat.z,heading:boat.heading,at:now};
+    }
+    if (distance <= 1.35 || now-goal.progress.at >= 2800) {
+      clearSailingDestination();
+      return {throttle:0,steer:0};
+    }
+    const bearing = Math.atan2(dx,dz);
+    const reverse = Math.abs(wrapSailingAngle(bearing-boat.heading)) > Math.PI/2;
+    const headingError = wrapSailingAngle(bearing-boat.heading-(reverse ? Math.PI : 0));
+    const direction = reverse ? -1 : 1;
+    const momentum = Math.abs(boat.speed) > .15 ? Math.sign(boat.speed) : direction;
+    const maxThrottle = reverse ? .8 : .72;
+    const brakingDistance = reverse ? 4.5 : 10;
+    return {
+      throttle:direction*Math.min(maxThrottle,distance/brakingDistance)*Math.max(.18,Math.cos(headingError)),
+      steer:-momentum*Math.max(-1,Math.min(1,headingError*2)),
+    };
+  }
+
+  $("boatLaunch").onclick = () => { cancelQuestNavigation();sendBoatIntent("launch"); };
+  $("boatBoard").onclick = () => {
+    const id = $("boatBoard").dataset.boatId;
+    if (id) {cancelQuestNavigation();sendBoatIntent("board",{boatId:id});}
+  };
+  $("boatHelm").onclick = () => sendBoatIntent(boatAtHelm() ? "release" : "helm");
+  $("boatExit").onclick = () => sendBoatIntent("exit");
+  $("boatAnchor").onclick = () => {
+    const boat = ownBoatState();
+    if (boatAtHelm()) {
+      clearSailingDestination();
+      requestedBoatAnchor = !boat.anchored;
+    }
+  };
+  for (const button of boatPanel.querySelectorAll("[data-boat-drive]")) {
+    button.addEventListener("pointerdown",event=>{
+      if (!boatAtHelm() || event.button !== 0) return;
+      event.preventDefault();
+      button.setPointerCapture(event.pointerId);
+      clearSailingDestination();
+      sailingTouches.set(event.pointerId,button.dataset.boatDrive);
+    });
+    for (const name of ["pointerup","pointercancel","lostpointercapture"]) {
+      button.addEventListener(name,event=>sailingTouches.delete(event.pointerId));
+    }
+  }
+  addEventListener("keydown",event=>{
+    if (!sailingInputKeys.has(event.code) || !boatAtHelm() || event.altKey || event.metaKey || event.ctrlKey ||
+        event.target?.closest?.("input,textarea,select,[contenteditable]")) return;
+    event.preventDefault();
+    clearSailingDestination();
+    sailingKeys.add(event.code);
+  });
+  addEventListener("keyup",event=>sailingKeys.delete(event.code));
+  addEventListener("blur",resetHelmControls);
+  document.addEventListener("visibilitychange",()=>{if(document.hidden)resetHelmControls();});
+
+  function clickSailingDeck(id, point) {
+    const player = ownServerCharacter();
+    if (!player?.boatId) {sendBoatIntent("board",{boatId:id});return;}
+    if (player.boatId !== id || !point) return;
+    if (boatAtHelm()) {clearSailingDestination();return;}
+    const node = sailingMeshes.get(id);
+    if (!node) return;
+    const dx = point.x-node.position.x, dz = point.z-node.position.z;
+    const c = Math.cos(node.rotation.y), s = Math.sin(node.rotation.y);
+    sendBoatIntent("walk",{x:dx*c-dz*s,z:dx*s+dz*c});
+  }
+
+  function updateSailing(now, dt) {
+    const state = mode === "live" ? room?.state : null;
+    const dock = state?.boatsAvailable ? worldDefinitions?.[activeMapId]?.boatDock : null;
+    const player = dock ? ownServerCharacter() : null;
+    const seen = new Set();
+    let nearestId = "", nearestDistance = 6.5;
+    if (dock) state.boats?.forEach((boat,id)=>{
+      if (boat.mapId !== activeMapId || boat.sunk) return;
+      seen.add(id);
+      const distance = player ? Math.hypot(player.x-boat.x,player.z-boat.z) : Infinity;
+      if (distance <= nearestDistance && Math.abs(boat.speed) <= 1) {nearestDistance=distance;nearestId=id;}
+      let node = sailingMeshes.get(id);
+      if (!node) {
+        node = longTailBoat(boat.x,boat.z,boat.heading,true);
+        node.scaling.set(dock.deck.width/.95,dock.deck.y/.16,dock.deck.length/5.1);
+        const pick = B.MeshBuilder.CreateBox("sailing deck pick",{
+          width:.95*.82*1.08,height:.016,depth:5.1*.62*1.08,
+        },scene);
+        pick.parent = node;pick.position.y = .16;
+        pick.visibility = .004;pick.isPickable = true;pick.metadata = {sailingBoatId:id};
+        sailingMeshes.set(id,node);
+      }
+      const blend = 1-Math.exp(-16*dt);
+      node.position.x += (boat.x-node.position.x)*blend;
+      node.position.z += (boat.z-node.position.z)*blend;
+      const yaw = boat.heading-node.rotation.y;
+      node.rotation.y += Math.atan2(Math.sin(yaw),Math.cos(yaw))*blend;
+    });
+    for (const [id,node] of sailingMeshes) if (!seen.has(id)) {node.dispose();sailingMeshes.delete(id);}
+
+    const boat = player?.alive ? ownBoatState() : null;
+    const helm = Boolean(boat && boat.helmId === localId);
+    if (currentHelmBoat !== (helm ? player.boatId : "")) {
+      resetHelmControls();
+      currentHelmBoat = helm ? player.boatId : "";
+      nextHelmInput = 0;
+      if (helm) {
+        if (fishingSelect) clearFishing(false);
+        toast("คลิกหรือแตะผิวน้ำเพื่อเดินเรือ");
+      }
+    }
+    const onLand = player?.alive && !player.boatId && !player.flying && !player.mounted;
+    $("boatLaunch").hidden = !(onLand && Math.hypot(player.x-dock.x,player.z-dock.z) <= dock.range);
+    $("boatBoard").hidden = !(onLand && nearestId);
+    $("boatBoard").dataset.boatId = nearestId;
+    $("boatHelm").hidden = !(boat && (!boat.helmId || helm));
+    $("boatHelm").textContent = helm ? "ปล่อยหางเสือ" : "จับหางเสือ";
+    $("boatExit").hidden = !boat;
+    $("boatAnchor").hidden = !helm;
+    $("boatAnchor").textContent = boat?.anchored ? "ถอนสมอ" : "ทิ้งสมอ";
+    for (const button of boatPanel.querySelectorAll("[data-boat-drive]")) button.hidden = !helm;
+    boatPanel.hidden = !Array.from(boatPanel.children).some(button=>!button.hidden);
+    if (!helm || now < nextHelmInput) return;
+    nextHelmInput = now + 100;
+    const directions = new Set(sailingTouches.values());
+    for (const code of sailingKeys) directions.add(sailingInputKeys.get(code));
+    if (directions.size) clearSailingDestination();
+    const {throttle,steer} = directions.size ? {
+      throttle:Number(directions.has("forward"))-Number(directions.has("reverse")),
+      steer:Number(directions.has("left"))-Number(directions.has("right")),
+    } : sailingInputForDestination(boat,now);
+    if (requestedBoatAnchor === boat.anchored) requestedBoatAnchor = null;
+    sendBoatIntent("input",{throttle,steer,...(requestedBoatAnchor===null ? {} : {anchor:requestedBoatAnchor})});
+  }
+
   // Cooldown labels must advance even in a quiet room with no schema patches.
   setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="strategy")updateAtlasWarTimes();if(drawerActive==="quest")updateDirectorTimer();},1000);
   $("helpButton").onclick=openHelp;
@@ -38,6 +256,7 @@
     elapsed+=dt;
     const now = performance.now();
     updateFishing(now);
+    updateSailing(now,dt);
     checkClimbApproach();
     updateQuestNavigation(now);
     for(const [id,fx] of seerBindingEffects){

@@ -19,13 +19,15 @@
     const m = B.MeshBuilder.CreateBox(name, { width: w, height: h, depth: d }, scene);
     m.position.set(x, y, z); m.material = material; m.isPickable = false;
     if (parent) m.parent = parent;
-    villageParts.push(m); return m;
+    if (!parent?.metadata?.sailingBoat) villageParts.push(m);
+    return m;
   }
   function vcyl(name, x, y, z, height, bottom, top, material, sides = 8, parent) {
     const m = B.MeshBuilder.CreateCylinder(name, { height, diameterBottom: bottom, diameterTop: top, tessellation: sides }, scene);
     m.position.set(x, y, z); m.material = material; m.isPickable = false;
     if (parent) m.parent = parent;
-    villageParts.push(m); return m;
+    if (!parent?.metadata?.sailingBoat) villageParts.push(m);
+    return m;
   }
   const gableLacquer = mat("gable red lacquer", "#7c2618", "#1c0604");
   // Triangular gable (pediment) filling the roof end; a box here showed as a black slab above the roofline.
@@ -92,8 +94,9 @@
     vcyl("hanging lantern", lanternX, 2.3, z + size / 2 - .1, .36, .26, .3, lanternPaper, 8);
     vpool(lanternX, z + size / 2 - .1, 2.2, .07);
   }
-  function longTailBoat(x, z, angle) {
+  function longTailBoat(x, z, angle, sailingBoat = false) {
     const node = new B.TransformNode("boat", scene); node.position.set(x, 0, z); node.rotation.y = angle;
+    if (sailingBoat) node.metadata = {sailingBoat};
     vbox("boat hull", 0, -.02, 0, .95, .34, 3.2, darkWood, node);
     vbox("boat floor", 0, .14, 0, .75, .04, 3.0, wooden, node);
     for (const end of [-1, 1]) {
