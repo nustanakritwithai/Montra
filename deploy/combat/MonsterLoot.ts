@@ -4,7 +4,7 @@ import {REGIONAL_BOSSES} from "./RegionalBosses.js";
 import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
-import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
+import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,HIMMAPAN_SPAWNS,RIFT_WARDEN} from "./WorldAtlas.js";
 
 type Theme="grove"|"hunter"|"guard"|"spirit";
 type Hunt={id:string;name:string;level:number;mapId:string;tier?:string;theme:Theme;x?:number;z?:number};
@@ -38,6 +38,7 @@ export const hunts:Hunt[]=[
   ...TEMPLE_SPAWNS.map(s=>({...s,mapId:TEMPLE_ID,theme:templeThemes[s.id.split("_")[1]]})),
   ...[...ATLAS_SPAWNS,...FRONTIER_SPAWNS].map(s=>({...s,theme:regionalTheme(s.id,s.mapId)})),
   ...REGIONAL_BOSSES,
+  ...HIMMAPAN_SPAWNS,
 ];
 const materials:Record<Theme,readonly string[]>={
   grove:["wood","resin","herb"], hunter:["hide","fiber","herb"], guard:["metal","fiber"], spirit:["ink","resin"],

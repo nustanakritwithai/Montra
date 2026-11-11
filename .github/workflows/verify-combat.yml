@@ -450,7 +450,7 @@ jobs:
         run: |
           export PORT=4117 MONTRA_RIDGE_TERRAIN=1 MONTRA_WORLD_EXPANSION=1 MONTRA_ECONOMY_ENABLED=1
           export MONTRA_TEST_URL=http://127.0.0.1:4117 MONTRA_CHARACTER_DIR="$(mktemp -d -t montra-terrain-test-XXXXXX)"
-          npx tsx --test src/rooms/terrain.test.ts
+          npx tsx --test src/rooms/terrain.test.ts src/rooms/forest-monster-config.test.ts
           node --import tsx src/index.ts > terrain-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true; rm -rf "$MONTRA_CHARACTER_DIR"' EXIT

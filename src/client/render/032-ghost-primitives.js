@@ -70,7 +70,108 @@
   }
   const swayStrand = (joints, t, phase, amp, axis = "x") => joints.forEach((j, i) => { j.rotation[axis] = Math.sin(t * 2.2 + phase + i * .7) * amp * (1 + i * .25); });
 
+  function himmapanStrike(k) {
+    const progress = (k.now - k.g.specialAt) / 600;
+    return k.g.ai === "special_recovery" ? Math.sin(Math.PI * Math.min(1, Math.max(0, progress))) : k.atk;
+  }
+
   const GHOST_KINDS = {
+    matchaNaga(root) {
+      const b = ghostBuilder(root), jade = gm.sash3[2];
+      const body = b.joint("naga body", root, 0, .88, 0);
+      b.ball(0, 0, 0, .95, jade).scaling.set(.85, .9, 1.7);
+      b.ball(0, -.15, -.1, .72, gm.pale).scaling.set(.9, .75, 1.65);
+      for (const side of [-1, 1]) {
+        b.cyl(side * .5, -.04, .15, .64, .04, .27, gold, 4).rotation.z = -side * 1.18;
+      }
+      b.flush(body, "naga scaled body");
+      const head = b.joint("naga head", body, 0, .24, -.59);
+      b.ball(0, .1, -.1, .61, jade).scaling.z = 1.25;
+      b.ball(0, -.02, -.39, .4, jade).scaling.set(1, .63, 1.15);
+      b.cyl(0, .41, -.04, .47, .01, .24, gold, 5).rotation.x = .28;
+      for (const side of [-1, 1]) {
+        b.ball(side * .23, .15, -.3, .11, gm.eyeAmber);
+        b.cyl(side * .24, .31, .06, .36, .01, .12, gold, 4).rotation.z = -side * .35;
+      }
+      b.flush(head, "naga crested head");
+      const tail = [];
+      let parent = body;
+      for (const [offset, diameter] of [[.56, .53], [.4, .41], [.34, .3], [.26, .21]]) {
+        parent = b.joint("naga tail joint", parent, 0, -.04, offset);
+        b.ball(0, 0, .17, diameter, jade).scaling.z = 1.6;
+        b.cyl(0, diameter * .52, .19, diameter * .8, 0, diameter * .35, gold, 4).rotation.x = .5;
+        b.flush(parent, "naga tail scale");
+        tail.push(parent);
+      }
+      b.cyl(0, .15, .38, .48, 0, .25, gold, 4).rotation.x = .8;
+      b.cyl(0, -.15, .38, .48, 0, .25, gold, 4).rotation.x = Math.PI - .8;
+      b.flush(parent, "naga tail fins");
+      return k => {
+        const strike = himmapanStrike(k);
+        body.position.y = .88 + Math.sin(k.t * 3) * .13 + k.wind * .17;
+        head.rotation.x = -k.wind * .42 + strike * .68;
+        tail.forEach((joint, i) => { joint.rotation.y = Math.sin(k.t * (3 + k.move * 3) - i * .7) * (.22 + strike * .32); });
+      };
+    },
+    garudaScout(root) {
+      const b = ghostBuilder(root), feathers = gm.sash3[0];
+      const body = b.joint("garuda body", root, 0, .94, 0);
+      b.ball(0, .23, 0, .9, feathers).scaling.set(.9, 1.12, .7);
+      b.cyl(0, -.19, 0, .32, .52, .66, gold, 8);
+      b.ball(0, .84, -.12, .52, gm.pale);
+      b.cyl(0, .75, -.43, .4, 0, .3, gold, 5).rotation.x = -Math.PI / 2;
+      b.cyl(0, 1.13, -.08, .36, 0, .25, gold, 5);
+      for (const side of [-1, 1]) {
+        b.ball(side * .17, .88, -.3, .095, gm.eyeAmber);
+        b.cap(side * .19, -.55, 0, .6, .095, gm.robe);
+        b.box(side * .2, -.83, -.11, .25, .12, .42, gold);
+      }
+      b.flush(body, "garuda beak and talons");
+      const wings = [-1, 1].map(side => {
+        const wing = b.joint("garuda wing", body, side * .3, .49, .12);
+        for (let i = 0; i < 5; i++) {
+          const feather = b.ball(side * (.25 + i * .18), .08 - i * .05, .21 + i * .13, .37, i % 2 ? gold : feathers);
+          feather.scaling.set(.67, 2.2 + i * .22, .38);
+          feather.rotation.z = -side * (1.08 - i * .13);
+        }
+        b.flush(wing, "garuda flight feathers");
+        return wing;
+      });
+      return k => {
+        const strike = himmapanStrike(k);
+        body.position.y = .94 + k.wind * .44 + k.move * .12;
+        body.position.z = -strike * .66;
+        body.rotation.x = -k.wind * .22 + strike * .75;
+        wings.forEach((wing, i) => { wing.rotation.z = (i ? 1 : -1) * (k.wind * .8 + strike * .36 + Math.sin(k.t * (5 + 4 * k.move)) * .25); });
+      };
+    },
+    stoneYaksha(root) {
+      const b = ghostBuilder(root), stone = gm.stone;
+      const body = b.joint("yaksha body", root, 0, .96, 0);
+      b.box(0, .22, 0, .93, .9, .58, stone);
+      b.box(0, -.18, -.01, 1, .23, .65, gold);
+      b.box(0, .89, -.04, .61, .54, .51, stone);
+      b.cyl(0, 1.31, -.04, .55, .02, .52, gold, 7);
+      b.box(-.51, .2, -.02, .29, .61, .37, stone);
+      for (const side of [-1, 1]) {
+        b.box(side * .28, -.53, 0, .39, .68, .41, stone);
+        b.box(side * .28, -.88, -.12, .42, .17, .55, stone);
+        b.ball(side * .14, .93, -.309, .1, gm.eyeAmber);
+        b.cyl(side * .19, .73, -.33, .21, 0, .095, gm.pale, 5).rotation.z = -side * .17;
+      }
+      b.flush(body, "yaksha stone armour");
+      const arm = b.joint("yaksha club arm", body, .55, .48, 0);
+      b.box(.08, -.31, 0, .34, .73, .38, stone);
+      b.cyl(.13, -.47, -.24, 1.15, .1, .14, gm.beam, 7).rotation.x = Math.PI / 2;
+      b.cyl(.13, -.47, -.79, .41, .28, .41, gold, 7).rotation.x = Math.PI / 2;
+      b.flush(arm, "yaksha club");
+      return k => {
+        const strike = himmapanStrike(k);
+        body.position.y = .96 + Math.sin(k.walk) * k.move * .09;
+        body.rotation.x = strike * .18;
+        arm.rotation.x = -k.wind * 1.85 + strike * .94 + Math.sin(k.walk) * k.move * .18;
+      };
+    },
     // ผีช้าง: a spectral war elephant — translucent hide, tattered caparison,
     // long tusks and a swaying trunk; it rears and slams down with the trunk.
     elephant(root, o) {

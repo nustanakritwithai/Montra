@@ -18,8 +18,13 @@
   // name is kept for designs that already match it.
   const GHOST_NAMES = { nangmai: "นางไม้", krasue: "ผีกระสือ", krahang: "ผีกระหัง", preta: "ผีเปรต", phiphong: "ผีโพง", kongkoi: "ผีกองกอย", takhian: "ผีนางตะเคียน",
     maenak: "ผีแม่นาค", phipop: "ผีปอบ", dancer: "ผีนางรำ", headless: "ผีหัวขาด", phitakhon: "ผีตาโขน", unaware: "ผีตายโหง", childghost: "ผีเด็ก", elephant: "ผีช้าง" };
+  const HIMMAPAN_VISUALS = new Map([
+    ["himmapan_matcha_naga", { kind: "matchaNaga", height: 1.9, width: 1.45, warningColor: "#77e4ff", warningText: "คลื่นน้ำ · หลบด้านข้าง" }],
+    ["himmapan_garuda_scout", { kind: "garudaScout", height: 2.5, width: 2.25, warningColor: "#ffdb76", warningText: "เงาโฉบ · หลบด้านข้าง" }],
+    ["himmapan_stone_yaksha", { kind: "stoneYaksha", height: 2.65, width: 1.7, warningColor: "#ff883b", warningText: "กระบองกระแทก · ถอยออกจากวง" }],
+  ]);
   function monsterName(monster, id) {
-    if (!monster || monster.tier === "boss" || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
+    if (!monster || monster.tier === "boss" || HIMMAPAN_VISUALS.has(id || monster.id) || String(id || monster.id).startsWith("frontier_")) return monster?.displayName || "";
     const kind = forestMonsters.get(id)?.metadata?.ghost?.design?.kind || ghostDesign(monster, String(id || monster.id || "")).kind;
     return GHOST_NAMES[kind] || monster.displayName;
   }
@@ -48,6 +53,8 @@
       { kind: "unaware", fallback: "corpse" }, { kind: "statue", fallback: "corpse", lead: true }],
   };
   function ghostDesign(monster, id) {
+    const himmapan = HIMMAPAN_VISUALS.get(id);
+    if (himmapan) return { ...himmapan, himmapan: true, scale: 1, eye: gm.eyeAmber };
     const level = Number(monster.level) || 1;
     const atlas = ATLAS_GHOSTS[monster.mapId];
     if (atlas) {
@@ -113,6 +120,42 @@
     }
     return k => { seal.rotation.y = Math.sin(k.t * .45) * .12; };
   }
+  function updateHimmapanWarning(mesh, monster) {
+    const metadata = mesh.metadata, design = metadata.ghost.design;
+    const range = Number(monster.specialRange), halfWidth = Number(monster.specialHalfWidth);
+    if (!monster.alive || monster.aiState !== "windup" || !(range > 0)) {
+      metadata.specialWarning?.setEnabled(false);
+      return;
+    }
+    if (metadata.specialWarning?.isEnabled()) return;
+    const terrain = worldDefinitions?.[monster.mapId]?.terrain;
+    const facing = Number(monster.facing) || 0, sin = Math.sin(facing), cos = Math.cos(facing);
+    const points = [];
+    const add = (side, forward) => {
+      const x = monster.x + side * cos - forward * sin;
+      const z = monster.z - side * sin - forward * cos;
+      points.push(new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z));
+    };
+    if (halfWidth > 0) {
+      const corners = [[-halfWidth, 0], [-halfWidth, range], [halfWidth, range], [halfWidth, 0], [-halfWidth, 0]];
+      for (let i = 1; i < corners.length; i++) {
+        const [a, b] = corners[i - 1], [c, d] = corners[i];
+        for (let j = 0; j < 6; j++) add(a + (c - a) * j / 6, b + (d - b) * j / 6);
+      }
+      add(-halfWidth, 0);
+    } else {
+      for (let i = 0; i <= 40; i++) {
+        const angle = i * Math.PI / 20;
+        add(Math.cos(angle) * range, Math.sin(angle) * range);
+      }
+    }
+    const warning = B.MeshBuilder.CreateLines("himmapan strike boundary", { points, updatable: true, instance: metadata.specialWarning }, scene);
+    warning.color = B.Color3.FromHexString(design.warningColor);
+    warning.isPickable = false;
+    warning.setEnabled(true);
+    metadata.specialWarning = warning;
+    if (monster.targetId === room?.sessionId) toast(monsterName(monster, mesh.metadata.monsterId) + " · " + design.warningText);
+  }
   const soulMeshes = [];
   // Builds the pickable root plus the visual rig for one monster.
   function makeGhostMonster(monster, id, design = ghostDesign(monster, id)) {
@@ -121,9 +164,9 @@
     // only the visual proxy changes, never server collision or strike radius.
     const bossHeight = { bell: 4.5, boatman: 3.1, moonspirit: 3.9, statue: 4.3, stump: 3.1,
       krahang: 3.7, waterspirit: 3.9, phipop: 3.1, headless: 3.1, phitakhon: 4.2, preta: 4.4 };
-    const tall = (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
+    const tall = design.height ?? (design.boss ? bossHeight[design.kind] : undefined) ?? ({ hanged: 3.4, bell: 2.6, longhair: 2.2, statue: 2.4, waterspirit: 2.4, moonspirit: 2.4, boatman: 2.2, preta: 3.2, krahang: 2.4, krasue: 2.2, takhian: 2.4, elephant: 3.6, childghost: 1.3 }[design.kind] || 2);
     const pickHeight = design.boss ? tall * design.scale : tall;
-    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.boss ? 2.1 : 1.3, height: pickHeight, depth: design.boss ? 2.1 : 1.3 }, scene);
+    const root = B.MeshBuilder.CreateBox("monster-" + id, { width: design.width ?? (design.boss ? 2.1 : 1.3), height: pickHeight, depth: design.boss ? 2.1 : 1.3 }, scene);
     if (design.boss) root.bakeTransformIntoVertices(B.Matrix.Translation(0, (pickHeight - tall) / 2, 0));
     root.visibility = .001; root.isPickable = true;
     const rig = new B.TransformNode("ghost rig", scene); rig.parent = root; rig.position.y = -tall / 2; rig.scaling.setAll(design.scale);
@@ -137,16 +180,17 @@
     const fallback = GHOST_KINDS[design.kind] || GHOST_KINDS[design.fallback || "corpse"];
     const visualRoot = design.boss ? new B.TransformNode("boss model", scene) : rig;
     if (design.boss) visualRoot.parent = rig;
-    const bossMaterials = new Set();
-    const releaseBossMaterials = () => {
+    const modelMaterials = new Set();
+    const releaseModelMaterials = () => {
       // mergedSegment owns these wrappers, but their submaterials are shared.
-      for (const material of bossMaterials) material.dispose(false, false, false);
-      bossMaterials.clear();
+      for (const material of modelMaterials) material.dispose(false, false, false);
+      modelMaterials.clear();
     };
-    if (design.boss) root.onDisposeObservable.add(releaseBossMaterials);
+    if (design.boss || design.himmapan) root.onDisposeObservable.add(releaseModelMaterials);
+    if (design.himmapan) root.onDisposeObservable.add(() => root.metadata.specialWarning?.dispose());
     const build = () => {
       if (design.boss) {
-        releaseBossMaterials();
+        releaseModelMaterials();
         for (const child of visualRoot.getChildren()) child.dispose();
         rig.metadata?.skeletons?.forEach(s => s.dispose());
         rig.metadata = null; visualRoot.metadata = null;
@@ -154,7 +198,7 @@
       const pose = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(visualRoot, design) : fallback(visualRoot, design);
       if (design.boss) rig.metadata = visualRoot.metadata;
       const seal = design.boss ? bossRoyalSeal(visualRoot, design) : null;
-      if (design.boss) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) bossMaterials.add(mesh.material);
+      if (design.boss || design.himmapan) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) modelMaterials.add(mesh.material);
       update = seal ? k => { pose(k); seal(k); } : pose;
     };
     if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) {

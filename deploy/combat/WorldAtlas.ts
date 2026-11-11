@@ -207,4 +207,13 @@ export const FRONTIER_SPAWNS:readonly AtlasSpawn[]=[
     ...frontierGroup(CASTLE_ID,2,"วิญญาณไพร่แนวล้อม",[[-235,151,67],[252,150,68],[-22,-271,72],[23,-269,73]]),
   ] : []),
 ];
-export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS].map(s=>s.id));
+export type HimmapanAttack = { range:number; halfWidth:number; windupMs:number };
+export const HIMMAPAN_SPAWNS = ([
+  { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
+    theme:"grove", special:{ range:4, halfWidth:1.05, windupMs:1100 } },
+  { id:"himmapan_garuda_scout", name:"ครุฑลาดตระเวน", mapId:RIDGE_PASS, x:77, z:-4, level:52, tier:"normal",
+    theme:"hunter", special:{ range:5.2, halfWidth:.8, windupMs:1000 } },
+  { id:"himmapan_stone_yaksha", name:"ยักษ์ศิลาด่าน", mapId:"hex_ridge", x:71, z:0, level:45, tier:"normal",
+    theme:"guard", special:{ range:2.8, halfWidth:0, windupMs:1300 } },
+] as const).filter(s=>s.mapId!==RIDGE_PASS || RIDGE_ENABLED);
+export const ATLAS_TARGETS:ReadonlySet<string>=new Set([...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...HIMMAPAN_SPAWNS].map(s=>s.id));

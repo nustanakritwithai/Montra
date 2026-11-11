@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {ATLAS_MAPS, ATLAS_SPAWNS, RIFT_WARDEN} from "./WorldAtlas.js";
+import {ATLAS_MAPS, ATLAS_SPAWNS, HIMMAPAN_SPAWNS, RIFT_WARDEN} from "./WorldAtlas.js";
 import {WORLD_MAPS, isRestArea, isSafeWorldPoint, isWorldSegmentClear, getSafeMapSpawn, provinceShotClear} from "./WorldMaps.js";
 import {crestCorners} from "./StrategicProvinces.js";
 import {parseAttackCommand} from "./GameRules.js";
@@ -48,7 +48,8 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
     }
     const guards=ATLAS_SPAWNS.filter(s=>s.mapId===map.id);
     const relay=map.strategic?.relay;
-    for(const p of [...map.camps!,...map.portals,...guards,...(map.boss?[map.boss]:[]),...(relay?[relay]:[])])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
+    const himmapan=HIMMAPAN_SPAWNS.filter(s=>s.mapId===map.id);
+    for(const p of [...map.camps!,...map.portals,...guards,...himmapan,...(map.boss?[map.boss]:[]),...(relay?[relay]:[])])assert.ok(reached.has(p.x+","+p.z),map.id+" "+p.x+","+p.z);
     if(relay){
       assert.ok(!isRestArea(map.id,relay));assert.equal(map.portals.filter(p=>p.targetMapId===map.id).length,2);
       assert.ok((map.bounds.maxX-map.bounds.minX)*(map.bounds.maxZ-map.bounds.minZ)>3.5*84*97);
@@ -164,7 +165,7 @@ test("all occupied atlas zones replicate and the warden's respawn clock survives
   tick(100);assert.equal(state.monsters.size+1,79);
   assert.ok(!state.monsters.has("atlas_hex_ridge_1_1"));
   for (const map of Object.values(ATLAS_MAPS)) state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
-  tick(100);assert.equal(state.monsters.size+1,134);
+  tick(100);assert.equal(state.monsters.size+1,136);
   const id=RIFT_WARDEN.id;assert.ok(forest.kill(id,100));state.players.delete("spirit_rift");tick(500);
   assert.ok(!state.monsters.has(id));state.players.set("spirit_rift",new Player({...ATLAS_MAPS.spirit_rift.spawn,mapId:"spirit_rift"}));
   tick(1100);assert.equal(state.monsters.get(id)?.alive,false);

@@ -86,6 +86,38 @@ test('unknown IDs, wrong maps and non-boss tiers never borrow a registered boss 
  }finally{f.dispose();}
 });
 
+test('Himmapan monsters have distinct rigs and render the authoritative ground warning',()=>{
+ const f=fixture();try{
+  const species=[
+   ['himmapan_matcha_naga','lotus_basin','มัจฉนาคา','naga scaled body',4,1.05],
+   ['himmapan_garuda_scout','twin_neck_pass','ครุฑลาดตระเวน','garuda flight feathers',5.2,.8],
+   ['himmapan_stone_yaksha','hex_ridge','ยักษ์ศิลาด่าน','yaksha stone armour',2.8,0],
+  ];
+  for(const [id,mapId,displayName,part,specialRange,specialHalfWidth] of species){
+   const m=state({id,mapId,displayName,level:48},{tier:'normal',x:10,y:2,z:20,facing:Math.PI/2,specialRange,specialHalfWidth});
+   const mesh=add(f,m);
+   assert(mesh.getChildMeshes().some(child=>child.name===part));
+   assert.equal(f.ctx.monsterName(m,id),displayName);
+   m.aiState='windup';f.sync();
+   const warning=mesh.metadata.specialWarning;
+   assert(warning?.isEnabled());assert.equal(warning.isPickable,false);
+   const positions=warning.getVerticesData(f.B.VertexBuffer.PositionKind);
+   const xs=positions.filter((_,i)=>i%3===0),zs=positions.filter((_,i)=>i%3===2);
+   close(Math.min(...xs),m.x-specialRange,'forward reach');
+   close(Math.max(...xs),m.x+(specialHalfWidth?0:specialRange),'rear reach');
+   close(Math.max(...zs),m.z+(specialHalfWidth||specialRange),'lateral reach');
+   m.aiState='special_recovery';f.sync();
+   assert.equal(warning.isEnabled(),false);
+   f.at(1300);f.ctx.animateGhosts(.016,1300);
+   assert(!mesh.metadata.ghost.phase2 && !mesh.metadata.ghost.enraged,'tall field monsters do not trigger boss phases');
+   m.aiState='windup';f.sync();
+   assert.equal(mesh.metadata.specialWarning,warning,'reuse the ground warning');
+   f.ctx.activeMapId='ritual_village';f.sync();
+   assert(warning.isDisposed(),'map exit disposes world-space warning');
+  }
+ }finally{f.dispose();}
+});
+
 test('pending shared asset retains fallback; failed load and late callbacks cannot resurrect removed bosses',()=>{
  const f=fixture();try{
   const entry=roster.find(e=>f.run(`HUMANOID_KINDS.has(bossDesign(${JSON.stringify(state(e))},${JSON.stringify(e.id)}).kind)`));assert(entry,'at least one humanoid boss');
