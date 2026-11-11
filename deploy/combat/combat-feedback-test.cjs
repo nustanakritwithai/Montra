@@ -41,7 +41,7 @@ function fixture() {
   vm.createContext(ctx);
   vm.runInContext(read('src/client/audio/023-action-and-impact-sounds.js'), ctx);
   vm.runInContext(read('src/client/combat/024-action-and-skill-motion.js'), ctx);
-  vm.runInContext(between(render, '  // One flash for a normal hit.', '  // Wind-up telegraph:'), ctx);
+  vm.runInContext(between(render, '  function hitBurst(', '  // Wind-up telegraph:'), ctx);
   for (const event of ['combat_hit', 'pvp_hit', 'monster_hit', 'summon_hit', 'ranged_hit']) {
     const start = 'joined.onMessage("' + event + '",';
     vm.runInContext(between(network, start, 'joined.onMessage('), ctx);
@@ -69,9 +69,16 @@ test('a burst of confirmed hits has one sound and flash, while damage, combo, an
   f.advance(100);
   f.emit('combat_hit', { attackerId: 'me', targetId: 'mob', source: 'sword', damage: 42, hp: 3 });
   assert.equal(f.count('sound'), 2);
-  assert.deepEqual(f.calls.filter(call => call[0] === 'plane').map(call => call[1]), ['star', 'star', 'cross', 'ring']);
   assert.equal(f.calls.filter(call => call[0] === 'damage-mob').at(-1)[3], 'crit');
-  assert.equal(f.count('shake'), 1);
+
+  f.advance(140);
+  f.emit('combat_hit', { attackerId: 'me', targetId: 'mob', source: 'sword', damage: 18, hp: 2 });
+  const flashes = f.calls.filter(call => call[0] === 'plane');
+  assert.equal(flashes.length, 3);
+  assert.equal(flashes[0][1], 'star');
+  assert.deepEqual(flashes[1], flashes[0], 'critical impact matches a normal hit');
+  assert.deepEqual(flashes[2], flashes[0], 'heavy skill impact matches a normal hit');
+  assert.equal(f.count('shake'), 0);
   f.ctx.joined.state.monsters.get('mob').tier = 'boss';
   f.emit('combat_hit', { attackerId: 'me', targetId: 'mob', damage: 15, hp: 0 });
   assert.deepEqual(f.calls.filter(call => call[0] === 'callout'), [['callout', 'execute_finisher']]);

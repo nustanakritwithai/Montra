@@ -299,7 +299,7 @@
               demoLastHitAt = now;
               playAttack(localId, false, enemy.position.x, enemy.position.z);
               villageGhost.metadata.ghost.hurtAt = now;
-              impactAt(localId, enemy.position.x, enemy.position.z, "", undefined, false, enemy.position.y);
+              impactAt(localId, enemy.position.x, enemy.position.z, "", undefined, enemy.position.y);
               demoMonsterHp = Math.max(0, demoMonsterHp - 20);
               registerComboHit();
               floatAtMonster(MONSTER_ID, "20", "dealt");

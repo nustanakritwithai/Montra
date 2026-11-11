@@ -20,7 +20,7 @@
     } else if (!g.windup && g.wasWindup) {
       // Windup completed: slam shockwave impact at telegraph center
       const y = (g.ty ?? 0) + .1;
-      hitBurst(mesh.position.x, mesh.position.z, "red", true, y, true);
+      hitBurst(mesh.position.x, mesh.position.z, "red", y, true);
       shakeCamera((g.design?.elite || (g.tall || 2) > 2.2) ? 0.6 : 0.42, 380);
       SFX("shock", { x: mesh.position.x, z: mesh.position.z, intensity: 1.1 });
     }

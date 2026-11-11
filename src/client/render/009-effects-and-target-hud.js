@@ -99,15 +99,13 @@
         vel: [Math.cos(a) * sp, (o.up ?? 4) * (.6 + Math.random() * .8), Math.sin(a) * sp], grav: o.grav ?? 9, follow: o.follow })) break;
     }
   }
-  // One flash for a normal hit. Heavy and critical hits add a distinct shape.
-  function hitBurst(x, z, tone = "gold", heavy = false, y = 0, isCrit = false) {
-    const sc = (heavy || isCrit) ? 1.6 : 1;
+  // Regular hits use a single flash. Scripted boss events can add an impact cue.
+  function hitBurst(x, z, tone = "gold", y = 0, bossImpact = false) {
+    const sc = bossImpact ? 1.6 : 1;
     spawnFx("star", tone, x, y + 1.6, z, { life: 180, s0: 1.25 * sc, s1: 3.6 * sc, a0: .85, a1: 0 });
-    if (isCrit) {
+    if (bossImpact) {
       spawnFx("cross", tone === "red" ? "red" : "orange", x, y + 1.5, z, { life: 220, s0: 1.4, s1: 4.8, a0: .85, a1: 0 });
       spawnFx("ring", tone, x, y + .15, z, { orient: "ground", life: 280, s0: 1, s1: 5, a0: .7, a1: 0 });
-    } else if (heavy) {
-      spawnFx("slash", tone, x, y + 1.5, z, { life: 180, s0: 1.15, s1: 3.6, a0: .75, a1: 0 });
     }
   }
   // Wind-up telegraph: a red danger disc that tightens onto the ghost until it strikes.
