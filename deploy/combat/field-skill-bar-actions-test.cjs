@@ -8,15 +8,26 @@ const barStart = html.indexOf('class="skill-bar learned-bar"');
 const bar = html.slice(barStart, html.indexOf('id="fishingPanel"'));
 const ghostRow = html.slice(html.indexOf('id="ghostFieldActions"'), barStart);
 assert.match(bar, /<button id="fly" class="orb-action[^"]*"[^>]* hidden>/);
-for (const id of ['ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostTeamButton']) {
+for (const [id, icon] of Object.entries({
+  ghostSummonButton: 'summon', ghostAttackButton: 'attack', ghostFollowButton: 'follow',
+  ghostSkillButton: 'skill',
+})) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
-  assert.match(ghostRow, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
+  assert.match(ghostRow, new RegExp(
+    `<button id="${id}" class="orb-action[^"]*"[^>]* hidden><img[^>]*src="\\./assets/ui/companion-${icon}\\.webp"[^>]*alt=""`
+  ));
   assert.doesNotMatch(bar, new RegExp(`id="${id}"`));
+}
+for (const icon of ['summon','attack','follow','skill','team','recall']) {
+  const artwork = readFileSync(`assets/ui/companion-${icon}.webp`);
+  assert.equal(artwork.toString('ascii',8,16), 'WEBPVP8X', icon);
+  assert.ok(artwork[20] & 0x10, `${icon} has transparency`);
 }
 const characterMenu = html.slice(html.indexOf('id="menu-character"'), html.indexOf('id="menu-travel"'));
 assert.equal(html.split('id="ghostPoolButton"').length, 2);
-assert.match(characterMenu, /<button id="ghostPoolButton"[^>]*>.*จัดทีมคู่หู/);
+assert.match(characterMenu, /<button id="ghostPoolButton"[^>]*>.*companion-team\.webp.*จัดทีมคู่หู/);
 assert.doesNotMatch(characterMenu, /<button id="ghostPoolButton"[^>]* hidden/);
+assert.doesNotMatch(html, /id="ghostTeamButton"/);
 assert.doesNotMatch(ghostRow, /id="ghostPoolButton"/);
 assert.equal(html.split('id="ghostPotButton"').length, 2);
 assert.doesNotMatch(ghostRow, /id="ghostPotButton"/);
@@ -88,9 +99,8 @@ handlers.state({ ghostPotAvailable: false });
 click();
 assert.equal(button.hidden, true);
 assert.equal(sent.length, 0);
-assert.equal(get("ghostTeamButton").hidden,false);
 assert.equal(get("ghostSummonButton").hidden,false);
-handlers["ghostTeamButton:click"]();
+handlers["ghostPoolButton:click"]();
 assert.equal(context.drawerActive,"ghostPool");
 assert.match(drawerBody.children[0].textContent,/ห้องนี้ยังไม่เปิด/);
 context.closeDrawer();
@@ -109,7 +119,6 @@ assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"read"}']);
 assert.equal(sent.length,0);
 handlers.ghost_pot_state({active:false,combatId:null,pool:{collection:[],slots:[null,null,null],selectedSlot:0,revision:0}});
 assert.equal(context.drawerActive,"ghostPool","arrival of the pool keeps the open drawer");
-assert.equal(get("ghostTeamButton").hidden,false,"empty teams retain an entry");
 assert.equal(get("ghostSummonButton").hidden,false);
 assert.ok(drawerBody.children[0].children.some(child=>child.textContent.includes("ยังไม่มีคู่หู")));
 context.closeDrawer();
@@ -156,7 +165,7 @@ assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"recall"}']);
 
 context.room = null;
 context.resetGhostPot();
-assert.equal(get("ghostTeamButton").hidden,true);
+assert.equal(get("ghostSummonButton").hidden,true);
 handlers["ghostPoolButton:click"]();
 assert.match(drawerBody.children[0].textContent,/เข้าโหมดออนไลน์/);
 context.closeDrawer();
@@ -268,7 +277,6 @@ assert.equal(get("ghostPotButton").hidden,true);
 assert.equal(get("ghostSummonButton").hidden,false);
 handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,combatAvailable:false,combatId:null,status:"war_ended"});
 assert.equal(get("ghostSummonButton").hidden,false);
-assert.equal(get("ghostTeamButton").hidden,false);
 handlers["ghostSummonButton:click"]();
 assert.ok(drawerBody.children[0].children.some(child=>child.textContent.includes("เรียกคู่หูในช่วงนี้ไม่ได้")));
 assert.equal(notices.at(-1),"สงครามจบแล้ว ผีกลับเข้าหม้อ");
@@ -282,6 +290,7 @@ handlers.ghost_pot_state({...current,status:"summoned"});
 handlers["ghostSummonButton:click"]();
 const teamMenu=get("ghostTeamMenu");
 assert.equal(teamMenu.hidden,false);
+assert.equal(teamMenu.children[1].children[0].className,"ghost-recall-action");
 assert.equal(teamMenu.children[0].children[0].disabled,true,"cannot switch to the active creature");
 teamMenu.children[0].children[2].onclick();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"select","slot":2,"revision":8}']);
@@ -324,6 +333,6 @@ context.resetGhostPot();
 joined.state.players = new Map([["local",{persistent:false}]]);
 context.requestGhostPotState();
 assert.equal(sent.length,0,"a temporary character cannot request the saved roster");
-handlers["ghostTeamButton:click"]();
+handlers["ghostPoolButton:click"]();
 assert.match(drawerBody.children[0].textContent,/เลือกตัวละครที่บันทึกบนเซิร์ฟเวอร์/);
-console.log("PASS visible companion controls, roster recovery, contextual capture, one-tap summon and attack, confirmed switch, cooldown, recall and team placement");
+console.log("PASS character menu team access, roster recovery, contextual capture, one-tap summon and attack, confirmed switch, cooldown, recall and team placement");

@@ -36,19 +36,32 @@
 .field-dock .field-prompts .ghost-pot-action[hidden] { display: none; }
 .ghost-pot-action img { display: block; object-fit: contain; pointer-events: none; }
 .ghost-field-actions .orb-action:disabled { opacity: .5; }
-.ghost-field-actions .ghost-icon-action, .ghost-field-actions .ghost-companion-action { align-content: center; gap: 2px; width: 44px; height: 44px; padding: 2px; }
-.ghost-icon-action > span, .ghost-companion-action > span { font-size: 17px; line-height: 1; }
-.ghost-icon-action > small, .ghost-companion-action > small { font-size: 9px; line-height: 1; white-space: nowrap; }
-.ghost-field-actions #ghostTeamButton, .ghost-field-actions .ghost-companion-action { width: 60px; }
-.ghost-field-actions #ghostTeamButton > small, .ghost-companion-action > small { font-size: 11px; }
-.ghost-field-actions .ghost-companion-action { border-color: #c9a35a; background: radial-gradient(circle at 50% 24%, #385949, #142621); color: #ffe8b4; }
-.ghost-companion-action progress { width: 34px; height: 4px; accent-color: #80db9e; }
+.ghost-field-actions .ghost-icon-action, .ghost-field-actions .ghost-companion-action {
+  align-content: center; gap: 1px; width: 44px; height: 44px; padding: 1px;
+  border-color: #8b754e; color: #fff0ce;
+  background: radial-gradient(ellipse at 50% 15%, var(--ghost-action-glow, #30433e), #111d1b 78%);
+  box-shadow: inset 0 0 0 1px #f4d18a19, 0 3px 6px #0009;
+}
+.ghost-action-art { display: block; object-fit: contain; pointer-events: none; }
+.ghost-icon-action > small, .ghost-companion-action > small { font-size: 10px; line-height: 1; white-space: nowrap; }
+#ghostAttackButton { --ghost-action-glow: #603721; }
+#ghostSkillButton { --ghost-action-glow: #493257; }
+.ghost-companion-action > small { font-size: 11px; }
+.ghost-field-actions .ghost-companion-action { --ghost-action-glow: #37614d; width: 60px; border-color: #c9a35a; }
+.ghost-companion-action:has(progress:not([hidden])) .ghost-action-art { width: 22px; height: 22px; }
+.ghost-companion-action progress { width: 34px; height: 3px; accent-color: #80db9e; }
+.ghost-field-actions .orb-action:focus-visible { outline: 2px solid #ffde9e; outline-offset: 2px; }
 .ghost-companion-action progress[hidden], .ghost-team-menu[hidden] { display: none; }
 .ghost-team-menu { display: grid; gap: 5px; width: min(244px, calc(100vw - 24px)); max-width: 100%; padding: 6px; pointer-events: auto; background: #132821f5; border: 1px solid #977d4d; border-radius: 10px; }
 .ghost-team-menu .ghost-team-slot { display: grid; align-content: start; justify-items: center; min-width: 0; min-height: 52px; gap: 3px; padding: 4px; font-size: 11px; overflow-wrap: anywhere; }
 .ghost-team-slot > span:first-child { font-size: 18px; }
 .ghost-team-slot > small { font-size: 9px; color: #ffe3a6; }
 .ghost-team-menu .ghost-pool-buttons button { min-height: 44px; font-size: 12px; }
+.ghost-team-menu .ghost-recall-action { display: inline-flex; align-items: center; gap: 5px; }
+.ghost-recall-action::before {
+  content: ""; width: 24px; height: 24px; flex: none;
+  background: url("./assets/ui/companion-recall.webp") center / contain no-repeat;
+}
 .ghost-field-actions .ghost-catch-receipt { padding-inline: 10px; border-color: #c9a35a; }
 .ghost-field-status { max-width: 100%; padding: 3px 6px; border-radius: 6px; background: #0c1825f5; color: #dff4ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .ghost-field-skills { display: grid; gap: 4px; padding: 4px; width: max-content; max-width: 100%; max-height: min(146px, 28dvh); overflow: auto; overscroll-behavior: contain; touch-action: pan-y; pointer-events: auto; border-radius: 10px; background: #0c1825f5; }
