@@ -219,3 +219,38 @@ test('the slot is attached above the real chat feed and the picker opens upward'
   assert.match(css, /\.chat-harvest\s*\{[^}]*bottom:calc\(100% \+ 5px\)/);
   assert.match(css, /\.chat-potion-picker\s*\{[^}]*bottom:calc\(100% \+ 4px\)[^}]*width:min\(148px, 75vw\)[^}]*overflow-y:auto/);
 });
+
+test('the nearby gathering button swaps tool artwork and keeps the action details accessible', () => {
+  const gathering=readFileSync('src/client/world/029-fishing-and-resources.js','utf8');
+  const start=gathering.indexOf('  const resourceHudActions='),end=gathering.indexOf('  const rarityNames=',start);
+  assert(start>=0 && end>start);
+  const button={setAttribute(key,value){this[key]=value;}};
+  const icon={...button,getAttribute(key){return this[key];}};
+  const context=vm.createContext({
+    $:id=>id==='harvestButton'?button:id==='harvestIcon'?icon:null,
+    resourceViewMap:'fixture',activeMapId:'fixture',resources:{received:0},resourceChoice:null,
+    nearbyResources:()=>context.near,syncResourcePickers(){},worldDefinitions:{},
+    harvestFocus:{setEnabled(){},position:{set(){}},scaling:{set(){}}},
+    personalItems:{mat_raw_stone_2:{level:10}},economyPending:false,resourceReadyAt:0,performance:{now:()=>1000},
+  });
+  vm.runInContext(gathering.slice(start,end),context);
+  for(const [kind,art,label] of [['wood','tool_axe','ตัดไม้'],['stone','tool_pick','ขุดหิน'],['herb','mat_herb','เก็บสมุนไพร']]){
+    context.near=[{kind,tier:2,x:0,z:0,radius:1,stock:1,capacity:1,readyAt:6000}];
+    context.updateResourceHud({level:12});
+    assert.equal(button.hidden,false);
+    assert.equal(button.disabled,false);
+    assert.equal(icon.src,'./assets/items/'+art+'.webp');
+    assert.equal(button['aria-label'],label+' · ชั้น 2 · 1/1');
+  }
+  context.near[0].stock=0;
+  context.updateResourceHud({level:12});
+  assert.equal(button.disabled,true);
+  assert.match(button.title,/ฟื้นใน 5 วิ/);
+  context.near[0].kind='stone';
+  context.updateResourceHud({level:1});
+  assert.match(button['aria-label'],/ต้องการ Lv\.10/);
+  context.near=[];
+  context.updateResourceHud({level:12});
+  assert.equal(button.hidden,true);
+  assert.match(readFileSync('index.html','utf8'),/<img id="harvestIcon" width="24" height="24" alt=""/);
+});

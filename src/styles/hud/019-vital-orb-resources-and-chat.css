@@ -38,6 +38,8 @@
 .chat-box:hover, .chat-box:focus-within, .chat-box.fresh { background: #070b09e6; }
 .chat-harvest { position:absolute; left:0; bottom:calc(100% + 5px); display:flex; flex-wrap:wrap; gap:4px; width:max-content; max-width:min(260px, 85vw); }
 .chat-harvest .warp-button { position:static; transform:none; min-height:36px; max-width:100%; padding:5px 9px; border-radius:9px; font-size:11px; line-height:1.3; white-space:normal; box-shadow:0 2px 8px #0009; }
+.chat-harvest .harvest-action:not([hidden]) { display:grid; place-items:center; width:44px; height:44px; padding:0; }
+.chat-harvest .harvest-action img { width:24px; height:24px; object-fit:contain; pointer-events:none; }
 .chat-potion-control { position:relative; z-index:1; align-self:center; }
 .chat-potion-control[hidden], .chat-box:not(.wide).composing .chat-potion-control { display:none; }
 .chat-potion-use, .chat-potion-picker button {

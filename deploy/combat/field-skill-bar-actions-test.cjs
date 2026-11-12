@@ -4,11 +4,19 @@ const vm = require('node:vm');
 
 const read = path => readFileSync(path, 'utf8');
 const html = read('index.html');
-const bar = html.slice(html.indexOf('class="skill-bar learned-bar"'), html.indexOf('id="fishingPanel"'));
-for (const id of ['fly', 'ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostPoolButton']) {
+const barStart = html.indexOf('class="skill-bar learned-bar"');
+const bar = html.slice(barStart, html.indexOf('id="fishingPanel"'));
+const ghostRow = html.slice(html.indexOf('id="ghostFieldActions"'), barStart);
+assert.match(bar, /<button id="fly" class="orb-action[^"]*"[^>]* hidden>/);
+for (const id of ['ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostPoolButton']) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
-  assert.match(bar, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
+  assert.match(ghostRow, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
+  assert.doesNotMatch(bar, new RegExp(`id="${id}"`));
 }
+const hudCss=read('src/styles/hud/022-chat-compose-and-vitals.css');
+assert.match(hudCss,/\.ghost-field-actions\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
+assert.match(hudCss,/\.ghost-field-buttons\s*\{[^}]*flex-wrap:\s*wrap/);
+assert.doesNotMatch(hudCss,/\.ghost-field-(?:actions|status|skills)\s*\{[^}]*position:\s*absolute/);
 assert.doesNotMatch(html, /id="(?:flightButton|menuGhostPot)"/);
 assert.doesNotMatch(read('src/client/ui/048-class-books-and-hotbars.js'), /id="occultFlight"/);
 assert.match(read('src/client/core/059-frame-loop-and-startup.js'), /\$\("fly"\)\.onclick = toggleFlightCommand/);
