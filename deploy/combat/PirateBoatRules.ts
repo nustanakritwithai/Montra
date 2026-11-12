@@ -115,7 +115,7 @@ const canals:Readonly<Record<string,CanalLayout>>={
     channels:[[[-51,-7],[115,-7]]],gates:[[-51,-7],[115,-7]],dock:southBank(-20,-7),
   },
   hex_ridge:{
-    channels:[[[39,-103],[39,47]]],gates:[[39,47],[39,-103]],dock:eastBank(39,-24),
+    channels:[[[39,-103],[39,47]]],gates:[[39,47],[39,-103]],dock:eastBank(39,-84),
   },
   twin_neck_pass:{
     channels:[[[-272,92],[272,92]]],gates:[[-272,92],[272,92]],dock:southBank(0,92),
@@ -127,8 +127,8 @@ const canals:Readonly<Record<string,CanalLayout>>={
     channels:[[[27,-103],[27,47]]],gates:[[27,47],[27,-103]],dock:eastBank(27,0),
   },
   tri_wiang_castle:{
-    channels:[[[-211,-343],[-211,211],[343,211]]],
-    gates:[[-211,-343],[343,211]],dock:southBank(-108,211),
+    channels:[[[-326,-343],[-326,340],[343,340]]],
+    gates:[[-326,-343],[343,340]],dock:eastBank(-326,0),
   },
   asura_peak:{
     channels:[[[-39,-108],[-39,48]]],gates:[[-39,-108],[-39,48]],dock:eastBank(-39,0),

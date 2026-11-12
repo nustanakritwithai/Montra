@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { getWorldMap, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
+import { getWorldMap, getSafeMapSpawn, groundAt, isSafeWorldPoint, isRestArea, isWorldSegmentClear } from "./WorldMaps.js";
 import { MyRoomState, Player } from "./schema/MyRoomState.js";
 import { ForestEncounters } from "./ForestEncounters.js";
 import { parseMoveCommand } from "./GameRules.js";
@@ -14,7 +14,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("forest adds a southern shipping lane and preserves its original entrance", () => {
+test("forest keeps the expanded bounds and original entrance", () => {
   const map = getWorldMap("forbidden_forest")!;
   assert.equal(map.bounds.maxX - map.bounds.minX, 120);
   assert.equal(map.bounds.maxZ - map.bounds.minZ, 141);
@@ -36,7 +36,7 @@ test("dash works beyond old bounds and still stops at the real forest edge", () 
   assert.ok(edge.blocked && edge.x <= 59.6 + 1e-8);
 });
 test("saved locations beyond the old boundary remain in the same map", () => {
-  const point = {x:30,y:0,z:-45};
+  const point = {x:30,y:groundAt("forbidden_forest",30,-45),z:-45};
   assert.deepEqual(getSafeMapSpawn("forbidden_forest",point),point);
   assert.deepEqual(getSafeMapSpawn("forbidden_forest",{x:500,y:0,z:0}),{x:0,y:0,z:12});
 });
