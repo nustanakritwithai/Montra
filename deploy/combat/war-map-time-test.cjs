@@ -46,23 +46,29 @@ function element(tag) {
     setAttribute: (key,value) => { attributes[key] = value; },
     append(...children) { this.children.push(...children); },
     replaceChildren(...children) { this.children = children; },
+    querySelectorAll(selector) {
+      assert.equal(selector,'[data-atlas-war-site]');
+      return this.children.flatMap(child=>[...(child.dataset.atlasWarSite?[child]:[]),...child.querySelectorAll(selector)]);
+    },
     get offsetTop() { return parseFloat(this.style.top) * 8.27; },
     get offsetLeft() { return parseFloat(this.style.left) * 4; },
     clientHeight: 320, clientWidth: 312, scrollTop: 0, scrollLeft: 0,
   };
 }
 
-function atlasFixture({boats = true, helm = false} = {}) {
+function atlasFixture({boats = true, helm = false, war = false} = {}) {
   const maps = {
     ritual_village: {name: 'หมู่บ้านอาคม', portals: [{targetMapId: 'forbidden_forest',x: 10,z: 20}], waterGates: [{id: 'to_marsh', targetMapId: 'drowned_marsh', x: 30, z: 40}]},
     forbidden_forest: {name: 'ป่าต้องห้าม', portals: [{targetMapId: 'drowned_marsh', x: 50, z: 60}]},
     drowned_marsh: {name: 'บึงพราย', portals: [], waterGates: []},
   };
   const nodes = {}, sent = [], actions = [];
-  let markup = '';
+  let markup = '', now = 1000;
   const context = vm.createContext({
-    $: id => nodes[id], worldDefinitions: maps, activeMapId: 'ritual_village', travelRoutes: null,
-    room: {state: {boatsAvailable: boats,cityMarketSupported: true}, send: (...args) => sent.push(args)},
+    $: id => nodes[id] || nodes.atlasDetail?.children.find(child=>child.id===id),
+    worldDefinitions: maps, activeMapId: 'ritual_village', travelRoutes: null, mode:'live',
+    territoryState:null, territoryReceivedAt:0, performance:{now:()=>now}, warLocalDate:()=> '04:00',
+    room: {state: {boatsAvailable: boats,cityMarketSupported: true,territoryWarAvailable:war}, send: (...args) => sent.push(args)},
     boatAtHelm: () => helm, sailThroughGate: id => actions.push(id), closeDrawer: () => actions.push('close'), openMap: () => actions.push('local'),
     document: {createElement: element,createElementNS: (_namespace,tag) => element(tag)},
     openDrawer(_name,_title,html) {
@@ -71,16 +77,17 @@ function atlasFixture({boats = true, helm = false} = {}) {
     },
   });
   vm.runInContext(slice(atlas,'  const atlasCells =','  const warErrors=')+
+    slice(atlas,'  function warTerritoryLabel(','  function renderWarSchedule(')+
     slice(journey,'  function travelRoute(','  function currentItemHunt(')+
     slice(atlas,'  function openStrategicMap(','  function openMap()'),context);
-  return {context,nodes,sent,actions,get markup(){return markup;}};
+  return {context,nodes,sent,actions,setNow:value=>{now=value;},get markup(){return markup;}};
 }
 
 test('atlas opens on the travel map, highlights actual land and water links, and returns to its opener', () => {
   const f = atlasFixture();
   f.context.openStrategicMap(undefined,() => f.actions.push('back'));
   assert.ok(f.markup.indexOf('id="atlasBoard"') < f.markup.indexOf('id="atlasDetail"'));
-  assert.doesNotMatch(f.markup,/atlasTradeRoute|atlasCityMarket|warTerritory|data-war-site/);
+  assert.doesNotMatch(f.markup,/atlasTradeRoute|atlasCityMarket|warTerritoryRoute/);
   assert.deepEqual(f.sent, []);
   const [svg, origin, forest, marsh] = f.nodes.atlasBoard.children;
   assert.equal(origin.attributes['aria-current'], 'location');
@@ -115,4 +122,62 @@ test('a helmsman uses the existing gate command, and older servers keep a land-o
   old.context.openStrategicMap('drowned_marsh');
   assert.equal(old.nodes.atlasWater, undefined);
   assert.match(old.nodes.atlasDetail.children[1].textContent, /ผ่าน 2 ประตู/);
+});
+
+test('atlas clocks follow server time without moving the map or changing the route', () => {
+  const f=atlasFixture({war:true});
+  f.context.openStrategicMap('drowned_marsh');
+  assert.deepEqual(f.sent.map(([name])=>name),['get_territories']);
+  const [svg,origin,forest,marsh]=f.nodes.atlasBoard.children;
+  const detail=f.nodes.atlasDetail.children[2];
+  const clock=marker=>marker.children[2];
+  assert.ok([origin,forest,marsh].every(marker=>clock(marker).hidden));
+  assert.equal(detail.hidden,true);
+  f.context.territoryState={
+    serverNow:10000,warTimes:{
+      ritual_village:{phase:'open'},
+      forbidden_forest:{phase:'battle',phaseEndsAt:16000},
+      drowned_marsh:{phase:'protected',phaseEndsAt:30000},
+    },
+  };
+  f.context.territoryReceivedAt=1000;
+  f.setNow(2500);
+  f.context.updateAtlasWarTimes();
+  assert.equal(clock(origin).hidden,true);
+  assert.equal(clock(forest).textContent,'รบ 0:05');
+  assert.equal(clock(forest).dataset.phase,'battle');
+  assert.equal(clock(marsh).textContent,'พัก 0:19');
+  assert.equal(detail.textContent,'คุ้มครอง 0:19');
+  assert.equal(detail.attributes['aria-live'],'off');
+  f.setNow(7000);
+  f.context.updateAtlasWarTimes();
+  assert.equal(clock(forest).hidden,true);
+  assert.equal(clock(marsh).textContent,'พัก 0:14');
+  assert.equal(f.nodes.atlasBoard.children[0],svg);
+  assert.equal(marsh.attributes['aria-pressed'],'true');
+  assert.equal(f.nodes.atlasDetail.children[2],detail);
+  assert.equal(svg.children.filter(line=>line.classList.contains('route')).length,2);
+  f.setNow(21000);
+  f.context.updateAtlasWarTimes();
+  assert.equal(clock(marsh).hidden,true);
+  assert.equal(detail.textContent,'กำลังอัปเดต');
+  f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
+  f.context.territoryState.schedule={drowned_marsh:{next:{startsAt:50000}}};
+  f.context.updateAtlasWarTimes();
+  assert.equal(detail.textContent,'พร้อมเปิดศึก · รอบถัดไป 04:00');
+});
+
+test('small atlas buttons and their clock badges have room at the narrow board width', () => {
+  const css=readFileSync('src/styles/market/008-economy-trade-and-atlas.css','utf8');
+  const boardWidth=Number(css.match(/\.atlas-board \{[^}]*min-width:(\d+)px/)?.[1]);
+  const [,min,percent,max,height]=css.match(/\.atlas-cell \{[^}]*width:clamp\((\d+)px,(\d+)%,(\d+)px\);height:(\d+)px/).map(Number);
+  const [,border,line]=css.match(/\.atlas-war-time \{[^}]*border:(\d+)px[^}]*line-height:(\d+)px/).map(Number);
+  const scale=boardWidth/400,width=Math.min(max,Math.max(min,percent*boardWidth/100)),badgeHeight=line+2*border;
+  const layout=vm.runInNewContext(slice(atlas,'  const atlasCells =','  const warErrors=')+'atlasCells');
+  const cells=Object.entries(layout);
+  for(const [i,[id,[x,y]]] of cells.entries()){
+    assert.ok(y*scale-height/2>=0 && y*scale+height/2+badgeHeight<=827*scale,id+' stays inside the board');
+    for(const [other,[otherX,otherY]] of cells.slice(i+1))
+      assert.ok(Math.abs(x-otherX)*scale>=width || Math.abs(y-otherY)*scale>=height+badgeHeight,id+' overlaps '+other);
+  }
 });

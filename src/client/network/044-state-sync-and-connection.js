@@ -504,6 +504,7 @@
         if(alerts.length)SFX("drum",{important:true});
         if(alerts.length)toast("เสียงกลอง · กำลังชิง "+alerts.map(id=>message.local.pilot.points.find(p=>p.id===id)?.name || id).join(" · "));
         if(drawerActive==="war")renderWarPanel();
+        if(drawerActive==="strategy")updateAtlasWarTimes();
         if(drawerActive==="guild")renderGuild();
         if(drawerActive==="cityMarket" && cityMarkets && Object.keys(citySiteNames).some(site=>
           previousOwners?.[site]!==message.owners?.[site] || previousWarTimes?.[site]?.phase!==message.warTimes?.[site]?.phase))refreshCityMarkets();

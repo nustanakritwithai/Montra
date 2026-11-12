@@ -737,7 +737,7 @@
   function warLocalDate(ms){
     return new Date(ms).toLocaleString("th-TH",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
   }
-  function warTerritoryLabel(entry,serverNow){
+  function warTerritoryLabel(entry,serverNow,compact=false){
     if(!entry)return "รอข้อมูล";
     if(entry.phase==="open")return "พร้อมเปิดศึก";
     if(entry.phase!=="battle" && entry.phase!=="protected")return warPhase(entry.phase);
@@ -746,7 +746,10 @@
     if(!seconds)return "กำลังอัปเดต";
     const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
     const clock=(hours?String(hours)+":"+String(minutes).padStart(2,"0"):String(minutes))+":"+String(remainder).padStart(2,"0");
-    return (entry.phase==="battle"?"รบ ":"คุ้มครอง ")+clock;
+    return (entry.phase==="battle"?"รบ ":compact?"พัก ":"คุ้มครอง ")+clock;
+  }
+  function territoryServerTime(){
+    return Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
   }
   function renderWarTerritories(){
     const panel=$("warTerritories");
@@ -767,7 +770,7 @@
     const panel=$("warTerritories"),picker=$("warTerritorySite");
     if(!panel || panel.hidden || !picker?.value)return;
     const site=picker.value,entry=territoryState?.warTimes?.[site];
-    const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
+    const now=territoryServerTime();
     const status=$("warTerritoryStatus"),owner=$("warTerritoryOwner"),schedule=territoryState?.schedule?.[site];
     let label=warTerritoryLabel(entry,now);
     if(entry?.phase==="open" && schedule?.next)
@@ -778,6 +781,29 @@
     if(owner.textContent!==ownerLabel)owner.textContent=ownerLabel;
     if(status.textContent!==label)status.textContent=label;
     $("warTerritoryRoute").hidden=site===activeMapId;
+  }
+  function updateAtlasWarTimes(){
+    const board=$("atlasBoard");
+    if(!board)return;
+    const now=territoryServerTime(),times=territoryState?.warTimes;
+    for(const clock of board.querySelectorAll("[data-atlas-war-site]")){
+      const entry=times?.[clock.dataset.atlasWarSite],phase=entry?.phase;
+      const counting=(phase==="battle" || phase==="protected") && Number.isFinite(entry.phaseEndsAt) && entry.phaseEndsAt>now;
+      clock.hidden=!counting;
+      if(!counting)continue;
+      const text=warTerritoryLabel(entry,now,true);
+      if(clock.textContent!==text)clock.textContent=text;
+      if(clock.dataset.phase!==phase)clock.dataset.phase=phase;
+    }
+    const status=$("atlasWarStatus");
+    if(!status)return;
+    const site=status.dataset.site,entry=times?.[site],next=territoryState?.schedule?.[site]?.next;
+    status.hidden=!entry;
+    if(!entry)return;
+    let text=warTerritoryLabel(entry,now);
+    if(entry.phase==="open" && Number.isFinite(next?.startsAt))
+      text+=" · รอบถัดไป "+warLocalDate(next.startsAt);
+    if(status.textContent!==text)status.textContent=text;
   }
   function renderWarSchedule(){
     const panel=$("warSchedulePanel"),schedule=territoryState?.schedule;
@@ -1069,7 +1095,10 @@
       button.style.left=(x/4)+"%";button.style.top=(y/827*100)+"%";
       const icon=document.createElement("b");icon.setAttribute("aria-hidden","true");
       icon.textContent=kind==="capital"?"♛":kind==="territory"?"⚑":kind==="village"?"⌂":"◆";
-      const label=document.createElement("span");label.textContent=map.name;button.append(icon,label);
+      const label=document.createElement("span");label.className="atlas-cell-name";label.textContent=map.name;
+      const clock=document.createElement("small");clock.className="atlas-war-time";clock.hidden=true;
+      clock.dataset.atlasWarSite=id;clock.setAttribute("aria-hidden","true");
+      button.append(icon,label,clock);
       button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
       if(id===origin){button.classList.add("here");button.setAttribute("aria-current","location");}
       board.append(button);cells.set(id,button);button.onclick=()=>select(id);
@@ -1098,7 +1127,10 @@
       directions.textContent=id===origin?"● คุณอยู่ที่นี่":gate?
         "ผ่าน "+(path.length-1)+" ประตู · ประตูแรกไป "+maps[path[1]].name:
         (water?"ยังไม่มีเส้นทางน้ำจากที่นี่":"ยังไม่มีเส้นทางบกจากที่นี่");
-      detail.replaceChildren(title,directions);
+      const status=document.createElement("p");status.id="atlasWarStatus";status.className="atlas-war-status";
+      status.dataset.site=id;status.hidden=true;status.setAttribute("aria-live","off");
+      detail.replaceChildren(title,directions,status);
+      updateAtlasWarTimes();
       if(!gate)return;
       if(water && boatAtHelm()){
         const navigate=document.createElement("button");navigate.type="button";navigate.className="primary atlas-sail";
@@ -1117,6 +1149,7 @@
     }
     $("atlasRecenter").onclick=()=>{select(origin);center(origin);};
     select(selected);center(selected);
+    if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
   }
   function openMap() {
     const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;

@@ -318,7 +318,7 @@
   }
 
   // Cooldown labels must advance even in a quiet room with no schema patches.
-  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="war")updateWarTerritoryStatus();if(drawerActive==="cityMission")updateCityContractDeadline();if(drawerActive==="quest")updateDirectorTimer();},1000);
+  setInterval(()=>{if(mode==="live"){syncOccultUI(ownServerCharacter());syncBladeUI(ownServerCharacter());syncSentinelUI(ownServerCharacter());}if(drawerActive==="war")updateWarTerritoryStatus();if(drawerActive==="strategy")updateAtlasWarTimes();if(drawerActive==="cityMission")updateCityContractDeadline();if(drawerActive==="quest")updateDirectorTimer();},1000);
   $("helpButton").onclick=openHelp;
   $("bag").onclick=openBag;
   // Pose rate by distance from the camera's focus: full rate near the hero, 15/s in the middle

@@ -1457,21 +1457,41 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .atlas-board line.route {stroke:var(--atlas-gold);stroke-width:3;filter:drop-shadow(0 0 2px #071a1d)}
 .atlas-board line[data-atlas-link="waterGates"].route {stroke:var(--atlas-water)}
 .atlas-cell {
-  position:absolute;transform:translate(-50%,-50%);width:27%;max-width:150px;min-height:48px;
-  padding:5px 6px;border:1px solid var(--rim);border-radius:12px 5px;background:var(--land);
-  color:#f2f1df;font-size:13px;line-height:1.22;text-align:center;
-  --rim:#92b198;--land:#24443e;
+  position:absolute;transform:translate(-50%,-50%);width:clamp(60px,20%,90px);height:44px;
+  display:grid;justify-items:center;align-content:center;gap:1px;padding:0;border:0;border-radius:6px;
+  background:transparent;color:#f2f1df;font-size:11px;line-height:1.05;text-align:center;
+  --rim:#b3c9a8;--land:#24443e;
 }
-.atlas-cell b {display:block;font-size:15px;color:var(--rim)}
-.atlas-cell span {display:block}
-.atlas-cell.capital {width:31%;--rim:#efc67e;--land:#60492e}
+.atlas-cell b {
+  display:grid;place-items:center;position:relative;width:20px;height:20px;border-radius:50%;
+  border:1px solid var(--rim);background:var(--land);color:var(--rim);font-size:13px;
+}
+.atlas-cell-name {
+  display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;max-width:100%;overflow:hidden;
+  overflow-wrap:anywhere;padding:0 3px;border-radius:4px;background:#102323ed;
+}
+.atlas-cell.capital {--rim:#efc67e;--land:#60492e}
 .atlas-cell.territory {--rim:#dab6d6;--land:#49324d}
-.atlas-cell.here::after {content:"●";position:absolute;top:3px;right:7px;color:#8dfce0;font-size:10px}
-.atlas-cell[aria-pressed=true] {border-color:#ffe2a5;box-shadow:0 0 0 2px #e9c283;z-index:1}
+.atlas-cell.here b::after {
+  content:"";position:absolute;top:-2px;right:-3px;width:7px;height:7px;border-radius:50%;
+  background:#8dfce0;border:1px solid #11383b;
+}
+.atlas-cell[aria-pressed=true] {z-index:1}
+.atlas-cell[aria-pressed=true] b {border-color:#fff0ba;box-shadow:0 0 0 2px #e9c283}
+.atlas-cell[aria-pressed=true] .atlas-cell-name {background:#463720;color:#fff0ce}
+.atlas-war-time {
+  position:absolute;top:100%;left:50%;transform:translateX(-50%);pointer-events:none;
+  padding:0 3px;border:1px solid #9a7b58;border-radius:4px;background:#172528;
+  color:#ffe3b2;white-space:nowrap;font-size:10px;font-weight:650;line-height:11px;font-variant-numeric:tabular-nums;
+}
+.atlas-war-time[data-phase="battle"] {background:#522b23;color:#ffdac3;border-color:#d99175}
+.atlas-war-time[data-phase="protected"] {background:#183b47;color:#d4f3fa;border-color:#73b9cb}
+.atlas-war-time[hidden] {display:none}
 .atlas-cell:focus-visible,.atlas-tools button:focus-visible,.atlas-scroll:focus-visible {outline:2px solid #fff0ba;outline-offset:2px}
 .atlas-summary {padding:8px 10px;border:1px solid #816946;border-radius:9px;background:#162c30}
 .atlas-summary strong {color:#ffe2ab;font-size:14px}
 .atlas-summary p {margin:2px 0;color:var(--atlas-ink)}
+.atlas-summary .atlas-war-status {color:#f5d8a3;font-variant-numeric:tabular-nums}
 .atlas-summary details {margin-top:4px}
 .atlas-summary summary {cursor:pointer;color:#ddc7a0;font-size:12px}
 .atlas-summary .atlas-sail {width:auto;min-height:44px;margin:5px 0;padding:6px 12px}
@@ -1482,7 +1502,6 @@ button:disabled { opacity:.5; cursor:not-allowed; }
   .drawer:has(.strategy-atlas) {padding-inline:10px}
   .drawer:has(.strategy-atlas) .drawer-header {margin-inline:-10px}
   .atlas-tools button {padding-inline:7px}
-  .atlas-cell {font-size:12px}
 }
 
 /* Sound settings (help sheet) */
