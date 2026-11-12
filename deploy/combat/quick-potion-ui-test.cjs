@@ -212,11 +212,11 @@ test('cancelled, dragged and stale presses do not open the picker or consume a p
   assert.deepEqual(f.sent, [{command:'use_item', slot:0}]);
 });
 
-test('the slot is attached above the real chat feed and the picker opens upward', () => {
-  assert.match(source, /harvestControls\.append\(potion\.el,\$\("harvestButton"\),\$\("fishButton"\)\); el\.prepend\(harvestControls\)/);
+test('fishing is leftmost above chat and the potion picker opens upward', () => {
+  assert.match(source, /harvestControls\.append\(\$\("fishButton"\), potion\.el, \$\("harvestButton"\)\);\s+el\.prepend\(harvestControls\)/);
   assert.match(source, /function openChat\(\)\{\s+if\(!chatBox\)return;\s+chatBox\.potion\?\.close\(\)/);
   const css = readFileSync('src/styles/hud/019-vital-orb-resources-and-chat.css', 'utf8');
-  assert.match(css, /\.chat-harvest\s*\{[^}]*bottom:calc\(100% \+ 5px\)/);
+  assert.match(css, /\.chat-harvest\s*\{[^}]*left:0;[^}]*bottom:calc\(100% \+ 5px\)/);
   assert.match(css, /\.chat-potion-picker\s*\{[^}]*bottom:calc\(100% \+ 4px\)[^}]*width:min\(148px, 75vw\)[^}]*overflow-y:auto/);
 });
 
