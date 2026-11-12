@@ -36,15 +36,18 @@
     }
     lanternPick=0;
     const bounds=mapBounds();
-    ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(bounds.maxZ-bounds.minZ)/40;
-    ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+bounds.maxZ)/2;
+    const map=worldDefinitions?.[activeMapId];
+    const river=activeMapId==="ritual_village" ? map?.water?.[0] : null;
+    const landEndZ=river?.z ?? bounds.maxZ;
+    ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(landEndZ-bounds.minZ)/40;
+    ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+landEndZ)/2;
     // Ground surfaces keep a fixed size in metres on the stretched walk plane (visual only; the plane itself is unchanged).
     const groundTile=ground.material?.metadata?.groundTile;
     // Terrain meshes map UVs at one unit per 45 m; the flat plane spans the map bounds.
     const reliefFloor=worldDefinitions?.[activeMapId]?.terrain;
     if(groundTile)for(const t of [ground.material.diffuseTexture,ground.material.bumpTexture,ground.material.emissiveTexture])if(t){
-      t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(bounds.maxZ-bounds.minZ)/groundTile;}
-    const map=worldDefinitions?.[activeMapId];alignVillage(worldDefinitions?.ritual_village?.terrain);
+      t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(landEndZ-bounds.minZ)/groundTile;}
+    alignVillage(worldDefinitions?.ritual_village?.terrain);
     ground.setEnabled(!map?.terrain);if(!map)return;
     if (isPrivateHomeMap(activeMapId)) {
       renderHomeScene();
@@ -66,7 +69,9 @@
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
     scatterGroundPatches(map,map.terrain?terrainPaint.floor:ground.material,REGION_GROUNDS[activeMapId]?.[0]||MAP_FLOORS[activeMapId]||"grass",
-      (x,z,r)=>!nearMapPath(map,x,z,r+2.5)&&!(map.portals||[]).some(p=>Math.hypot(p.x-x,p.z-z)<r+4)&&!(activeMapId==="ritual_village"&&Math.abs(x)<21&&z>-24&&z<48));
+      (x,z,r)=>(!river || z+r*3<river.z)&&!nearMapPath(map,x,z,r+2.5)&&
+        !(map.portals||[]).some(p=>Math.hypot(p.x-x,p.z-z)<r+4)&&
+        !(activeMapId==="ritual_village"&&Math.abs(x)<21&&z>-24&&z<villageRiver.z));
     for(const camp of map.camps||[]){
       if(map.reliefLabels)reliefPatches("terraced hunt clearing",map.terrain,[reliefDisk(camp.x,camp.z,inTemple?10:12,32)],.023,terrainPaint.court);
       else {

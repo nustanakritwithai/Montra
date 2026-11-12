@@ -233,6 +233,8 @@
   rippleTexture.uScale = 1.2; rippleTexture.vScale = 10;
   water.emissiveTexture = rippleTexture;
   const riverWater = water.clone("river water");
+  riverWater.diffuseColor = B.Color3.FromHexString("#235b70");
+  riverWater.emissiveColor = B.Color3.FromHexString("#12485a");
   const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
   riverWater.emissiveTexture = riverRipple;
   riverSurface.material = riverWater;

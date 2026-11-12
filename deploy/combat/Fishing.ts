@@ -1,4 +1,4 @@
-import {WORLD_MAPS,groundAt,onMapGround,provinceShotClear,type WorldWall} from "./WorldMaps.js";
+import {VILLAGE_RIVER,WORLD_MAPS,groundAt,onMapGround,provinceShotClear,type WorldWall} from "./WorldMaps.js";
 
 export const FISH_CAST_RANGE=9;
 export const FISH_BITE_DELAY=3000;
@@ -8,11 +8,10 @@ export const FISH_MAX_DISTANCE=18;
 export type FishItem="mat_fish_common"|"mat_fish_silver"|"mat_fish_spirit";
 export type FishingSession={id:string;mapId:string;x:number;z:number;originX:number;originZ:number;combatAt:number;biteAt:number;lastReel:number;lastDriftAt:number;distance:number;initialDistance:number;strength:number;line:number;item:FishItem};
 
-// The village canals are decorative geometry, rather than movement-blocking water.
-// Keep them separate from map.water so existing paths and player movement stay unchanged.
+// The canals and pond also support fishing. Only the river blocks land movement.
 const villageWater:readonly WorldWall[]=[
   {x:-19.7,z:-26,width:11.2,length:74},{x:8.5,z:-26,width:11.2,length:74},
-  {x:-80,z:48,width:160,length:40},          // the river along the south edge
+  VILLAGE_RIVER,
   {x:-50,z:-50,width:14,length:10},          // the field pond
 ];
 export function fishingWater(mapId:string):readonly WorldWall[]{

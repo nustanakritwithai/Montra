@@ -34,7 +34,7 @@ function fixture(raySlope=0) {
   };
   const sandbox = {
     $: id=>{
-      if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[],querySelectorAll:()=>[]});
+      if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[]});
       return buttons.get(id);
     },
     localId:"local",mode:"live",activeMapId:map.id,worldDefinitions:{[map.id]:map},
@@ -127,7 +127,7 @@ test("tapping an opposing captured ghost sends its server-issued attack target",
   assert.deepEqual(f.stats(),{rayCalls:0,attacks:0,walks:0});
 });
 
-test("pinching does not set a course and manual steering can take over",()=>{
+test("pinching does not set a course and the helm responds only to taps",()=>{
   const f = fixture();
   f.pointerEvent("pointerdown","touch",1);
   f.pointerEvent("pointerdown","touch",2);
@@ -136,7 +136,21 @@ test("pinching does not set a course and manual steering can take over",()=>{
   assert.equal(f.stats().rayCalls,0);
   f.tap("touch",10,55);
   assert.equal(f.marker.enabled,true);
-  f.windowEvents.keydown({code:"KeyW",preventDefault(){}});
-  assert.equal(f.tick(100).throttle,1);
+  assert.equal(f.windowEvents.keydown,undefined);
+  assert.ok(f.tick(100).throttle>0);
+  assert.equal(f.marker.enabled,true);
+});
+
+test("tapping the deck anchors the boat and another water tap resumes the course",()=>{
+  const f = fixture();
+  f.tap("touch",15,54);
+  assert.equal(f.tick(100).anchor,false);
+  f.boat.anchored = false;
+  f.tap("touch",0,51,{isEnabled:()=>true,metadata:{sailingBoatId:"boat"}});
+  assert.deepEqual(f.tick(200),{type:"boat_intent",action:"input",throttle:0,steer:0,anchor:true});
   assert.equal(f.marker.enabled,false);
+  f.boat.anchored = true;
+  f.tap("touch",12,53);
+  assert.equal(f.tick(300).anchor,false);
+  assert.equal(f.marker.enabled,true);
 });

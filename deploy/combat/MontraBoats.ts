@@ -1,5 +1,4 @@
 import { stepTowards, type Vec2 } from "./GameRules.js";
-import { fishingWater } from "./Fishing.js";
 import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
@@ -46,13 +45,8 @@ export function parseBoatIntent(message: unknown): BoatIntent | null {
   }
 }
 
-function boatWater(mapId: string) {
-  const water = fishingWater(mapId);
-  return mapId === "ritual_village" ? water.filter(w => w.z >= 48) : water;
-}
-
 function inWater(mapId: string, x: number, z: number) {
-  return boatWater(mapId).some(w => x >= w.x && x <= w.x + w.width && z >= w.z && z <= w.z + w.length);
+  return Boolean(getWorldMap(mapId)?.water?.some(w => x >= w.x && x <= w.x + w.width && z >= w.z && z <= w.z + w.length));
 }
 
 export function boatCanSail(mapId: string, x: number, z: number, radius: number) {

@@ -233,7 +233,8 @@
   }
   function buildTerrainGround(map,paint){
     const t=map.terrain,positions=[],normals=[],colors=[],uvs=[],indices=[];
-    for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
+    const riverStart = map.id === "ritual_village" ? map.water?.[0]?.z ?? Infinity : Infinity;
+    for(let j=0;j<t.zs.length-1 && t.zs[j]<riverStart;j++)for(let i=0;i<t.xs.length-1;i++){
       const point=(a,b)=>new B.Vector3(t.xs[i+a],t.heights[j+b][i+a],t.zs[j+b]);
       const a=point(0,0),b=point(1,0),c=point(0,1),d=point(1,1);
       for(const tri of [[a,b,d],[a,d,c]]){

@@ -47,7 +47,7 @@ await new Promise((resolve,reject)=>probe.close(error=>error ? reject(error) : r
 const server = defineServer({rooms:{my_room:defineRoom(BoatTestRoom)}});
 await server.listen(port,"127.0.0.1");
 const sdk = new Client("http://127.0.0.1:"+port), clients = new Set();
-const opts = () => ({worldVersion:1,guestToken:"mt1_"+randomBytes(32).toString("hex")});
+const opts = () => ({worldVersion:1,originalReliefVersion:1,guestToken:"mt1_"+randomBytes(32).toString("hex")});
 const me = room => room.state?.players?.get(room.sessionId);
 const command = (room, action, fields = {}) => room.send("boat_intent",{action,...fields});
 const observe = room => {
@@ -68,6 +68,13 @@ try {
   const {room:pilot} = observe(await sdk.create("my_room",pilotOptions));
   const {room:passenger,rejected} = observe(await sdk.joinById(pilot.roomId,opts()));
   await until(()=>pilot.state?.boatsAvailable && me(pilot) && me(passenger),"both actors ashore");
+  const river = getWorldMap("ritual_village").water[0];
+  assert.deepEqual(JSON.parse(pilot.state.worldDefinition).maps.ritual_village.water,[river]);
+  pilot.send("move",{x:0,z:river.z+5});
+  await until(()=>me(pilot).z>river.z-1,"walk to the edge of the river");
+  await wait(1600);
+  assert.ok(me(pilot).z<river.z,"foot movement stops at the bank");
+  const pilotShore = me(pilot).z;
 
   command(pilot,"launch");
   const boatId = "boat-"+pilot.sessionId;
@@ -103,7 +110,7 @@ try {
   // Keep this combat fixture at the shoreline instead of running its village patrol.
   game.updateMonsterAI = () => {};
   const attacker = game.state.players.get(passenger.sessionId), target = game.state.monster;
-  const x = attacker.x, z = 47.9;
+  const x = attacker.x, z = river.z-.5;
   Object.assign(target,{x,y:groundAt("ritual_village",x,z),z,alive:true,hp:target.maxHp});
   const hp = target.hp, deck = {x:attacker.x,z:attacker.z};
   passenger.send("attack",{targetId:target.id});
@@ -118,8 +125,8 @@ try {
   assert.ok(Math.abs(me(passenger).z-BOAT_SHORES.ritual_village.z)<1);
   const {room:rejoined} = observe(await sdk.joinById(passenger.roomId,pilotOptions));
   await until(()=>me(rejoined) && !me(rejoined).boatId,"pilot reconnect");
-  assert.ok(Math.abs(me(rejoined).z-BOAT_SHORES.ritual_village.z)<1);
-  console.log("PASS legacy boat launch, replication, helm, deck walk and carry, deck attack, disconnect and reconnect");
+  assert.ok(Math.abs(me(rejoined).z-pilotShore)<.1,"the pilot reconnects on the bank used to board");
+  console.log("PASS river blocks foot travel; launch, replication, helm, deck walk and carry, deck attack, disconnect and reconnect");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

@@ -104,6 +104,7 @@ export const VILLAGE_LAYOUT = Object.freeze({
   temple:{x:0,z:-40}, market:{x:40,z:-4}, fields:{x:-40,z:-8}, training:{x:-34,z:34}, graves:{x:38,z:38},
   forestGate:{x:-10,z:-56}, cityGate:{x:10,z:-56},
 });
+export const VILLAGE_RIVER: WorldWall = {x:-80,z:48,width:160,length:40};
 // Solid village buildings (boxes). Shared by the server collision and the client models.
 export const VILLAGE_BUILDINGS: readonly WorldWall[] = [
   {x:-6,z:-52,width:12,length:7},                                   // ordination hall (ubosot)
@@ -124,6 +125,7 @@ const maps: Record<string,WorldMapDefinition>={
     id: "ritual_village", name: "หมู่บ้านอาคม",
     bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
     spawn: { x: 0, y: 0, z: 0 },
+    water: WORLD_EXPANSION ? [VILLAGE_RIVER] : undefined,
     walls: VILLAGE_BUILDINGS,
     obstacles: [
       ...[[-38,30],[-34,30],[-30,30],[-38,38],[-30,38]].map(([x,z],i)=>({id:"training-dummy-"+(i+1),x,z,radius:.45})),

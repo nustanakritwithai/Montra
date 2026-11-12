@@ -31,7 +31,6 @@
 .field-dock .sword-hotkey { min-height:44px; flex:0 1 78px; }
 .field-prompts { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:5px; margin-bottom:2px; }
 .boat-panel:not([hidden]) { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:5px; }
-.boat-panel [data-boat-drive] { touch-action:none; }
 .field-prompts .warp-button { position:static; transform:none; min-height:44px; max-width:100%; white-space:normal; pointer-events:auto; font-size:12px; }
 .field-shortcuts { position:absolute; left:max(var(--field-gap),env(safe-area-inset-left)); bottom:max(var(--field-gap),env(safe-area-inset-bottom)); z-index:6; display:flex; gap:3px; padding:3px; background:#102420ed; border:1px solid var(--field-line); border-radius:12px; }
 .field-shortcuts button,.menu-tiles button { position:relative; border:0; border-radius:8px; background:transparent; font:inherit; color:var(--field-paper); }

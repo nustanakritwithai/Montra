@@ -7421,7 +7421,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
     if (this.homeWalls.get(mapId)?.some(wall=>homeWallBlocks(wall.cell,wall.rotation,{x,z}))) return false;
     const map=getWorldMap(mapId);
-    if(mapId!==DEFAULT_MAP_ID || map?.terrain){
+    if(mapId!==DEFAULT_MAP_ID || map?.terrain || map?.water?.length){
       const r=map?.strategic?.rampart;
       if(r && isOnPlatform(feetY))return onRampart(r,x,z);
       if(r && this.closedFieldGates.size && r.gates.some(g=>this.closedFieldGates.has(g.id) && segmentIntersectsExpandedWall({x,z},{x,z},g.box,.4)))return false;
