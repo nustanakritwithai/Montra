@@ -119,6 +119,7 @@
     territoryState=null;forestObjectiveState=null;forestDefenseState=null;forestEscortState=null;directorEventState=null;syncQuestRanger();syncWarQuartermaster();$("quest").classList.remove("war-hud");
     if (room) { try { room.leave(); } catch (e) { console.warn(e); } }
     room = null; mode = "demo"; localId = "demo"; activeCharacterSlot = null; sentinelChallengeUntil=0; sentinelCoreStanceUntil=0;seerBoundTarget="";seerPoisoned=false;
+    resetGhostPotUi();
     possessed=false;occultBookState=null;occultRequestKey="";selectedOccultSkill="";occultCurseUntil=0;bladeBookState=null;bladeRequestKey="";selectedBladeSkill="";bladeCloakUntil=0;syncBladeUI(null);syncSentinelUI(null);syncOccultUI(null);syncPossessionButton();syncSwordTreeButton(null);syncSwordHotbar();setGrappleResponse(null);muayGrabTarget="";muayGrabUntil=0;muayFollowupSkill="";muayFollowupTarget="";muayFollowupUntil=0;muayDefenseUntil=0;syncMuayHotbar();$("muayBookButton").hidden=true;swordCombo=0; swordComboUntil=0; swordCounterUntil=0; swordStanceUntil=0; muayCounterUntil=0; muayComboCount=0; muayComboUntil=0; muayInterruptUntil=0; syncMuayComboStatus(null); syncSwordStatus(null);
     economyGold = null; economyListings = []; activeTrade = null; economyPending = false; resetCentralMarket();
     resetCombatFeatures();resetCraftQueue();resetAdvancedMarket();

@@ -449,15 +449,8 @@
       updateStatus();
       const ok = syncState(joined.state);
       console.info("MONTRA room joined", {roomId:joined.roomId, sessionId:joined.sessionId, initialStateReady:ok});
-      let ghostPotRequested = false;
-      const requestGhostPot = state => {
-        if (state?.ghostPotAvailable && !ghostPotRequested && room === joined) {
-          ghostPotRequested = true;
-          joined.send("ghost_pot", {action: "read"});
-        }
-      };
       resetGhostPot();
-      joined.onStateChange(state => {syncState(state);requestGhostPot(state);});
+      joined.onStateChange(state => {if(room === joined){syncState(state);requestGhostPotState(state);}});
       joined.onMessage("ghost_pot_state", payload => {
         if (room !== joined || !payload || typeof payload.active !== "boolean") return;
         receiveGhostPot(payload);
@@ -1796,7 +1789,7 @@
         }
       } catch (err) { console.warn("Callbacks fallback to state updates",err); }
       // Some SDK/room combinations expose the collection only after the first full state sync.
-      clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) syncState(joined.state); },350);
+      clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) { syncState(joined.state);requestGhostPotState(joined.state); } },350);
       joined.onLeave(() => {
         if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
       });
@@ -1805,7 +1798,7 @@
         localStorage.setItem("montra_endpoint", endpoint);
         localStorage.setItem(preferredSlotKey(endpoint), String(requestedSlot));
       } catch (_) { /* optional */ }
-      requestGhostPot(joined.state);
+      requestGhostPotState(joined.state);
       if(joined.state?.territoryWarAvailable)joined.send("get_territories",{});
       if(joined.state?.forestObjectivesAvailable){joined.send("get_forest_objective",{});joined.send("get_director_event",{});}
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }

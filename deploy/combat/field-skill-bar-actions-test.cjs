@@ -15,7 +15,8 @@ for (const id of ['ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton',
 }
 const characterMenu = html.slice(html.indexOf('id="menu-character"'), html.indexOf('id="menu-travel"'));
 assert.equal(html.split('id="ghostPoolButton"').length, 2);
-assert.match(characterMenu, /<button id="ghostPoolButton"[^>]* hidden>.*จัดการมอนสเตอร์/);
+assert.match(characterMenu, /<button id="ghostPoolButton"[^>]*>.*จัดทีมคู่หู/);
+assert.doesNotMatch(characterMenu, /<button id="ghostPoolButton"[^>]* hidden/);
 assert.doesNotMatch(ghostRow, /id="ghostPoolButton"/);
 assert.equal(html.split('id="ghostPotButton"').length, 2);
 assert.doesNotMatch(ghostRow, /id="ghostPotButton"/);
@@ -36,9 +37,10 @@ const bindings = read('src/client/input/058-field-control-bindings.js');
 const connection = read('src/client/network/044-state-sync-and-connection.js');
 const ghostBinding = bindings.slice(bindings.indexOf('  let ghostPotState'), bindings.indexOf('  function triggerWarBanner'));
 const ghostReset = connection.slice(connection.indexOf('  function resetGhostPot()'), connection.indexOf('  const REPLACEMENT_SKILLS'));
-const ghostJoin = connection.slice(connection.indexOf('      let ghostPotRequested'), connection.indexOf('      joined.onMessage("chat_message"'));
+const ghostJoin = connection.slice(connection.indexOf('      resetGhostPot();\n      joined.onStateChange'), connection.indexOf('      joined.onMessage("chat_message"'));
 const sent = [];
 const notices = [];
+let now = 100;
 const handlers = {};
 const attributes = {};
 const nodes = new Map();
@@ -64,6 +66,7 @@ button.setAttribute=(name,value)=>{attributes[name]=value;nativeSet.call(button,
 const drawerBody=node();
 const click=()=>handlers["ghostPotButton:click"]();
 const joined = {
+  state:{ghostPotAvailable:false},
   send: (type, payload) => sent.push([type, JSON.stringify(payload)]),
   onMessage: (type, listener) => { handlers[type] = listener; },
   onStateChange: listener => { handlers.state = listener; },
@@ -77,7 +80,7 @@ const context = vm.createContext({
   mode: 'live', room: joined, joined, localId:"local", summonAvatars:new Map(), selectedForestTarget: null, targetedSkill:null,
   activeMapId:"forbidden_forest", monsterForSpell:id=>id==="forest-ghost"?monster:null, ownServerCharacter:()=>owner,
   setTargetedSkill(skill){context.targetedSkill=skill;context.syncGhostPoolUi();},
-  hudTarget: { until: 0 }, performance: { now: () => 100 },
+  hudTarget: { until: 0 }, performance: { now: () => now },
   toast: notice => notices.push(notice), syncState() {},
 });
 vm.runInContext(ghostBinding + ghostReset + ghostJoin, context);
@@ -85,10 +88,34 @@ handlers.state({ ghostPotAvailable: false });
 click();
 assert.equal(button.hidden, true);
 assert.equal(sent.length, 0);
-handlers.state({ ghostPotAvailable: true });
-handlers.state({ ghostPotAvailable: true });
+assert.equal(get("ghostTeamButton").hidden,false);
+assert.equal(get("ghostSummonButton").hidden,false);
+handlers["ghostTeamButton:click"]();
+assert.equal(context.drawerActive,"ghostPool");
+assert.match(drawerBody.children[0].textContent,/ห้องนี้ยังไม่เปิด/);
+context.closeDrawer();
+joined.state.ghostPotAvailable=true;
+handlers.state(joined.state);
+handlers.state(joined.state);
 assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"read"}']);
 assert.equal(sent.length, 0);
+handlers["ghostSummonButton:click"]();
+assert.equal(context.drawerActive,"ghostPool");
+assert.match(drawerBody.children[0].textContent,/รอข้อมูลทีมคู่หู/);
+assert.equal(drawerBody.children[1].textContent,"โหลดทีมใหม่");
+now+=2500;
+context.requestGhostPotState();
+assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"read"}']);
+assert.equal(sent.length,0);
+handlers.ghost_pot_state({active:false,combatId:null,pool:{collection:[],slots:[null,null,null],selectedSlot:0,revision:0}});
+assert.equal(context.drawerActive,"ghostPool","arrival of the pool keeps the open drawer");
+assert.equal(get("ghostTeamButton").hidden,false,"empty teams retain an entry");
+assert.equal(get("ghostSummonButton").hidden,false);
+assert.ok(drawerBody.children[0].children.some(child=>child.textContent.includes("ยังไม่มีคู่หู")));
+context.closeDrawer();
+now+=5000;
+context.requestGhostPotState();
+assert.equal(sent.length,0,"read retries stop after the pool arrives");
 
 handlers.ghost_pot_state({ active: false, ghost: null });
 assert.equal(button.hidden, true);
@@ -129,6 +156,10 @@ assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"recall"}']);
 
 context.room = null;
 context.resetGhostPot();
+assert.equal(get("ghostTeamButton").hidden,true);
+handlers["ghostPoolButton:click"]();
+assert.match(drawerBody.children[0].textContent,/เข้าโหมดออนไลน์/);
+context.closeDrawer();
 handlers.ghost_pot_state({ active: false, ghost: null });
 click();
 assert.equal(button.hidden, true);
@@ -138,7 +169,6 @@ context.room=joined;
 const ghosts=Array.from({length:8},(_,i)=>({instanceId:"ghost-"+i,name:"ผี "+i,level:i+1}));
 const pool={collection:ghosts,slots:[null,"ghost-1","ghost-2"],selectedSlot:1,revision:5};
 handlers.ghost_pot_state({active:true,ghost:ghosts[1],activeInstanceId:"ghost-1",pool});
-assert.equal(get("ghostPoolButton").hidden,false);
 assert.equal(get("ghostCompanionAction").textContent,"คู่หู");
 assert.equal(button.hidden,true);
 handlers["ghostPoolButton:click"]();
@@ -237,8 +267,10 @@ handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,comba
 assert.equal(get("ghostPotButton").hidden,true);
 assert.equal(get("ghostSummonButton").hidden,false);
 handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,combatAvailable:false,combatId:null,status:"war_ended"});
-assert.equal(get("ghostSummonButton").hidden,true);
-assert.equal(get("ghostPoolButton").hidden,false);
+assert.equal(get("ghostSummonButton").hidden,false);
+assert.equal(get("ghostTeamButton").hidden,false);
+handlers["ghostSummonButton:click"]();
+assert.ok(drawerBody.children[0].children.some(child=>child.textContent.includes("เรียกคู่หูในช่วงนี้ไม่ได้")));
 assert.equal(notices.at(-1),"สงครามจบแล้ว ผีกลับเข้าหม้อ");
 
 const quickPool={...updated,selectedSlot:0,revision:8};
@@ -280,4 +312,10 @@ handlers["ghostCatchReceipt:click"]();
 assert.equal(find("tab-all")["aria-pressed"],"true");
 assert.equal(find("ghost-ghost-5")["aria-pressed"],"true");
 assert.equal(get("ghostCatchReceipt").hidden,true);
-console.log("PASS legacy controls, contextual capture, one-tap summon and attack, confirmed quick switch, skill cooldown, recall and team placement");
+context.resetGhostPot();
+joined.state.players = new Map([["local",{persistent:false}]]);
+context.requestGhostPotState();
+assert.equal(sent.length,0,"a temporary character cannot request the saved roster");
+handlers["ghostTeamButton:click"]();
+assert.match(drawerBody.children[0].textContent,/เลือกตัวละครที่บันทึกบนเซิร์ฟเวอร์/);
+console.log("PASS visible companion controls, roster recovery, contextual capture, one-tap summon and attack, confirmed switch, cooldown, recall and team placement");

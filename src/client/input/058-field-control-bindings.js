@@ -72,6 +72,7 @@
   let ghostPoolPending = null, ghostPoolFocus = null, ghostPoolTab = "carry";
   let ghostPoolFocusKey = null;
   let ghostTeamOpen = false, ghostCapturedId = null, ghostCatchTimer = null;
+  let ghostPotReadAt = -Infinity, ghostPotReads = 0;
   const ghostPendingLabels = {capture:"กำลังจับ…",summon:"กำลังเรียก…",recall:"กำลังเก็บ…",switch:"กำลังสลับ…",
     select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…",
     attack:"กำลังส่งคำสั่งโจมตี…",follow:"กำลังเรียกให้ตาม…",skill:"กำลังใช้วิชาผี…"};
@@ -136,6 +137,8 @@
   }
   function resetGhostPotUi() {
     ghostPotState = null;
+    ghostPotReadAt = -Infinity;
+    ghostPotReads = 0;
     ghostCombatTarget = null;
     ghostCombatResult = null;
     ghostAimSkill = null;
@@ -147,6 +150,16 @@
     clearGhostPoolPending();
     if (targetedSkill === "ghostAttack") setTargetedSkill(null);
     syncGhostPoolUi();
+  }
+  function requestGhostPotState(state = room?.state, retry = false) {
+    if (mode !== "live" || !room || state?.ghostPotAvailable !== true || ghostPotState || ghostPoolPending) return;
+    if (state.players?.get?.(localId)?.persistent === false) return;
+    const now = performance.now();
+    if (now - ghostPotReadAt < 2500 || (!retry && ghostPotReads >= 3)) return;
+    ghostPotReadAt = now;
+    ghostPotReads++;
+    try { room.send("ghost_pot",{action:"read"}); }
+    catch (_) { if (retry) toast("โหลดทีมคู่หูไม่สำเร็จ"); }
   }
   function sendGhostPoolCommand(action, args = {}, next = null) {
     if (mode !== "live" || !room || !ghostPotState || ghostPoolPending) return;
@@ -190,10 +203,9 @@
     });
   }
   function syncGhostTeamMenu(view) {
-    const menu = $("ghostTeamMenu"), summon = $("ghostSummonButton"), team = $("ghostTeamButton");
+    const menu = $("ghostTeamMenu"), summon = $("ghostSummonButton");
     menu.hidden = !view || !ghostTeamOpen;
     summon.setAttribute("aria-expanded",String(!menu.hidden && Boolean(view?.active)));
-    team.setAttribute("aria-expanded",String(!menu.hidden && !view?.active));
     if (menu.hidden) return;
     const makeButton = (label, click) => {
       const button = document.createElement("button");
@@ -277,17 +289,16 @@
   function syncGhostPoolUi(renderPool = true) {
     const group = $("ghostFieldActions"), summon = $("ghostSummonButton");
     if (!group || !summon) return;
-    const poolButton = $("ghostPoolButton"), caption = $("ghostFieldStatus");
+    const caption = $("ghostFieldStatus");
     const attack = $("ghostAttackButton"), follow = $("ghostFollowButton"), team = $("ghostTeamButton");
     const state = ghostPotState, view = ghostPoolView(state), companion = view?.active ?? view?.selected;
-    group.hidden = !state;
+    group.hidden = mode !== "live" || !room;
     syncGhostCaptureTarget();
-    poolButton.hidden = !view;
-    summon.hidden = !companion || state?.combatAvailable === false;
-    team.hidden = !view?.slots.some(Boolean) || Boolean(view?.active) || state?.combatAvailable === false;
+    summon.hidden = group.hidden;
+    team.hidden = group.hidden;
     team.disabled = Boolean(ghostPoolPending);
     $("ghostCompanionPortrait").textContent = ghostPortrait(companion);
-    $("ghostCompanionAction").textContent = view?.active ? "คู่หู" : "เรียก";
+    $("ghostCompanionAction").textContent = view?.active ? "คู่หู" : "เรียกคู่หู";
     summon.title = view?.active ? "ทีมคู่หู · " + companion.name : "เรียก " + (companion?.name ?? "คู่หู");
     summon.setAttribute("aria-label",summon.title);
     summon.disabled = Boolean(ghostPoolPending);
@@ -322,7 +333,7 @@
     if (renderPool) { syncGhostSkillMenu(); syncGhostTeamMenu(view); }
     if (renderPool && drawerActive === "ghostPool") {
       if (view) renderGhostPool(view);
-      else closeDrawer();
+      else renderGhostPoolUnavailable();
     }
   }
   function receiveGhostPot(state) {
@@ -426,6 +437,7 @@
     };
     const busy = Boolean(ghostPoolPending);
     if (busy) element(root,"p",ghostPendingLabels[ghostPoolPending.action],"muted").setAttribute("role","status");
+    if (ghostPotState.combatAvailable === false) element(root,"p","จัดทีมได้ แต่เรียกคู่หูในช่วงนี้ไม่ได้","muted");
     const order = (action,args) => sendGhostPoolCommand(action,{...args,revision:view.pool.revision});
     element(root,"h3","ช่องเรียก");
     const slots = element(root,"div","","ghost-pool-grid");
@@ -440,7 +452,7 @@
     const commandRow = element(root,"div","","ghost-pool-buttons");
     const summonAction = ghostPoolSummonAction(view);
     if (summonAction) {
-      button(commandRow,ghostPoolCommandLabel(summonAction) + (summonAction === "recall" ? view.active.name : view.selected.name),
+      button(commandRow,ghostPoolCommandLabel(summonAction) + " " + (summonAction === "recall" ? view.active.name : view.selected.name),
         "summon",() => sendGhostPoolCommand(summonAction),{disabled:busy});
       if (summonAction === "switch") button(commandRow,"เก็บ" + view.active.name,"recall",
         () => sendGhostPoolCommand("recall"),{disabled:busy});
@@ -466,7 +478,7 @@
       element(card,"strong",ghost.name);
       element(card,"small","Lv. "+ghost.level+" · "+badge(ghost));
     }
-    if (!ghosts.length) element(root,"p",view.reserve.length ? "เลือกคู่หูจากคลังทั้งหมดเพื่อจัดเข้าทีม" : "เลือกมอนสเตอร์ในฉากแล้วแตะหม้อเพื่อจับ","muted");
+    if (!ghosts.length) element(root,"p",view.reserve.length ? "เลือกคู่หูจากคลังทั้งหมดเพื่อจัดเข้าทีม" : "ยังไม่มีคู่หู · เลือกมอนสเตอร์ในฉากแล้วแตะไอคอนหม้อเพื่อจับ","muted");
     const ghost = view.byId.get(ghostPoolFocus);
     if (ghost) {
       const detail = element(root,"section","","ghost-pool-detail");
@@ -485,20 +497,39 @@
     ui.drawerBody.replaceChildren(root);
     if (restoreFocus && !restoreFocus.disabled) restoreFocus.focus({preventScroll:true});
   }
+  function renderGhostPoolUnavailable() {
+    const online = mode === "live" && room;
+    const available = room?.state?.ghostPotAvailable;
+    const persistent = room?.state?.players?.get?.(localId)?.persistent;
+    const message = document.createElement("p");
+    message.setAttribute("role","status");
+    message.textContent = !online ? "เข้าโหมดออนไลน์และเลือกตัวละครเพื่อจัดทีมคู่หู"
+      : available === false ? "ห้องนี้ยังไม่เปิดระบบคู่หู"
+      : persistent === false ? "เลือกตัวละครที่บันทึกบนเซิร์ฟเวอร์เพื่อจัดทีมคู่หู"
+      : "รอข้อมูลทีมคู่หูจากเซิร์ฟเวอร์";
+    if (online && available === true && persistent !== false) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.textContent = "โหลดทีมใหม่";
+      retry.onclick = () => requestGhostPotState(room?.state,true);
+      ui.drawerBody.replaceChildren(message,retry);
+    } else ui.drawerBody.replaceChildren(message);
+  }
   function openGhostPool(focusId = null) {
     const view = ghostPoolView(ghostPotState);
-    if (!view) return;
     ghostSkillMenuOpen = false;
     ghostTeamOpen = false;
     clearGhostCatchReceipt();
     if (targetedSkill === "ghostAttack") setTargetedSkill(null);
     syncGhostSkillMenu();
     syncGhostTeamMenu(view);
-    ghostPoolTab = focusId && !view.pool.slots.includes(focusId) ? "all" : "carry";
+    ghostPoolTab = view && ((focusId && !view.pool.slots.includes(focusId)) ||
+      (!view.slots.some(Boolean) && view.reserve.length)) ? "all" : "carry";
     ghostPoolFocus = focusId;
     ghostPoolFocusKey = null;
     openDrawer("ghostPool","ทีมและคลังมอนสเตอร์","");
-    renderGhostPool(view);
+    if (view) renderGhostPool(view);
+    else { renderGhostPoolUnavailable();requestGhostPotState(); }
   }
   $("ghostPoolButton")?.addEventListener("click", () => openGhostPool());
   $("ghostCatchReceipt")?.addEventListener("click", () => openGhostPool(ghostCapturedId));
@@ -520,10 +551,11 @@
     syncGhostPoolUi();
     if (ghostTeamOpen) $("ghostTeamMenu").querySelector("button:not(:disabled)")?.focus();
   }
-  $("ghostTeamButton")?.addEventListener("click",toggleGhostTeamMenu);
+  $("ghostTeamButton")?.addEventListener("click",() => openGhostPool());
   $("ghostSummonButton")?.addEventListener("click", () => {
     const view = ghostPoolView(ghostPotState);
-    if (!view || ghostPoolPending || ghostPotState.combatAvailable === false) return;
+    if (ghostPoolPending) return;
+    if (!view || ghostPotState?.combatAvailable === false || (!view.active && !view.selected)) return openGhostPool();
     if (view.active) return toggleGhostTeamMenu();
     if (view.selected) sendGhostPoolCommand("summon");
   });
@@ -555,7 +587,7 @@
     if (ghostTeamOpen) {
       ghostTeamOpen = false;
       syncGhostTeamMenu(ghostPoolView(ghostPotState));
-      $(ghostPotState?.activeInstanceId ? "ghostSummonButton" : "ghostTeamButton").focus();
+      $("ghostSummonButton").focus();
     }
     if (ghostSkillMenuOpen) {
       ghostSkillMenuOpen = false;

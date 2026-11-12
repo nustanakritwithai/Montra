@@ -2639,6 +2639,8 @@ button.gx-with-emblem { justify-content: center; }
 .ghost-field-actions .ghost-icon-action, .ghost-field-actions .ghost-companion-action { align-content: center; gap: 2px; width: 44px; height: 44px; padding: 2px; }
 .ghost-icon-action > span, .ghost-companion-action > span { font-size: 17px; line-height: 1; }
 .ghost-icon-action > small, .ghost-companion-action > small { font-size: 9px; line-height: 1; white-space: nowrap; }
+.ghost-field-actions #ghostTeamButton, .ghost-field-actions .ghost-companion-action { width: 60px; }
+.ghost-field-actions #ghostTeamButton > small, .ghost-companion-action > small { font-size: 11px; }
 .ghost-field-actions .ghost-companion-action { border-color: #c9a35a; background: radial-gradient(circle at 50% 24%, #385949, #142621); color: #ffe8b4; }
 .ghost-companion-action progress { width: 34px; height: 4px; accent-color: #80db9e; }
 .ghost-companion-action progress[hidden], .ghost-team-menu[hidden] { display: none; }
