@@ -118,7 +118,7 @@ import {
   equippedWeaponId, gearLook, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
-import { ForestEncounters, type MonsterCombatTarget } from "./ForestEncounters.js";
+import { ForestEncounters, legacyCapturedGhostSource, type MonsterCombatTarget } from "./ForestEncounters.js";
 import { mapsWithServiceNpcs, serviceNpcsFor } from "./ServiceNpcs.js";
 
 type AdvancedSkillFamily = "sword" | "muay" | "blade" | "sentinel" | "occult";
@@ -5239,7 +5239,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           if (!caught) return this.sendGhostPot(client, "escaped");
           const snapshot = this.captureCharacterSnapshot(id);
           if (!snapshot) return this.sendGhostPot(client, "unavailable");
-          const captured = {instanceId: randomUUID(), name: (target.displayName || "ผี").slice(0, 80), level: target.level};
+          const captured = {instanceId: randomUUID(), name: (target.displayName || "ผี").slice(0, 80), level: target.level,
+            source: {monsterId: target.id, mapId: target.mapId}};
           const nextPool = addCapturedGhost(pool, captured);
           await characterStore.save({...snapshot, ghostPool: nextPool});
           this.ghostPools.set(id, nextPool);
@@ -5304,6 +5305,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.sendGhostPot(client, "unavailable");
       }
       const combatId = randomUUID();
+      const villageGhost = this.state.monster;
+      const source = ghost.source ?? (ghost.name === villageGhost.displayName && ghost.level === villageGhost.level
+        ? {monsterId: RULES.monsterId, mapId: DEFAULT_MAP_ID}
+        : legacyCapturedGhostSource(ghost.name, ghost.level));
       // Keep the legacy level curve in Montra's combat units.
       const maxHp = Math.round(active.hpScale * RULES.monsterMaxHp);
       this.activeGhosts.set(id, {instanceId: ghost.instanceId, generation: active.generation, combatId,
@@ -5313,6 +5318,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.state.summons.set(id, new SummonedGuardian({
         ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
         combatTargetId: `ghost:${id}:${combatId}`, hp: Math.min(parkedHp ?? maxHp, maxHp), maxHp, mapId: zone,
+        ...(source && {sourceMonsterId: source.monsterId, sourceMapId: source.mapId, sourceLevel: ghost.level}),
       }));
       this.broadcast("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
       this.sendGhostPot(client, kind === "switch" ? "switched" : "summoned");

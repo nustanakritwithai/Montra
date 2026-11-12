@@ -112,6 +112,9 @@ export const SummonedGuardian = schema({
   hp: t.number().default(0),
   maxHp: t.number().default(0),
   mapId: t.string().default(""),
+  sourceMonsterId: t.string().default(""),
+  sourceMapId: t.string().default(""),
+  sourceLevel: t.number().default(0),
 }, "MontraSummonedGuardian");
 
 export type SummonedGuardian = SchemaType<typeof SummonedGuardian>;

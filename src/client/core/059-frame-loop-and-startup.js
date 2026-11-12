@@ -435,15 +435,26 @@
         npc.action = (hero?.action && ACTIONS[hero.action.type]?.swing && now < hero.action.end) ? "attack" : "follow";
       }
       const blend = 1 - Math.exp(-dt * 12);
-      npc.x += (npc.targetX - npc.x) * blend;
+      const stepX = (npc.targetX - npc.x) * blend, stepZ = (npc.targetZ - npc.z) * blend;
+      npc.x += stepX;
       npc.y += (npc.targetY - npc.y) * blend;
-      npc.z += (npc.targetZ - npc.z) * blend;
+      npc.z += stepZ;
       const rotationDelta = Math.atan2(
         Math.sin(npc.desiredFacing - npc.facing),
         Math.cos(npc.desiredFacing - npc.facing)
       );
       npc.facing += rotationDelta * (1 - Math.exp(-dt * 10));
       npc.node.rotation.y = npc.facing;
+      if (npc.capturedVisual) {
+        npc.node.position.set(npc.x, npc.y, npc.z);
+        const model = npc.capturedVisual.metadata.ghost;
+        if (model) {
+          model.speed = Math.hypot(stepX, stepZ) / Math.max(dt, 1e-3);
+          model.ai = npc.action;
+          poseGhostModel(npc.capturedVisual, model, dt, now, npc.x, npc.z);
+        }
+        continue;
+      }
       const bob = Math.sin(elapsed * 2.4 + npc.ownerId.length) * .09;
       npc.node.position.set(npc.x, npc.y+bob, npc.z);
       const striking = npc.action === "attack" || npc.hitUntil > now;

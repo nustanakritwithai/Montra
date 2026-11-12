@@ -1,5 +1,28 @@
+  function poseGhostModel(mesh, g, dt, now, x = mesh.position.x, z = mesh.position.z) {
+    // Mid-distance ghosts pose at 15/s (position, voices and death stay per frame).
+    g.poseAcc = (g.poseAcc || 0) + dt;
+    if (!g.deathAt && typeof poseInterval === "function" && g.poseAcc < poseInterval(false, Math.hypot(x - camera.target.x, z - camera.target.z))) return;
+    const pdt = g.poseAcc; g.poseAcc = 0;
+    const move = Math.min(1, g.speed / 2.5);
+    g.walk += pdt * (2 + 6 * move);
+    const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
+    const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
+    const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
+    g.update({ t: now / 1000 + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
+    // Humanoid rigs play spawn and death on the skeleton; primitive and object rigs rise or sink.
+    const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
+    let s = g.design.scale * (humanoid ? 1 : .3 + .7 * ease(spawnP)) * (g.enraged ? 1.15 : 1), sink = humanoid ? 0 : (1 - ease(spawnP)) * -.8;
+    if (g.deathAt) {
+      const p = (now - g.deathAt) / 1400;
+      if (p >= 1) { mesh.setEnabled(false); g.deathAt = 0; return; }
+      // Hold the death pose, then dissolve downward over the last third.
+      const fade = ease((p - .65) / .35);
+      s *= 1 - (humanoid ? fade * .9 : ease(p) * .85); sink = humanoid ? -fade * .4 : -ease(p) * .9; g.rig.rotation.z = humanoid ? 0 : ease(p) * .6;
+    } else g.rig.rotation.z = 0;
+    g.rig.scaling.setAll(Math.max(.01, s)); g.rig.position.y = -g.tall / 2 + sink;
+  }
+
   function animateGhosts(dt, now) {
-    const t = now / 1000;
     const tick = (mesh) => {
       const g = mesh.metadata?.ghost; if (!g || !mesh.isEnabled()) return;
       if (g.tx !== undefined) {
@@ -29,28 +52,7 @@
         g.aggroPlayed = false;
       }
       updateMonsterAuras(mesh, g, now, dt);
-      // Mid-distance ghosts pose at 15/s (position, voices and death above/below stay per frame).
-      g.poseAcc = (g.poseAcc || 0) + dt;
-      if (!g.deathAt && typeof poseInterval === "function" && g.poseAcc < poseInterval(false, Math.hypot(mesh.position.x - camera.target.x, mesh.position.z - camera.target.z))) return;
-      const pdt = g.poseAcc; g.poseAcc = 0;
-      const move = Math.min(1, g.speed / 2.5);
-      g.walk += pdt * (2 + 6 * move);
-      const atkAge = (now - g.attackAt) / 1000, hurtAge = (now - g.hurtAt) / 1000;
-      const atk = g.hold?.atk ?? (atkAge < .7 ? Math.sin(Math.min(1, atkAge / .7) * Math.PI) : 0); // hold: preview frames
-      const hurt = g.hold?.hurt ?? (hurtAge < .3 ? Math.sin(hurtAge / .3 * Math.PI) : 0);
-      g.update({ t: t + (mesh.uniqueId % 17), move, atk, hurt, walk: g.walk, wind: g.windup ? 1 : 0, g, now });
-      // Humanoid rigs play their own spawn and death on the skeleton; the
-      // primitive and object rigs rise out of / sink into the ground.
-      const humanoid = g.rig.metadata?.skeletons, spawnP = Math.min(1, (now - g.spawnAt) / 700);
-      let s = g.design.scale * (humanoid ? 1 : .3 + .7 * ease(spawnP)) * (g.enraged ? 1.15 : 1), sink = humanoid ? 0 : (1 - ease(spawnP)) * -.8;
-      if (g.deathAt) {
-        const p = (now - g.deathAt) / 1400;
-        if (p >= 1) { mesh.setEnabled(false); g.deathAt = 0; return; }
-        // Hold the death pose, then dissolve downward over the last third.
-        const fade = ease((p - .65) / .35);
-        s *= 1 - (humanoid ? fade * .9 : ease(p) * .85); sink = humanoid ? -fade * .4 : -ease(p) * .9; g.rig.rotation.z = humanoid ? 0 : ease(p) * .6;
-      } else g.rig.rotation.z = 0;
-      g.rig.scaling.setAll(Math.max(.01, s)); g.rig.position.y = -g.tall / 2 + sink;
+      poseGhostModel(mesh, g, dt, now);
     };
     // Ghosts well beyond the farthest camera view skip their skeleton update
     // (rendering is already frustum-culled); dying ghosts always finish.

@@ -1,11 +1,12 @@
   // The village DEMO ghost: a corpse rig following the legacy tap target.
-  const villageGhost = (() => {
+  function makeVillageGhostVisual() {
     const holder = makeGhostMonster({ level: 3, mapId: "ritual_village" }, "possessed-1");
     holder.isPickable = false; holder.metadata.monsterId = null;
     const g = holder.metadata.ghost; g.tall = 2; g.rig.position.y = -.88;
-    enemy.visibility = .001; eyeA.setEnabled(false); eyeB.setEnabled(false);
     return holder;
-  })();
+  }
+  const villageGhost = makeVillageGhostVisual();
+  enemy.visibility = .001; eyeA.setEnabled(false); eyeB.setEnabled(false);
   let player = ensureAvatar("demo",true,0,0);
   setAvatarWeapon(player,"ritual_dagger");
   const MONSTER_ID = "possessed-1";

@@ -5,7 +5,8 @@ import {isAbsolute, join} from "node:path";
 import {createInterface} from "node:readline";
 import {pathToFileURL} from "node:url";
 
-export type PotGhost = {instanceId: string; name: string; level: number};
+export type GhostSource = {monsterId: string; mapId: string};
+export type PotGhost = {instanceId: string; name: string; level: number; source?: GhostSource};
 export type LegacyGhostSkill = {skillId: string; range: number; cooldownMs: number; maxUses: number};
 type Position = {x: number; y: number; z: number};
 type Command = {
@@ -31,10 +32,19 @@ export class GhostWorkerBusy extends Error {}
 
 export const POT_CAPTURE_PROFILE = "MON_001";
 
+function isGhostSource(value: unknown): value is GhostSource {
+  if (!value || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 2) return false;
+  const {monsterId,mapId} = value as Partial<GhostSource>;
+  return typeof monsterId === "string" && /^[a-z0-9][a-z0-9_-]{0,95}$/.test(monsterId) &&
+    typeof mapId === "string" && /^[a-z0-9][a-z0-9_-]{0,63}$/.test(mapId);
+}
+
 export function isPotGhost(value: unknown): value is PotGhost {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const ghost = value as Partial<PotGhost>;
-  return Object.keys(ghost).length === 3 && typeof ghost.instanceId === "string" &&
+  const keys = Object.keys(ghost).length;
+  const validSource = Object.hasOwn(ghost,"source") ? keys === 4 && isGhostSource(ghost.source) : keys === 3;
+  return validSource && typeof ghost.instanceId === "string" &&
     /^[0-9a-f-]{36}$/.test(ghost.instanceId) && typeof ghost.name === "string" &&
     ghost.name.length > 0 && ghost.name.length <= 80 && typeof ghost.level === "number" &&
     Number.isSafeInteger(ghost.level) && ghost.level >= 1 && ghost.level <= 60;

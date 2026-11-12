@@ -17,6 +17,8 @@ const {defineServer,defineRoom} = await import("colyseus");
 const {MyRoom} = await import("./src/rooms/MyRoom.ts");
 const {characterStore} = await import("./src/rooms/CharacterStore.ts");
 const {isGhostPool,GHOST_POOL_CAPACITY} = await import("./src/rooms/GhostPool.ts");
+const {legacyCapturedGhostSource} = await import("./src/rooms/ForestEncounters.ts");
+const {isPotGhost} = await import("./src/rooms/LegacyGhostPot.ts");
 
 let fixture;
 class GhostTestRoom extends MyRoom {
@@ -54,7 +56,15 @@ async function until(predicate, name, timeout = 5000) {
 const options = () => ({worldVersion:1,guestToken:"mt1_"+randomBytes(32).toString("hex")});
 const client = () => new Client("http://127.0.0.1:"+port);
 const ownerOptions = options(), rooms = new Set();
-const legacy = {instanceId:randomUUID(),name:"ผีในหม้อเดิม",level:7};
+const legacy = {instanceId:randomUUID(),name:"เงารากไม้",level:6};
+const villageSource = {monsterId:"possessed-1",mapId:"ritual_village"};
+assert.ok(isPotGhost(legacy));
+assert.ok(isPotGhost({...legacy,source:villageSource}));
+assert.equal(isPotGhost({...legacy,source:{...villageSource,mapId:""}}),false);
+assert.equal(legacyCapturedGhostSource(legacy.name,7),undefined,"two different legacy Lv.7 models have the same name");
+function summonSource(npc) {
+  return {monsterId:npc.sourceMonsterId,mapId:npc.sourceMapId,level:npc.sourceLevel};
+}
 function observe(room) {
   const info = {room,states:[],combat:[],damage:[],rejections:[]};
   rooms.add(room);
@@ -126,6 +136,9 @@ try {
   assert.equal(new Set(pool.collection.map(ghost=>ghost.instanceId)).size,4);
   assert.ok(pool.slots.every(Boolean));
   const reserved=pool.collection.find(ghost=>!pool.slots.includes(ghost.instanceId));
+  for (const ghost of pool.collection.filter(ghost=>ghost.instanceId!==legacy.instanceId)) {
+    assert.deepEqual(ghost.source,villageSource);
+  }
 
   const placed=await command(a,"assign",{slot:1,instanceId:reserved.instanceId,revision:pool.revision},"placed");
   assert.equal(placed.pool.slots[1],reserved.instanceId);
@@ -137,6 +150,8 @@ try {
   assert.deepEqual(summoned.skills.map(skill=>[skill.skillId,skill.usesLeft]),[["SK_NORMAL_01",28],["SK_NORMAL_02",16]]);
   await until(()=>b.room.state.summons.get(a.room.sessionId)?.kind==="captured_ghost","other player sees one ghost");
   assert.equal(b.room.state.summons.size,1);
+  assert.deepEqual(summonSource(b.room.state.summons.get(a.room.sessionId)),
+    {monsterId:"forest_east_3",mapId:"forbidden_forest",level:6});
   const skillTargetId=fixture.prepareTarget(), skillTarget=fixture.state.monster;
   skillTarget.hp=skillTarget.maxHp;
   const tackle={combatId:summoned.combatId,targetId:skillTargetId,skillId:"SK_NORMAL_01"};
@@ -191,6 +206,11 @@ try {
   assert.equal(switched.activeInstanceId,reserved.instanceId);
   assert.deepEqual(switched.skills.map(skill=>skill.skillId),["SK_NORMAL_01"]);
   assert.notEqual(switched.combatId,summoned.combatId);
+  const switchedActor=await until(()=>{
+    const actor=b.room.state.summons.get(a.room.sessionId);
+    return actor?.combatTargetId.endsWith(switched.combatId) && actor;
+  },"other player sees the switched ghost");
+  assert.deepEqual(summonSource(switchedActor),{...villageSource,level:1});
   assert.equal(b.room.state.summons.size,1);
   await wait(1600);
   assert.equal(prey.hitSeq,hitsBeforeSwitch,"switch cancels the old order after cooldown");
@@ -327,6 +347,7 @@ try {
 
   const forestCall=await command(a,"summon",{},"summoned");
   const forestGuardian=fixture.state.summons.get(a.room.sessionId);
+  assert.deepEqual(summonSource(forestGuardian),{...villageSource,level:1},"summon retains its model across maps");
   const forestMonster=fixture.state.monsters.get("forest_west_1");
   assert.ok(forestMonster?.alive);
   Object.assign(forestGuardian,{x:forestMonster.x,y:forestMonster.y,z:forestMonster.z});
@@ -350,6 +371,7 @@ try {
   await until(()=>restored.room.state?.ghostPotAvailable,"rejoined");
   const durable=await command(restored,"read",{},"ready");
   assert.deepEqual(durable.pool,stored.pool);
+  assert.deepEqual(durable.pool.collection.find(ghost=>ghost.instanceId===reserved.instanceId).source,villageSource);
   assert.equal(durable.activeInstanceId,null);
   await rejected(restored,"attack",{combatId:forestCall.combatId,targetId},"ghost_combat_inactive");
 

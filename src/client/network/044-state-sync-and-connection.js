@@ -46,8 +46,12 @@
       if (!Number.isFinite(x) || !Number.isFinite(z)) return;
       present.add(ownerId);
       let actor = summonAvatars.get(ownerId);
+      if (actor && actor.combatTargetId !== npc.combatTargetId) {
+        deleteSummonAvatar(ownerId);
+        actor = undefined;
+      }
       if (!actor) {
-        actor = createSummonAvatar(ownerId, x, z);
+        actor = createSummonAvatar(ownerId, x, z, npc);
         summonAvatars.set(ownerId, actor);
       }
       actor.targetX = x;
@@ -58,6 +62,9 @@
       const yaw = Number(npc.facing);
       if (Number.isFinite(yaw)) actor.desiredFacing = yaw;
       actor.combatTargetId = npc.combatTargetId;
+      const model = actor.capturedVisual?.metadata.ghost;
+      if (model && npc.hitSeq > actor.hitSeq) model.attackAt = performance.now();
+      actor.hitSeq = npc.hitSeq;
     });
 
     for (const id of [...summonAvatars.keys()]) {
@@ -463,6 +470,8 @@
         if (payload?.ownerId === localId) receiveGhostDamaged(payload);
         const actor = summonAvatars.get(payload?.ownerId);
         if (!actor || actor.combatTargetId !== payload.targetId) return;
+        const model = actor.capturedVisual?.metadata.ghost;
+        if (model) model.hurtAt = performance.now();
         if (avatars.has(payload.attackerId)) playAttack(payload.attackerId,payload.ranged === true,actor.x,actor.z);
         if (payload.attackerId === localId) {
           floatText(actor.x,actor.y + 1.55,actor.z,String(Math.round(payload.damage)),"dealt");

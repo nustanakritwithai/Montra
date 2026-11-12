@@ -7,6 +7,7 @@ import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
 import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
 import { distance3d } from "./HeightRules.js";
 import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDelay, type MonsterProfile, type MonsterTier } from "./MonsterProfiles.js";
+import type {GhostSource} from "./LegacyGhostPot.js";
 
 export const FOREST_RESPAWN_MS = MONSTER_CONFIG.respawnMs;
 /** Observation only. Events describe code execution order, not sub-tick time,
@@ -28,6 +29,26 @@ type Point = {x:number;z:number};
 export type MonsterCombatTarget = Pick<Player, "x" | "y" | "z" | "alive" | "mapId" | "boatId">;
 type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; retreat?:Point; nav:MonsterRRTNavigator};
 type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
+const FOREST_OFFSETS = [[-7,-7],[7,-7],[-7,7],[7,7]] as const;
+const normalForestSpawns = FOREST_CAMPS.flatMap(camp => camp.levels.map((level, i) => ({
+  id: `forest_${camp.id}_${i + 1}`, level,
+  name: level < 5 ? "ผีหลงป่า" : level < 9 ? "เงารากไม้" : "วิญญาณอาคม",
+  x: camp.x + FOREST_OFFSETS[i][0], z: camp.z + FOREST_OFFSETS[i][1],
+})));
+const capturableSources = [
+  ...normalForestSpawns.filter(spawn => (FOREST_MONSTER_TIERS[spawn.id] ?? "normal") === "normal")
+    .map(spawn => ({...spawn,mapId:"forbidden_forest"})),
+  ...TEMPLE_SPAWNS.map(spawn => ({...spawn,mapId:TEMPLE_MAP.id})),
+  ...[...ATLAS_SPAWNS,...FRONTIER_SPAWNS,...HIMMAPAN_SPAWNS]
+    .filter(spawn => spawn.tier === "normal" && !HIMMAPAN_REPLACED_TARGETS.has(spawn.id)),
+];
+
+/** Older pools only have a name and level. Use an origin when the catalogue gives one match. */
+export function legacyCapturedGhostSource(name:string,level:number):GhostSource | undefined {
+  const matches = capturableSources.filter(spawn => spawn.name === name && spawn.level === level);
+  return matches.length === 1 ? {monsterId:matches[0].id,mapId:matches[0].mapId} : undefined;
+}
+
 function inSpecialArea(monster:Monster, origin:Point, player:MonsterCombatTarget, attack:HimmapanPhase, rear=false):boolean {
   const dx=player.x-origin.x, dz=player.z-origin.z;
   const distance=Math.hypot(dx,dz);
@@ -108,12 +129,7 @@ export class ForestEncounters {
   }
   initialize(includeWorldEncounters=true):void {
     if(!WORLD_EXPANSION)return;
-    const offsets = [[-7,-7],[7,-7],[-7,7],[7,7]];
-    const normalSpawns = FOREST_CAMPS.flatMap(camp => camp.levels.map((level, i) => ({
-      id: `forest_${camp.id}_${i + 1}`, level,
-      name: level < 5 ? "ผีหลงป่า" : level < 9 ? "เงารากไม้" : "วิญญาณอาคม",
-      x: camp.x + offsets[i][0], z: camp.z + offsets[i][1],
-    })));
+    const normalSpawns = normalForestSpawns;
     const spawnIds = new Set(normalSpawns.map(spawn => spawn.id));
     // A full world room can populate every atlas hunting region at once.
     const bosses=includeWorldEncounters?REGIONAL_BOSSES.filter(b=>getWorldMap(b.mapId)?.boss?.id===b.id || (b.id===TITAN_BOSS.id && getWorldMap(b.mapId))):[];

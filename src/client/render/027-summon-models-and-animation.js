@@ -1,6 +1,11 @@
   // Distinct server-owned 3D NPCs; ownerId matches the Colyseus session ID.
   const summonAvatars = new Map();
   function syncGhostAttackPicker(actor, targetId) {
+    if (actor.capturedVisual) {
+      actor.capturedVisual.isPickable = Boolean(targetId);
+      actor.capturedVisual.metadata.ghostCombatTargetId = targetId || "";
+      return;
+    }
     if (!targetId) {
       actor.picker?.setEnabled(false);
       return;
@@ -15,8 +20,30 @@
     actor.picker.metadata = {ghostCombatTargetId:targetId};
     actor.picker.setEnabled(true);
   }
-  function createSummonAvatar(ownerId, x, z) {
+  function createSummonAvatar(ownerId, x, z, summon) {
     const parent = new B.TransformNode("guardian-" + ownerId, scene);
+    const y = Number(summon?.y) || 0;
+    parent.position.set(x, y, z);
+    const actor = {
+      node: parent, ownerId, x, y, z,
+      targetX: x, targetY: y, targetZ: z,
+      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0,
+    };
+    if (summon?.kind === "captured_ghost" && summon.sourceMonsterId && summon.sourceMapId && summon.sourceLevel > 0) {
+      const id = summon.sourceMonsterId;
+      const village = id === MONSTER_ID;
+      const mesh = village ? makeVillageGhostVisual() : makeForestMonster({
+        mapId: summon.sourceMapId, level: summon.sourceLevel, tier: "normal",
+      }, id);
+      mesh.name = "captured-ghost-model-" + ownerId;
+      mesh.parent = parent;
+      mesh.position.set(0, village ? .9 : (mesh.metadata.ghost?.tall ?? 1.76) / 2, 0);
+      mesh.setEnabled(true);
+      mesh.isPickable = false;
+      mesh.metadata.monsterId = null;
+      actor.capturedVisual = mesh;
+      return actor;
+    }
     const body = B.MeshBuilder.CreateSphere("guardian-body-" + ownerId,
       { diameter: 1.05, segments: 12 }, scene);
     body.parent = parent;
@@ -41,13 +68,7 @@
       eye.material = ownerId === localId ? gold : glowMat;
       eye.isPickable = false;
     }
-    parent.position.set(x, 0, z);
-    const actor = {
-      node: parent, ownerId, x, y:0, z,
-      targetX: x, targetY:0, targetZ: z,
-      facing: 0, desiredFacing: 0, action: "follow", hitUntil: 0, emergingUntil: 0,
-      fallback: [body, ...parent.getChildMeshes().filter(m => /guardian-eye/.test(m.name))],
-    };
+    actor.fallback = [body, ...parent.getChildMeshes().filter(m => /guardian-eye/.test(m.name))];
     addMovingLight(parent, "#ffd27a", 1.05, 1.3);
     attachSpiritModel(actor);
     return actor;
@@ -201,6 +222,7 @@
     if (!actor) return;
     actor.spirit?.copy.skeletons.forEach(skeleton => skeleton.dispose());
     actor.spirit?.arms?.copy.skeletons.forEach(skeleton => skeleton.dispose());
+    actor.capturedVisual?.metadata.ghost?.rig.metadata?.skeletons?.forEach(skeleton => skeleton.dispose());
     actor.node.getChildMeshes().forEach(mesh => mesh.dispose());
     actor.node.dispose();
     summonAvatars.delete(ownerId);
