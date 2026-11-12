@@ -186,6 +186,9 @@
   function waterAreaContains(area,x,z){
     return x>=area.x && x<=area.x+area.width && z>=area.z && z<=area.z+area.length;
   }
+  function capitalMoatContains(map,x,z){
+    return map.id==="mantra_capital" && (map.water||[]).some(area=>waterAreaContains(area,x,z));
+  }
   function worldWaterDepth(map,x,z){
     if(map?.waterLevel===undefined || !map.terrain ||
         !map.water?.some(w=>waterAreaContains(w,x,z)))return 0;
@@ -402,11 +405,17 @@
     if(lines.length){const contours=B.MeshBuilder.CreateLineSystem("natural terrace edges",{lines},scene);
       contours.color=paint.stone.diffuseColor;contours.alpha=.42;contours.isPickable=false;contours.parent=expansionRoot;}
   }
-  function buildTerrainGround(map,paint){
+  function buildTerrainSurface(map,material,extension=0){
     const t=map.terrain,positions=[],normals=[],colors=[],uvs=[],indices=[];
-    const riverStart = map.id === "ritual_village" && map.waterLevel===undefined ? map.water?.[0]?.z ?? Infinity : Infinity;
-    for(let j=0;j<t.zs.length-1 && t.zs[j]<riverStart;j++)for(let i=0;i<t.xs.length-1;i++){
-      const point=(a,b)=>new B.Vector3(t.xs[i+a],t.heights[j+b][i+a],t.zs[j+b]);
+    const extend=axis=>extension?[axis[0]-extension,...axis,axis.at(-1)+extension]:axis;
+    const xs=extend(t.xs),zs=extend(t.zs);
+    const terrainIndex=(i,axis)=>Math.max(0,Math.min(axis.length-1,i-1));
+    const riverStart=map.id==="ritual_village" && map.waterLevel===undefined ? map.water?.[0]?.z ?? Infinity : Infinity;
+    for(let j=0;j<zs.length-1 && zs[j]<riverStart;j++)for(let i=0;i<xs.length-1;i++){
+      // Draw only the ring outside the original mesh, with shared heights and UVs at its edge.
+      if(extension && i>0 && i<xs.length-2 && j>0 && j<zs.length-2)continue;
+      const point=(a,b)=>new B.Vector3(xs[i+a],extension?
+        t.heights[terrainIndex(j+b,t.zs)][terrainIndex(i+a,t.xs)]:t.heights[j+b][i+a],zs[j+b]);
       const a=point(0,0),b=point(1,0),c=point(0,1),d=point(1,1);
       for(const tri of [[a,b,d],[a,d,c]]){
         const n=B.Vector3.Cross(tri[2].subtract(tri[0]),tri[1].subtract(tri[0])).normalize();
@@ -418,9 +427,17 @@
         }
       }
     }
-    const mesh=new B.Mesh(map.reliefLabels?map.id+" walkable terrain":"B02 walkable terrain",scene),data=new B.VertexData();
+    const name=extension?map.id+" grass horizon":map.reliefLabels?map.id+" walkable terrain":"B02 walkable terrain";
+    const mesh=new B.Mesh(name,scene),data=new B.VertexData();
     Object.assign(data,{positions,normals,colors,uvs,indices});data.applyToMesh(mesh);
-    mesh.parent=expansionRoot;mesh.material=paint.floor;mesh.metadata={walkable:true};
+    mesh.parent=expansionRoot;mesh.material=material;
+    mesh.metadata=extension?{noShadow:true}:{walkable:true};
+    mesh.isPickable=!extension;
+  }
+  function buildTerrainGround(map,paint){
+    const t=map.terrain;
+    buildTerrainSurface(map,paint.floor);
+    if(map.id==="mantra_capital")buildTerrainSurface(map,paint.floor,camera.maxZ);
     if(map.reliefLabels){buildReliefRoads(map,paint);buildReliefContours(map,paint);return;}
     const paths=map.paths||[];
     for(const [i,path] of paths.entries())for(let k=1;k<path.length;k++){
@@ -481,7 +498,9 @@
     let parts=[];
     const elevation=(x,z)=>map.reliefLabels?terrainHeight(map.terrain,x,z):0;
     // Thai tree / rock kit instances seated on the relief (they are not merged with the carved parts).
-    const tree=(species,x,z,scale=1)=>placeThaiTree(species,x,elevation(x,z),z,{parent:expansionRoot,scale});
+    const tree=(species,x,z,scale=1)=>{
+      if(!capitalMoatContains(map,x,z))placeThaiTree(species,x,elevation(x,z),z,{parent:expansionRoot,scale});
+    };
     const rock=(kind,x,z,scale=1)=>placeRock(kind,x,elevation(x,z),z,{parent:expansionRoot,scale});
     function put(mesh,x,y,z,material){
       mesh.position.set(x,y+elevation(x,z),z);mesh.material=material;mesh.isPickable=false;parts.push(mesh);return mesh;
@@ -528,21 +547,22 @@
         roof(x,height,z,width,width*.85);
       };
       const lamp=(x,z)=>{
+        if(capitalMoatContains(map,x,z))return;
         box(x,1,z,.17,2,.17,darkWood);box(x,2.16,z,.55,.58,.55,lanternPaper);addLightSpot(x,2.3,z,"#ffa060",.9);
         cone(x,2.58,z,.37,1,.1,deep,4);box(x,.04,z,1.3,.05,1.3,paint.court);
       };
       const relay=map.strategic.relay,bounds=map.bounds,river=map.strategic.riverCity;
       const huntTrail=map.strategic.huntTrail;
-      if(relay || huntTrail || river)box((bounds.minX+bounds.maxX)/2,map.reliefLabels?-12:-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
-      else if(!castle)box(0,map.reliefLabels?-12:-1.05,-16,220,.6,228,deep);
-      if(relay || huntTrail || river){
+      if(!city && (relay || huntTrail || river))box((bounds.minX+bounds.maxX)/2,map.reliefLabels?-12:-1.05,(bounds.minZ+bounds.maxZ)/2,bounds.maxX-bounds.minX+56,.6,bounds.maxZ-bounds.minZ+56,deep);
+      else if(!city && !castle)box(0,map.reliefLabels?-12:-1.05,-16,220,.6,228,deep);
+      if(!city && (relay || huntTrail || river)){
         for(let i=0;i<22;i++)for(const side of [-1,1]){
           const t=(i+.5)/22,h=3+5*noise(i,51);
           cone(side<0?bounds.minX-4:bounds.maxX+4,h*.34,bounds.minZ+t*(bounds.maxZ-bounds.minZ),h,7,.3,stone,6);
           cone(bounds.minX+t*(bounds.maxX-bounds.minX),h*.34,side<0?bounds.minZ-4:bounds.maxZ+4,h,7,.4,floor,6);
         }
       }
-      for(let i=0;!castle && !relay && !huntTrail && !river && i<18;i++)for(const side of [-1,1]){
+      for(let i=0;!city && !castle && !relay && !huntTrail && !river && i<18;i++)for(const side of [-1,1]){
         const h=4+(i*7)%6;
         // Bamboo and lotus provinces frame the edge with kit trees; elsewhere the backdrop is rock.
         if(bamboo||lotus){const x=side*(46+i%4),z=-65+i*5.6;tree(bamboo?"phai":["sai","maprao","tan"][i%3],x,z,.8+(i%3)*.12);tree(bamboo?"phai":"makham",x+side*2.5,z+2,.7);}
@@ -1253,13 +1273,13 @@
   function buildBackdrop(map, bounds) {
     const w = bounds.maxX - bounds.minX, d = bounds.maxZ - bounds.minZ;
     if (w > 600 || d > 600) return; // the open-world castle map has no edge in sight
-    if (!backdropGroundMat) backdropGroundMat = backdropMaterial("backdrop ground", .15);
-    backdropGroundMat.metadata.base = B.Color3.FromHexString(atmosphere.ground || "#2a2a22");
     const cx = (bounds.minX + bounds.maxX) / 2, cz = (bounds.minZ + bounds.maxZ) / 2;
-    // Ground on to the horizon, a little under the map so the map's own floor and relief always win;
-    // it keeps the scene fog on top, so it runs from the map's tone at the edge into the haze.
-    const skirt = B.MeshBuilder.CreateGround("backdrop ground", { width: w + 640, height: d + 640 }, scene);
-    skirt.position.set(cx, -.3, cz); skirt.material = backdropGroundMat; skirt.isPickable = false; skirt.parent = expansionRoot; skirt.metadata = { noShadow: true };
+    if(map.id!=="mantra_capital" || !map.terrain){
+      if (!backdropGroundMat) backdropGroundMat = backdropMaterial("backdrop ground", .15);
+      backdropGroundMat.metadata.base = B.Color3.FromHexString(atmosphere.ground || "#2a2a22");
+      const skirt = B.MeshBuilder.CreateGround("backdrop ground", { width: w + 640, height: d + 640 }, scene);
+      skirt.position.set(cx, -.3, cz); skirt.material = backdropGroundMat; skirt.isPickable = false; skirt.parent = expansionRoot; skirt.metadata = { noShadow: true };
+    }
     // Mist curtains: [metres outside the edge, height, opacity at the foot, drift speed]. Phones get three.
     // They start well past the edge and stay light, so the map itself reads clearly and only the far
     // distance goes to haze; the last ring closes the horizon.

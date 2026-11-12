@@ -129,7 +129,10 @@
     const tree=(species,x,z,scale=1)=>placeThaiTree(species,x,elev(x,z),z,{parent:expansionRoot,scale});
     const rock=(kind,x,z,scale=1)=>placeRock(kind,x,elev(x,z),z,{parent:expansionRoot,scale});
     // Avenue trees: sacred pho (with cloth), yang-na and tamarind from the Thai tree kit.
-    const rainTree=(x,z,k)=>{sceneryPoint("wood",x,z,1.1);tree(["pho","yangna","makham"][k%3],x,z,.72+noise(k,601)*.18);};
+    const rainTree=(x,z,k)=>{
+      if(capitalMoatContains(map,x,z))return;
+      sceneryPoint("wood",x,z,1.1);tree(["pho","yangna","makham"][k%3],x,z,.72+noise(k,601)*.18);
+    };
     // Decorative trees and stones (no gather point, kept off roads and sites).
     const grove=(count,seed,kinds,scale=.75)=>scatter(count,seed,(x,z,k)=>tree(kinds[k%kinds.length],x,z,scale+noise(k,seed+2)*.2),3);
     const stones=(count,seed,kinds,scale=.6)=>scatter(count,seed,(x,z,k)=>rock(kinds[k%kinds.length],x,z,scale+noise(k,seed+2)*.35),2);
@@ -143,11 +146,13 @@
       scatter(18,613,(x,z,k)=>{ball(x,.55,z,1.1,provinceFx.jar,6);cone(x,1.08,z,.12,.5,.6,provinceFx.jar,8);if(k%3===0)ball(x+.9,.4,z+.3,.8,provinceFx.jar,6);},2);
       for(const path of map.paths)for(let i=1;i<path.length;i++){const a=path[i-1],c=path[i],len=Math.hypot(c.x-a.x,c.z-a.z);
         for(let t=9;t<len-4;t+=18){const nx=-(c.z-a.z)/len,nz=(c.x-a.x)/len,x=a.x+(c.x-a.x)*t/len+nx*3.6,z=a.z+(c.z-a.z)*t/len+nz*3.6;if(clear(x,z,1.5))flagPole(x,z,i+t);}}
-      for(let i=0;i<14;i++){const side=i%2?1:-1,x=side*(48+noise(i,615)*8),z=-60+i*6.5,h=7+noise(i,616)*5;
+      for(let i=0;i<14;i++){
+        const side=i%2?1:-1,x=(side<0?b.minX:b.maxX)+side*(5+noise(i,615)*8);
+        const z=b.minZ+(i+.5)/14*(b.maxZ-b.minZ),h=7+noise(i,616)*5;
         // Ruined Ayutthaya chedi: laterite base, brick bell and a broken spire.
         box(x,.7,z,5,1.4,5,provinceFx.laterite);cone(x,1.9,z,1,4.2,4.4,provinceFx.brick,8);ball(x,3.6,z,3.6,provinceFx.brick,8);
         const spire=cone(x,3.6+h/2,z,h*(i%3?1:.6),1.2,i%3?.05:.5,provinceFx.brick,8);spire.rotation.z=(noise(i,619)-.5)*.12;}
-      for(let i=0;i<8;i++){const x=-36+i*10,z=-74-noise(i,617)*5,h=6+noise(i,618)*4;box(x,.6,z,4.6,1.2,4.6,provinceFx.laterite);
+      for(let i=0;i<8;i++){const x=-36+i*10,z=b.minZ-7-noise(i,617)*5,h=6+noise(i,618)*4;box(x,.6,z,4.6,1.2,4.6,provinceFx.laterite);
         for(let k=0;k<3;k++)box(x,1.4+k*.7,z,3.8-k*.7,.7,3.8-k*.7,provinceFx.brick);cone(x,3.4+h/2,z,h,1.8,.3,provinceFx.brick,4).rotation.y=Math.PI/4;}
     }else if(map.strategic.kind==="territory"){
       // War camp: tents, cannons on carriages, stacked supplies, braziers and a palisade rim.
