@@ -19,7 +19,7 @@ function fixture() {
     between(materials, '  function paintTexture(', '  // Deterministic noise'),
     between(materials, '  function additiveMat(', '\n  }') + '\n  }',
     read('src/client/render/007-world-effects.js'),
-    between(read('src/client/render/009-effects-and-target-hud.js'), '  // Phase 7:', '  // The selected monster'),
+    between(read('src/client/render/009-effects-and-target-hud.js'), '  function updateWorldFx(', '  // The selected monster'),
     read('src/client/combat/010-action-effects.js'),
     between(read('src/client/input/039-movement-flight-and-climbing.js'), '  function monsterForSpell(', '  function castAtTarget('),
     read('src/client/combat/040-spell-visuals.js'),
@@ -51,7 +51,7 @@ function actor(id,x,z,color){
 const casterAvatar=actor('local',-5,0,'#509ddd'),caster={id:'local',sessionId:'local',x:-5,y:0,z:0,facing:Math.PI/2,mapId:activeMapId};room.state.players.set(localId,caster);
 const target=actor('authoritative',4,0,'#55cf91'),wrong=actor('selected-wrong',-1,6,'#e19154');
 let frozenNow=performance.now();
-function frame(age=160){lastOccultMistTime=lastWaterRippleTime=performance.now()+100000;frozenNow=performance.now()+age;updateWorldFx(frozenNow);scene.render();}
+function frame(age=160){frozenNow=performance.now()+age;updateWorldFx(frozenNow);scene.render();}
 function reset(){clearCombatVfx();cameraShakes.length=0;}
 window.fixture={scene,engine,caster,target,wrong,worldFx,worldFxPool,skillEffects,avatars,room,cameraShakes,reset,frame,
  cast(id){reset();triggerSkillVfx(id,caster,skillVfxTarget('authoritative'),'authoritative');frame();return worldFx.length;},

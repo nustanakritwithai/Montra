@@ -8,20 +8,17 @@
   function spawnFootstepDust(a, speed, m) {
     if (!a || !fxNear(a.x, a.z, 36)) return;
     const surf = STEP_SURFACE[activeMapId] || "soil";
+    if (surf === "water") return;
     const y = (a.y || 0) + .04;
     const h = a.heading || 0;
     const fwd = [-Math.sin(h), -Math.cos(h)];
     const footSide = a.stepSign > 0 ? 0.22 : -0.22;
     const fx = a.x - fwd[0] * 0.15 - fwd[1] * footSide;
     const fz = a.z - fwd[1] * 0.15 + fwd[0] * footSide;
-    if (surf === "water") {
-      spawnFx("ring", "cyan", fx, y + .05, fz, { orient: "ground", life: 340, s0: .3, s1: 1.6, a0: .7, a1: 0 });
-    } else {
-      const col = surf === "stone" || surf === "brick" ? "white" : "gold";
-      spawnFx("ring", col, fx, y, fz, { orient: "ground", life: 260, s0: .2, s1: 1.1 * m, a0: .35, a1: 0 });
-      if (speed > 4.2 || (a.dashUntil || 0) > performance.now()) {
-        sparks(col, fx, y + .1, fz, 2, { speed: 1.4, up: 1.2, life: 280, size: .35, spread: 20 });
-      }
+    const col = surf === "stone" || surf === "brick" ? "white" : "gold";
+    spawnFx("ring", col, fx, y, fz, { orient: "ground", life: 260, s0: .2, s1: 1.1 * m, a0: .35, a1: 0 });
+    if (speed > 4.2 || (a.dashUntil || 0) > performance.now()) {
+      sparks(col, fx, y + .1, fz, 2, { speed: 1.4, up: 1.2, life: 280, size: .35, spread: 20 });
     }
   }
 

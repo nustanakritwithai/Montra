@@ -8,7 +8,7 @@ const mainSrc = fs.readFileSync('main.js', 'utf8');
 // 1. Footstep dust dynamics
 assert(mainSrc.includes('function spawnFootstepDust(a, speed, m)'), 'spawnFootstepDust exists');
 assert(mainSrc.includes('spawnFootstepDust(a, speed, m);'), 'spawnFootstepDust called at foot plant');
-assert(mainSrc.includes('surf === "water"'), 'Water surface ring splash handled');
+assert(mainSrc.includes('if (surf === "water") return;'), 'Water footsteps do not emit ground ripples');
 assert(mainSrc.includes('col = surf === "stone" || surf === "brick" ? "white" : "gold"'), 'Surface-matched dust colors');
 
 // 2. Avatar real-time 3D status auras

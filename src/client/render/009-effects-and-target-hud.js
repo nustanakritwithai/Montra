@@ -1,8 +1,3 @@
-  // Phase 7: Exploration & World Ambient State
-  let lastOccultMistTime = 0;
-  let lastWaterRippleTime = 0;
-  let lastPlayerWaterPos = { x: 0, z: 0 };
-
   function updateWorldFx(now) {
     for (let i = worldFx.length - 1; i >= 0; i--) {
       const f = worldFx[i], k = (now - f.born) / f.life;
@@ -18,65 +13,6 @@
       if (f.spin) { if (f.orient === "bill") f.m.rotation.z += f.spin * dt; else f.m.rotation.y += f.spin * dt; }
       if (f.vel) { f.vel[1] -= f.grav * dt; f.fx += f.vel[0] * dt; f.m.position.y += f.vel[1] * dt; f.fz += f.vel[2] * dt; if (!f.follow) { f.m.position.x += f.vel[0] * dt; f.m.position.z += f.vel[2] * dt; } }
       if (f.follow) { const p = f.follow.position || f.follow; f.m.position.x = p.x + f.fx; f.m.position.z = p.z + f.fz; }
-    }
-
-    // Phase 7: Occult ground mist & spirit fireflies
-    if (now - lastOccultMistTime > 380) {
-      lastOccultMistTime = now;
-      const me = avatars.get(localId) || (typeof ownServerCharacter === "function" ? ownServerCharacter() : null);
-      if (me && Number.isFinite(me.x) && Number.isFinite(me.z)) {
-        const ang = Math.random() * Math.PI * 2;
-        const dist = 4 + Math.random() * 14;
-        const mx = me.x + Math.cos(ang) * dist;
-        const mz = me.z + Math.sin(ang) * dist;
-        const my = (me.y || 0) + 0.1;
-        const mistTone = activeMapId === "forbidden_forest" ? "jade" : (activeMapId === "bound_temple" ? "gold" : "cyan");
-        spawnFx("disc", mistTone, mx, my, mz, {
-          orient: "ground",
-          life: 2800,
-          s0: 2.4,
-          s1: 5.8,
-          a0: 0.18,
-          a1: 0,
-          vel: [Math.cos(ang + 1.2) * 0.35, 0, Math.sin(ang + 1.2) * 0.35],
-          grav: 0
-        });
-        if (Math.random() < 0.6) {
-          sparks(mistTone === "jade" ? "jade" : "gold", mx, my + 0.6, mz, 2, {
-            speed: 1.2,
-            up: 1.4,
-            size: 0.45,
-            life: 1600,
-            grav: -0.25
-          });
-        }
-      }
-    }
-
-    // Phase 7: Water surface ripples when walking on water
-    if (now - lastWaterRippleTime > 260) {
-      const me = avatars.get(localId) || (typeof ownServerCharacter === "function" ? ownServerCharacter() : null);
-      if (me && Number.isFinite(me.x) && Number.isFinite(me.z)) {
-        const dMove = Math.hypot(me.x - lastPlayerWaterPos.x, me.z - lastPlayerWaterPos.z);
-        lastPlayerWaterPos.x = me.x;
-        lastPlayerWaterPos.z = me.z;
-        if (dMove > 0.3) {
-          const inWater = (activeMapId === "ritual_village" && Math.abs(me.x) > 8.5 && me.z > -26 && me.z < 26) ||
-            Boolean(worldDefinitions?.[activeMapId]?.water?.some(w => me.x >= w.x && me.x <= w.x + w.width && me.z >= w.z && me.z <= w.z + w.length));
-          if (inWater) {
-            lastWaterRippleTime = now;
-            spawnFx("ring", "cyan", me.x, (me.y || 0) + 0.05, me.z, {
-              orient: "ground",
-              life: 580,
-              s0: 0.6,
-              s1: 2.6,
-              a0: 0.7,
-              a1: 0
-            });
-            sparks("cyan", me.x, (me.y || 0) + 0.12, me.z, 2, { speed: 1.5, up: 1.2, size: 0.35, life: 300 });
-          }
-        }
-      }
     }
 
     // Phase 7: Waypoint beam pulse & destination torus spin
