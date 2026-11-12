@@ -29,7 +29,8 @@ export function buildSite(output, revision, source = root) {
   assert.equal([...html.matchAll(script)].length, 1, 'Expected exactly one versioned main.js script');
   writeFileSync(join(output, 'index.html'), html.replace(script, `$1&amp;rev=${revision}$2`));
   cpSync(join(source, 'assets'), join(output, 'assets'), { recursive: true });
-  for (const file of ['assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb']) {
+  const swords = Array.from({ length: 8 }, (_, i) => `assets/weapons/thai-sword-0${i + 1}.glb`);
+  for (const file of ['assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb', ...swords]) {
     assert(statSync(join(output, file)).size > 0, `Missing model: ${file}`);
   }
   const preview = 'weapon-preview/lod2';

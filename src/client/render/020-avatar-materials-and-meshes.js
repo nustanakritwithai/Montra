@@ -381,7 +381,6 @@
       tool_pick: createHeldWeapon("tool_pick"),
       tool_sickle: createHeldWeapon("tool_sickle"),
     };
-    if(!npcOptions)attachCrescentBlade(weaponModels.arcane_sword);
     const avatar = {
       id, node: parent, local, npc:Boolean(npcOptions),npcCloth:npcOptions?.cloth,pathId:npcOptions?"seer":"", x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,

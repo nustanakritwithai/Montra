@@ -1,10 +1,12 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const source=fs.readFileSync('main.js','utf8'),start=source.indexOf('  function attachNpcAvatar('),end=source.indexOf('  // Crescent Blade',start);
-assert.ok(start>=0&&end>start,'NPC avatar helper exists');
+const source=fs.readFileSync('main.js','utf8');
+const avatarCode=fs.readFileSync('src/client/render/020-avatar-materials-and-meshes.js','utf8');
+const start=avatarCode.indexOf('  function attachNpcAvatar(');
+assert.ok(start>=0,'NPC avatar helper exists');
 const children=[{isPickable:true},{isPickable:true}],skeletons=[{disposed:false,dispose(){this.disposed=true}}],listeners=[];
 const actor={node:{getChildMeshes:()=>children,onDisposeObservable:{add:fn=>listeners.push(fn)}},skin:{copy:{skeletons}}};
 let created;
-const attach=vm.runInNewContext(`(${source.slice(start,end)})`,{avatarMesh:(...args)=>{created=args;return actor}});
+const attach=vm.runInNewContext(`(${avatarCode.slice(start)})`,{avatarMesh:(...args)=>{created=args;return actor}});
 const root={},cloth={},fallback=[{setEnabled(x){this.enabled=x}},{setEnabled(x){this.enabled=x}}];
 assert.equal(attach(root,'smith',cloth,fallback),actor.node);assert.equal(created[0],'npc-smith');assert.equal(created[1],false);assert.equal(created[2].cloth,cloth);
 assert.equal(actor.node.parent,root);assert.ok(children.every(child=>child.isPickable===false));assert.ok(fallback.every(item=>item.enabled===false));

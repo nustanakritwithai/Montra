@@ -196,13 +196,19 @@
     const modelId = weaponModelFor(weaponId,pathId);
     const safeId = modelId === "thai_dual" || modelId === "muay_wraps" || Object.hasOwn(avatar.weaponModels,modelId) ? modelId : "";
     const band = weaponBand(weaponId);
-    if (avatar.weaponId === safeId && avatar.weaponBand === band) return;
-    avatar.weaponId = safeId; avatar.weaponBand = band;
+    const bladeFile = heldBladeFile(weaponId, safeId);
+    if (avatar.weaponId === safeId && avatar.weaponBand === band && avatar.bladeFile === bladeFile) return;
+    avatar.weaponId = safeId; avatar.weaponBand = band; avatar.bladeFile = bladeFile;
     for(const [id,model] of Object.entries(avatar.weaponModels)) {
       if (id.startsWith("tool_")) continue; // gathering tools are shown by showGatherTool
-      model.setEnabled(id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right")));
+      model.setEnabled(!avatar.gatherTool && (id === safeId || (safeId === "thai_dual" && (id === "thai_left" || id === "thai_right"))));
     }
-    for (const id of safeId === "thai_dual" ? ["thai_left", "thai_right"] : [safeId]) if (avatar.weaponModels[id]) showWeaponTrim(avatar.weaponModels[id], id, band);
+    for (const id of safeId === "thai_dual" ? ["thai_left", "thai_right"] : [safeId]) {
+      const model = avatar.weaponModels[id];
+      if (!model) continue;
+      if (bladeFile) setHeldBlade(model, bladeFile, id);
+      showWeaponTrim(model, id, band);
+    }
     setMuayPrajiad(avatar, band);
   }
   // ---- Weapon tiers (visual only) ----
@@ -228,11 +234,14 @@
       if (band > 2) { k.edge(.03, 1.32, .5); k.backBlade(1.22); k.tassel(1.12, .34); } },
     ritual_dagger: (k, band) => { k.ring(.0, .09, .012); k.gem(.03, .035); k.guard(.02, .16);
       if (band > 2) { k.curveEdge(.5, .09, 5); k.tassel(-.3, .16); } },
-    thai_left: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); k.gem(-.26, .05);
-      if (band > 2) { k.curveEdge(.95, .105, 7); k.guard(.03, .2); } },
-    thai_right: (k, band) => { k.ring(-.03, .075, .012); k.ring(-.21, .075, .012); k.gem(-.26, .05);
-      if (band > 2) { k.curveEdge(.95, .105, 7); k.guard(.03, .2); } },
+    thai_left: twinSwordTrim,
+    thai_right: twinSwordTrim,
   };
+  function twinSwordTrim(k, band) {
+    k.ring(.114, .083, .011);
+    k.ring(-.091, .081, .011);
+    if (band > 2) k.tassel(-.104, .11);
+  }
   function showWeaponTrim(root, modelId, band) {
     const trims = root.metadata?.trims || {};
     for (const [b, node] of Object.entries(trims)) node.setEnabled(Number(b) === band);

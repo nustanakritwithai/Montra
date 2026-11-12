@@ -1,29 +1,57 @@
-  // Crescent Blade (assets/weapons/crescent-blade-lod2.glb, 1,530 tris, 256px
-  // PBR) replaces the procedural arcane sword once loaded; the procedural
-  // blade stays as the fallback if the loader or file is unavailable.
-  const crescentWaiting = [];
-  let crescentBlade = null;
-  function attachCrescentBlade(root) {
-    if (crescentBlade === null) { crescentWaiting.push(root); return; }
-    if (!crescentBlade) return;
-    const copy = crescentBlade.instantiateModelsToScene(name => name, false);
-    const model = copy.rootNodes[0];
-    model.parent = root;
-    // Model units: grip spans y -1.19..0.51, blade tip at y 3.54.
-    model.scaling.setAll(.27); model.position.set(.02, .16, 0);
-    for (const m of model.getChildMeshes()) m.isPickable = false;
-    for (const m of root.getChildMeshes(true)) if (m.name === "held arcane_sword") m.setEnabled(false);
+  const heldBladeAssets = new Map();
+  const heldBladeByHand = new WeakMap();
+  const shrineGlaiveFile = "crescent-blade-lod2.glb";
+  const twinSwordProfiles = [1, 2, 3, 4, 5, 6, 7, 8, 7, 8];
+  function heldBladeFile(weaponId, modelId) {
+    if (weaponId === "shrine_glaive") return shrineGlaiveFile;
+    if (modelId !== "thai_dual" && modelId !== "arcane_sword") return "";
+    const tier = Number(/^wp_twins_(\d+)$/.exec(String(weaponId))?.[1]);
+    const profile = modelId === "thai_dual" ? twinSwordProfiles[tier - 1] || 1 : 1;
+    return `thai-sword-${String(profile).padStart(2, "0")}.glb`;
   }
-  if (B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) {
-    B.SceneLoader.LoadAssetContainerAsync("./assets/weapons/", "crescent-blade-lod2.glb", scene).then(container => {
-      for (const material of container.materials) {
-        // No environment map at night: soften metal so direct light reads.
-        if ("metallic" in material) { material.metallic = .45; material.environmentIntensity = 0; material.directIntensity = 1.6; }
+  function loadHeldBlade(file) {
+    if (!heldBladeAssets.has(file)) {
+      const load = B.SceneLoader.LoadAssetContainerAsync("./assets/weapons/", file, scene).then(container => {
+        for (const material of container.materials) {
+          // Soften reflections so the cutting edge reads under direct light at night.
+          if (material.metallic > .45) material.metallic = .45;
+          material.environmentIntensity = 0;
+          material.directIntensity = 1.6;
+          material.maxSimultaneousLights = MAX_LIGHTS;
+        }
+        return container;
+      }).catch(error => {
+        heldBladeAssets.delete(file);
+        console.warn("MONTRA held blade", file, error);
+        return null;
+      });
+      heldBladeAssets.set(file, load);
+    }
+    return heldBladeAssets.get(file);
+  }
+  function setHeldBlade(root, file, kind) {
+    if (!B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) return;
+    const previous = heldBladeByHand.get(root);
+    if (previous?.file === file && (previous.model || heldBladeAssets.has(file))) return;
+    previous?.model?.dispose();
+    const fallback = previous?.fallback || root.getChildMeshes(true).find(mesh => mesh.name === "held " + kind);
+    fallback?.setEnabled(true);
+    const request = { file, fallback, model: null };
+    heldBladeByHand.set(root, request);
+    loadHeldBlade(file).then(container => {
+      // Equipping another tier or leaving the map can happen during the fetch.
+      if (!container || root.isDisposed() || heldBladeByHand.get(root) !== request) return;
+      const model = container.instantiateModelsToScene(name => name, false).rootNodes[0];
+      model.parent = root;
+      if (file === shrineGlaiveFile) {
+        model.scaling.setAll(.27);
+        model.position.set(.02, .16, 0);
       }
-      crescentBlade = container;
-      crescentWaiting.splice(0).forEach(attachCrescentBlade);
-    }).catch(error => { console.warn("MONTRA crescent blade", error); crescentBlade = false; crescentWaiting.length = 0; });
-  } else crescentBlade = false;
+      for (const mesh of model.getChildMeshes()) mesh.isPickable = false;
+      request.model = model;
+      fallback?.setEnabled(false);
+    }).catch(error => console.warn("MONTRA blade instance", file, error));
+  }
   // ---- Skinned Thai male body (assets/characters/thai-male.glb) ----
   // 8,472-triangle mobile mesh with a 25-joint T-pose skeleton (every rest
   // rotation is identity) and 17 sockets; 512px PBR maps with sak yant
