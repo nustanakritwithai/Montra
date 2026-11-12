@@ -222,6 +222,18 @@
     sendBoatIntent("walk",{x:dx*c-dz*s,z:dx*s+dz*c});
   }
 
+  function sailingHelmPose(id) {
+    const state=mode==="live"?room?.state:null;
+    const player=state?.players?.get(id);
+    const boat=player?.boatId && state.boats?.get(player.boatId);
+    if(!boat || boat.helmId!==id || boat.mapId!==activeMapId)return null;
+    const node=sailingMeshes.get(player.boatId),deck=worldDefinitions?.[activeMapId]?.boatDock?.deck;
+    if(!node || !deck)return null;
+    const stern=deck.helmZ??-deck.length*.22,heading=node.rotation.y;
+    return {x:node.position.x+stern*Math.sin(heading),y:node.position.y+deck.y,
+      z:node.position.z+stern*Math.cos(heading),facing:player.combatState==="idle"?heading+Math.PI:null};
+  }
+
   function updateSailing(now, dt) {
     const state = mode === "live" ? room?.state : null;
     const map = state?.boatsAvailable ? worldDefinitions?.[activeMapId] : null;
@@ -257,7 +269,14 @@
       node.position.x += (boat.x-node.position.x)*blend;
       node.position.z += (boat.z-node.position.z)*blend;
       const yaw = boat.heading-node.rotation.y;
-      node.rotation.y += Math.atan2(Math.sin(yaw),Math.cos(yaw))*blend;
+      const turn = Math.atan2(Math.sin(yaw),Math.cos(yaw));
+      node.rotation.y += turn*blend;
+      const paddle=node.metadata.sternPaddle;
+      if(paddle){
+        const stroke=boat.helmId?Math.min(1,Math.abs(boat.speed)/3+Math.abs(turn)*5):0;
+        paddle.rotation.x=-.22+Math.cos(now*.006)*.035*stroke;
+        paddle.rotation.y=Math.sin(now*.006)*.23*stroke;
+      }
     });
     for (const [id,node] of sailingMeshes) if (!seen.has(id)) {node.dispose();sailingMeshes.delete(id);}
 
@@ -465,9 +484,15 @@
       const beforeX = a.x, beforeZ = a.z;
       const dashing = a.dashUntil > now;
       const blend = 1 - Math.exp(-dt * (dashing ? 25 : 14));
-      a.x += (a.targetX - a.x) * blend;
-      a.y += (a.targetY - a.y) * blend;
-      a.z += (a.targetZ - a.z) * blend;
+      const helmPose=sailingHelmPose(a.id);
+      if(helmPose){
+        // Attach the pilot to the rendered stern as the hull turns and moves.
+        a.x=helmPose.x;a.y=helmPose.y;a.z=helmPose.z;
+      }else{
+        a.x += (a.targetX - a.x) * blend;
+        a.y += (a.targetY - a.y) * blend;
+        a.z += (a.targetZ - a.z) * blend;
+      }
 
       // Infer every character's facing from the SERVER-SYNCED position
       // change (or local demo movement). Preserve the last facing at rest.
@@ -486,6 +511,7 @@
         Math.cos(a.desiredHeading - a.heading)
       );
       a.heading += angleDelta * (1 - Math.exp(-dt * 11));
+      if(helmPose?.facing!=null)a.heading=a.desiredHeading=helmPose.facing;
       a.node.rotation.y = a.heading;
       a.node.scaling.set(dashing ? 1.07 : 1, dashing ? 0.94 : 1, dashing ? 1.07 : 1);
       const flash = (a.hitFlashUntil || 0) > now;
@@ -495,7 +521,7 @@
       // every frame, so walking stays smooth and only the limbs step at 15 or 8 poses a second.
       a.poseAcc = (a.poseAcc || 0) + dt;
       if (a.poseAcc >= poseInterval(a.local, Math.hypot(a.x - camera.target.x, a.z - camera.target.z))) {
-        animateRig(a, Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), a.poseAcc, now); a.poseAcc = 0;
+        animateRig(a, helmPose?0:Math.hypot(travelX, travelZ) / Math.max(dt, 1e-3), a.poseAcc, now); a.poseAcc = 0;
       }
       updateAvatarAuras(a, now, dt);
       a.flightHalo?.setEnabled(a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain));

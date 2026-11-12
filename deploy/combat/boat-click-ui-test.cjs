@@ -20,13 +20,13 @@ function fixture(raySlope=0) {
   const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
   const marker = {enabled:false,position:{set(x,y,z){Object.assign(this,{x,y,z});}},
     setEnabled(enabled){this.enabled=enabled;}};
-  const player = {boatId:"boat",alive:true,x:0,z:51};
+  const player = {boatId:"boat",alive:true,x:0,z:51,combatState:"idle"};
   const boat = {mapId:"ritual_village",x:0,z:51,speed:0,heading:Math.PI/2,helmId:"local",anchored:true};
   const map = {id:"ritual_village",bounds:{minX:-60,maxX:60,minZ:-60,maxZ:60},
     waterLevel:.025,water:[{x:-80,z:48,width:160,length:40}],
     waterGates:[{id:"water_ritual_village_to_drowned_marsh",x:16,z:54,range:3.2}],
     terrain:{xs:[-60,60],zs:[-60,48,51,60],heights:[[0,0],[0,0],[-.66,-.66],[-1.45,-1.45]]},
-    boatDock:{x:0,z:46,range:3,deck:{width:2.1,length:5.2,y:.88}}};
+    boatDock:{x:0,z:46,range:3,deck:{width:2.1,length:5.2,y:.88,helmZ:-1.2}}};
   const ground = {isEnabled:()=>true,metadata:{walkable:true}};
   const enemy = {isEnabled:()=>true};
   let now = 0, point = {x:15,z:54}, selected = ground, rayCalls = 0, attacks = 0, walks = 0;
@@ -45,7 +45,7 @@ function fixture(raySlope=0) {
       return buttons.get(id);
     },
     localId:"local",mode:"live",activeMapId:map.id,worldDefinitions:{[map.id]:map},
-    room:{state:{boatsAvailable:true,boats:new Map([["boat",boat]])},send:(type,payload)=>packets.push({type,...payload})},
+    room:{state:{boatsAvailable:true,boats:new Map([["boat",boat]]),players:new Map([["local",player]])},send:(type,payload)=>packets.push({type,...payload})},
     ownServerCharacter:()=>player,performance:{now:()=>now},toast(){},cancelQuestNavigation(){},
     fishingSelect:false,resourcePickers:new Map(),forestMonsters:new Map(),fortRoot:{isEnabled:()=>false},enemy,
     targetedSkill:null,MONSTER_ID:"possessed-1",orderGhostAttack:id=>ghostOrders.push(id),
@@ -64,8 +64,27 @@ function fixture(raySlope=0) {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
   return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,map,player,buttons,
+    helmPose:()=>sandbox.sailingHelmPose("local"),
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
+
+test("the pilot stays aft of the rendered bow during turns and reverse travel",()=>{
+  const f=fixture();
+  const assertStern=()=>{
+    const pose=f.helmPose(),heading=pose.facing-Math.PI;
+    assert.ok(Math.abs(pose.x+1.2*Math.sin(heading))<1e-6);
+    assert.ok(Math.abs(pose.z-51+1.2*Math.cos(heading))<1e-6);
+    assert.ok(Math.abs(pose.y-.905)<1e-6);
+  };
+  assertStern();
+  f.boat.heading=0;f.boat.speed=-3;
+  f.tick(100);assertStern();
+  f.boat.heading=Math.PI;f.tick(200);assertStern();
+  f.player.combatState="attacking";
+  assert.equal(f.helmPose().facing,null,"combat retains its target facing");
+  f.boat.helmId="";
+  assert.equal(f.helmPose(),null);
+});
 
 test("mouse clicks sail toward water, turn, and stop at the marker",()=>{
   const f = fixture();

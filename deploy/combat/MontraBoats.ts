@@ -1,4 +1,4 @@
-import { stepTowards, type Vec2 } from "./GameRules.js";
+import { facingTo, stepTowards, type Vec2 } from "./GameRules.js";
 import { waterDepthAt } from "./GroundTerrain.js";
 import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldMapDefinition, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
@@ -9,12 +9,13 @@ import {
 export const BOAT_SHORES: Readonly<Record<string,Vec2>> = Object.fromEntries(Object.values(WORLD_MAPS)
   .flatMap(map=>map.boatHarbor?[[map.id,map.boatHarbor.shore]]:[]));
 export const BOAT_LAUNCH_RANGE = 3;
-export const BOAT_DECK = {width: 2.1, length: 5.2, y: .88};
+export const BOAT_DECK = {width: 2.1, length: 5.2, y: .88, helmZ: -1.2};
 const PORT_BERTH_RANGE = 2.4;
 const starter = AUTHORITATIVE_BOAT_DEFINITIONS["training-dinghy"]!;
 // Pirate Fruit DeckSpace ratios, measured from Montra's water level.
 const halfWidth = BOAT_DECK.width * .41 * 1.08;
 const halfLength = BOAT_DECK.length * .31 * 1.08;
+const helmSeat = {x:0,z:BOAT_DECK.helmZ};
 
 type BoatIntent =
   | {action: "launch" | "helm" | "release" | "exit"}
@@ -76,6 +77,10 @@ function toLocal(boat: BoatWorldSnapshot, point: Vec2): Vec2 {
 function toWorld(boat: BoatWorldSnapshot, point: Vec2): WorldPoint {
   const c = Math.cos(boat.heading), s = Math.sin(boat.heading);
   return {x: boat.x + point.x*c + point.z*s, y: deckY(boat.islandId), z: boat.z - point.x*s + point.z*c};
+}
+
+function helmFacing(boat: BoatWorldSnapshot) {
+  return facingTo(Math.sin(boat.heading),Math.cos(boat.heading));
 }
 
 function nearestPort(ports:readonly BoatPort[]|undefined,point:Vec2,side:"shore"|"berth",range=Infinity) {
@@ -150,7 +155,7 @@ export class MontraBoats {
       rider.shore=transit.shore;
       rider.target=undefined;
       player.mapId=boat.islandId;
-      player.facing+=boat.heading-transit.boat.heading;
+      player.facing=boat.helmId===id?helmFacing(boat):player.facing+boat.heading-transit.boat.heading;
       Object.assign(player,toWorld(boat,rider.position));
     }
   }
@@ -191,8 +196,9 @@ export class MontraBoats {
       }
       case "helm":
         if (!rider || !boat || !this.sim.takeHelm(rider.boatId,id)) return false;
-        rider.position = {x:0,z:-halfLength*.66};
+        rider.position = helmSeat;
         rider.target = undefined;
+        if(player.combatState==="idle")player.facing=helmFacing(boat);
         Object.assign(player, toWorld(boat,rider.position));
         return true;
       case "release":
@@ -204,7 +210,7 @@ export class MontraBoats {
         return true;
       }
       case "walk":
-        return this.walkLocal(id,intent);
+        return Boolean(boat && boat.helmId!==id && this.walkLocal(id,intent));
       case "input":
         return Boolean(boat && boat.helmId === id && (intent.passage===undefined || intent.passage===boat.passage) &&
           this.sim.setInput(now,id,boat.entityId,intent.throttle,intent.steer,intent.anchor));
@@ -241,7 +247,9 @@ export class MontraBoats {
         this.detach(id,player);
         continue;
       }
-      if (rider.target && canWalk(id)) {
+      if (boat.helmId===id) {
+        if(player.combatState==="idle")player.facing=helmFacing(boat);
+      } else if (rider.target && canWalk(id)) {
         const previous = toWorld(boat,rider.position);
         const next = stepTowards(rider.position,rider.target,3.1*dt);
         rider.position = next;

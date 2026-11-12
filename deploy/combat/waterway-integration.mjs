@@ -104,6 +104,13 @@ function localDeck(player,boat){
   const dx=player.x-boat.x,dz=player.z-boat.z,c=Math.cos(boat.heading),s=Math.sin(boat.heading);
   return [dx*c-dz*s,dx*s+dz*c];
 }
+function assertStern(room,boat){
+  const deck=JSON.parse(room.state.worldDefinition).maps[boat.mapId].boatDock.deck;
+  const [x,z]=localDeck(me(room),boat);
+  assert.equal(boat.helmId,room.sessionId);
+  assert.ok(deck.helmZ<0 && Math.abs(x)<.06 && Math.abs(z-deck.helmZ)<.06);
+  assert.ok(Math.cos(me(room).facing-boat.heading)<-.999,"pilot faces the bow from the stern");
+}
 const passengerOptions=opts();
 try{
   for(const map of Object.values(WORLD_MAPS)){
@@ -119,6 +126,7 @@ try{
   await until(()=>me(pilot.room)?.persistent && me(passenger.room)?.persistent && me(blocker.room)?.mapId===marsh.id,"crew and destination");
   const id=await launch(pilot.room),blockId=await launch(blocker.room);
   const boat=()=>boats(pilot.room).get(id);
+  assertStern(pilot.room,boat());
   command(passenger.room,"board",{boatId:id});
   await until(()=>me(passenger.room).boatId===id,"passenger boards");
   await rejected(passenger,"warp",{gateId:toMarsh.id},"boat_gate_helm");
@@ -146,7 +154,7 @@ try{
   assert.equal(boats(pilot.room).size,1);
   assert.equal(boat().passage,1);
   assert.equal(boat().hp,hp);
-  assert.equal(boat().helmId,pilot.room.sessionId);
+  assertStern(pilot.room,boat());
   assert.equal(me(passenger.room).boatId,id);
   localDeck(me(passenger.room),boat()).forEach((value,i)=>assert.ok(Math.abs(value-deck[i])<.06));
   await rejected(pilot,"input",{throttle:1,steer:0,anchor:false,passage:0},"boat_action_unavailable");
@@ -161,7 +169,7 @@ try{
     "same crew sails across the marsh and enters Lotus Basin");
   assert.equal(boat().passage,2);
   assert.equal(boat().hp,hp);
-  assert.equal(boat().helmId,pilot.room.sessionId);
+  assertStern(pilot.room,boat());
   await wait(3200);
   command(pilot.room,"warp",{gateId:backToMarsh.id});
   await until(()=>boat()?.mapId===marsh.id && me(passenger.room).mapId===marsh.id,
@@ -184,6 +192,7 @@ try{
   await until(()=>boat()?.mapId===village.id && me(pilot.room).mapId===village.id,"same boat returns to the village");
   assert.equal(boat().passage,4);
   assert.equal(boat().hp,hp);
+  assertStern(pilot.room,boat());
   assert.equal(boats(pilot.room).size,1);
   console.log("PASS waterways: sailing to gates, occupied berth, save failure, two riders, preserved hull and helm, stale input, full marsh crossing, reconnect and return");
   await leave(pilot.room);

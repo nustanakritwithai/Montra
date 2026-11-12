@@ -4,7 +4,7 @@ import {randomBytes} from "node:crypto";
 import {mkdtemp} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
-import {boatCanSail,MontraBoats} from "./MontraBoats.js";
+import {boatCanSail,BOAT_DECK,MontraBoats} from "./MontraBoats.js";
 import {groundAt,isSafeWorldPoint,WORLD_MAPS} from "./WorldMaps.js";
 import {waterDepthAt} from "./GroundTerrain.js";
 import {CharacterStore} from "./CharacterStore.js";
@@ -75,10 +75,19 @@ test("a stopped boat can turn 180 degrees in under three seconds without driftin
   const [start]=boats.snapshot();
   assert.ok(boats.act(id,pilot,{action:"board",boatId:start.entityId},0));
   assert.ok(boats.act(id,pilot,{action:"helm"},0));
+  assert.ok(!boats.act(id,pilot,{action:"walk",x:0,z:1},0));
+  const assertStern=()=>{
+    const [ship]=boats.snapshot();
+    assert.ok(Math.abs(pilot.x-ship.x-BOAT_DECK.helmZ*Math.sin(ship.heading))<1e-7);
+    assert.ok(Math.abs(pilot.z-ship.z-BOAT_DECK.helmZ*Math.cos(ship.heading))<1e-7);
+    assert.ok(Math.cos(pilot.facing-ship.heading)<-.999999,"avatar forward faces the bow");
+  };
+  assertStern();
   let quarterTurn=0,halfTurn=0;
   for(let now=50;now<3000;now+=50){
     if(now%100===0)assert.ok(boats.act(id,pilot,{action:"input",throttle:0,steer:1},now));
     boats.tick(now,.05,crew,()=>true);
+    assertStern();
     const [ship]=boats.snapshot();
     const turn=start.heading-ship.heading;
     if(!quarterTurn && turn>=Math.PI/2)quarterTurn=now;
@@ -88,6 +97,10 @@ test("a stopped boat can turn 180 degrees in under three seconds without driftin
   assert.ok(halfTurn>0);
   const [ship]=boats.snapshot();
   assert.deepEqual({x:ship.x,z:ship.z,hp:ship.hp},{x:start.x,z:start.z,hp:start.hp});
+  assert.ok(boats.act(id,pilot,{action:"input",throttle:-1,steer:0},3100));
+  boats.tick(3150,.05,crew,()=>true);
+  assert.ok(boats.snapshot()[0].speed<0);
+  assertStern();
 });
 
 test("one failed crew save rolls back the whole SQLite arrival",async()=>{
