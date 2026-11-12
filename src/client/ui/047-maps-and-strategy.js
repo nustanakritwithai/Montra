@@ -567,7 +567,6 @@
     twin_neck_pass:[168,467], naga_cavern:[66,519], river_watch:[193,556], sam_lan_estuary:[326,554], lotus_basin:[318,478],
     fallen_city:[107,637], tri_wiang_castle:[321,635], asura_peak:[222,710], spirit_rift:[112,780]
   };
-  const provinceTitle={capital:"เมืองหลวง",territory:"ด่านสงคราม",hunting:"พื้นที่เก็บเลเวล"};
   const warErrors={
     war_schedule_required:"สนามนี้เปิดตามเวลาที่ประกาศ",war_schedule_unavailable:"ยังไม่มีรอบศึกสำหรับพื้นที่นี้",
     war_registration_locked:"รอบนี้ล็อกรายชื่อแล้ว",war_roster_locked:"ตัวละครนี้ไม่อยู่ในรายชื่อที่ล็อกไว้",
@@ -653,7 +652,7 @@
     quartermasterRoot.setEnabled(visible);if(visible)quartermasterRoot.position.set(base.x+1,base.y || 0,base.z);
   }
   const campStatus={ready:"เปิด",contested:"กำลังถูกชิง",cut:"เส้นทางขาด",unheld:"ยังไม่ได้ครอง"};
-  function openWarPanel(back){
+  function openWarPanel(back,overviewSite){
     openDrawer("war","ศึกชิงเมือง",`<div class="field-command">
       <button class="secondary field-back" id="warBack" type="button" hidden>← ข้อมูลเมือง</button>
       <section class="field-banner" aria-labelledby="warHeading">
@@ -697,6 +696,12 @@
           <button id="estateFocusApply" type="button" class="secondary">เปลี่ยนนโยบาย</button><p id="estateHistory" class="note"></p>
         </details>
       </section>
+      <details id="warTerritories" class="field-card" hidden>
+        <summary>สถานะด่านทั้งหมด</summary>
+        <label class="field" for="warTerritorySite">พื้นที่ <select id="warTerritorySite"></select></label>
+        <p id="warTerritoryOwner"></p><p id="warTerritoryStatus"></p>
+        <button id="warTerritoryRoute" class="secondary" type="button">ดูเส้นทางไปด่าน</button>
+      </details>
       <section id="warSchedulePanel" class="field-card" hidden>
         <h3 class="gx-with-emblem" data-guild-icon="time">ตารางศึก</h3><label class="field" for="warScheduleCity">เมือง <select id="warScheduleCity"></select></label>
         <p id="warScheduleTime" role="status"></p><form id="warRosterForm" hidden><fieldset id="warRoster"></fieldset>
@@ -708,7 +713,13 @@
       $("warBack").hidden=false;
       $("warBack").onclick=back;
     }
-    $("warAtlasLink").onclick=()=>openStrategicMap(activeMapId,back);
+    const overview=$("warTerritories");
+    if(overviewSite){overview.dataset.site=overviewSite;overview.open=true;}
+    $("warTerritoryRoute").onclick=()=>{
+      const site=$("warTerritorySite").value;
+      if(site)openStrategicMap(site,()=>openWarPanel(back,site));
+    };
+    $("warAtlasLink").onclick=()=>openStrategicMap(activeMapId,()=>openWarPanel(back));
     $("warObjectiveMap").onclick=()=>{
       const local=territoryState?.local;
       if(local?.site===activeMapId && local.canStart && !local.inField)warMusterSite=activeMapId;
@@ -721,9 +732,52 @@
       if(gateId)room?.send("territory_gate",{gateId,repair:true});
     };
     renderWarPanel();
+    if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
   }
   function warLocalDate(ms){
     return new Date(ms).toLocaleString("th-TH",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
+  }
+  function warTerritoryLabel(entry,serverNow){
+    if(!entry)return "รอข้อมูล";
+    if(entry.phase==="open")return "พร้อมเปิดศึก";
+    if(entry.phase!=="battle" && entry.phase!=="protected")return warPhase(entry.phase);
+    if(!Number.isFinite(entry.phaseEndsAt) || !Number.isFinite(serverNow))return "รอข้อมูล";
+    const seconds=Math.max(0,Math.ceil((entry.phaseEndsAt-serverNow)/1000));
+    if(!seconds)return "กำลังอัปเดต";
+    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
+    const clock=(hours?String(hours)+":"+String(minutes).padStart(2,"0"):String(minutes))+":"+String(remainder).padStart(2,"0");
+    return (entry.phase==="battle"?"รบ ":"คุ้มครอง ")+clock;
+  }
+  function renderWarTerritories(){
+    const panel=$("warTerritories");
+    if(!panel)return;
+    const picker=$("warTerritorySite");
+    const sites=Object.keys(territoryState?.warTimes || {}).filter(site=>worldDefinitions?.[site]);
+    panel.hidden=!sites.length;
+    if(panel.hidden)return;
+    if(picker.options.length!==sites.length || Array.from(picker.options).some((option,i)=>option.value!==sites[i])){
+      const preferred=picker.value || panel.dataset.site || activeMapId;
+      picker.replaceChildren(...sites.map(site=>new Option(worldDefinitions[site].name,site)));
+      if(sites.includes(preferred))picker.value=preferred;
+    }
+    picker.onchange=updateWarTerritoryStatus;
+    updateWarTerritoryStatus();
+  }
+  function updateWarTerritoryStatus(){
+    const panel=$("warTerritories"),picker=$("warTerritorySite");
+    if(!panel || panel.hidden || !picker?.value)return;
+    const site=picker.value,entry=territoryState?.warTimes?.[site];
+    const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
+    const status=$("warTerritoryStatus"),owner=$("warTerritoryOwner"),schedule=territoryState?.schedule?.[site];
+    let label=warTerritoryLabel(entry,now);
+    if(entry?.phase==="open" && schedule?.next)
+      label+=" · รอบนัดถัดไป "+warLocalDate(schedule.next.startsAt)+" (เวลาเครื่อง)";
+    if(Number.isFinite(entry?.phaseEndsAt) && entry.phaseEndsAt>now)
+      label+=" · "+(entry.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ")+warLocalDate(entry.phaseEndsAt)+" (เวลาเครื่อง)";
+    const ownerLabel="ผู้ครอง · "+(territoryState?.owners?.[site] || "เป็นกลาง");
+    if(owner.textContent!==ownerLabel)owner.textContent=ownerLabel;
+    if(status.textContent!==label)status.textContent=label;
+    $("warTerritoryRoute").hidden=site===activeMapId;
   }
   function renderWarSchedule(){
     const panel=$("warSchedulePanel"),schedule=territoryState?.schedule;
@@ -849,12 +903,13 @@
     objectiveButton.textContent=battle?"ดูจุดยึดบนแผนที่สนาม":"ดูจุดเปิดศึกบนแผนที่";
     button.hidden=!actionable;
     button.onclick=null;
-    hint.textContent=!s?"เลือกด่านสงครามในแผนที่เพื่อดูเส้นทาง":
+    hint.textContent=!s?"เลือกด่านใน «สถานะด่านทั้งหมด» เพื่อดูเวลาและเส้นทาง":
       battle?"สนามรบนี้ยังไม่เปิดให้ตัวละครของคุณเข้าร่วม":
       s.phase==="protected"?"รอพ้นช่วงคุ้มครองก่อนเปิดศึก":
       s.phase==="open"?"กิลด์ผู้ท้าชิงต้องให้ผู้บัญชาการหรือนายทหารเปิดศึกที่จุดท้าชิง":"";
     hint.hidden=actionable || !hint.textContent;
     renderGovernment(s);
+    renderWarTerritories();
     renderWarSchedule();
     renderWarRoutes();
     const cargo=s?.cargo,panel=$("warCargoPanel");panel.hidden=!cargo;
@@ -971,282 +1026,97 @@
     if(actionable)button.onclick=()=>{if(s.inField)void connectOnline(currentCharacterEndpoint(),activeCharacterSlot,{world:true});
       else if(room)room.send(s.canStart?"territory_start":"territory_join",isCastle?{objectiveId:Number($("castleFront").value)}:{});};
   }
-  function updateAtlasOwner(){
-    const node=$("atlasOwner");
-    if(node)node.textContent="ธงครองด่าน · "+(territoryState?.owners?.[node.dataset.site] || "เป็นกลาง");
-  }
-  function strategicWarLabel(entry,serverNow,compact=false){
-    if(!entry)return "รอข้อมูล";
-    if(entry.phase==="open")return compact?"พร้อมรบ":"พร้อมเปิดศึก";
-    if(!Number.isFinite(entry.phaseEndsAt) || !Number.isFinite(serverNow))return "รอข้อมูล";
-    const seconds=Math.max(0,Math.ceil((entry.phaseEndsAt-serverNow)/1000));
-    if(!seconds)return "กำลังอัปเดต";
-    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
-    const clock=(hours?String(hours)+":"+String(minutes).padStart(2,"0"):String(minutes))+":"+String(remainder).padStart(2,"0");
-    return (entry.phase==="battle"?"รบ ":compact?"พัก ":"คุ้มครอง ")+clock;
-  }
-  function updateAtlasWarTimes(){
-    if(drawerActive!=="strategy")return;
-    const route=cityMarkets?.tradeRoute?.contracts,panel=$("atlasTradeRoute");
-    if(route && panel?.dataset.paused!==undefined && panel.dataset.paused!==String(cityTradeRoutePaused(route)))
-      renderAtlasTradeRoute();
-    updateAtlasTradeDeadline();
-    const now=Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
-    for(const node of ui.drawerBody.querySelectorAll("[data-war-site]")){
-      const site=node.dataset.warSite,entry=territoryState?.warTimes?.[site],button=node.closest(".atlas-cell");
-      const schedule=territoryState?.schedule?.[site];
-      node.textContent=strategicWarLabel(entry,now,Boolean(button));
-      if(schedule && !button && entry?.phase==="open")
-        node.textContent+=" · รอบนัดถัดไป "+warLocalDate(schedule.next.startsAt)+" (เวลาเครื่อง)";
-      if(!button && Number.isFinite(entry?.phaseEndsAt) && entry.phaseEndsAt>now){
-        const when=new Date(entry.phaseEndsAt).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
-        node.textContent+=" · "+(entry.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ")+when+" (เวลาเครื่อง)";
-      }
-      if(button)button.setAttribute("aria-label",button.dataset.baseLabel+" · "+strategicWarLabel(entry,now));
-    }
-  }
-  function updateAtlasCityMarket(){
-    const price=$("atlasCityMarket");
-    if(drawerActive!=="strategy" || !price)return;
-    const markets=cityMarketRows();
-    if(!markets.length){price.textContent="กำลังโหลดราคาตลาดเมือง…";return;}
-    price.replaceChildren();
-    for(const market of markets.filter(row=>row.site===price.dataset.site)){
-      price.append(marketText("p","note",cityItemName(market.item??cityProduct)+" · "+cityMarketSummary(market)));
-      const comparison=cityMarketRouteQuote(market,markets);
-      if(comparison)price.append(marketText("p","note",comparison));
-    }
-  }
-  function currentCityTradePin(){
-    if(mode!=="live" || !cityTradePin || cityTradePin.actor!==ownServerCharacter()?.characterId)return null;
-    return cityTradePin.contractId && cityTradePin.expires<=cityTradeNow()?null:cityTradePin;
-  }
-  function pinCityTradeRoute(site,job){
-    const actor=ownServerCharacter()?.characterId;
-    if(!actor || !Object.hasOwn(citySiteNames,site))return;
-    cityTradePin={actor,site,contractId:job?.id??null,expires:job?.expires??null};
-    openStrategicMap(site);
-  }
-  function cityTradeRoutePaused(contracts){
-    return Boolean(contracts?.paused || [contracts?.source,contracts?.destination].some(site=>site &&
-      territoryState?.warTimes?.[site]?.phase==="battle"));
-  }
-  function cityTradeHudGuide(){
-    const pin=currentCityTradePin();
-    if(!pin || territoryState?.local?.inField)return null;
-    const title="เส้นทางค้า · "+citySiteNames[pin.site];
-    const contracts=(cityMission?.serverNow??0)>(cityMarkets?.serverNow??0)?cityMission.tradeContracts:cityMarkets?.tradeRoute?.contracts;
-    if(pin.contractId && cityTradeRoutePaused(contracts))
-      return {title,step:"พักรับและส่งสัญญาระหว่างศึก"};
-    const route=travelRoute(worldDefinitions,activeMapId,pin.site);
-    if(!route.length)return {title,step:"เส้นทางจากจุดนี้ยังใช้ไม่ได้"};
-    const map=worldDefinitions[activeMapId];
-    const to=route.length>1?map.portals.find(gate=>gate.targetMapId===route[1]):map.serviceNpcs?.find(npc=>npc.role==="market");
-    return {title,step:route.length>1?"ไปประตู "+worldDefinitions[route[1]].name:"ไปหานายหน้าตลาด",to};
-  }
-  function cityTradeEstimate(amount,prices,receivePrices,job,available){
-    const total=entries=>entries.length>=amount?entries.slice(0,amount).reduce((sum,price)=>sum+price,0):null;
-    const guaranteed=available && !job?.carrying && job?.amount===amount && Number.isFinite(job.total);
-    return {cost:guaranteed?job.total:total(prices), spot:total(receivePrices), guaranteed:guaranteed?job.gold:null};
-  }
-  function updateAtlasTradeDeadline(refresh=true){
-    const node=$("atlasTradeDeadline");
-    if(!node)return;
-    const remaining=Math.max(0,Math.ceil((Number(node.dataset.expires)-cityTradeNow())/1000));
-    if(refresh && !remaining && node.dataset.running==="true"){
-      renderAtlasTradeRoute();refreshCityMarkets();return;
-    }
-    const hours=Math.floor(remaining/3600),minutes=Math.floor(remaining%3600/60),seconds=remaining%60;
-    node.textContent=remaining?"เหลือ "+hours+" ชม. "+minutes+" นาที "+seconds+" วิ":"สัญญาถึงกำหนดแล้ว · รีเฟรชสถานะ";
-  }
-  function renderAtlasReturnRoute(panel,origin,destination,selected){
-    const section=marketText("section","gx-page");
-    const note=text=>section.append(marketText("p","note",text));
-    section.append(marketText("strong","","การค้า · "+citySiteNames[origin.site]+" → "+citySiteNames[destination.site]));
-    for(const market of [origin,destination])note(citySiteNames[market.site]+" · "+cityMarketSummary(market,false));
-    if(origin.prices.length && destination.prices.length){
-      const max=Math.min(origin.prices.length,destination.prices.length);
-      const label=marketText("label","field","จำนวนแร่เที่ยวกลับ"),amount=document.createElement("input");
-      amount.id="atlasReturnAmount";amount.type="number";amount.inputMode="numeric";amount.min="1";amount.max=String(max);
-      amount.value=String(cityPositive(selected,max)?selected:1);label.append(amount);section.append(label);
-      const estimate=marketText("p","note");estimate.setAttribute("aria-live","polite");section.append(estimate);
-      amount.oninput=()=>{
-        const quantity=amount.valueAsNumber;
-        if(!cityPositive(quantity,max)){estimate.textContent="เลือกจำนวน 1–"+max+" ชิ้น";return;}
-        const {cost,spot}=cityTradeEstimate(quantity,origin.prices,destination.prices,null,false);
-        const delta=spot-cost;
-        estimate.textContent="ซื้อ "+cost+" ทอง · ขายประมาณ "+spot+" ทอง · ส่วนต่าง "+(delta>0?"+":"")+delta+" ทอง";
-      };
-      amount.oninput();
-    }
-    for(const [market,label] of [[origin,"ปักหมุดไปซื้อที่จันทรา"],[destination,"ปักหมุดไปขายที่สามลาน"]]){
-      const button=marketText("button","secondary",label);
-      button.type="button";button.onclick=()=>pinCityTradeRoute(market.site);section.append(button);
-    }
-    panel.append(section);
-  }
-  function renderAtlasTradeRoute(){
-    const panel=$("atlasTradeRoute"),route=cityMarkets?.tradeRoute;
-    if(!panel)return;
-    const selected=$("atlasOutboundAmount")?.valueAsNumber,selectedReturn=$("atlasReturnAmount")?.valueAsNumber;
-    panel.hidden=Boolean(cityMarkets && !route);
-    panel.replaceChildren();
-    if(!route){if(!panel.hidden)panel.textContent="กำลังโหลดสถานะการค้า…";return;}
-    const {contracts,report}=route,{source,destination,job,manage,enabled}=contracts;
-    const paused=cityTradeRoutePaused(contracts);
-    panel.dataset.paused=String(paused);
-    const rows=cityMarketRows(),markets=rows.filter(market=>(market.item??cityProduct)===cityProduct);
-    const selling=markets.find(market=>market.site===source),buying=markets.find(market=>market.site===destination);
-    const note=text=>panel.append(marketText("p","note",text));
-    const button=(text,onclick)=>{
-      const control=marketText("button","secondary",text);control.type="button";control.onclick=onclick;panel.append(control);
-    };
-    panel.append(marketText("strong","","การค้า · "+citySiteNames[source]+" → "+citySiteNames[destination]));
-    note("ราคา ณ "+new Date(cityMarkets.serverNow).toLocaleTimeString("th-TH"));
-    for(const market of [selling,buying])if(market)note(citySiteNames[market.site]+" · "+cityMarketSummary(market,false));
-    const open=Boolean(job && !job.carrying && enabled && !paused && job.expires>cityTradeNow());
-    if(paused)note("พักรับและส่งสัญญาระหว่างศึก");
-    if(!job)note(enabled?"จันทรายังไม่มีสัญญาจัดซื้อเปิดอยู่":"พักเปิดสัญญาจัดซื้อ");
-    else {
-      const status=job.yours?"สัญญาที่คุณรับแล้ว":job.carrying?"มีพ่อค้ารับสัญญาแล้ว":"สัญญาจัดซื้อ";
-      note(status+" · จันทราต้องการ "+job.amount+" ชิ้น · รับประกัน "+job.gold+" ทองเมื่อส่งครบ");
-      if(open && job.total===null)note("แร่ที่คุณซื้อได้ตอนนี้ "+(selling?.prices.length??0)+" / "+job.amount+" ชิ้น");
-      const deadline=marketText("p","note");deadline.id="atlasTradeDeadline";deadline.dataset.expires=String(job.expires);
-      deadline.dataset.running=String(job.expires>cityTradeNow());
-      panel.append(deadline);updateAtlasTradeDeadline(false);
-    }
-    const sourcePrices=selling?.prices??[],destinationPrices=buying?.prices??[];
-    if(sourcePrices.length || open){
-      const label=marketText("label","field","จำนวนแร่ที่เทียบราคา"),amount=document.createElement("input");
-      amount.id="atlasOutboundAmount";amount.type="number";amount.inputMode="numeric";amount.min="1";amount.max="12";
-      amount.value=String(cityPositive(selected,12)?selected:open?job.amount:1);
-      label.append(amount);panel.append(label);
-      const estimate=marketText("p","note");estimate.setAttribute("aria-live","polite");panel.append(estimate);
-      amount.oninput=()=>{
-        const quantity=amount.valueAsNumber;
-        if(!cityPositive(quantity,12)){estimate.textContent="เลือกจำนวน 1–12 ชิ้น";return;}
-        const {cost,spot,guaranteed}=cityTradeEstimate(quantity,sourcePrices,destinationPrices,job,open);
-        const difference=value=>value-cost>0?"+"+(value-cost):String(value-cost);
-        const lines=[cost===null?"แร่ต้นทางไม่ครบตามจำนวน":"ซื้อ "+quantity+" ชิ้น · "+cost+" ทอง"];
-        if(guaranteed!==null)lines.push("ตามสัญญา "+guaranteed+" ทอง · ส่วนต่าง "+difference(guaranteed)+" ทอง");
-        if(spot!==null && cost!==null)lines.push("ขายหน้าตลาดประมาณ "+spot+" ทอง · ส่วนต่าง "+difference(spot)+" ทอง");
-        if(open && quantity!==job.amount)lines.push("สัญญาต้องส่งครบ "+job.amount+" ชิ้น");
-        if(cost!==null && (cityMarkets.wallet<cost || cityMarkets.bagSpace<quantity))lines.push("ตรวจทองหรือพื้นที่กระเป๋าก่อนซื้อ");
-        estimate.textContent=lines.join(" · ");
-      };
-      amount.oninput();
-    }
-    if(manage){
-      note("ทองตลาดพร้อมใช้ "+manage.gold+" ทอง · คลังว่าง "+manage.free+" ชิ้น");
-      if(manage.canOpen && manage.maxGold>0 && manage.maxAmount>0)
-        button("เปิดกระดานเพื่อออกสัญญา",openCityMission);
-    }
-    button("รีเฟรชราคาและสัญญา",refreshCityMarkets);
-    button(cityMarkets.contribution?"เปิดตลาดและสมทบทอง":"เปิดตลาดเมือง",openCityMarket);
-    if(job)button("เปิดกระดานสัญญา",openCityMission);
-    if(job?.yours && job.expires>cityTradeNow())button("ปักหมุดไปส่งที่จันทรา",()=>pinCityTradeRoute(destination,job));
-    else button("ปักหมุดไปสามลาน",()=>pinCityTradeRoute(source,open?job:null));
-    if(manage?.canOpen && contracts.atCity!==destination)
-      button("ปักหมุดไปจันทรา",()=>pinCityTradeRoute(destination));
-    const returnDestination=rows.find(market=>market.neutralReturn);
-    const returnOrigin=rows.find(market=>market.site===destination && market.item===cityReturnProduct);
-    if(returnDestination && returnOrigin)renderAtlasReturnRoute(panel,returnOrigin,returnDestination,selectedReturn);
-    const pin=currentCityTradePin();
-    if(pin){
-      note("ปักหมุด "+citySiteNames[pin.site]);
-      button("ล้างหมุดการค้า",()=>{cityTradePin=null;renderAtlasTradeRoute();});
-    }
-    const average=report.units?(report.gold/report.units).toLocaleString("th-TH",{maximumFractionDigits:2}):null;
-    note("การค้า 7 วัน · ซื้อที่สามลาน "+report.deals+" ดีล · "+report.units+" ชิ้น · ส่งสัญญาสำเร็จ "+report.delivered+" งาน"+
-      (average===null?"":" · เฉลี่ย "+average+" ทอง/ชิ้น"));
-    if(report.lastPurchase){
-      const {at,total,amount}=report.lastPurchase;
-      note("ดีลล่าสุด "+amount+" ชิ้น · "+total+" ทอง · "+new Date(at).toLocaleString("th-TH"));
-    }
-  }
   function openStrategicMap(destination,back){
     const maps=worldDefinitions,origin=activeMapId;
-    if(!maps?.[origin])return;
-    openDrawer("strategy","แผนที่ยุทธศาสตร์",`<button class="atlas-back" id="backLocalMap">‹ แผนที่พื้นที่ปัจจุบัน</button>
+    if(!maps?.[origin] || !atlasCells[origin])return;
+    const boats=room?.state?.boatsAvailable===true;
+    openDrawer("strategy","แผนที่ยุทธศาสตร์",`<div class="strategy-atlas">
+      <div class="atlas-tools">
+        <button type="button" id="backLocalMap">‹ แผนที่พื้นที่</button>
+        <button type="button" id="atlasRecenter"><span aria-hidden="true">◎</span> ที่อยู่ของฉัน</button>
+        ${boats?'<div class="atlas-modes" role="group" aria-label="เส้นทาง"><button type="button" id="atlasLand" aria-pressed="true">ทางบก</button><button type="button" id="atlasWater" aria-pressed="false">ทางน้ำ</button></div>':""}
+      </div>
+      <div class="atlas-scroll" id="atlasScroll" tabindex="0" role="region" aria-label="แผนที่อาณาจักร แตะพื้นที่เพื่อดูเส้นทาง"><div class="atlas-board" id="atlasBoard"></div></div>
       <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>
-      ${room?.state?.cityMarketSupported===true?'<section class="atlas-summary" id="atlasTradeRoute"></section>':""}
-      <p class="note">แตะพื้นที่เพื่อหาเส้นทาง · เลื่อนเพื่อดูอาณาจักรทั้งหมด</p>
-      <div class="atlas-scroll"><div class="atlas-board" id="atlasBoard"></div></div>
-      <div class="legend"><span>♛ เมืองหลวง</span><span>⚑ ด่านสงคราม</span><span>◆ เขตล่า</span><span>● จุดที่ยืน</span></div>`);
+    </div>`);
     const backButton=$("backLocalMap");
-    if(typeof back==="function")backButton.textContent="← กลับหน้าก่อน";
+    if(typeof back==="function")backButton.textContent="‹ กลับหน้าก่อน";
     backButton.onclick=typeof back==="function"?back:openMap;
-    const board=$("atlasBoard"),detail=$("atlasDetail"),cells=new Map(),lines=[];
+    const board=$("atlasBoard"),scroll=$("atlasScroll"),detail=$("atlasDetail"),cells=new Map(),edges=[];
     const ids=Object.keys(maps).filter(id=>atlasCells[id]);
-    const linkLayer=document.createElementNS("http://www.w3.org/2000/svg","svg");
-    linkLayer.setAttribute("viewBox","0 0 400 827");linkLayer.setAttribute("preserveAspectRatio","none");linkLayer.setAttribute("aria-hidden","true");board.append(linkLayer);
+    const svgNS="http://www.w3.org/2000/svg",linkLayer=document.createElementNS(svgNS,"svg");
+    linkLayer.setAttribute("viewBox","0 0 400 827");linkLayer.setAttribute("preserveAspectRatio","none");linkLayer.setAttribute("aria-hidden","true");
+    board.append(linkLayer);
+    const pairs=new Set();
+    for(const kind of boats?["portals","waterGates"]:["portals"])for(const id of ids){
+      for(const gate of maps[id][kind] || []){
+        const other=gate.targetMapId;
+        if(!maps[other] || !atlasCells[other])continue;
+        const pair=kind+":"+[id,other].sort().join(":");
+        if(pairs.has(pair))continue;
+        pairs.add(pair);
+        const [x,y]=atlasCells[id],[endX,endY]=atlasCells[other];
+        const line=document.createElementNS(svgNS,"line");
+        line.setAttribute("data-atlas-link",kind);
+        for(const [key,value] of Object.entries({x1:x,y1:y,x2:endX,y2:endY}))line.setAttribute(key,String(value));
+        linkLayer.append(line);edges.push({id,other,kind,line});
+      }
+    }
     for(const id of ids){
       const [x,y]=atlasCells[id],map=maps[id];
-      for(const gate of map.portals){
-        const other=gate.targetMapId;
-        if(!atlasCells[other] || other<=id)continue;
-        const line=document.createElementNS(linkLayer.namespaceURI,"line"),[endX,endY]=atlasCells[other];
-        for(const [key,value] of Object.entries({x1:x,y1:y,x2:endX,y2:endY}))line.setAttribute(key,String(value));
-        linkLayer.append(line);lines.push({id,other,line});
-      }
       const kind=map.strategic?.kind || (id==="ritual_village"?"village":"hunting");
       const button=document.createElement("button");button.type="button";button.className="atlas-cell "+kind;
       button.style.left=(x/4)+"%";button.style.top=(y/827*100)+"%";
       const icon=document.createElement("b");icon.setAttribute("aria-hidden","true");
       icon.textContent=kind==="capital"?"♛":kind==="territory"?"⚑":kind==="village"?"⌂":"◆";
       const label=document.createElement("span");label.textContent=map.name;button.append(icon,label);
-      if(kind==="territory" || territoryState?.warTimes?.[id]){const timer=document.createElement("small");timer.className="atlas-war-time";timer.dataset.warSite=id;button.append(timer);}
-      button.dataset.baseLabel=map.name+(id===origin?" · คุณอยู่ที่นี่":"");button.setAttribute("aria-label",button.dataset.baseLabel);
-      if(id===origin)button.classList.add("here");
+      button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
+      if(id===origin){button.classList.add("here");button.setAttribute("aria-current","location");}
       board.append(button);cells.set(id,button);button.onclick=()=>select(id);
     }
-    function select(id){
-      const map=maps[id],path=travelRoute(maps,origin,id);
-      for(const [key,button] of cells)button.setAttribute("aria-pressed",String(key===id));
-      for(const edge of lines)edge.line.classList.toggle("route",path.some((a,i)=>i>0 &&
-        ((a===edge.id && path[i-1]===edge.other)||(a===edge.other && path[i-1]===edge.id))));
-      const title=document.createElement("strong"),description=document.createElement("p"),directions=document.createElement("p");
-      title.textContent=map.name+" · "+(provinceTitle[map.strategic?.kind] || (id==="ritual_village"?"หมู่บ้าน":"พื้นที่เก็บเลเวล"))+
-        (map.region?.range?" · Lv."+map.region.range.join("–"):"");
-      description.textContent=map.strategic?.hint || map.region?.hint || (id===origin?"คุณอยู่ที่นี่":"ประตูเชื่อม "+map.portals.map(p=>maps[p.targetMapId].name).join(" / "));
-      const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
-      directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
-      detail.replaceChildren(title,description,directions);
-      if(room?.state?.boatsAvailable && id!==origin){
-        const waterPath=travelRoute(maps,origin,id,"waterGates");
-        const next=maps[origin].waterGates?.find(gate=>gate.targetMapId===waterPath[1]);
-        if(next){
-          const route=document.createElement("p");
-          route.textContent="ทางน้ำ · "+waterPath.map(key=>maps[key].name).join(" → ")+
-            " · ประตูแรก ("+next.x+", "+next.z+")";
-          detail.append(route);
-          if(boatAtHelm()){
-            const navigate=document.createElement("button");navigate.type="button";navigate.className="secondary";
-            navigate.textContent="ล่องไป "+maps[next.targetMapId].name;
-            navigate.onclick=()=>{if(sailThroughGate(next.id))closeDrawer();};
-            detail.append(navigate);
-          }
-        }
-      }
-      if(room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,id)){
-        const price=document.createElement("div");price.id="atlasCityMarket";price.dataset.site=id;
-        const market=document.createElement("button");market.type="button";market.className="secondary";
-        market.textContent="เปิดตลาดประจำเมือง";market.onclick=openCityMarket;
-        detail.append(price,market);updateAtlasCityMarket();
-      }
-      if(territoryState && (map.strategic?.kind==="territory" || territoryState.warTimes?.[id])){
-        const owner=document.createElement("p");owner.id="atlasOwner";owner.dataset.site=id;detail.append(owner);updateAtlasOwner();
-        const timer=document.createElement("p");timer.dataset.warSite=id;timer.setAttribute("aria-live","off");detail.append(timer);updateAtlasWarTimes();
-      }
+    let travel=boats && boatAtHelm()?"waterGates":"portals";
+    let selected=typeof destination==="string" && cells.has(destination)?destination:origin;
+    function center(id){
+      const cell=cells.get(id);
+      scroll.scrollTop=cell.offsetTop-scroll.clientHeight/2;
+      scroll.scrollLeft=cell.offsetLeft-scroll.clientWidth/2;
     }
-    const target=typeof destination==="string"?destination:currentCityTradePin()?.site;
-    const selected=typeof target==="string" && maps[target] && atlasCells[target]?target:origin;
-    select(selected);updateAtlasWarTimes();
-    renderAtlasTradeRoute();
-    if(mode==="live")room?.send("get_territories",{});
-    if(room?.state?.cityMarketSupported===true)refreshCityMarkets();
-    const scroll=board.parentElement;
-    scroll.scrollTop=atlasCells[selected][1]-scroll.clientHeight/2;
+    function select(id){
+      selected=id;
+      const water=travel==="waterGates",map=maps[id],path=travelRoute(maps,origin,id,travel);
+      board.dataset.travel=travel;
+      if(boats){
+        $("atlasLand").setAttribute("aria-pressed",String(!water));
+        $("atlasWater").setAttribute("aria-pressed",String(water));
+      }
+      for(const [key,button] of cells)button.setAttribute("aria-pressed",String(key===id));
+      for(const edge of edges)edge.line.classList.toggle("route",edge.kind===travel && path.some((step,i)=>i>0 &&
+        ((step===edge.id && path[i-1]===edge.other)||(step===edge.other && path[i-1]===edge.id))));
+      const gate=maps[origin][travel]?.find(entry=>entry.targetMapId===path[1]);
+      const title=document.createElement("strong"),directions=document.createElement("p");
+      title.textContent=map.name;
+      directions.textContent=id===origin?"● คุณอยู่ที่นี่":gate?
+        "ผ่าน "+(path.length-1)+" ประตู · ประตูแรกไป "+maps[path[1]].name:
+        (water?"ยังไม่มีเส้นทางน้ำจากที่นี่":"ยังไม่มีเส้นทางบกจากที่นี่");
+      detail.replaceChildren(title,directions);
+      if(!gate)return;
+      if(water && boatAtHelm()){
+        const navigate=document.createElement("button");navigate.type="button";navigate.className="primary atlas-sail";
+        navigate.textContent="ล่องไปประตูแรก";
+        navigate.onclick=()=>{if(sailThroughGate(gate.id))closeDrawer();};
+        detail.append(navigate);
+      }
+      const route=document.createElement("details"),summary=document.createElement("summary"),steps=document.createElement("p");
+      summary.textContent="ลำดับพื้นที่และพิกัดประตู";
+      steps.textContent=path.map(key=>maps[key].name).join(" → ")+" · ("+gate.x+", "+gate.z+")";
+      route.append(summary,steps);detail.append(route);
+    }
+    if(boats){
+      $("atlasLand").onclick=()=>{travel="portals";select(selected);};
+      $("atlasWater").onclick=()=>{travel="waterGates";select(selected);};
+    }
+    $("atlasRecenter").onclick=()=>{select(origin);center(origin);};
+    select(selected);center(selected);
   }
   function openMap() {
     const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;

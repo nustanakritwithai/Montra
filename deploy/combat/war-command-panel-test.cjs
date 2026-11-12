@@ -6,7 +6,7 @@ const vm = require("node:vm");
 
 const source = readFileSync(join(__dirname, "../../src/client/ui/047-maps-and-strategy.js"), "utf8");
 const start = source.indexOf("  const warPhase=");
-const end = source.indexOf("  function updateAtlasOwner(", start);
+const end = source.indexOf("  function openStrategicMap(", start);
 assert(start >= 0 && end > start);
 
 function fixture() {

@@ -481,13 +481,13 @@
   let cityState=null, cityClaims=null, cityPending=null, cityStatus="", cityReceivedAt=0;
   let cityWorkshop=null, cityWorkshopReceivedAt=0;
   let cityPurchase=null, cityMission=null, cityGovernance=null, cityMarkets=null;
-  let cityTradePin=null, cityTradeClock=null, cityProductionTarget=null;
+  let cityTradePin=null, cityTradeClock=null, cityTradeDraft=null, cityProductionTarget=null;
   let cityReplyTimer=0, cityJobTimer=0;
   const cityPolledTimers=new Map();
   function cityRecoveryReady(){return economyReady() && room.state.cityRecoveryAvailable===true;}
   function resetCityProduction(){
     cityState=null;cityWorkshop=null;cityPurchase=null;cityMission=null;cityGovernance=null;cityMarkets=null;
-    cityTradePin=null;cityTradeClock=null;cityProductionTarget=null;
+    cityTradePin=null;cityTradeClock=null;cityTradeDraft=null;cityProductionTarget=null;
     cityClaims=null;cityPending=null;cityStatus="";cityPolledTimers.clear();
     clearTimeout(cityReplyTimer);clearTimeout(cityJobTimer);
     renderCityProduction();
@@ -537,10 +537,40 @@
     if(!Number.isFinite(data?.serverNow) || !Array.isArray(data.markets) || !Array.isArray(data.history))return;
     cityMarkets=data;
     cityTrackTradeContract(data.tradeRoute?.contracts,data.serverNow);
-    if(drawerActive==="strategy"){updateAtlasCityMarket();renderAtlasTradeRoute();}
     renderCityProduction();
   }
+  function currentCityTradePin(){
+    if(mode!=="live" || !cityTradePin || cityTradePin.actor!==ownServerCharacter()?.characterId)return null;
+    return cityTradePin.contractId && cityTradePin.expires<=cityTradeNow()?null:cityTradePin;
+  }
+  function pinCityTradeRoute(site,job){
+    const actor=ownServerCharacter()?.characterId;
+    if(!actor || !Object.hasOwn(citySiteNames,site))return;
+    cityTradePin={actor,site,contractId:job?.id??null,expires:job?.expires??null};
+    const body=$("cityProductionContent"),navigation=body?cityBoardNavigation(body):undefined;
+    const draft=cityTradeComparisonDraft();
+    const back=drawerActive==="cityMission"?()=>openCityMission(navigation):()=>openCityMarket(navigation,draft);
+    openStrategicMap(site,back);
+  }
+  function cityTradeRoutePaused(contracts){
+    return Boolean(contracts?.paused || [contracts?.source,contracts?.destination].some(site=>site &&
+      territoryState?.warTimes?.[site]?.phase==="battle"));
+  }
+  function cityTradeHudGuide(){
+    const pin=currentCityTradePin();
+    if(!pin || territoryState?.local?.inField)return null;
+    const title="เส้นทางค้า · "+citySiteNames[pin.site];
+    const contracts=(cityMission?.serverNow??0)>(cityMarkets?.serverNow??0)?cityMission.tradeContracts:cityMarkets?.tradeRoute?.contracts;
+    if(pin.contractId && cityTradeRoutePaused(contracts))
+      return {title,step:"พักรับและส่งสัญญาระหว่างศึก"};
+    const route=travelRoute(worldDefinitions,activeMapId,pin.site);
+    if(!route.length)return {title,step:"เส้นทางจากจุดนี้ยังใช้ไม่ได้"};
+    const map=worldDefinitions[activeMapId];
+    const to=route.length>1?map.portals.find(gate=>gate.targetMapId===route[1]):map.serviceNpcs?.find(npc=>npc.role==="market");
+    return {title,step:route.length>1?"ไปประตู "+worldDefinitions[route[1]].name:"ไปหานายหน้าตลาด",to};
+  }
   function cityTrackTradeContract(contracts,serverNow){
+    if(cityTradeClock && serverNow<cityTradeClock.serverNow)return;
     cityTradeClock={serverNow,receivedAt:performance.now()};
     if(!cityTradePin?.contractId)return;
     const job=contracts?.job;
@@ -762,8 +792,8 @@
     try{room.send("get_city_markets",{});}
     catch(_){cityStatus="เชื่อมต่อไม่ได้ · กรุณารีเฟรช";renderCityProduction();}
   }
-  function openCityMarket(navigation){
-    cityMarkets=null;
+  function openCityMarket(navigation,draft=null){
+    cityMarkets=null;cityTradeDraft=draft;
     openCityBoard("cityMarket","ตลาดประจำเมือง",refreshCityMarkets,navigation);
   }
   const cityMarketStatuses={
@@ -958,11 +988,84 @@
     };
     quantity.oninput();
   }
+  function cityTradeComparisonDraft(){
+    const panel=$("cityTradeComparison");
+    return panel?{open:panel.open,cityTradeOutbound:$("cityTradeOutbound")?.valueAsNumber,cityTradeReturn:$("cityTradeReturn")?.valueAsNumber}:null;
+  }
+  function renderCityTradeComparison(body,markets,draft){
+    const route=cityMarkets.tradeRoute;
+    if(!route)return;
+    const {source,destination}=route.contracts;
+    const report=route.report;
+    const panel=marketText("details","field-card city-trade-comparison");
+    panel.id="cityTradeComparison";panel.open=draft.open;
+    panel.append(cityEmblemText("summary","เทียบราคาเส้นทางค้า","market"));
+    const directions=[
+      {from:source,to:destination,item:cityProduct,id:"cityTradeOutbound",label:"เที่ยวไป"},
+      {from:destination,to:source,item:cityReturnProduct,id:"cityTradeReturn",label:"เที่ยวกลับ"},
+    ];
+    for(const {from,to,item,id,label} of directions){
+      const matches=(market,site)=>market.site===site && (market.item??cityProduct)===item;
+      const seller=markets.find(market=>matches(market,from)),buyer=markets.find(market=>matches(market,to));
+      if(!seller && !buyer)continue;
+      const section=marketText("section","city-trade-direction");
+      section.append(marketText("h4","",label+" · "+citySiteNames[from]+" → "+citySiteNames[to]));
+      for(const market of [seller,buyer])if(market)
+        section.append(marketText("p","note",citySiteNames[market.site]+" · "+cityMarketSummary(market,false)));
+      const prices=seller?.prices??[],payouts=buyer?.prices??[];
+      if(prices.length){
+        const max=Math.min(12,prices.length),field=marketText("label","field","จำนวน "+cityItemName(item));
+        const input=document.createElement("input"),quote=marketText("p","note");
+        input.id=id;input.type="number";input.inputMode="numeric";input.min="1";input.max=String(max);
+        input.value=String(cityPositive(draft[id],max)?draft[id]:1);
+        quote.setAttribute("aria-live","polite");
+        input.oninput=()=>{
+          const count=input.valueAsNumber;
+          if(!cityPositive(count,max)){quote.textContent="เลือกจำนวน 1–"+max+" ชิ้น";return;}
+          const total=list=>list.slice(0,count).reduce((sum,price)=>sum+price,0);
+          const cost=total(prices),sold=payouts.length>=count?total(payouts):null;
+          const delta=sold===null?null:sold-cost;
+          quote.textContent="ซื้อ "+count+" ชิ้น · "+cost+" ทอง"+
+            (delta===null?" · ปลายทางยังรับไม่ครบ":" · ขายประมาณ "+sold+" ทอง · ส่วนต่าง "+(delta>0?"+":"")+delta+" ทอง");
+          if(cityMarkets.wallet<cost || cityMarkets.bagSpace<count)quote.textContent+=" · ตรวจทองหรือพื้นที่กระเป๋าก่อนซื้อ";
+        };
+        input.oninput();field.append(input);section.append(field,quote);
+      }
+      const actions=marketText("div","field-actions");
+      for(const [site,action] of [[from,"ปักหมุดไปซื้อ"],[to,"ปักหมุดไปขาย"]]){
+        const button=marketText("button","secondary",action);
+        button.type="button";button.onclick=()=>pinCityTradeRoute(site);
+        actions.append(button);
+      }
+      section.append(actions);panel.append(section);
+    }
+    if(report){
+      const average=report.units?(report.gold/report.units).toLocaleString("th-TH",{maximumFractionDigits:2}):null;
+      panel.append(marketText("p","note","การค้า 7 วัน · ซื้อที่สามลาน "+report.deals+" ดีล · "+report.units+" ชิ้น · ส่งสัญญาสำเร็จ "+report.delivered+" งาน"+
+        (average===null?"":" · เฉลี่ย "+average+" ทอง/ชิ้น")));
+      if(report.lastPurchase){
+        const {at,total,amount}=report.lastPurchase;
+        panel.append(marketText("p","note","ดีลล่าสุด "+amount+" ชิ้น · "+total+" ทอง · "+new Date(at).toLocaleString("th-TH")));
+      }
+    }
+    body.append(panel);
+  }
+  function appendCityTradePin(body,kind){
+    const pin=currentCityTradePin();
+    if(!pin || Boolean(pin.contractId)!==(kind==="contract"))return;
+    const group=marketText("div","field-card"),note=marketText("p","note","หมุดเดินทาง · "+citySiteNames[pin.site]);
+    if(kind==="contract")group.id="cityContractPin";
+    const clear=marketText("button","secondary","ล้างหมุด");
+    clear.type="button";clear.onclick=()=>{cityTradePin=null;renderCityProduction();};
+    group.append(note,clear);body.append(group);
+  }
   function renderCityMarket(){
     const body=$("cityProductionContent"),ready=cityMarketReady(),locked=!!cityPending;
     if(!body)return;
     $("cityRefresh").disabled=!ready;
     $("cityStatus").textContent=cityStatus || (ready?"":"เชื่อมต่อกับตลาดเมืองเพื่อดูราคา");
+    const focused=document.activeElement?.id;
+    cityTradeDraft=cityTradeComparisonDraft() || cityTradeDraft;
     body.replaceChildren();
     const note=(target,label)=>target.append(marketText("p","note",label));
     const button=(target,label,run,disabled=false)=>{
@@ -976,6 +1079,8 @@
     note(body,"ราคาของแต่ละชิ้นอาจเปลี่ยนตามสต็อก");
     const navigation=cityBoardNavigation(body),site=navigation?.site;
     const markets=cityMarketRows();
+    renderCityTradeComparison(body,markets,cityTradeDraft || {});
+    appendCityTradePin(body,"market");
     if(site)markets.sort((a,b)=>Number(b.site===site)-Number(a.site===site));
     for(const market of markets){
       const section=marketText("section","gx-page");body.append(section);
@@ -987,8 +1092,10 @@
       if(cityMarkets.atMarket===market.site && market.prices.length)renderCityMarketTrade(section,market,note,locked);
       else if(market.prices.length){
         note(section,"เข้าใกล้นายหน้าตลาดของเมืองนี้เพื่อซื้อขาย");
-        button(section,"ดูเส้นทาง",()=>navigation?
-          openStrategicMap(market.site,()=>openCityMarket(navigation)):openStrategicMap(market.site));
+        button(section,"ดูเส้นทาง",()=>{
+          const draft=cityTradeComparisonDraft();
+          openStrategicMap(market.site,()=>openCityMarket(navigation,draft));
+        });
       }
       if(market.manage)renderCityMarketManagement(section,market,note,button,locked);
     }
@@ -999,6 +1106,7 @@
     for(const entry of history.slice(0,10))note(body,citySiteNames[entry.site]+" · "+
       (cityMarketPlayerBuys(entry)?"ซื้อ ":"ขาย ")+cityItemName(entry.item??cityProduct)+" "+entry.amount+" ชิ้น · "+
       entry.total+" ทอง · "+new Date(entry.at).toLocaleString("th-TH"));
+    if(focused==="cityTradeOutbound" || focused==="cityTradeReturn")$(focused)?.focus({preventScroll:true});
   }
   function cityBoardNavigation(body){
     const {site}=body.dataset;
@@ -1204,8 +1312,9 @@
           amount,reward,audience:audience.value});
     },locked);
   }
-  function renderCityTradeContracts(sections,contracts,{note,button,route},locked){
-    const {job,manage,source,destination,atMarket,atCity,enabled,paused}=contracts;
+  function renderCityTradeContracts(sections,contracts,{note,button},locked){
+    const {job,manage,source,destination,atMarket,atCity,enabled}=contracts;
+    const paused=cityTradeRoutePaused(contracts);
     if(job){
       const section=cityMissionCard(job.yours?sections.active:sections.open,
         "สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination],"contract");
@@ -1213,6 +1322,7 @@
       note(section,job.name+" · รับรางวัลเมื่อส่งครบ");
       if(job.neutral)note(section,"ซื้อแร่จากตลาดฝากขายสามลาน");
       cityMissionDeadline(section,job.expires);
+      const countdown=marketText("p","note");countdown.id="cityContractCountdown";countdown.dataset.expires=String(job.expires);section.append(countdown);
       if(paused)note(section,"พักรับและส่งสัญญาระหว่างศึก");
       else if(!enabled)note(section,job.yours?"พักสัญญาใหม่ · คุณยังส่งสินค้าตามสัญญาได้":"พักรับสัญญาใหม่");
       const fields={contractId:job.id};
@@ -1220,7 +1330,8 @@
       if(job.yours){
         if(!paused && atMarket!==destination)note(section,"ไปพบนายหน้าตลาดที่"+citySiteNames[destination]+"เพื่อส่งสินค้า");
         button(actions,"ส่งสินค้าตามสัญญา",()=>sendCityProduction("contract_deliver",fields),paused || atMarket!==destination,true);
-        if(atMarket!==destination)button(actions,"ดูเส้นทางส่งสินค้า",()=>route(destination));
+        actions.lastElementChild.dataset.contractDeadline="true";
+        if(atMarket!==destination)button(actions,"ปักหมุดไปส่งสินค้า",()=>pinCityTradeRoute(destination,job));
         button(actions,"คืนสัญญาจัดซื้อ",()=>sendCityProduction("contract_abandon",fields));
       }else if(job.carrying)note(section,"มีพ่อค้ารับสัญญาแล้ว");
       else if(enabled && !paused){
@@ -1230,8 +1341,9 @@
           note(section,"ซื้อที่ต้นทาง "+job.total+" ทอง · ส่วนต่าง "+(difference>0?"+":"")+difference+" ทอง");
           button(actions,"ซื้อแร่และรับสัญญา",()=>sendCityProduction("contract_accept",{...fields,total:job.total}),
             atMarket!==source,true);
+          actions.lastElementChild.dataset.contractDeadline="true";
         }
-        if(atMarket!==source)button(actions,"ดูเส้นทางไปซื้อแร่",()=>route(source));
+        if(atMarket!==source)button(actions,"ปักหมุดไปซื้อแร่",()=>pinCityTradeRoute(source,job));
       }
       if(job.canCancel)button(actions,"ปิดสัญญาจัดซื้อ",()=>sendCityProduction("contract_cancel",fields),atCity!==destination);
       if(actions.children.length)section.append(actions);
@@ -1248,7 +1360,21 @@
         sendCityProduction("contract_open",{epoch:manage.epoch,amount,gold});
     },locked);
   }
-    function renderCityMission(){
+  function updateCityContractDeadline(){
+    const node=$("cityContractCountdown");
+    if(!node)return;
+    const seconds=Math.max(0,Math.ceil((Number(node.dataset.expires)-cityTradeNow())/1000));
+    if(!Number.isFinite(seconds))return;
+    const text=seconds?"หมดอายุใน "+Math.floor(seconds/3600)+" ชม. "+Math.floor(seconds%3600/60)+" นาที "+seconds%60+" วิ":"สัญญาถึงกำหนดแล้ว";
+    if(node.textContent===text)return;
+    node.textContent=text;
+    if(!seconds){
+      for(const control of node.parentElement.querySelectorAll("[data-contract-deadline]"))control.disabled=true;
+      const pin=$("cityContractPin");
+      if(pin && !currentCityTradePin())pin.hidden=true;
+    }
+  }
+  function renderCityMission(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
     if(!body)return;
     $("cityRefresh").disabled=!ready;
@@ -1300,6 +1426,7 @@
     panel.append(sections.active,sections.open);
     if(sections.manage.children.length>1)panel.append(sections.manage);
     body.append(panel);
+    appendCityTradePin(body,"contract");updateCityContractDeadline();
     const restored=focusId && $(focusId);
     if(restored && !restored.disabled && $("cityMissionPost").dataset.epoch===draft.epoch)
       restored.focus({preventScroll:true});
