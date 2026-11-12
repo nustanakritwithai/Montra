@@ -272,10 +272,10 @@ test("the fishing icon keeps its image across casting, cancelling and collecting
   check("collect","รับปลาที่จับได้");
 });
 
-test("water actions reference distinct packaged WebP icons",()=>{
+test("water actions reference packaged WebP icons and share the boat access artwork",()=>{
   const html=readFileSync(resolve(root,"index.html"),"utf8");
   assert.match(html, /<button id="boatLaunch"[^>]*aria-label="เรียกเรือ"[^>]*title="เรียกเรือ"/);
-  const icons={boatLaunch:"boat-launch",boatBoard:"boat-board",boatHelm:"boat-paddle",fishButton:"fishing-rod"};
+  const icons={boatLaunch:"boat-launch",boatBoard:"boat-board",boatExit:"boat-board",boatHelm:"boat-paddle",fishButton:"fishing-rod"};
   for(const [id,name] of Object.entries(icons)){
     const asset="assets/ui/"+name+".webp";
     const markup=html.match(new RegExp('<button id="'+id+'"[^>]*>[^<]*<img src="([^"]+)"[^>]*></button>'));
@@ -299,14 +299,15 @@ test("disembarking is available away from the docks once the boat stops",()=>{
   assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"exit"});
 });
 
-test("boarding and disembarking alternate in one fixed-size slot",()=>{
+test("boarding and disembarking alternate in one compact circular slot",()=>{
   const html=readFileSync(resolve(root,"index.html"),"utf8");
   const accessMarkup=html.match(/<div id="boatAccess"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
-  assert.match(accessMarkup, /<button id="boatBoard"/);
-  assert.match(accessMarkup, /<button id="boatExit"/);
+  assert.match(accessMarkup, /<button id="boatBoard"[^>]*aria-label="ขึ้นเรือ"/);
+  assert.match(accessMarkup, /<button id="boatExit"[^>]*aria-label="ลงจากเรือ"/);
   const css=readFileSync(resolve(root,"src/styles/hud/016-field-layout-and-account.css"),"utf8");
   assert.match(css, /\.boat-access:not\(\[hidden\]\)\s*\{[^}]*width:44px; height:44px/);
   assert.match(css, /\.boat-access > \.warp-button\s*\{[^}]*grid-area:1 \/ 1/);
+  assert.match(css, /\.boat-access > \.warp-button::before\s*\{[^}]*inset:6px;[^}]*border-radius:50%/);
 
   const f=fixture();
   const access=f.buttons.get("boatAccess");
