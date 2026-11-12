@@ -74,13 +74,14 @@ function toWorld(boat: BoatWorldSnapshot, point: Vec2): WorldPoint {
 
 function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null {
   const map = getWorldMap(boat.islandId)!;
+  const eye = {x:point.x,y:point.y+1,z:point.z};
   for (let r = .5; r <= 4.5; r += .5) {
     for (let i = 0; i < 16; i++) {
       const a = i * Math.PI / 8;
       const x = point.x + Math.cos(a)*r, z = point.z + Math.sin(a)*r;
       const y = groundAt(map.id, x, z);
       if (!inWater(map.id, x, z) && isSafeWorldPoint(map, {x,y,z}) &&
-          Math.abs(y-point.y) <= 1.3 && provinceShotClear(map, {...point,y:point.y+1}, {x,y:y+1,z})) {
+          Math.abs(y-point.y) <= 1.3 && provinceShotClear(map, eye, {x,y:y+1,z})) {
         return {x,y,z};
       }
     }

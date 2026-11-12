@@ -119,10 +119,16 @@ try {
   assert.equal(me(passenger).boatId,boatId);
   assert.ok(Math.hypot(attacker.x-deck.x,attacker.z-deck.z)<.4,"attack does not chase off the deck");
 
+  command(passenger,"exit");
+  await until(()=>!me(passenger).boatId && me(passenger).z<river.z,"disembark to the bank");
+  const passengerShore = me(passenger).z;
+  command(passenger,"board",{boatId});
+  await until(()=>me(passenger).boatId===boatId,"board again from the bank");
+
   await pilot.leave();
   clients.delete(pilot);
   await until(()=>!me(passenger).boatId && !passenger.state.boats.has(boatId),"owner disconnect removes ship and returns rider to shore");
-  assert.ok(Math.abs(me(passenger).z-BOAT_SHORES.ritual_village.z)<1);
+  assert.ok(Math.abs(me(passenger).z-passengerShore)<.1);
   const {room:rejoined} = observe(await sdk.joinById(passenger.roomId,pilotOptions));
   await until(()=>me(rejoined) && !me(rejoined).boatId,"pilot reconnect");
   assert.ok(Math.abs(me(rejoined).z-pilotShore)<.1,"the pilot reconnects on the bank used to board");
