@@ -79,13 +79,24 @@ const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z+2],
 // around transfer pads and fort walls so the river crosses the map without opening land defenses.
 const canals:Readonly<Record<string,CanalLayout>>={
   ritual_village:{
-    bounds:{maxZ:84},
-    channels:[[[-53,54],[53,54]],[[22,-53],[22,54]],[[0,54],[0,72]],[[-53,72],[53,72]]],
-    gates:[[-53,54],[22,-53],[53,54]],dockName:"ท่ากลางหมู่บ้าน",
+    bounds:{minX:-94,maxX:94,minZ:-76,maxZ:116},
+    channels:[
+      [[-53,54],[53,54]],[[22,-63],[22,54]],[[0,54],[0,94]],
+      [[-72,80],[-58,80],[-58,94],[58,94],[58,80],[72,80]],
+    ],
+    basins:[
+      {x:10,z:-74,width:25,length:14}, // forest mouth, north of the dry city gate
+      {x:-87,z:62,width:21,length:37},{x:66,z:62,width:21,length:37},
+      {x:-81,z:84,width:162,length:19},{x:-68,z:98,width:136,length:10},
+      {x:-50,z:105,width:100,length:4},
+    ],
+    gates:[[-72,80],[22,-63],[72,80]],dockName:"ท่ากลางหมู่บ้าน",
     ports:[
       {id:"village_fields",name:"ท่าริมนา",shore:[-49,46],berth:[-49,51],direction:[1,0]},
       {id:"village_market",name:"ท่าตลาดใต้",shore:[49,46],berth:[49,51],direction:[-1,0]},
+      {id:"village_south_bend",name:"ท่าพักคุ้งใต้",shore:[32,112],berth:[32,104],direction:[1,0]},
     ],
+    shorePaths:[[[49,46],[55,42],[84,42],[91,50],[91,101],[86,112],[66,113],[32,113],[32,112]]],
   },
   drowned_marsh:{
     bounds:{minX:-144},

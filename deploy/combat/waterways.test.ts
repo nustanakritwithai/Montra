@@ -41,6 +41,36 @@ test("all enabled maps have a river across their terrain and separated two-way w
   assert.deepEqual([...seen].sort(),Object.keys(WORLD_MAPS).sort());
 });
 
+test("the village bend has room to turn and approach gates, with a dry path to its new port",()=>{
+  const map=WORLD_MAPS.ritual_village;
+  const canSail=(x:number,z:number)=>boatCanSail(map.id,x,z,2.6);
+  assert.deepEqual(map.bounds,{minX:-94,maxX:94,minZ:-76,maxZ:116});
+  // Sample both banks of the turning basin and keep two parallel passing lines clear.
+  for(let i=0;i<32;i++){
+    const angle=i*Math.PI/16;
+    assert.ok(canSail(Math.cos(angle)*13,92+Math.sin(angle)*13),"26-unit turning basin");
+  }
+  for(let x=-58;x<=58;x++)for(const z of [84,98])assert.ok(canSail(x,z),`passing lane ${x},${z}`);
+  for(const gate of map.waterGates!){
+    if(gate.targetMapId==="forbidden_forest"){
+      for(let x=13;x<=31;x++)assert.ok(canSail(x,gate.z),"wide forest mouth");
+    }else{
+      for(let n=0;n<=12;n++)assert.ok(canSail(gate.x+Math.sign(gate.x)*n,gate.z),gate.id+" outside maneuvering room");
+    }
+  }
+  const path=map.paths!.at(-1)!;
+  const port=map.boatPorts!.find(p=>p.id==="village_south_bend")!;
+  assert.deepEqual(path.at(-1),port.shore);
+  for(const [i,a] of path.slice(0,-1).entries()){
+    const b=path[i+1],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
+    for(let j=0;j<=steps;j++){
+      const x=a.x+(b.x-a.x)*j/steps,z=a.z+(b.z-a.z)*j/steps;
+      assert.equal(waterDepthAt(map,x,z),0,`dry path ${x},${z}`);
+      assert.ok(isSafeWorldPoint(map,{x,y:groundAt(map.id,x,z),z}),`walkable path ${x},${z}`);
+    }
+  }
+});
+
 test("every port launches a boardable boat and returns both riders to its bank",()=>{
   const ids=new Set<string>();
   for(const map of Object.values(WORLD_MAPS))for(const port of map.boatPorts??[]){
@@ -63,7 +93,7 @@ test("every port launches a boardable boat and returns both riders to its bank",
       assert.deepEqual({x:player.x,y:player.y,z:player.z},shore,port.id+" landing");
     }
   }
-  assert.equal(ids.size,Object.keys(WORLD_MAPS).length+13);
+  assert.equal(ids.size,Object.keys(WORLD_MAPS).length+14);
 });
 
 test("a stopped boat can turn 180 degrees in under three seconds without drifting",()=>{

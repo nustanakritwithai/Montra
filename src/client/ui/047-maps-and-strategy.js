@@ -149,6 +149,10 @@
       for (let z = Math.ceil(bounds.minZ / step) * step; z <= bounds.maxZ; z += step) { ctx.moveTo(left, sy(z)); ctx.lineTo(left + w, sy(z)); }
       ctx.stroke();
     }
+    const trail = (width_, color) => {
+      ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
+      for (const path of map?.paths || []) { ctx.beginPath(); (map.id === "ritual_village" || map.strategic || map.huntTrail ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
+    };
     if(map?.waterLevel!==undefined)drawMapWater(ctx,map,sx(0),sy(0),scale);
     if (activeMapId === "ritual_village") {
       for (const area of map?.waterLevel===undefined ? villageWaters : []) {
@@ -163,6 +167,7 @@
           ctx.beginPath(); ctx.moveTo(sx(mid - 1.4), sy(z)); ctx.lineTo(sx(mid + 1.4), sy(z)); ctx.stroke();
         }
       }
+      if(map?.paths?.length)trail(Math.max(1.5,4*scale),"#8f7a5a");
       ctx.fillStyle = "#5a3e2b"; ctx.fillRect(sx(-5.55), sy(-18), sx(5.55) - sx(-5.55), sy(18)-sy(-18));
       if (large) {
         ctx.strokeStyle = "rgba(20,12,8,.45)"; ctx.lineWidth = 1; ctx.beginPath();
@@ -192,11 +197,6 @@
       }
       mapDot(ctx, sx(1.1), sy(10.4), large ? 5.5 : 3, "#e15855", "#3a0d0d", "#ff4a3a");
     } else {
-      // Trails: dark verge, packed earth, faint centre line.
-      const trail = (width_, color) => {
-        ctx.strokeStyle = color; ctx.lineWidth = width_; ctx.lineCap = "round"; ctx.lineJoin = "round";
-        for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic || map.huntTrail ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
-      };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
       for (const pool of map?.waterLevel===undefined ? map?.water||[] : []) {
         ctx.fillStyle = theme.water || "#14384b"; ctx.fillRect(sx(pool.x), sy(pool.z), pool.width * scale, pool.length * scale);
