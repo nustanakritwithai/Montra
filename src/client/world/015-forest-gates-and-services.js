@@ -207,7 +207,10 @@
   function makePortal(mapId, parent, override) {
     const info=override||portals[mapId];
     const root=new B.TransformNode("spirit gate "+info.id,scene);root.position.set(info.x,info.groundY||0,info.z);if(parent)root.parent=parent;
-    if(mapId==="mantra_capital"){root.scaling.y=.48;if(Math.abs(info.x)>30)root.rotation.y=Math.PI/2;}
+    if(mapId==="mantra_capital"){
+      root.scaling.set(.5,.48,.38);
+      if(Math.abs(info.x)>30)root.rotation.y=Math.PI/2;
+    }
     const part=(mesh,x,y,z,material)=>{mesh.parent=root;mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;return mesh;};
     const box=(x,y,z,w,h,d,material)=>part(B.MeshBuilder.CreateBox("spirit gate",{width:w,height:h,depth:d},scene),x,y,z,material);
     const cone=(x,y,z,h,b,t,material,sides=6)=>part(B.MeshBuilder.CreateCylinder("spirit gate",{height:h,diameterBottom:b,diameterTop:t,tessellation:sides},scene),x,y,z,material);

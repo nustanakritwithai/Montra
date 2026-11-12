@@ -102,6 +102,7 @@ const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
+export const CAPITAL_WARP_POINTS={south:[-2,30],west:[-37,-10],north:[-5,-62],east:[37,-10]} as const;
 export const CAPITAL_SIEGE={
   moat:CAPITAL_MOAT,
   entry:site("fort","จุดสมัครศึกนคร",-4,-14),
@@ -160,7 +161,11 @@ const hubs:Record<string,Hub>={
     paths:trails([[0,56],[4,50],[4,26],[0,22],[0,-14],[0,-58],[0,-87]],[[-62,-14],[-34,-14],[0,-14],[34,-14],[62,-14]],
       [[0,12],[-17,8],[-22,-14],[-16,-32],[0,-40],[18,-32],[22,-14],[18,8],[0,12]],
       [[-62,-87],[0,-87],[62,-87],[62,56],[0,56],[-62,56],[-62,-87]],
-      [[-67,-16],[-62,-16]],[[67,-16],[62,-16]]),
+      [[-67,-16],[-62,-16]],[[67,-16],[62,-16]],
+      [[0,26],CAPITAL_WARP_POINTS.south],
+      [[-34,-14],[-34,-10],CAPITAL_WARP_POINTS.west],
+      [[0,-58],[-4,-58],[-4,-60],CAPITAL_WARP_POINTS.north],
+      [[34,-14],[34,-10],CAPITAL_WARP_POINTS.east]),
     walls:[wall(-16,-45,6,5),wall(10,-45,6,5),wall(-15,-4,7,3),wall(9,-5,7,4),wall(24,-25,4,4),
       wall(-29,-93,8,2),wall(21,-93,8,2),wall(-29,61,8,2),wall(21,61,8,2),
       wall(-68,-41,2,9),wall(66,-41,2,9),wall(-68,22,2,9),wall(66,22,2,9)],obstacles:[]},

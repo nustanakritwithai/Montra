@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {ATLAS_MAPS, ATLAS_SPAWNS, HIMMAPAN_SPAWNS, RIFT_WARDEN} from "./WorldAtlas.js";
-import {WORLD_MAPS, isRestArea, isSafeWorldPoint, isWorldSegmentClear, getSafeMapSpawn, provinceShotClear} from "./WorldMaps.js";
+import {WORLD_MAPS, isRestArea, isSafeWorldPoint, isWorldSegmentClear, getSafeMapSpawn, provinceShotClear, walkBridgeAt, walkBridgeTransitionClear} from "./WorldMaps.js";
 import {crestCorners} from "./StrategicProvinces.js";
 import {parseAttackCommand} from "./GameRules.js";
 import {checkWarp} from "./WarpRules.js";
@@ -10,6 +10,46 @@ import {MyRoomState,Player} from "./schema/MyRoomState.js";
 import {partyMonsterShares} from "./PartyMonsterRewards.js";
 import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import {groundAt} from "./WorldMaps.js";
+import {waterDepthAt} from "./GroundTerrain.js";
+
+test("capital warps and both ends of their approach are on dry ground outside the wall",()=>{
+  const city=WORLD_MAPS.mantra_capital,deck=city.strategic!.rampart!.deck;
+  const oldGates:Record<string,{x:number;z:number}>={
+    ritual_village:{x:0,z:26},bamboo_frontier:{x:-34,z:-14},moon_pass:{x:0,z:-58},lotus_basin:{x:34,z:-14},
+  };
+  const minX=Math.min(...deck.map(w=>w.x)),maxX=Math.max(...deck.map(w=>w.x+w.width));
+  const minZ=Math.min(...deck.map(w=>w.z)),maxZ=Math.max(...deck.map(w=>w.z+w.length));
+  const onBank=(p:{x:number;z:number})=>(p.x<minX||p.x>maxX||p.z<minZ||p.z>maxZ) &&
+    waterDepthAt(city,p.x,p.z)===0 && !walkBridgeAt(city,p.x,p.z);
+  const check=(mapId:string,p:{x:number;z:number},portalId:string)=>checkWarp({portalId},{
+    mapId,position:{...p,y:groundAt(mapId,p.x,p.z)},alive:true,flying:false,climbing:false,dashing:false,
+    changingHeight:false,lastCombatMs:-Infinity,lastWarpMs:-Infinity,nowMs:6000,
+  });
+  assert.equal(city.portals.length,4);
+  for(const portal of city.portals){
+    const other=WORLD_MAPS[portal.targetMapId],incoming=other.portals.find(p=>p.targetMapId===city.id)!;
+    assert.ok(incoming,portal.id);
+    for(const p of [portal,incoming.targetSpawn]){
+      assert.ok(onBank(p),portal.id);
+      assert.ok(isSafeWorldPoint(city,{...p,y:groundAt(city.id,p.x,p.z)}),portal.id);
+    }
+    const fromOld=check(city.id,oldGates[other.id],portal.id);
+    assert.deepEqual(fromOld,{ok:false,reason:"portal_too_far"},portal.id);
+    assert.ok(check(other.id,incoming,incoming.id).ok,incoming.id);
+    assert.ok(check(city.id,incoming.targetSpawn,portal.id).ok,portal.id);
+    const approach=city.paths!.find(path=>path.at(-1)!.x===portal.x&&path.at(-1)!.z===portal.z)!;
+    assert.ok(approach,portal.id);
+    for(let i=1;i<approach.length;i++){
+      const a=approach[i-1],b=approach[i],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)*5);
+      assert.ok(walkBridgeTransitionClear(city,a,b.x,b.z),portal.id);
+      for(let j=0;j<=steps;j++){
+        const t=j/steps,x=a.x+(b.x-a.x)*t,z=a.z+(b.z-a.z)*t;
+        assert.equal(waterDepthAt(city,x,z),0,portal.id);
+        assert.ok(isSafeWorldPoint(city,{x,y:groundAt(city.id,x,z),z}),portal.id);
+      }
+    }
+  }
+});
 
 test("all sixteen maps connect to the village and every gate has a safe return",()=>{
   const seen=new Set<string>(),queue=["ritual_village"];

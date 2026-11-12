@@ -2,7 +2,7 @@ import type { HuntCamp, RestArea, WorldMapDefinition, WorldPortal, WorldWall } f
 import type { MonsterHabitat } from "./MonsterHabitat.js";
 
 import { atlasRelief } from "./AtlasRelief.js";
-import { PROVINCES } from "./StrategicProvinces.js";
+import { CAPITAL_WARP_POINTS, PROVINCES } from "./StrategicProvinces.js";
 import {CASTLE_ENABLED, CASTLE_ID} from "./CastlePilot.js";
 import {RIDGE_ENABLED,RIDGE_PASS,ridgeTerrain,groundSample} from "./GroundTerrain.js";
 import {RIVER_CITY,riverNodes} from "./RiverCity.js";
@@ -127,13 +127,13 @@ const edges:readonly (readonly [GateEnd,GateEnd])[]=[
   [["forbidden_forest",48,-84],["drowned_marsh",0,26]],
   [["bound_temple",32,-65],["moon_cemetery",-18,25]],
   [["drowned_marsh",0,-58],["moon_cemetery",18,25]],
-  [["ritual_village",10,-56],["mantra_capital",0,26]],
-  [["mantra_capital",-34,-14],["bamboo_frontier",0,26]],
+  [["ritual_village",10,-56],["mantra_capital",...CAPITAL_WARP_POINTS.south]],
+  [["mantra_capital",...CAPITAL_WARP_POINTS.west],["bamboo_frontier",0,26]],
   [["bamboo_frontier",0,-58],["moon_cemetery",-34,12]],
   [["moon_cemetery",0,-58],["moon_pass",0,26]],
   [["moon_pass",0,-58],["hex_ridge",0,26]],
-  [["mantra_capital",0,-58],["moon_pass",-34,6]],
-  [["mantra_capital",34,-14],["lotus_basin",0,26]],
+  [["mantra_capital",...CAPITAL_WARP_POINTS.north],["moon_pass",-34,6]],
+  [["mantra_capital",...CAPITAL_WARP_POINTS.east],["lotus_basin",0,26]],
   [["lotus_basin",0,-58],["river_watch",34,-14]],
   ...(RIDGE_ENABLED ? [ [["hex_ridge",14,-66],[RIDGE_PASS,0,76]], [[RIDGE_PASS,0,-52],["naga_cavern",-10,26]] ] as const : []),
   [["hex_ridge",0,-58],["naga_cavern",0,26]],

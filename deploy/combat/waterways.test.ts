@@ -45,12 +45,15 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
       assert.equal(segmentIntersectsExpandedWall(berth,berth,footprint,BOAT_BOARD_RANGE),false,id+" berth vs "+b.id);
     }
   }
-  const routes=map.paths!.slice(3),moat=CAPITAL_SIEGE.moat;
+  const moat=CAPITAL_SIEGE.moat;
+  const outside=(p:{x:number;z:number})=>p.x<moat.minX || p.x>moat.maxX || p.z<moat.minZ || p.z>moat.maxZ;
+  const routes=map.paths!.filter(route=>route.every(outside));
+  assert.ok(routes.some(route=>route.length>=7 && route[0].x===route.at(-1)!.x && route[0].z===route.at(-1)!.z));
   for(const route of routes)for(let i=1;i<route.length;i++){
     const a=route[i-1],b=route[i],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)*2);
     for(let step=0;step<=steps;step++){
       const t=step/steps,p=feet(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t);
-      assert.ok(p.x<moat.minX || p.x>moat.maxX || p.z<moat.minZ || p.z>moat.maxZ);
+      assert.ok(outside(p));
       assert.equal(waterDepthAt(map,p.x,p.z),0);
       assert.ok(isSafeWorldPoint(map,p),"unsafe outer road at "+p.x+","+p.z);
     }
