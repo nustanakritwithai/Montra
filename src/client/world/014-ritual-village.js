@@ -93,6 +93,14 @@
     }
     return y + rise;
   }
+  function villageGateRoof(x, y, z, width, depth) {
+    const frame = new B.TransformNode("village gate roof", scene);
+    frame.position.set(x, y, z);
+    frame.rotation.y = -Math.PI / 2; // The ridge runs along the gate lintel on X.
+    thaiRoof(0, 0, 0, depth, width, .7, frame);
+    for (const part of frame.getChildMeshes(true)) part.setParent(null);
+    frame.dispose();
+  }
   // Teak house raised on stilts over the canal, veranda facing the boardwalk.
   function house(x, z, size = 3.4, veranda = true) {
     const sign = Math.sign(x), front = x - sign * (size / 2);
@@ -209,7 +217,7 @@
   }
   vbox("gate lintel", 0, 4.2, -19.4, 12.6, .3, .5, darkWood);
   vbox("gate plaque", 0, 3.75, -19.4, 2.4, .6, .1, gold);
-  thaiRoof(0, 4.4, -19.4, 1.6, 13.2, .7);
+  villageGateRoof(0, 4.4, -19.4, 13.2, 1.6);
   // Trees framing the quarter: Thai village trees along the canals — tamarind, sugar palm and coconut,
   // with a sacred bodhi wrapped in the three-colour cloth on each bank.
   const villageTreeNodes = []; // re-seated on the ground by alignVillage when the village sits on terrain
@@ -346,7 +354,7 @@
   for (const gx of [-10, 10]) {
     for (const dx of [-3.2, 3.2]) { vbox("outer gate post", gx + dx, 2.4, -58, .5, 4.8, .5, clothRed); vbox("outer gate base", gx + dx, .3, -58, .8, .6, .8, darkWood); }
     vbox("outer gate lintel", gx, 4.6, -58, 7.4, .3, .5, darkWood); vbox("outer gate plaque", gx, 4.1, -57.7, 2.2, .55, .1, gold);
-    thaiRoof(gx, 4.8, -58, 1.4, 7.8, .7);
+    villageGateRoof(gx, 4.8, -58, 7.8, 1.4);
   }
 
   // Market (ตลาดริมคลอง): paved square, two rows of awning stalls, a hall, a smithy and two storehouses.
