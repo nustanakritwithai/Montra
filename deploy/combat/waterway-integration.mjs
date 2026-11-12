@@ -16,7 +16,7 @@ process.env.MONTRA_ACCOUNTS_REQUIRED="0";
 process.env.MONTRA_BOATS_ENABLED="1";
 const {defineServer,defineRoom}=await import("colyseus");
 const {MyRoom}=await import("./src/rooms/MyRoom.ts");
-const {getWorldMap,groundAt}=await import("./src/rooms/WorldMaps.ts");
+const {getWorldMap,groundAt,WORLD_MAPS}=await import("./src/rooms/WorldMaps.ts");
 const {characterStore}=await import("./src/rooms/CharacterStore.ts");
 const village=getWorldMap("ritual_village"),marsh=getWorldMap("drowned_marsh");
 const toMarsh=village.waterGates.find(gate=>gate.targetMapId===marsh.id);
@@ -64,15 +64,23 @@ async function rejected(info,action,fields,reason){
 }
 
 const core=await readFile(new URL("../../src/client/core/059-frame-loop-and-startup.js",import.meta.url),"utf8");
+const terrain=await readFile(new URL("../../src/client/world/017-region-terrain.js",import.meta.url),"utf8");
+const waterSource=terrain.slice(terrain.indexOf("  function terrainCell"),terrain.indexOf("  // ---- Ground patches"))+
+  terrain.slice(terrain.indexOf("  function terrainHeight"),terrain.indexOf("  const waterPolygons"));
+const courseSource=core.slice(core.indexOf("  function sailingCourse"),core.indexOf("  function setSailingDestination"));
 const steeringSource=core.slice(core.indexOf("  function wrapSailingAngle"),core.indexOf('  $("boatLaunch")'));
+const findCourse=runInNewContext(waterSource+courseSource+"\nsailingCourse;");
 function navigator(point,boat){
-  const scope={sailingDestination:{x:point.x,z:point.z,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
+  const map=getWorldMap(boat.mapId),course=findCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
+  assert.ok(course.length,"navigable course to "+JSON.stringify(point));
+  const scope={sailingDestination:{x:point.x,z:point.z,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
     clearSailingDestination(){scope.sailingDestination=null;}};
   return runInNewContext(steeringSource+"\nsailingInputForDestination;",scope);
 }
 async function sail(room,id,point){
-  const steer=navigator(point,boats(room).get(id)),start=Date.now();
-  while(Date.now()-start<26000){
+  const boat=boats(room).get(id),steer=navigator(point,boat),start=Date.now();
+  const budget=Math.max(30000,Math.hypot(boat.x-point.x,boat.z-point.z)*450+15000);
+  while(Date.now()-start<budget){
     const boat=boats(room).get(id);
     if(Math.hypot(boat.x-point.x,boat.z-point.z)<2.5)return;
     command(room,"input",{...steer(boat,Date.now()-start),anchor:false,passage:boat.passage});
@@ -96,6 +104,13 @@ function localDeck(player,boat){
 }
 const passengerOptions=opts();
 try{
+  for(const map of Object.values(WORLD_MAPS)){
+    const definition={...map,boatDock:{deck:{length:5.2}}};
+    const points=[map.boatHarbor.berth,...map.waterGates];
+    for(const from of points)for(const to of points)if(from!==to)
+      assert.ok(findCourse(definition,from,to).length, map.id+" course "+JSON.stringify({from,to}));
+  }
+  console.log("PASS client sailing routes between all docks and gates");
   const pilot=observe(await sdk.create("my_room",opts()));
   const passenger=observe(await sdk.joinById(pilot.room.roomId,passengerOptions));
   const blocker=observe(await sdk.joinById(pilot.room.roomId,{...opts(),marsh:true}));
@@ -135,6 +150,23 @@ try{
   await rejected(pilot,"input",{throttle:1,steer:0,anchor:false,passage:0},"boat_action_unavailable");
   assert.equal(boat().speed,0);
 
+  const lotus=getWorldMap("lotus_basin");
+  const toLotus=marsh.waterGates.find(gate=>gate.targetMapId===lotus.id);
+  const backToMarsh=lotus.waterGates.find(gate=>gate.targetMapId===marsh.id);
+  assert.ok(Math.hypot(boat().x-toLotus.x,boat().z-toLotus.z)>160);
+  await sail(pilot.room,id,toLotus);
+  command(pilot.room,"warp",{gateId:toLotus.id});
+  await until(()=>boat()?.mapId===lotus.id && me(passenger.room).mapId===lotus.id,
+    "same crew sails across the marsh and enters Lotus Basin");
+  assert.equal(boat().passage,2);
+  assert.equal(boat().hp,hp);
+  assert.equal(boat().helmId,pilot.room.sessionId);
+  await wait(3200);
+  command(pilot.room,"warp",{gateId:backToMarsh.id});
+  await until(()=>boat()?.mapId===marsh.id && me(passenger.room).mapId===marsh.id,
+    "crew returns through the eastern marsh gate");
+  assert.equal(boat().passage,3);
+
   // Rejoining immediately after a confirmed crossing places the passenger on the new bank.
   await leave(passenger.room);
   const rejoined=observe(await sdk.joinById(pilot.room.roomId,passengerOptions));
@@ -144,14 +176,14 @@ try{
 
   const turn={x:toVillage.x,z:toVillage.z+8};
   await sail(pilot.room,id,turn);
-  assert.ok(boat().z>toVillage.z+5 && boat().passage===1);
+  assert.ok(boat().z>toVillage.z+5 && boat().passage===3);
   await sail(pilot.room,id,toVillage);
   command(pilot.room,"warp",{gateId:toVillage.id});
   await until(()=>boat()?.mapId===village.id && me(pilot.room).mapId===village.id,"same boat returns to the village");
-  assert.equal(boat().passage,2);
+  assert.equal(boat().passage,4);
   assert.equal(boat().hp,hp);
   assert.equal(boats(pilot.room).size,1);
-  console.log("PASS waterways: sailing to gates, occupied berth, save failure, two riders, preserved hull and helm, stale input, reconnect and return");
+  console.log("PASS waterways: sailing to gates, occupied berth, save failure, two riders, preserved hull and helm, stale input, full marsh crossing, reconnect and return");
 }catch(error){
   console.error(error);
   process.exitCode=1;

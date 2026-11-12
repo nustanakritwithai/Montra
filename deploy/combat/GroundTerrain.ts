@@ -66,6 +66,7 @@ export function waterTerrain(map:WorldMapDefinition) {
   const {minX,maxX,minZ,maxZ}=map.bounds;
   const cuts=(axis:"x"|"z",min:number,max:number,existing:number[]|undefined)=>{
     const points=new Set([min,max,...existing??[]]);
+    for(const lane of map.boatLanes??[])for(const point of lane)points.add(point[axis]);
     for(const area of waters){
       const start=area[axis],size=axis==="x"?area.width:area.length,inset=Math.min(1.25,size/4);
       for(const p of [start,start+inset,start+size/2,start+size-inset,start+size]){

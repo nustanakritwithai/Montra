@@ -1189,6 +1189,12 @@
           route.textContent="ทางน้ำ · "+waterPath.map(key=>maps[key].name).join(" → ")+
             " · ประตูแรก ("+next.x+", "+next.z+")";
           detail.append(route);
+          if(boatAtHelm()){
+            const navigate=document.createElement("button");navigate.type="button";navigate.className="secondary";
+            navigate.textContent="ล่องไป "+maps[next.targetMapId].name;
+            navigate.onclick=()=>{if(sailThroughGate(next.id))closeDrawer();};
+            detail.append(navigate);
+          }
         }
       }
       if(room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,id)){

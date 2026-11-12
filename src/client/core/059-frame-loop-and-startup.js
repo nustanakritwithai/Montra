@@ -60,12 +60,62 @@
   function sailThroughGate(id) {
     if(!boatAtHelm()){toast("จับหางเสือก่อนผ่านประตูน้ำ");return;}
     const map=worldDefinitions?.[activeMapId],gate=map?.waterGates?.find(entry=>entry.id===id);
-    if(gate)setSailingDestination(gate,map.waterLevel,gate);
+    if(gate)return setSailingDestination(gate,map.waterLevel,gate);
+  }
+  function sailingCourse(map,start,end) {
+    if(!map.boatLanes?.length)return [end];
+    const radius=map.boatDock.deck.length/2, bounds=map.bounds;
+    const rim=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8)*radius,Math.sin(i*Math.PI/8)*radius]);
+    const gap=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
+    const clear=(a,b)=>{
+      const steps=Math.max(1,Math.ceil(gap(a,b)));
+      for(let i=0;i<=steps;i++){
+        const x=a.x+(b.x-a.x)*i/steps,z=a.z+(b.z-a.z)*i/steps;
+        if(x-radius<bounds.minX || x+radius>bounds.maxX || z-radius<bounds.minZ || z+radius>bounds.maxZ ||
+            worldWaterDepth(map,x,z)<.45 || map.obstacles?.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+radius))return false;
+        if(!rim.every(([dx,dz])=>{
+          const px=x+dx,pz=z+dz;
+          return worldWaterDepth(map,px,pz)>0 && !map.walls?.some(w=>px>=w.x && px<=w.x+w.width && pz>=w.z && pz<=w.z+w.length);
+        }))return false;
+      }
+      return true;
+    };
+    if(clear(start,end))return [end];
+    const points=[start,end];
+    function add(p){if(!points.some(q=>gap(p,q)<.01))points.push(p);}
+    for(const [a,b] of map.boatLanes){
+      add(a);add(b);
+      const dx=b.x-a.x,dz=b.z-a.z;
+      for(const p of [start,end]){
+        const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz)));
+        add({x:a.x+t*dx,z:a.z+t*dz});
+      }
+    }
+    const remaining=new Set(points.keys()),distance=points.map(()=>Infinity),from=[];
+    distance[0]=0;
+    while(remaining.size){
+      let i=-1;
+      for(const index of remaining)if(i<0 || distance[index]<distance[i])i=index;
+      if(!Number.isFinite(distance[i]))return [];
+      if(i===1){
+        const course=[];
+        for(let step=i;step!==0;step=from[step])course.push(points[step]);
+        return course.reverse();
+      }
+      remaining.delete(i);
+      for(const j of remaining){
+        const length=distance[i]+gap(points[i],points[j]);
+        if(length<distance[j] && clear(points[i],points[j])){distance[j]=length;from[j]=i;}
+      }
+    }
+    return [];
   }
   function setSailingDestination(point,waterY,gate) {
+    const boat = ownBoatState(),map=worldDefinitions[activeMapId];
+    const course=sailingCourse(map,boat,point);
+    if(!course.length){toast("ไม่พบร่องน้ำไปยังจุดนี้");return false;}
     cancelQuestNavigation("",false);
-    const boat = ownBoatState();
-    sailingDestination = {x:point.x,z:point.z,gate,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    sailingDestination = {x:point.x,z:point.z,gate,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
     if (!sailingMarker) {
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
@@ -73,6 +123,7 @@
     sailingMarker.position.set(point.x,waterY+.15,point.z);
     sailingMarker.setEnabled(true);
     requestedBoatAnchor = false;
+    return true;
   }
   function wrapSailingAngle(angle) {
     return Math.atan2(Math.sin(angle),Math.cos(angle));
@@ -80,9 +131,15 @@
   function sailingInputForDestination(boat, now) {
     const goal = sailingDestination;
     if (!goal) return {throttle:0,steer:0};
-    const dx = goal.x-boat.x, dz = goal.z-boat.z;
+    const course=goal.course;
+    while(course?.length>1 && Math.hypot(course[0].x-boat.x,course[0].z-boat.z)<=1.35){
+      course.shift();
+      goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
+    }
+    const next=course?.[0]??goal;
+    const dx = next.x-boat.x, dz = next.z-boat.z;
     const distance = Math.hypot(dx,dz);
-    if(goal.gate && distance<=goal.gate.range-.35){
+    if(goal.gate && (!course || course.length===1) && distance<=goal.gate.range-.35){
       clearSailingDestination();
       sendBoatIntent("warp",{gateId:goal.gate.id});
       return null;

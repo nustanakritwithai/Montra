@@ -1,7 +1,8 @@
 // Adapted from Pirate Fruit 1d931558d7a484a1c321f719f07735195ae95801 (shared/src/world/boats.ts).
-import type { WorldMapDefinition } from "./WorldMaps.js";
+import type { WorldMapDefinition, WorldWall } from "./WorldMaps.js";
 
 type Position = Readonly<{x:number;z:number}>;
+export type BoatLane = readonly [Position,Position];
 export type BoatBerth = Position & Readonly<{heading:number}>;
 export type BoatHarbor = Readonly<{shore:Position;berth:BoatBerth;offshore:Position}>;
 export type WaterGate = BoatBerth & Readonly<{id:string;targetMapId:string;range:number}>;
@@ -51,41 +52,130 @@ const waterLinks = [
   ["tri_wiang_castle","asura_peak"],["asura_peak","spirit_rift"],
 ] as const;
 
-const existingHarbors:Readonly<Record<string,{shore:Position;gates:readonly BoatBerth[]}>> = {
-  ritual_village:{shore:{x:0,z:46},gates:[24,-24,-8].map(x=>({x,z:55,heading:Math.PI/2}))},
-  drowned_marsh:{shore:{x:-104,z:-68},gates:[-81,-54,-72].map(z=>({x:-113,z,heading:0}))},
-  river_watch:{shore:{x:-92.7,z:24},gates:[-82,-60,-37,-14].map(z=>({x:-101.5,z,heading:0}))},
+type Coordinate = readonly [x:number,z:number];
+type HarborLayout = Readonly<{
+  shore:Coordinate;
+  berth:Coordinate;
+  direction:Coordinate;
+}>;
+type CanalLayout = Readonly<{
+  channels:readonly (readonly Coordinate[])[];
+  gates:readonly Coordinate[];
+  dock?:HarborLayout;
+  maxX?:number;
+}>;
+
+const point=([x,z]:Coordinate):Position=>({x,z});
+const canalRadius=7;
+const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x,z],direction:[0,1]});
+const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z],direction:[1,0]});
+
+// Each gate belongs to the corresponding neighbor in waterLinks. Author channels
+// around transfer pads and fort walls so the river crosses the map without opening land defenses.
+const canals:Readonly<Record<string,CanalLayout>>={
+  ritual_village:{
+    channels:[[[-53,54],[53,54]],[[22,-53],[22,54]]],
+    gates:[[-53,54],[22,-53],[53,54]],
+  },
+  drowned_marsh:{
+    channels:[[[-111,-83],[-111,-34],[52,-34]]],
+    gates:[[-111,-83],[52,-34],[-41,-34]],
+  },
+  lotus_basin:{
+    channels:[[[-53,-35],[125,-35]],[[32,-35],[32,-92],[58,-92]]],
+    gates:[[-53,-35],[125,-35]],
+    dock:{shore:[58,-100],berth:[58,-95],direction:[0,1]},
+  },
+  river_watch:{
+    channels:[[[-100,-87],[-100,27]],[[-100,-3],[72,-3]]],
+    gates:[[-100,-87],[72,-3],[-38,-3],[24,-3]],
+  },
+  sam_lan_estuary:{
+    channels:[[[-193,-193],[-193,159],[-16,159],[-16,144],[0,144]]],
+    gates:[[-193,-193]],
+    dock:{shore:[0,134],berth:[0,140],direction:[1,0]},
+  },
+  forbidden_forest:{
+    channels:[[[-53,-45],[-14,-45],[-14,-49],[39,-49],[39,-57],[53,-57]]],
+    gates:[[53,-57],[-53,-45]],dock:southBank(0,-49),
+  },
+  bound_temple:{
+    channels:[[[-43,3],[43,3]]],gates:[[43,3],[-43,3]],dock:southBank(0,3),
+  },
+  moon_cemetery:{
+    channels:[[[29,-97],[29,41]]],gates:[[29,-97],[29,41]],dock:eastBank(29,-8),
+  },
+  mantra_capital:{
+    channels:[[[-35,37],[43,37],[43,-58]]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),maxX:50,
+  },
+  bamboo_frontier:{
+    channels:[[[-38,-93],[-38,45]]],gates:[[-38,-93]],dock:eastBank(-38,38),
+  },
+  moon_pass:{
+    channels:[[[-51,-7],[115,-7]]],gates:[[-51,-7],[115,-7]],dock:southBank(-20,-7),
+  },
+  hex_ridge:{
+    channels:[[[39,-103],[39,47]]],gates:[[39,47],[39,-103]],dock:eastBank(39,-24),
+  },
+  twin_neck_pass:{
+    channels:[[[-272,92],[272,92]]],gates:[[-272,92],[272,92]],dock:southBank(0,92),
+  },
+  naga_cavern:{
+    channels:[[[-127,4],[47,4]]],gates:[[-127,4],[47,4]],dock:southBank(-8,4),
+  },
+  fallen_city:{
+    channels:[[[27,-103],[27,47]]],gates:[[27,47],[27,-103]],dock:eastBank(27,0),
+  },
+  tri_wiang_castle:{
+    channels:[[[-211,-343],[-211,211],[343,211]]],
+    gates:[[-211,-343],[343,211]],dock:southBank(-108,211),
+  },
+  asura_peak:{
+    channels:[[[-39,-108],[-39,48]]],gates:[[-39,-108],[-39,48]],dock:eastBank(-39,0),
+  },
+  spirit_rift:{
+    channels:[[[-129,-38],[59,-38]]],gates:[[-129,-38]],dock:southBank(46,-38),
+  },
 };
 
+const originalShore:Readonly<Record<string,Position>>={
+  ritual_village:{x:0,z:46},drowned_marsh:{x:-104,z:-68},river_watch:{x:-92.7,z:24},
+};
+
+function canalWater([a,b]:BoatLane):WorldWall {
+  return {x:Math.min(a.x,b.x)-canalRadius,z:Math.min(a.z,b.z)-canalRadius,
+    width:Math.abs(b.x-a.x)+2*canalRadius,length:Math.abs(b.z-a.z)+2*canalRadius};
+}
+
+function gateHeading(gate:Position,lanes:readonly BoatLane[]):number {
+  const [a,b]=lanes.find(([a,b])=>gate.x>=Math.min(a.x,b.x) && gate.x<=Math.max(a.x,b.x) &&
+    gate.z>=Math.min(a.z,b.z) && gate.z<=Math.max(a.z,b.z))!;
+  const inside=Math.hypot(gate.x-a.x,gate.z-a.z)>Math.hypot(gate.x-b.x,gate.z-b.z)?a:b;
+  return Math.atan2(inside.x-gate.x,inside.z-gate.z);
+}
+
 export function addWaterways(map:WorldMapDefinition,maps:Readonly<Record<string,WorldMapDefinition>>):WorldMapDefinition {
-  const links = maps.tri_wiang_castle ? waterLinks : [...waterLinks,["fallen_city","asura_peak"] as const];
+  const links=maps.tri_wiang_castle?waterLinks:[...waterLinks,["fallen_city","asura_peak"] as const];
   const neighbors=links.flatMap(([a,b])=>a===map.id && maps[b]?[b]:b===map.id && maps[a]?[a]:[]);
   if(!neighbors.length)return map;
-  const existing=existingHarbors[map.id];
-  let bounds=map.bounds,water=map.water??[],harbor:BoatHarbor,gates:readonly BoatBerth[];
-  if(existing){
-    harbor={shore:existing.shore,berth:BOAT_DOCK_SPAWNS[map.id],offshore:BOAT_DOCK_OFFSHORE_DIRECTIONS[map.id]};
-    gates=existing.gates;
-  }else if(map.id==="lotus_basin"){
-    harbor={shore:{x:58,z:-100},berth:{x:58,z:-95,heading:Math.PI/2},offshore:{x:0,z:1}};
-    gates=[53,63].map(x=>({x,z:-92,heading:Math.PI/2}));
-  }else if(map.id==="sam_lan_estuary"){
-    harbor={shore:{x:0,z:134},berth:{x:0,z:140,heading:Math.PI/2},offshore:{x:1,z:0}};
-    gates=[{x:14,z:144,heading:Math.PI/2}];
-  }else{
-    // Keep the existing playable land and run the shipping lane along its southern edge.
-    const x=(bounds.minX+bounds.maxX)/2,z=bounds.maxZ+1;
-    const width=Math.max(34,neighbors.length*12+16);
-    bounds={...bounds,maxZ:z+20};
-    water=[...water,{x:x-width/2,z,width,length:20}];
-    harbor={shore:{x,z:z-1},berth:{x,z:z+4,heading:Math.PI/2},offshore:{x:1,z:0}};
-    gates=neighbors.map((_,i)=>({x:x+(i-(neighbors.length-1)/2)*10,z:z+12,heading:Math.PI/2}));
-  }
-  if(gates.length<neighbors.length)throw new Error("missing_water_gate_berth:"+map.id);
-  const waterGates=neighbors.map((targetMapId,i)=>({
-    ...gates[i],id:`water_${map.id}_to_${targetMapId}`,targetMapId,range:WATER_GATE_RANGE,
-  }));
-  return {...map,bounds,water,boatHarbor:harbor,waterGates};
+  const layout=canals[map.id];
+  if(!layout || layout.gates.length<neighbors.length)throw new Error("missing_canal_layout:"+map.id);
+  const lanes=layout.channels.flatMap(channel=>channel.slice(1).map((end,i):BoatLane=>[point(channel[i]),point(end)]));
+  const water=[...map.water??[],...lanes.map(canalWater)];
+  const harbor:BoatHarbor=layout.dock?{
+    shore:point(layout.dock.shore),offshore:point(layout.dock.direction),
+    berth:{...point(layout.dock.berth),heading:Math.atan2(...layout.dock.direction)},
+  }:{
+    shore:originalShore[map.id],offshore:BOAT_DOCK_OFFSHORE_DIRECTIONS[map.id],berth:BOAT_DOCK_SPAWNS[map.id],
+  };
+  const waterGates=neighbors.map((targetMapId,i)=>{
+    const gate=point(layout.gates[i]);
+    return {...gate,heading:gateHeading(gate,lanes),id:"water_"+map.id+"_to_"+targetMapId,targetMapId,range:WATER_GATE_RANGE};
+  });
+  // Keep the previous bounds for saves made around the former southern docks.
+  const legacyExtension=!layout.dock || map.id==="lotus_basin" || map.id==="sam_lan_estuary"?0:21;
+  const bounds={...map.bounds,maxX:layout.maxX??map.bounds.maxX,maxZ:map.bounds.maxZ+legacyExtension};
+  return {...map,bounds,water,boatHarbor:harbor,boatLanes:lanes,waterGates};
 }
 
 export type BoatWorldState = 'docked' | 'sailing' | 'sunk' | 'respawning';

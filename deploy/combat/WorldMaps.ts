@@ -6,7 +6,7 @@ import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, BOSS_RESPAWN_MS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
 import {regionalBossOn} from "./RegionalBosses.js";
 import { originalRelief } from "./AtlasRelief.js";
-import { addWaterways, type BoatHarbor, type WaterGate } from "./PirateBoatRules.js";
+import { addWaterways, type BoatHarbor, type BoatLane, type WaterGate } from "./PirateBoatRules.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
 export function segmentIntersectsExpandedWall(
@@ -61,6 +61,7 @@ export type WorldMapDefinition = Readonly<{
   water?: readonly WorldWall[];
   waterLevel?: number;
   boatHarbor?: BoatHarbor;
+  boatLanes?: readonly BoatLane[];
   waterGates?: readonly WaterGate[];
   bridges?: readonly Readonly<{x:number;z:number}>[];
   huntTrail?: Province["huntTrail"];
