@@ -257,7 +257,7 @@
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
     }
-    const fogOrigin = fieldFogOrigin();
+    const fogOrigin = getLocalAvatar();
     if (fogOrigin) {
       const x = sx(fogOrigin.x), y = sy(fogOrigin.z);
       const mist = ctx.createRadialGradient(x, y, FIELD_FOG_CLEAR_RADIUS * scale, x, y, FIELD_FOG_RADIUS * scale);

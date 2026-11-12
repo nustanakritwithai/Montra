@@ -46,21 +46,16 @@
   scene.fogMode = B.Scene.FOGMODE_LINEAR;
   scene.fogColor = B.Color3.FromHexString("#405a52");
   const FIELD_FOG_CLEAR_RADIUS = 24, FIELD_FOG_RADIUS = 30;
-  const fieldFogMaps = new Set(["ritual_village", "forbidden_forest"]);
   function villageMonsterState(state = room?.state) {
     return state?.battlefieldFog ? state.battlefieldVillageMonsters?.get(MONSTER_ID) : state?.monster;
   }
-  function fieldFogOrigin() {
-    if (fieldFogMaps.has(activeMapId) || room?.state?.battlefieldFog) return getLocalAvatar();
-    return null;
-  }
   function fieldPointVisible(point) {
-    const origin = fieldFogOrigin();
+    const origin = getLocalAvatar();
     if (!origin) return true;
     return Boolean(point && (point.x - origin.x) ** 2 + (point.z - origin.z) ** 2 < FIELD_FOG_RADIUS ** 2);
   }
   function fieldTargetVisible(id) {
-    if (!fieldFogOrigin()) return true;
+    if (!getLocalAvatar()) return true;
     if (mode !== "live") return id === MONSTER_ID && fieldPointVisible(enemy.position);
     const state = room?.state;
     const target = (id === MONSTER_ID ? villageMonsterState(state) : state?.monsters?.get(id)) || state?.players?.get(id);
@@ -74,7 +69,7 @@
   const fieldFogColor = new B.Color3(.08, .12, .13);
   const fieldParticleMasks = new WeakMap();
   function updateFieldFog() {
-    const origin = fieldFogOrigin();
+    const origin = getLocalAvatar();
     fieldFog.set(origin?.x ?? 0, origin?.z ?? 0, FIELD_FOG_CLEAR_RADIUS, origin ? FIELD_FOG_RADIUS : 0);
     scene.fogColor.scaleToRef(.42, fieldFogColor);
     for (const [id, actor] of avatars) {
