@@ -387,4 +387,3 @@
   $("characterProfile").onclick=openCharacterProfile;
   $("fieldMenuButton").onclick=openFieldMenu;
   $("drawerMenuBack").onclick=openFieldMenu;
-  $("menuCharacter").onclick=openCharacterProfile;

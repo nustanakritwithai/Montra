@@ -20,7 +20,10 @@ assert(!context.$('characterProfile')['aria-label'].includes('ประมาณ
 assert.equal((html.match(/id="characterProfile"/g)||[]).length,1);
 assert.match(html,/<button id="characterProfile"[^>]*aria-haspopup="dialog"/);
 assert.match(html,/<div class="legacy-character-meters" hidden>/);
-assert.match(source,/\$\("characterProfile"\)\.onclick=openCharacterProfile/);
+assert.deepEqual([...source.matchAll(/\$\("([^"]+)"\)\.onclick=openCharacterProfile\b/g)].map(match=>match[1]),['characterProfile']);
+assert.doesNotMatch(html, /\bid="menuCharacter"/);
+assert.doesNotMatch(source, /\bmenuCharacter\b/);
+assert.match(html, /data-journal-tab="character"[^>]*>สกิลและคู่หู<\/button>/);
 assert.match(source,/const cpVal = characterPowerEstimate\(char\)/);
 assert.match(source,/updateCompactCharacterHud\(me\);/);
 assert.match(css,/\.identity \.portrait.low-hp \{ border-color:#ff6a5a/);
