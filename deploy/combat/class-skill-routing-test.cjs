@@ -7,6 +7,7 @@ const graphSource=slice('  // Core-book adapter', '  let activeSkillModalId =');
 const graphClasses=slice('  const SG_CLASS =', '  function skillLearningLevel(');
 const graphEscape=slice('  const sgEsc =', '  const sgCombatLine =');
 const route=slice('  function openClassSkillBook(', '  function getBuildCatalog(');
+const flyout=slice('  // Under the minimap', '  $("menuBag").onclick=');
 const dataSource=slice('  function swordData(', '  function syncSwordStatus(');
 const buttonSource=slice('  function syncSwordTreeButton(', '  let swordHotbarKey=');
 const ownerSource=slice('  let activeSkillModalId =', '  function ensureSkillDetailModalElements(');
@@ -43,6 +44,28 @@ test('quick skill entry routes all six authoritative classes independent of DOM 
   ctx.mode='demo';ctx.openClassSkillBook();assert.equal(calls.pop(),'SwordTree');
   assert.match(source,/\$\("quickSkills"\)\.onclick=openClassSkillBook;/);
   assert(!source.includes('querySelector(".book-entry:not([hidden])")'));
+});
+test('the minimap flyout offers services and the journal without the removed shortcuts',()=>{
+  const html=fs.readFileSync('index.html','utf8');
+  const hud=html.match(/<nav class="field-shortcuts"[^>]*>([\s\S]*?)<\/nav>/)[1];
+  const character=html.match(/<section id="menu-character"[^>]*>([\s\S]*?)<\/section>/)[1];
+  assert.match(hud,/id="quickSkills"/);
+  assert.doesNotMatch(hud,/id="(?:petButton|skillLoadoutButton)"/);
+  assert.match(character,/id="petButton"/);
+  assert.match(character,/id="skillLoadoutButton"/);
+  let journal=0;
+  const buttons=[];
+  const nav={after(){}};
+  const node=()=>({dataset:{},setAttribute(){},style:{setProperty(){}},querySelector:()=>null,
+    classList:{remove(){}},focus(){},append(button){buttons.push(button);}});
+  const menu=node();
+  vm.runInNewContext(flyout,{
+    document:{querySelector:()=>nav,createElement:node,addEventListener(){}},
+    $:id=>id==='fieldMenuButton'?menu:node(), addEventListener(){},openFieldMenu(){journal++;},
+  });
+  assert.deepEqual(buttons.map(b=>b.dataset.menuSource),['menuGuild','marketButton','menuQuest','modeButton','helpButton','fieldMenu']);
+  buttons.at(-1).onclick();
+  assert.equal(journal,1);
 });
 test('LIVE sword reads only the current sword character and real server data; DEMO is explicit',()=>{
   const f=fixture(),original=f.ctx.me.swordTreeData;

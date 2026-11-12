@@ -52,10 +52,13 @@ async function openMenuLoadout(page,mobile){
  assert.equal(await page.locator('.learned-bar #skillLoadoutButton').count(),0,'configuration removed from combat arc');
  assert.equal(await page.locator('#menu-character #skillLoadoutButton').count(),1,'one canonical menu tile');
  await page.locator('#fieldMenuButton').click();
- const selector='.map-flyout [data-menu-source="skillLoadoutButton"]';
+ assert.equal(await page.locator('.map-flyout [data-menu-source="skillLoadoutButton"], .map-flyout [data-menu-source="quickSkills"]').count(),0,'skill shortcuts are absent from the flyout');
+ await page.locator('.map-flyout [data-menu-source="fieldMenu"]').click();
+ await page.locator('[data-journal-tab="character"]').click();
+ const selector='#skillLoadoutButton';
  await inside(page,selector);
  if(mobile)await page.locator(selector).tap();else{await page.locator(selector).focus();await page.keyboard.press('Enter');}
- assert.equal(await page.locator('.map-flyout').isVisible(),false,'entry collapses flyout');
+ assert.equal(await page.locator('.map-flyout').isVisible(),false,'full menu collapses flyout');
  assert.equal(await page.locator('#fieldMenuButton').getAttribute('aria-expanded'),'false');
  assert.equal(await page.locator('#skillLoadoutBody').isVisible(),true,'same loadout drawer');
 }
@@ -108,7 +111,7 @@ async function main(){
    await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+job+'-mixed.png')});await openMenuLoadout(page,mobile);await page.screenshot({animations:'disabled',path:path.join(out,width+'-'+job+'-config.png')});
    await page.evaluate(()=>{fixture.stale();fixture.setMode('demo');fixture.tickLoadout();fixture.wire.length=0;fixture.invokeStale();});assert.deepEqual(await page.evaluate(()=>fixture.wire),[],'stale owner callbacks cannot send');
    await page.evaluate(({job,id})=>{fixture.setup(job,id);fixture.legacy();},{job,id});assert.equal(await page.locator(bar+' [data-skill-id]').count(),4,'old server retains four core buttons');assert.equal(await page.locator('#skillLoadoutButton').evaluate(el=>el.hidden),true,'old server hides mixed config');
-   await page.locator('#fieldMenuButton').click();assert.equal(await page.locator('[data-menu-source="skillLoadoutButton"]').isVisible(),false,'legacy flyout entry also hidden');
+   await page.locator('#fieldMenuButton').click();assert.equal(await page.locator('[data-menu-source="skillLoadoutButton"]').count(),0,'flyout has no skill configuration');
    await page.keyboard.press('Escape');assert.equal(await page.locator('#fieldMenuButton').evaluate(el=>el===document.activeElement),true,'Escape restores menu focus');
    report.cases.push({width,height,job,command:sent.command});
   }
@@ -150,9 +153,11 @@ async function main(){
   await page.evaluate(()=>fixture.setup('phutthaisawan','flowing_blades'));
   await page.locator('#fieldMenuButton').click();
   await page.screenshot({animations:'disabled',path:path.join(out,width+'-skill-menu.png')});
-  const entry=page.locator('[data-menu-source="skillLoadoutButton"]');
+  await page.locator('[data-menu-source="fieldMenu"]').click();
+  await page.locator('[data-journal-tab="character"]').click();
+  const entry=page.locator('#skillLoadoutButton');
   await page.evaluate(()=>document.getElementById('skillLoadoutButton').disabled=true);
-  assert.equal(await entry.isDisabled(),true,'proxy tracks disabled state while open');
+  assert.equal(await entry.isDisabled(),true,'canonical menu tile respects disabled state');
   await page.evaluate(()=>document.getElementById('skillLoadoutButton').disabled=false);
   await entry.focus();await page.keyboard.press('Space');
   assert.equal(await page.locator('#skillLoadoutBody').isVisible(),true,'Space opens loadout');
@@ -171,9 +176,7 @@ async function main(){
   await page.locator('#world').click({position:{x:10,y:Math.floor(height/2)}});
   assert.equal(await page.locator('.map-flyout').isVisible(),false,'outside pointer dismisses menu');
   await page.evaluate(()=>{fixture.setMode('demo');fixture.tickLoadout();});
-  await page.locator('#fieldMenuButton').click();
-  assert.equal(await entry.isVisible(),false,'demo never offers loadout');
-  await page.keyboard.press('Escape');
+  assert.equal(await entry.evaluate(el=>el.hidden),true,'demo never offers loadout');
   await context.close();
  }
  assert.equal(report.cases.length,24);assert.equal(report.catalogRoutes.length,116);assert.equal(report.coreRoutes.length,24);assert.deepEqual(report.errors,[]);
