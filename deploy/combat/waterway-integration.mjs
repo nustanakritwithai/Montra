@@ -75,7 +75,7 @@ const findCourse=runInNewContext(waterSource+courseSource+"\nsailingCourse;");
 function navigator(point,boat){
   const map=getWorldMap(boat.mapId),course=findCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
   assert.ok(course.length,"navigable course to "+JSON.stringify(point));
-  const scope={sailingDestination:{x:point.x,z:point.z,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
+  const scope={sailingDestination:{x:point.x,z:point.z,course,aligning:true,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
     clearSailingDestination(){scope.sailingDestination=null;}};
   return runInNewContext(steeringSource+"\nsailingInputForDestination;",scope);
 }

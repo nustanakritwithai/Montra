@@ -185,3 +185,15 @@ test("port markers steer to the berth and anchor, and the launch control works a
   f.tick(300);
   assert.equal(f.buttons.get("boatLaunch").hidden,false);
 });
+
+test("a river route aligns the hull before thrusting out of a berth",()=>{
+  const f=fixture();
+  f.map.boatLanes=[[{x:-25,z:54},{x:25,z:54}]];
+  f.boat.heading=0;
+  f.tap("touch",16,54,{isEnabled:()=>true,metadata:{waterGateId:"water_ritual_village_to_drowned_marsh"}});
+  const turn=f.tick(100);
+  assert.equal(turn.throttle,0);
+  assert.ok(turn.steer<0);
+  f.boat.heading=Math.atan2(16,3);
+  assert.ok(f.tick(200).throttle>0);
+});

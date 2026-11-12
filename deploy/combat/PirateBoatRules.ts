@@ -92,7 +92,7 @@ const canals:Readonly<Record<string,CanalLayout>>={
     channels:[[[-112,-83],[-112,-34],[52,-34]],[[-112,-83],[-134,-83],[-134,-34],[-112,-34]]],
     gates:[[-112,-83],[52,-34],[-41,-34]],dockName:"ท่าสุสานเรือพราย",
     ports:[
-      {id:"marsh_island",name:"ท่าเกาะกอพราย",shore:[-124.5,-65],berth:[-130,-65],direction:[0,1]},
+      {id:"marsh_island",name:"ท่าเกาะกอพราย",shore:[-125,-65],berth:[-131,-65],direction:[0,1]},
       {id:"marsh_reeds",name:"ท่าเกาะกกผี",shore:[-22,-26],berth:[-22,-31.5],direction:[1,0]},
     ],
     shorePaths:[[[-22,-17],[-22,-26]]],

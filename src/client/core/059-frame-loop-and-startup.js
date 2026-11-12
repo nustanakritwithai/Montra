@@ -73,13 +73,16 @@
     const rim=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8)*radius,Math.sin(i*Math.PI/8)*radius]);
     const gap=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
     const clear=(a,b)=>{
-      const steps=Math.max(1,Math.ceil(gap(a,b)));
+      const length=gap(a,b),steps=Math.max(1,Math.ceil(length/.65));
       for(let i=0;i<=steps;i++){
         const x=a.x+(b.x-a.x)*i/steps,z=a.z+(b.z-a.z)*i/steps;
-        if(x-radius<bounds.minX || x+radius>bounds.maxX || z-radius<bounds.minZ || z+radius>bounds.maxZ ||
-            worldWaterDepth(map,x,z)<.45 || map.obstacles?.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+radius))return false;
+        // Allow the hull to start and finish close to a pier. Leave steering
+        // room along the leg itself, especially at the mouth of a side channel.
+        const clearance=radius+Math.min(.22,Math.min(i,steps-i)*length/steps*.12);
+        if(x-clearance<bounds.minX || x+clearance>bounds.maxX || z-clearance<bounds.minZ || z+clearance>bounds.maxZ ||
+            worldWaterDepth(map,x,z)<.45 || map.obstacles?.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+clearance))return false;
         if(!rim.every(([dx,dz])=>{
-          const px=x+dx,pz=z+dz;
+          const px=x+dx*clearance/radius,pz=z+dz*clearance/radius;
           return worldWaterDepth(map,px,pz)>0 && !map.walls?.some(w=>px>=w.x && px<=w.x+w.width && pz>=w.z && pz<=w.z+w.length);
         }))return false;
       }
@@ -120,7 +123,8 @@
     const course=sailingCourse(map,boat,point);
     if(!course.length){toast("ไม่พบร่องน้ำไปยังจุดนี้");return false;}
     cancelQuestNavigation("",false);
-    sailingDestination = {x:point.x,z:point.z,gate,port,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    sailingDestination = {x:point.x,z:point.z,gate,port,course,aligning:Boolean(map.boatLanes?.length),
+      progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
     if (!sailingMarker) {
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
@@ -137,8 +141,10 @@
     const goal = sailingDestination;
     if (!goal) return {throttle:0,steer:0};
     const course=goal.course;
-    while(course?.length>1 && Math.hypot(course[0].x-boat.x,course[0].z-boat.z)<=1.35){
+    while(course?.length>1 && Math.hypot(course[0].x-boat.x,course[0].z-boat.z)<=.2){
       course.shift();
+      goal.aligning=true;
+      goal.reverse=undefined;
       goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
     }
     const next=course?.[0]??goal;
@@ -154,7 +160,7 @@
         Math.abs(wrapSailingAngle(boat.heading-progress.heading)) >= .16) {
       goal.progress = {x:boat.x,z:boat.z,heading:boat.heading,at:now};
     }
-    if (distance <= 1.35 || now-goal.progress.at >= 2800) {
+    if ((!course || course.length===1) && distance <= 1.35 || now-goal.progress.at >= 2800) {
       clearSailingDestination();
       if(goal.port && distance<=1.35 && course?.length===1){
         requestedBoatAnchor=true;
@@ -164,8 +170,17 @@
       return {throttle:0,steer:0};
     }
     const bearing = Math.atan2(dx,dz);
-    const reverse = Math.abs(wrapSailingAngle(bearing-boat.heading)) > Math.PI/2;
+    const facingAway = Math.abs(wrapSailingAngle(bearing-boat.heading)) > Math.PI/2;
+    if(goal.aligning && goal.reverse===undefined)goal.reverse=distance<12 && facingAway;
+    const reverse = goal.reverse??facingAway;
     const headingError = wrapSailingAngle(bearing-boat.heading-(reverse ? Math.PI : 0));
+    // Align before leaving a berth or turning into a narrower reach. At idle the
+    // rudder can still rotate, without thrust pushing the hull into the bank.
+    if(goal.aligning && (Math.abs(headingError)>.035 || Math.abs(boat.speed)>.25)){
+      const movingBackward=boat.speed<0?-1:1;
+      return {throttle:0,steer:-movingBackward*Math.sign(headingError)};
+    }
+    goal.aligning=false;
     const direction = reverse ? -1 : 1;
     const momentum = Math.abs(boat.speed) > .15 ? Math.sign(boat.speed) : direction;
     const maxThrottle = reverse ? .8 : .72;
