@@ -478,6 +478,13 @@
     const v = ctx.createRadialGradient(width / 2, height / 2, Math.min(width, height) * .35, width / 2, height / 2, Math.max(width, height) * .72);
     v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
     ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
+    const boatDock = room?.state?.boatsAvailable ? map?.boatDock : null;
+    if (boatDock) {
+      const x = sx(boatDock.x), y = sy(boatDock.z);
+      mapDot(ctx, x, y, large ? 8 : 6, "#16475a", "#9ee9ff");
+      mapText(ctx, "⚓︎", x, y, large ? 12 : 9, "#e0f8ff", 700);
+      if (large) mapText(ctx, "ท่าปล่อยเรือ", Math.max(45, Math.min(width - 45, x)), y - 15, 12, "#bfefff", 700);
+    }
     if(objective){
       const x=sx(objective.to.x),y=sy(objective.to.z),radius=large?12:6;
       ctx.strokeStyle="#ffdc84";ctx.lineWidth=large?2:1.5;
