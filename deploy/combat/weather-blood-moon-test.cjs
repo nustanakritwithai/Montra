@@ -18,12 +18,11 @@ assert(mainSrc.includes('sky: "#ff3344"'), 'BLOOD_MOON_ATMOSPHERE has crimson sk
 assert(mainSrc.includes('function drawSkyTexture(isBloodMoon, fogColor, skyLevel)'), 'main.js defines drawSkyTexture');
 assert(mainSrc.includes('rgba(255,40,60,.65)'), 'drawSkyTexture creates crimson halo for blood moon');
 
-// 3. Verify Rain Particle System & Weather State
-assert(mainSrc.includes('paintTexture("rain droplet"'), 'main.js creates rain droplet texture');
-assert(mainSrc.includes('new B.ParticleSystem("weather rain"'), 'main.js instantiates weather rain particle system');
+// 3. Verify Weather State without Rain Particles
+assert.doesNotMatch(mainSrc, /rainParticles|rain droplet|weather rain/, 'main.js has no rain particle renderer');
 assert(mainSrc.includes('const weatherState = {'), 'main.js defines weatherState');
 assert(mainSrc.includes('function setWeather(type)'), 'main.js defines setWeather');
-assert(mainSrc.includes('function updateWeather(dt, elapsed)'), 'main.js defines updateWeather');
+assert(mainSrc.includes('function updateWeather(dt)'), 'main.js defines updateWeather');
 
 // 4. Verify Storm Lightning Integration
 assert(mainSrc.includes('window.MontraWeather?.getWeather?.() === "storm"'), 'stormFlash checks MontraWeather for storm mode');
