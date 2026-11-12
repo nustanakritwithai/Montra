@@ -57,6 +57,8 @@ function fixture(raySlope=0) {
       getBoundingClientRect:()=>({left:10,top:20,width:300,height:300}),setPointerCapture(){}}},
   };
   vm.runInNewContext([villageWater,terrainCell,waterDepth,sailing,picking].join("\n"),sandbox);
+  sandbox.$("boatPanel").children = ["boatLaunch","boatHelm","boatAccess"].map(sandbox.$);
+  sandbox.$("boatAccess").children = ["boatBoard","boatExit"].map(sandbox.$);
   const tick = value=>{now=value;sandbox.updateSailing(now,.02);return packets.at(-1);};
   tick(0);
   const pointerEvent = (kind,type,id=1) => canvasEvents[kind]({button:0,pointerType:type,pointerId:id,clientX:100,clientY:110});
@@ -291,4 +293,33 @@ test("disembarking is available away from the docks once the boat stops",()=>{
   f.boat.speed=0;
   exit.onclick();
   assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"exit"});
+});
+
+test("boarding and disembarking alternate in one fixed-size slot",()=>{
+  const html=readFileSync(resolve(root,"index.html"),"utf8");
+  const accessMarkup=html.match(/<div id="boatAccess"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
+  assert.match(accessMarkup, /<button id="boatBoard"/);
+  assert.match(accessMarkup, /<button id="boatExit"/);
+  const css=readFileSync(resolve(root,"src/styles/hud/016-field-layout-and-account.css"),"utf8");
+  assert.match(css, /\.boat-access:not\(\[hidden\]\)\s*\{[^}]*width:44px; height:44px/);
+  assert.match(css, /\.boat-access > \.warp-button\s*\{[^}]*grid-area:1 \/ 1/);
+
+  const f=fixture();
+  const access=f.buttons.get("boatAccess");
+  const [board,exit]=access.children;
+  const panel=f.buttons.get("boatPanel");
+  assert.equal(access.hidden,false);
+  assert.equal(panel.hidden,false);
+  assert.equal(board.hidden,true);
+  assert.equal(exit.hidden,false);
+  f.player.boatId="";
+  f.tick(100);
+  assert.equal(access.hidden,false);
+  assert.equal(panel.hidden,false);
+  assert.equal(board.hidden,false);
+  assert.equal(exit.hidden,true);
+  f.player.x=59;
+  f.tick(200);
+  assert.equal(access.hidden,true);
+  assert.equal(panel.hidden,true);
 });

@@ -295,8 +295,9 @@
     const onFoot = player?.alive && !player.boatId && !player.flying && !player.mounted;
     const launchPoints=map?.boatPorts?.map(port=>port.shore)??[dock];
     $("boatLaunch").hidden = !(onFoot && launchPoints.some(shore=>Math.hypot(player.x-shore.x,player.z-shore.z)<=dock.range));
-    $("boatBoard").hidden = !(onFoot && nearestId);
-    $("boatBoard").dataset.boatId = nearestId;
+    const boardButton = $("boatBoard"), exitButton = $("boatExit");
+    boardButton.hidden = !(onFoot && nearestId);
+    boardButton.dataset.boatId = nearestId;
     const helmButton = $("boatHelm");
     helmButton.hidden = !(boat && (!boat.helmId || helm));
     if (helmButton.dataset.helmActive !== String(helm)) {
@@ -304,8 +305,9 @@
       helmButton.title = helm ? "ปล่อยหางเสือ" : "จับหางเสือ";
       helmButton.setAttribute("aria-label", helmButton.title);
     }
-    $("boatExit").hidden = !boat;
-    boatPanel.hidden = !Array.from(boatPanel.children).some(button=>!button.hidden);
+    exitButton.hidden = !boat;
+    $("boatAccess").hidden = boardButton.hidden && exitButton.hidden;
+    boatPanel.hidden = !Array.from(boatPanel.children).some(control=>!control.hidden);
     if (!helm || now < nextHelmInput) return;
     nextHelmInput = now + 100;
     const input=sailingInputForDestination(boat,now);

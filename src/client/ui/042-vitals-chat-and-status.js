@@ -296,7 +296,8 @@
       <form class="cb-form"><select class="cb-target" aria-label="ผู้รับ" hidden></select><input class="cb-input" maxlength="400" aria-label="ข้อความแชท" placeholder="แตะเพื่อพิมพ์" autocomplete="off" enterkeyhint="send"><button type="submit" class="cb-send" aria-label="ส่ง">➤</button></form>`;
     const potion = createQuickPotionControl();
     const harvestControls = document.createElement("div"); harvestControls.className = "chat-harvest";
-    harvestControls.append(potion.el,$("harvestButton"),$("fishButton")); el.prepend(harvestControls);
+    harvestControls.append($("fishButton"), potion.el, $("harvestButton"));
+    el.prepend(harvestControls);
     game.append(el);
     const log = el.querySelector(".cb-log"), form = el.querySelector(".cb-form"), input = el.querySelector(".cb-input"), target = el.querySelector(".cb-target");
     const toggle=el.querySelector(".cb-open");
