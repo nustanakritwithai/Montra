@@ -45,7 +45,7 @@
   // as the overhead camera pulls back, even when terrain is nearby.
   scene.fogMode = B.Scene.FOGMODE_LINEAR;
   scene.fogColor = B.Color3.FromHexString("#405a52");
-  const FIELD_FOG_CLEAR_RADIUS = 24, FIELD_FOG_RADIUS = 30;
+  const FIELD_FOG_CLEAR_RADIUS = 28, FIELD_FOG_RADIUS = 34;
   function villageMonsterState(state = room?.state) {
     return state?.battlefieldFog ? state.battlefieldVillageMonsters?.get(MONSTER_ID) : state?.monster;
   }

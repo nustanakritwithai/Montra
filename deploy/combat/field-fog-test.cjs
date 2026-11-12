@@ -36,7 +36,7 @@ function fixture() {
 test("fog follows the avatar with a shared horizontal radius on any map", () => {
   const { sandbox: s, hero } = fixture();
   const radius = Number(/battlefieldSightRadius:\s*(\d+)/.exec(rules)?.[1]);
-  assert.equal(radius, 30);
+  assert.equal(radius, 34);
   for (const mapId of ["ritual_village", "forbidden_forest", "mantra_capital", "bound_temple",
     "drowned_marsh", "tri_wiang_castle", "personal_home", "new_map"]) {
     s.activeMapId = mapId;
@@ -44,7 +44,7 @@ test("fog follows the avatar with a shared horizontal radius on any map", () => 
     assert.equal(s.fieldPointVisible({ x: hero.x + radius - .01, y: 100, z: hero.z }), true, mapId);
     assert.equal(s.fieldPointVisible({ x: hero.x + radius, z: hero.z }), false, mapId);
     s.updateFieldFog();
-    assert.deepEqual([s.uniform.x, s.uniform.y, s.uniform.z, s.uniform.w], [hero.x, hero.z, 24, radius], mapId);
+    assert.deepEqual([s.uniform.x, s.uniform.y, s.uniform.z, s.uniform.w], [hero.x, hero.z, 28, radius], mapId);
   }
   s.room.state.battlefieldFog = true;
   assert.equal(s.fieldPointVisible({ x: 50, z: 50 }), false);
@@ -65,7 +65,7 @@ test("moving out of sight hides the actor and clears every target HUD reference"
   s.activeMapId = "bound_temple";
   s.updateFieldFog();
   assert.equal(node.enabled, false);
-  assert.equal(s.uniform.w, 30);
+  assert.equal(s.uniform.w, 34);
   s.getLocalAvatar = () => undefined;
   s.updateFieldFog();
   assert.equal(node.enabled, true);

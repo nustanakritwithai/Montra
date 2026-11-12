@@ -18,6 +18,7 @@ process.env.MONTRA_HUNT_EVENTS = "0";
 
 const {defineServer,defineRoom} = await import("colyseus");
 const {MyRoom} = await import("./src/rooms/MyRoom.ts");
+const {RULES} = await import("./src/rooms/GameRules.ts");
 const {Monster} = await import("./src/rooms/schema/MyRoomState.ts");
 const {characterStore} = await import("./src/rooms/CharacterStore.ts");
 const {guildStore} = await import("./src/rooms/GuildStore.ts");
@@ -117,38 +118,40 @@ try {
   const order=(action,targetId) => ({action,combatId:called.combatId,targetId,
     ...(action==="skill" && {skillId:"SK_NORMAL_01"})});
 
-  // Use real per-client patches and commands on either side of the 30 m boundary.
+  // Use real per-client patches and commands on either side of the sight boundary.
+  const boundaryZ=14+RULES.battlefieldSightRadius;
+  const hiddenStarterZ=boundaryZ+6;
   Object.assign(owner,{x:0,y:0,z:14});
-  Object.assign(rival,{x:0,y:0,z:44});
+  Object.assign(rival,{x:0,y:0,z:boundaryZ});
   Object.assign(friend,{x:0,y:0,z:15});
   Object.assign(guardian,{x:0,y:0,z:14});
-  const probe = new Monster({id:"fog-probe",mapId:site,x:0,y:0,z:44,alive:false});
+  const probe = new Monster({id:"fog-probe",mapId:site,x:0,y:0,z:boundaryZ,alive:false});
   fixture.state.monsters.set(probe.id,probe);
   const starter = fixture.state.battlefieldVillageMonsters.get("possessed-1"), starterZ = starter.z;
   const visibleStarter = client => client.room.state.battlefieldVillageMonsters?.get("possessed-1");
   await until(()=>Math.abs(visibleStarter(a)?.z-starterZ)<.001,"nearby starter monster is replicated");
-  starter.z=50;
-  await until(()=>visibleStarter(b)?.z===50 && !visibleStarter(a),"starter is filtered per client");
+  starter.z=hiddenStarterZ;
+  await until(()=>visibleStarter(b)?.z===hiddenStarterZ && !visibleStarter(a),"starter is filtered per client");
   assert.equal(a.room.state.monster.alive,false);
-  await until(()=>b.room.state.players.get(b.id)?.z===44 && b.room.state.monsters?.has(probe.id),"rival sees nearby monster");
+  await until(()=>b.room.state.players.get(b.id)?.z===boundaryZ && b.room.state.monsters?.has(probe.id),"rival sees nearby monster");
   assert.equal(a.room.state.players.has(b.id),false);
   assert.equal(Boolean(a.room.state.monsters?.has(probe.id)),false);
   assert.equal(b.room.state.players.has(a.id),false);
   assert.equal(Boolean(b.room.state.summons?.has(a.id)),false);
   await reject(a,"attack",{targetId:b.id},"target_unavailable");
   const fxAt = a.events.length;
-  fixture.broadcastCombat("ranged_hit",{attackerId:b.id,targetId:b.id,from:{x:0,y:1,z:44},to:{x:0,y:1,z:43}});
-  await event(b,"ranged_hit",data=>data.from?.z===44);
+  fixture.broadcastCombat("ranged_hit",{attackerId:b.id,targetId:b.id,from:{x:0,y:1,z:boundaryZ},to:{x:0,y:1,z:boundaryZ-1}});
+  await event(b,"ranged_hit",data=>data.from?.z===boundaryZ);
   assert.equal(a.events.slice(fxAt).some(entry=>entry.type==="ranged_hit"),false);
 
-  rival.z=43.9;
-  probe.z=43.9;
+  rival.z=boundaryZ-.1;
+  probe.z=boundaryZ-.1;
   await until(()=>a.room.state.players.has(b.id) && a.room.state.monsters?.has(probe.id) &&
     b.room.state.summons?.has(a.id),"rival, monster, and guardian enter sight");
   a.room.send("attack",{targetId:b.id});
   await until(()=>owner.targetId===b.id,"nearby target accepted");
-  rival.z=48;
-  probe.z=48;
+  rival.z=boundaryZ+4;
+  probe.z=boundaryZ+4;
   await until(()=>!a.room.state.players.has(b.id) && !a.room.state.monsters?.has(probe.id) &&
     !b.room.state.summons?.has(a.id) && !owner.targetId,"sight exit removes actors and cancels pursuit");
   fixture.state.monsters.delete(probe.id);
