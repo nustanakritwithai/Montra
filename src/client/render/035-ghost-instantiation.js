@@ -242,11 +242,13 @@
     metadata.specialPending = [];
     metadata.warningStage = stage;
     const style = design.stages?.[stage - 1];
-    const terrain = worldDefinitions?.[monster.mapId]?.terrain;
+    const map = worldDefinitions?.[monster.mapId], terrain = map?.terrain;
     const facing = (Number(monster.facing) || 0)+(design.rear?Math.PI:0), sin = Math.sin(facing), cos = Math.cos(facing);
     const centerX = stage ? monster.specialOriginX : monster.x, centerZ = stage ? monster.specialOriginZ : monster.z;
     const groundPoint = (x,z) => {
-      return new B.Vector3(x, (terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0) + .14, z);
+      const y = map?.waterLevel !== undefined && worldWaterDepth(map, x, z) > 0
+        ? map.waterLevel : terrain ? terrainHeight(terrain, x, z) : Number(monster.y) || 0;
+      return new B.Vector3(x, y + .14, z);
     };
     const point = (side,forward) => groundPoint(centerX+side*cos-forward*sin,centerZ-side*sin-forward*cos);
     const rect = halfWidth > 0, fullCircle = !rect && !halfAngle;

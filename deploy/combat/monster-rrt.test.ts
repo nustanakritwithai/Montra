@@ -5,8 +5,42 @@ import {
   isMonsterFree, isMonsterSegmentClear,
   planMonsterRRT, smoothMonsterPath, MonsterRRTNavigator, distanceXZ,
 } from "./MonsterRRT.js";
+import { waterDepthAt, waterTerrain } from "./GroundTerrain.js";
+import { monsterHabitatGoal, monsterHabitatHeight, monsterHabitatSegmentClear } from "./MonsterHabitat.js";
+import { WORLD_MAPS, type WorldMapDefinition } from "./WorldMaps.js";
 
 const near=(a:number,b:number,tolerance=1e-5)=>Math.abs(a-b)<tolerance;
+
+test("land routes detour around water and aquatic routes stop at the shore",()=>{
+  const layout:WorldMapDefinition={
+    id:"test_pool",name:"Test pool",bounds:{minX:0,maxX:12,minZ:0,maxZ:12},
+    spawn:{x:2,y:0,z:6},obstacles:[],portals:[],water:[{x:4,z:2,width:4,length:8}],
+  };
+  const map={...layout,...waterTerrain(layout)};
+  const start={x:2,z:6},goal={x:10,z:6},inWater={x:6,z:6};
+  const land=(from:typeof start,to:typeof start)=>monsterHabitatSegmentClear(map,"land",from,to);
+  const water=(from:typeof start,to:typeof start)=>monsterHabitatSegmentClear(map,"water",from,to);
+  assert.equal(land(start,goal),false);
+  const route=planMonsterRRT(start,goal,{seed:71,bounds:map.bounds,obstacles:[],canTraverse:land});
+  assert.equal(route.found,true);
+  assert.equal(route.direct,false);
+  for(let i=1;i<route.path.length;i++)assert.ok(land(route.path[i-1],route.path[i]));
+  assert.equal(water(inWater,start),false);
+  const bank=monsterHabitatGoal(map,"water",inWater,start);
+  assert.ok(bank.x<inWater.x && bank.x>start.x);
+  assert.ok(water(inWater,bank));
+});
+
+test("land monsters can cross the market bridge on its deck and cannot climb the side",t=>{
+  const map=WORLD_MAPS.ritual_village,bridge=map.walkBridges?.[0];
+  if(!bridge)return t.skip("world expansion disabled");
+  const start={x:bridge.x[0],z:bridge.z},end={x:bridge.x[3],z:bridge.z};
+  const deck={x:(bridge.x[1]+bridge.x[2])/2,z:bridge.z};
+  assert.ok(waterDepthAt(map,deck.x,deck.z)>0);
+  assert.equal(monsterHabitatHeight(map,"land",deck),bridge.height);
+  assert.ok(monsterHabitatSegmentClear(map,"land",start,end));
+  assert.equal(monsterHabitatSegmentClear(map,"land",deck,{x:deck.x,z:deck.z+bridge.width}),false);
+});
 
 test("Direct unobstructed paths need no RRT tree expansion",()=>{
   const start={x:1.1,z:10.4},goal={x:4,z:10};

@@ -1,12 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { MyRoomState, Player } from "./schema/MyRoomState.js";
-import { SHRINE_GUARDIAN, getWorldMap, groundAt, isRestArea, isSafeWorldPoint } from "./WorldMaps.js";
+import { MyRoomState, Player, type Monster } from "./schema/MyRoomState.js";
+import { SHRINE_GUARDIAN, WORLD_MAPS, getWorldMap, groundAt, isRestArea, isSafeWorldPoint, type WorldMapDefinition } from "./WorldMaps.js";
 import { parseAttackCommand } from "./GameRules.js";
 import { grantRewardPotion, makeStarterInventory, INVENTORY_STACK_LIMIT } from "./ItemRules.js";
-import { ForestEncounters } from "./ForestEncounters.js";
-import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS } from "./WorldAtlas.js";
+import { FOREST_RESPAWN_MS, ForestEncounters } from "./ForestEncounters.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS, HIMMAPAN_SPAWNS } from "./WorldAtlas.js";
+import { waterDepthAt } from "./GroundTerrain.js";
 import { advanceForestObjective } from "./ForestObjectives.js";
+
+const waterMonsters=new Set<string>(HIMMAPAN_SPAWNS.filter(spawn=>"habitat" in spawn && spawn.habitat==="water").map(spawn=>spawn.id));
+function isValidMonsterSurface(map:WorldMapDefinition, monster:Monster):boolean {
+  if(waterMonsters.has(monster.id))return waterDepthAt(map,monster.x,monster.z)>0 && monster.y===map.waterLevel;
+  return isSafeWorldPoint(map,monster);
+}
 
 const himmapan = [
   ["himmapan_matcha_naga", "lotus_basin", "มัจฉนาคา", 48],
@@ -38,7 +45,7 @@ for(const [id,mapId,name,level] of [
       (pid,monster)=>{if(monster.id===id)hits.push(pid);},()=>{});
     tick(0);
     const monster=state.monsters.get(id)!;
-    assert.ok(monster?.alive && isSafeWorldPoint(map,monster));
+    assert.ok(monster?.alive && isValidMonsterSurface(map,monster));
     assert.deepEqual([monster.displayName,monster.level],[name,level]);
     const replaced=HIMMAPAN_REPLACEMENTS.get(id)!;
     assert.ok(!state.monsters.has(replaced));
@@ -141,9 +148,12 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
     const m=state.monsters.get(id)!;
     assert.ok(m);
     assert.deepEqual([m.displayName,m.level,m.tier],[name,level,tier]);
-    assert.ok(isSafeWorldPoint(map,m) && !isRestArea(mapId,m));
+    assert.ok(isValidMonsterSurface(map,m) && !isRestArea(mapId,m));
     const home={x:m.x,z:m.z};
-    const place=(player:Player,x:number,z:number)=>Object.assign(player,{x,y:groundAt(mapId,x,z),z});
+    const place=(player:Player,x:number,z:number)=>{
+      const onWater=waterDepthAt(map,x,z)>0;
+      Object.assign(player,{x,z,y:onWater ? map.waterLevel! : groundAt(mapId,x,z),boatId:onWater ? "test-boat" : ""});
+    };
     const resetHunter=()=>place(hunter,home.x,home.z-1.8);
     resetHunter();
     let now=100;
@@ -173,7 +183,7 @@ for (const [id,mapId,name,level,tier,phases,recovery] of [
     if(id==="himmapan_phayak_nathi"){
       assert.equal(centers.size,2);
       assert.ok(Math.hypot(m.x-home.x,m.z-home.z)>1);
-      assert.ok(isSafeWorldPoint(map,m));
+      assert.ok(isValidMonsterSurface(map,m));
     }
     if(id==="himmapan_kilen")assert.equal(centers.size,3);
     tick(now+recovery-1);
@@ -220,7 +230,7 @@ for (const [id, mapId, name, level] of himmapan) {
     assert.equal(monster.level, level);
     assert.equal(monster.tier, "normal");
     assert.deepEqual(parseAttackCommand({ targetId: id }), { targetId: id });
-    assert.ok(isSafeWorldPoint(map, monster));
+    assert.ok(isValidMonsterSurface(map, monster));
     assert.ok(!isRestArea(mapId, monster));
 
     const place = (x: number, z: number) => Object.assign(player, { x, y: groundAt(mapId, x, z), z });
@@ -300,19 +310,90 @@ test("forest monsters use the server profile and respawn independently with loca
   assert.equal(monster.alive,true);assert.equal(monster.hp,200);
 });
 
+test("wild encounters spawn, patrol and respawn in the intended habitat on every enabled map",()=>{
+  const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
+  forest.initialize();
+  for(const map of Object.values(WORLD_MAPS))state.players.set(map.id,new Player({...map.spawn,mapId:map.id}));
+  const blocked=new Set(state.players.keys());
+  const tick=(now:number,dt:number)=>forest.update(now,dt,state.players,blocked,()=>{},()=>{});
+  const check=()=>{
+    for(const [id,monster] of state.monsters){
+      const map=getWorldMap(monster.mapId)!;
+      const wet=waterDepthAt(map,monster.x,monster.z)>0;
+      assert.equal(wet,waterMonsters.has(id),id+" habitat");
+      assert.equal(monster.y,wet ? map.waterLevel : groundAt(map.id,monster.x,monster.z),id+" surface");
+    }
+  };
+  tick(0,0);
+  assert.ok(state.monsters.size>100);
+  for(const id of waterMonsters)assert.ok(state.monsters.get(id)?.alive,id);
+  const initial=new Map([...state.monsters].map(([id,m])=>[id,{x:m.x,y:m.y,z:m.z}]));
+  check();
+  for(let frame=1;frame<=80;frame++){
+    tick(frame*50,.05);
+    check();
+  }
+  for(const id of waterMonsters)assert.ok(forest.kill(id,4000));
+  tick(4000+FOREST_RESPAWN_MS,0);
+  check();
+  for(const id of waterMonsters){
+    const monster=state.monsters.get(id)!;
+    assert.equal(monster.alive,true);
+    assert.deepEqual({x:monster.x,y:monster.y,z:monster.z},initial.get(id));
+  }
+});
+
+
+test("land and water monsters stay in their habitats when chasing across a bank",()=>{
+  const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
+  forest.initialize();
+  const fixtures=[
+    {id:"frontier_river_watch_1_2",mapId:"river_watch",boatId:"test-boat"},
+    {id:"himmapan_matcha_naga",mapId:"lotus_basin",boatId:""},
+  ];
+  for(const {id,mapId} of fixtures)state.players.set(id,new Player({...WORLD_MAPS[mapId].spawn,mapId}));
+  const tick=(now:number,dt:number)=>forest.update(now,dt,state.players,new Set(),()=>{},()=>{});
+  forest.update(0,0,state.players,new Set(state.players.keys()),()=>{},()=>{});
+  for(const {id,mapId,boatId} of fixtures){
+    const map=WORLD_MAPS[mapId], monster=state.monsters.get(id)!;
+    // The shoreline shifts with optional terrain, so choose an opposite-bank point in aggro range.
+    const points=[];
+    for(let dx=-5;dx<=5;dx++)for(let dz=-5;dz<=5;dz++){
+      const distance=Math.hypot(dx,dz);
+      if(distance<3 || distance>5)continue;
+      points.push({x:monster.x+dx,z:monster.z+dz});
+    }
+    const target=points.find(p=>!isRestArea(mapId,p) && (waterDepthAt(map,p.x,p.z)>0)===Boolean(boatId));
+    assert.ok(target,id);
+    Object.assign(state.players.get(id)!,target,{boatId,y:boatId ? map.waterLevel! : groundAt(mapId,target.x,target.z)});
+    assert.equal(forest.canDisplace(id,target),false,id);
+  }
+  const matcha=state.monsters.get("himmapan_matcha_naga")!;
+  assert.ok(forest.canDisplace(matcha.id,{x:matcha.x+1,z:matcha.z}));
+  const chased=new Set<string>();
+  for(let frame=1;frame<=120;frame++){
+    tick(frame*50,.05);
+    for(const {id,mapId} of fixtures){
+      const monster=state.monsters.get(id)!;
+      assert.equal(waterDepthAt(WORLD_MAPS[mapId],monster.x,monster.z)>0,waterMonsters.has(id),id);
+      if(monster.targetId===id && monster.aiState==="chase")chased.add(id);
+    }
+  }
+  for(const {id} of fixtures)assert.ok(chased.has(id),id);
+});
 
 test("the shrine strike is avoidable, server-timed and the guardian has its own respawn",()=>{
   const state=new MyRoomState(),forest=new ForestEncounters(state.monsters);
   forest.initialize();
   const id=SHRINE_GUARDIAN.id,keeper=state.monsters.get(id)!;
-  const player=new Player({x:keeper.x,z:keeper.z,y:0,mapId:keeper.mapId});
+  const player=new Player({x:keeper.x,z:keeper.z,y:keeper.y,mapId:keeper.mapId});
   state.players.set("p",player);
   const hits:number[]=[];
   const update=(now:number)=>forest.update(now,.05,state.players,new Set(),(_id,_m,force=1)=>hits.push(force),()=>{});
   assert.equal(keeper.tier,"elite");
   update(1000);assert.equal(keeper.aiState,"windup");
-  player.x+=4;update(2400);assert.deepEqual(hits,[]);
-  player.x=keeper.x;update(10000);update(11399);assert.deepEqual(hits,[]);
+  player.x+=4;player.y=groundAt(player.mapId,player.x,player.z);update(2400);assert.deepEqual(hits,[]);
+  player.x=keeper.x;player.y=keeper.y;update(10000);update(11399);assert.deepEqual(hits,[]);
   update(11400);assert.deepEqual(hits,[1.6]);
   assert.ok(forest.kill(id,12000));assert.equal(forest.kill(id,12000),false);
   assert.equal(SHRINE_GUARDIAN.respawnMs,1_200_000);

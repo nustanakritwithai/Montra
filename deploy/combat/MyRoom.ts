@@ -52,8 +52,9 @@ import {
   type WorldPoint,
 } from "./HeightRules.js";
 import {
-  MonsterRRTNavigator, isMonsterSegmentClear,
+  MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV, MONSTER_WALLS,
 } from "./MonsterRRT.js";
+import { monsterHabitatGoal, monsterHabitatSegmentClear } from "./MonsterHabitat.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import {MASTERY_ENABLED,masteryBonuses,masteryCapacity,masteryPreview,encodeMasteryVitals,scaleResource,type MasteryMode} from "./RebirthCombat.js";
@@ -923,7 +924,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private monsterInterruptResistUntil = 0;
   private monsterReturning = false;
   // RRT only replaces NPC navigation. All AI intent/combat rules stay put.
-  private monsterNavigator = new MonsterRRTNavigator();
+  private villageMonsterCanTraverse = (from:Vec2,to:Vec2) => monsterHabitatSegmentClear(WORLD_MAPS[DEFAULT_MAP_ID],"land",from,to);
+  private monsterNavigator = new MonsterRRTNavigator(MONSTER_WALLS,MONSTER_NAV.bounds,MONSTER_NAV.iterations,this.villageMonsterCanTraverse);
 
   // All guardian state lives on the server; no client may select NPC stats.
   private lastSummonAt = new Map<string, number>();
@@ -1780,11 +1782,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     const dx=target.x-player.x,dz=target.z-player.z,length=Math.hypot(dx,dz), nx=length>0.001 ? dx/length : -Math.sin(player.facing),nz=length>0.001 ? dz/length : -Math.cos(player.facing);
     const next={x:target.x+nx*1.5,y:target.y,z:target.z+nz*1.5},map=getWorldMap(target.mapId);
-    if(!map || !this.canOccupy(next.x,next.z,surfaceLayer(target),false,target.mapId) || this.isProtectedArea(target.mapId,next) || !this.bodyPathClear(target.mapId,target,next) ||
-      (monster && (monster.id===RULES.monsterId ? !isMonsterSegmentClear(monster,next) : !this.forest.canDisplace(monster.id,next))))return this.reject(client,"muay_throw_blocked");
-    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,(x,z)=>this.canOccupy(x,z,surfaceLayer(target),false,target.mapId) && !this.isProtectedArea(target.mapId,{x,z}),map.bounds);
+    if(!map)return this.reject(client,"muay_throw_blocked");
+    const waterMonster=monster && this.forest.isWaterMonster(monster.id) ? monster : undefined;
+    const canOccupyLanding=(x:number,z:number)=>!this.isProtectedArea(target.mapId,{x,z}) &&
+      (waterMonster ? this.forest.canDisplace(waterMonster.id,{x,z}) :
+        walkBridgeTransitionClear(map,target,x,z) && this.canOccupy(x,z,surfaceLayer(target),false,target.mapId));
+    if(!canOccupyLanding(next.x,next.z) || !this.bodyPathClear(target.mapId,target,next) ||
+      (monster && !waterMonster && (monster.id===RULES.monsterId ? !isMonsterSegmentClear(monster,next) || !this.villageMonsterCanTraverse(monster,next) :
+        !this.forest.canDisplace(monster.id,next))))return this.reject(client,"muay_throw_blocked");
+    const sweep=advanceDash(target,{dx:nx,dz:nz},1.5,canOccupyLanding,map.bounds);
     if(sweep.blocked || sweep.moved<1.4999)return this.reject(client,"muay_throw_blocked");
-    this.moveOnSurface(target,next.x,next.z);
+    const landingHeight=monster ? this.forest.heightAt(monster.id,next) : undefined;
+    if(monster && landingHeight!==undefined){monster.x=next.x;monster.y=landingHeight;monster.z=next.z;}
+    else this.moveOnSurface(target,next.x,next.z);
     this.releaseMuayGrapple(id,"thrown");this.recordCombat(id,hold.targetId);this.recordMuayTraining(id,"strikes");
     const pvp=!monster,attack=(this.masteryPower(player,pvp?"pvp":"pve","atk",weaponBonuses(this.inventories.get(id),pvp?"pvp":"pve").melee))*MUAY_SKILLS.grapple.power*(pvp?MUAY_PVP_DAMAGE_MULTIPLIER:1);
     if(monster)this.hitMonsterWithSpell(id,monster,calculateDamage(attack,monster.defense,monster.level),"muay");
@@ -7965,15 +7975,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
    */
   private moveMonster(target:Vec2,step:number,intent:string,walk?:(monster:Monster,previous:Position)=>void) {
     const monster = this.state.monster;
+    const goal = monsterHabitatGoal(WORLD_MAPS[DEFAULT_MAP_ID],"land",monster,target);
     const waypoint = this.monsterNavigator.nextWaypoint(
-      monster, target, this.simulatedMs, intent
+      monster, goal, this.simulatedMs, intent
     );
     if (!waypoint) return; // Never fall back to walking through the wall.
 
     const dx = waypoint.x-monster.x;
     const dz = waypoint.z-monster.z;
     const next = stepTowards(monster, waypoint, step);
-    if (!next.moved || this.isProtectedArea(DEFAULT_MAP_ID,next) || !isMonsterSegmentClear(monster, next)) return;
+    if (!next.moved || this.isProtectedArea(DEFAULT_MAP_ID,next) || !isMonsterSegmentClear(monster, next) ||
+      !this.villageMonsterCanTraverse(monster,next)) return;
 
     const previous=walk?{x:monster.x,y:monster.y,z:monster.z}:undefined;
     monster.facing = facingTo(dx,dz);

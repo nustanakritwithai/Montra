@@ -17,6 +17,7 @@ import { RULES, type Vec2 } from "./GameRules.js";
 import {segmentIntersectsExpandedWall,type WorldWall} from "./WorldMaps.js";
 export type WallRect = WorldWall;
 export type NavigationBounds = { minX: number; maxX: number; minZ: number; maxZ: number };
+export type MonsterSegmentGuard = (from:Vec2,to:Vec2)=>boolean;
 export type RRTPathResult = {
   path: Vec2[];
   found: boolean;
@@ -79,10 +80,12 @@ export function isMonsterSegmentClear(
   obstacles:readonly WallRect[]=MONSTER_WALLS,
   radius:number=MONSTER_NAV.radius,
   bounds:NavigationBounds=MONSTER_NAV.bounds,
+  canTraverse?:MonsterSegmentGuard,
 ):boolean {
   return isMonsterFree(a,obstacles,radius,bounds)&&
     isMonsterFree(b,obstacles,radius,bounds)&&
-    !obstacles.some(w=>segmentIntersectsExpandedWall(a,b,w,radius));
+    !obstacles.some(w=>segmentIntersectsExpandedWall(a,b,w,radius))&&
+    (!canTraverse || canTraverse(a,b));
 }
 
 function steer(from:Vec2,to:Vec2,step:number):Vec2 {
@@ -103,6 +106,7 @@ export function smoothMonsterPath(
   obstacles:readonly WallRect[]=MONSTER_WALLS,
   radius:number=MONSTER_NAV.radius,
   bounds:NavigationBounds=MONSTER_NAV.bounds,
+  canTraverse?:MonsterSegmentGuard,
 ):Vec2[] {
   if(path.length<3)return [...path];
   const out:Vec2[]=[path[0]];
@@ -110,7 +114,7 @@ export function smoothMonsterPath(
   while(current<path.length-1) {
     let next=current+1;
     for(let i=path.length-1;i>current+1;i--){
-      if(isMonsterSegmentClear(path[current],path[i],obstacles,radius,bounds)){
+      if(isMonsterSegmentClear(path[current],path[i],obstacles,radius,bounds,canTraverse)){
         next=i;break;
       }
     }
@@ -136,18 +140,21 @@ export function planMonsterRRT(
     radius?:number;
     obstacles?:readonly WallRect[];
     bounds?:NavigationBounds;
+    canTraverse?:MonsterSegmentGuard;
   }={},
 ):RRTPathResult {
   const obstacles=options.obstacles??MONSTER_WALLS;
   const bounds=options.bounds??MONSTER_NAV.bounds;
   const radius=options.radius??MONSTER_NAV.radius;
+  const canTraverse=options.canTraverse;
+  const free=(point:Vec2)=>isMonsterFree(point,obstacles,radius,bounds) && (!canTraverse || canTraverse(point,point));
+  const clear=(from:Vec2,to:Vec2)=>isMonsterSegmentClear(from,to,obstacles,radius,bounds,canTraverse);
   const fail=(iterations=0,nodes=0):RRTPathResult=>
     ({path:[],found:false,iterations,nodes,direct:false});
 
-  if(!isMonsterFree(start,obstacles,radius,bounds)||
-     !isMonsterFree(goal,obstacles,radius,bounds))return fail();
+  if(!free(start)||!free(goal))return fail();
 
-  if(isMonsterSegmentClear(start,goal,obstacles,radius,bounds)){
+  if(clear(start,goal)){
     return {path:[{x:start.x,z:start.z},{x:goal.x,z:goal.z}],found:true,iterations:0,nodes:2,direct:true};
   }
 
@@ -191,7 +198,7 @@ export function planMonsterRRT(
         z:bounds.minZ+rand()*(bounds.maxZ-bounds.minZ),
       };
     }
-    if(!isMonsterFree(sample,obstacles,radius,bounds))continue;
+    if(!free(sample))continue;
 
     let nearest=0,best=Infinity;
     for(let i=0;i<nodes.length;i++){
@@ -199,11 +206,11 @@ export function planMonsterRRT(
       if(d<best){best=d;nearest=i;}
     }
     const next=steer(nodes[nearest].p,sample,step);
-    if(!isMonsterSegmentClear(nodes[nearest].p,next,obstacles,radius,bounds))continue;
+    if(!clear(nodes[nearest].p,next))continue;
     nodes.push({p:next,parent:nearest});
 
     if(distanceXZ(next,goal)<step*1.5 &&
-       isMonsterSegmentClear(next,goal,obstacles,radius,bounds)){
+       clear(next,goal)){
       nodes.push({p:{x:goal.x,z:goal.z},parent:nodes.length-1});
       end=nodes.length-1;
       break;
@@ -219,7 +226,7 @@ export function planMonsterRRT(
   }
   route.reverse();
   return {
-    path:smoothMonsterPath(route,obstacles,radius,bounds),
+    path:smoothMonsterPath(route,obstacles,radius,bounds,canTraverse),
     found:true,iterations:used,nodes:nodes.length,direct:false,
   };
 }
@@ -232,7 +239,8 @@ export function planMonsterRRT(
  * replanMs window per monster and never in a per-render-frame loop.
  */
 export class MonsterRRTNavigator {
-  constructor(private obstacles:readonly WallRect[]=MONSTER_WALLS, private bounds:NavigationBounds=MONSTER_NAV.bounds, private iterations:number=MONSTER_NAV.iterations) {}
+  constructor(private obstacles:readonly WallRect[]=MONSTER_WALLS, private bounds:NavigationBounds=MONSTER_NAV.bounds,
+    private iterations:number=MONSTER_NAV.iterations, private canTraverse?:MonsterSegmentGuard) {}
   private route:{
     intent:string;
     goal:Vec2;
@@ -246,7 +254,8 @@ export class MonsterRRTNavigator {
   nextWaypoint(
     position:Vec2,goal:Vec2,serverNowMs:number,intent:string,
   ):Vec2|null {
-    if(!isMonsterFree(position,this.obstacles,MONSTER_NAV.radius,this.bounds)||!isMonsterFree(goal,this.obstacles,MONSTER_NAV.radius,this.bounds)) {
+    if(!isMonsterFree(position,this.obstacles,MONSTER_NAV.radius,this.bounds)||!isMonsterFree(goal,this.obstacles,MONSTER_NAV.radius,this.bounds)||
+      (this.canTraverse && (!this.canTraverse(position,position)||!this.canTraverse(goal,goal)))) {
       this.route=null;
       return null;
     }
@@ -275,7 +284,7 @@ export class MonsterRRTNavigator {
       // Convert at the planner boundary to ordinary numeric waypoints.
       const from={x:position.x,z:position.z};
       const destination={x:goal.x,z:goal.z};
-      const result=planMonsterRRT(from,destination,{seed,obstacles:this.obstacles,bounds:this.bounds,iterations:this.iterations});
+      const result=planMonsterRRT(from,destination,{seed,obstacles:this.obstacles,bounds:this.bounds,iterations:this.iterations,canTraverse:this.canTraverse});
       this.route={
         intent,
         goal:{x:goal.x,z:goal.z},
@@ -294,7 +303,7 @@ export class MonsterRRTNavigator {
     if(route.index>=route.waypoints.length)return null;
 
     const candidate=route.waypoints[route.index];
-    if(!isMonsterSegmentClear(position,candidate,this.obstacles,MONSTER_NAV.radius,this.bounds)) {
+    if(!isMonsterSegmentClear(position,candidate,this.obstacles,MONSTER_NAV.radius,this.bounds,this.canTraverse)) {
       // Do not move through blocked geometry; a future plan may recover.
       route.waypoints=[];
       route.index=0;

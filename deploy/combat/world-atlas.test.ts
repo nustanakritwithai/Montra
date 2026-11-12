@@ -162,15 +162,18 @@ test("the city and both forts have continuous crests, usable stair endpoints and
 test("Titan spawns beside the existing Asura boss, strikes nearby players and respawns on its own clock",()=>{
   const map = WORLD_MAPS[TITAN_BOSS.mapId];
   const state = new MyRoomState(), forest = new ForestEncounters(state.monsters);
-  const point = {x: TITAN_BOSS.x, z: TITAN_BOSS.z, y: groundAt(map.id,TITAN_BOSS.x,TITAN_BOSS.z)};
-  assert.ok(isSafeWorldPoint(map,point));
-  for (const id of ["first","second"]) state.players.set(id,new Player({...point,mapId:map.id,alive:true}));
+  for (const id of ["first","second"]) state.players.set(id,new Player({...map.spawn,mapId:map.id,alive:true}));
   const hits: string[] = [], respawned: string[] = [];
   const tick = (at: number) => forest.update(at,0,state.players,new Set(),
     (id, monster) => { if (monster.id === TITAN_BOSS.id) hits.push(id); }, id => respawned.push(id));
   forest.initialize();
-  tick(100);
+  tick(0);
   const titan = state.monsters.get(TITAN_BOSS.id)!;
+  const point = {x:titan.x,y:titan.y,z:titan.z};
+  assert.ok(isSafeWorldPoint(map,point));
+  assert.ok(Math.hypot(point.x-TITAN_BOSS.x,point.z-TITAN_BOSS.z)<8);
+  for(const player of state.players.values())Object.assign(player,point);
+  tick(100);
   assert.equal(titan.tier,"boss");
   assert.ok(state.monsters.has("boss_asura_peak"));
   assert.equal(titan.aiState,"windup");

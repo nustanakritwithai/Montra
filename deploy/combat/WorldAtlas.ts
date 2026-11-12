@@ -216,7 +216,7 @@ export type HimmapanAttack = HimmapanPhase & {
   aimAtTarget?:boolean; defensive?:boolean;
 };
 export const HIMMAPAN_SPAWNS = ([
-  { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal",
+  { id:"himmapan_matcha_naga", name:"มัจฉนาคา", mapId:"lotus_basin", x:72, z:-23, level:48, tier:"normal", habitat:"water",
     theme:"grove", special:{ range:4, halfWidth:1.05, windupMs:1100 } },
   { id:"himmapan_garuda_scout", name:"ครุฑลาดตระเวน", mapId:RIDGE_PASS, x:77, z:-4, level:52, tier:"normal",
     theme:"hunter", special:{ range:5.2, halfWidth:.8, windupMs:1000 } },
@@ -228,11 +228,11 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"hunter", special:{ range:3.2, halfWidth:1.3, windupMs:850 } },
   { id:"himmapan_durong_paksin", name:"ดุรงค์ปักษิณ", mapId:"hex_ridge", x:55, z:25, level:45, tier:"normal",
     theme:"hunter", special:{ range:5.6, halfWidth:.75, windupMs:1050 } },
-  { id:"himmapan_kunchon_wari", name:"กุญชรวารี", mapId:"lotus_basin", x:101, z:-55, level:50, tier:"normal",
+  { id:"himmapan_kunchon_wari", name:"กุญชรวารี", mapId:"lotus_basin", x:101, z:-55, level:50, tier:"normal", habitat:"water",
     theme:"grove", special:{ range:3.45, halfWidth:0, innerRange:1.2, windupMs:1350 } },
   { id:"himmapan_karavek", name:"นกการเวก", mapId:"hex_ridge", x:-26, z:-29, level:45, tier:"normal",
     theme:"spirit", special:{ range:3.95, halfWidth:0, windupMs:1200 } },
-  { id:"himmapan_phayak_nathi", replaces:"atlas_drowned_marsh_3_2", name:"พยัคฆนที", mapId:"drowned_marsh", x:-73, z:-53, level:22, tier:"normal",
+  { id:"himmapan_phayak_nathi", replaces:"atlas_drowned_marsh_3_2", name:"พยัคฆนที", mapId:"drowned_marsh", x:-73, z:-35, level:22, tier:"normal", habitat:"water",
     theme:"hunter", special:{ range:1.9, halfWidth:0, windupMs:650, triggerRange:5, cueOnly:true,
       followups:[{range:1.85,halfWidth:0,windupMs:750,forward:3.4,leap:true}] } },
   { id:"himmapan_hatsadiling", replaces:"frontier_twin_neck_pass_2_3", name:"นกหัสดีลิงค์", mapId:RIDGE_PASS, x:64, z:-40, level:57, tier:"normal",
@@ -248,7 +248,7 @@ export const HIMMAPAN_SPAWNS = ([
     theme:"guard", special:{range:2.35,halfWidth:0,windupMs:1650,triggerRange:4.8,aimAtTarget:true,leap:true,recoveryMs:1150,force:1.35} },
   { id:"himmapan_tinna_siha", replaces:"atlas_bamboo_frontier_2_2", name:"ติณสีหะ", mapId:"bamboo_frontier", x:16, z:-11, level:31, tier:"normal",
     theme:"grove", special:{range:2.9,halfWidth:0,halfAngle:Math.PI/3,windupMs:880,defensive:true,recoveryMs:360,force:1} },
-  { id:"himmapan_hera", replaces:"atlas_naga_cavern_4_2", name:"เหรา", mapId:"naga_cavern", x:-75, z:-7, level:52, tier:"normal",
+  { id:"himmapan_hera", replaces:"atlas_naga_cavern_4_2", name:"เหรา", mapId:"naga_cavern", x:-75, z:-7, level:52, tier:"normal", habitat:"water",
     theme:"hunter", special:{range:1.25,halfWidth:0,windupMs:460,triggerRange:4.8,cueOnly:true,
       followups:[{range:4.8,halfWidth:.95,windupMs:870,force:1.2}],recoveryMs:850} },
   { id:"himmapan_thanthi_ma", replaces:"atlas_moon_cemetery_3_2", name:"นกทัณฑิมา", mapId:"moon_cemetery", x:24, z:-44, level:32, tier:"normal",

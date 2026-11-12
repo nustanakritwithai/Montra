@@ -2,9 +2,11 @@ import { Monster, type MyRoomState, type Player } from "./schema/MyRoomState.js"
 import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_SPAWNS, HIMMAPAN_REPLACED_TARGETS, type HimmapanAttack, type HimmapanPhase } from "./WorldAtlas.js";
 import {REGIONAL_BOSSES,TITAN_BOSS} from "./RegionalBosses.js";
 import { TEMPLE_MAP, TEMPLE_SPAWNS } from "./TempleMap.js";
-import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, groundAt, onMapGround, isRestArea, isSafeWorldPoint, isWorldSegmentClear } from "./WorldMaps.js";
+import { type WorldMapDefinition, type WorldWall, FOREST_CAMPS, SHRINE_GUARDIAN, WORLD_EXPANSION, WORLD_ROOM_CAPACITY, getWorldMap, onMapGround, isRestArea, isSafeWorldPoint, isWorldSegmentClear } from "./WorldMaps.js";
 import { facingTo, planarDistance, stepTowards } from "./GameRules.js";
-import { MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV } from "./MonsterRRT.js";
+import { MonsterRRTNavigator, isMonsterFree, isMonsterSegmentClear, MONSTER_NAV, type MonsterSegmentGuard } from "./MonsterRRT.js";
+import { monsterHabitatAllows, monsterHabitatGoal, monsterHabitatHeight, monsterHabitatSegmentClear, type MonsterHabitat } from "./MonsterHabitat.js";
+import { waterDepthAt } from "./GroundTerrain.js";
 import { distance3d } from "./HeightRules.js";
 import { FOREST_MONSTER_TIERS, MONSTER_CONFIG, monsterProfile, monsterRespawnDelay, type MonsterProfile, type MonsterTier } from "./MonsterProfiles.js";
 import type {GhostSource} from "./LegacyGhostPot.js";
@@ -27,9 +29,11 @@ const FOREST_TRACE_LIMIT=1024;
 type Navigation = {map:WorldMapDefinition; obstacles:WorldWall[]};
 type Point = {x:number;z:number};
 export type MonsterCombatTarget = Pick<Player, "x" | "y" | "z" | "alive" | "mapId" | "boatId">;
-type Life = {actor:Monster;zone:Navigation; special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; retreat?:Point; nav:MonsterRRTNavigator};
-type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack };
+type Life = {actor:Monster;zone:Navigation; habitat:MonsterHabitat; canTraverse?:MonsterSegmentGuard;
+  special?:HimmapanAttack; windupUntil:number; nextChargeAt:number; interruptUntil:number; interruptResistUntil:number; tauntOwner:string; tauntUntil:number; tauntResistUntil:number; x:number; z:number; profile:MonsterProfile; respawnAt:number; lastAttack:number; returning:boolean; retreat?:Point; nav:MonsterRRTNavigator};
+type Spawn = { id:string; x:number; z:number; level:number; name:string; tier?:MonsterTier; special?:HimmapanAttack; habitat?:MonsterHabitat };
 const FOREST_OFFSETS = [[-7,-7],[7,-7],[-7,7],[7,7]] as const;
+const HABITAT_HOME_RADIUS=24;
 const normalForestSpawns = FOREST_CAMPS.flatMap(camp => camp.levels.map((level, i) => ({
   id: `forest_${camp.id}_${i + 1}`, level,
   name: level < 5 ? "ผีหลงป่า" : level < 9 ? "เงารากไม้" : "วิญญาณอาคม",
@@ -59,17 +63,43 @@ function inSpecialArea(monster:Monster, origin:Point, player:MonsterCombatTarget
   const lateral=dx*cos-dz*sin;
   return forward>=0 && forward<=attack.range && Math.abs(lateral)<=attack.halfWidth;
 }
+
+function findMonsterHome(zone:Navigation, spawn:Point, habitat:MonsterHabitat):Point | undefined {
+  const {map,obstacles}=zone;
+  if(monsterHabitatAllows(map,habitat,spawn))return spawn;
+  let best:Point | undefined, bestDistance=HABITAT_HOME_RADIUS**2;
+  for(let dx=-HABITAT_HOME_RADIUS;dx<=HABITAT_HOME_RADIUS;dx++)for(let dz=-HABITAT_HOME_RADIUS;dz<=HABITAT_HOME_RADIUS;dz++){
+    const distance=dx*dx+dz*dz;
+    if(distance>=bestDistance)continue;
+    const point={x:spawn.x+dx,z:spawn.z+dz};
+    const depth=waterDepthAt(map,point.x,point.z);
+    if((habitat==="water" ? depth<.25 : depth>0) || isRestArea(map.id,point) ||
+      !isMonsterFree(point,obstacles,MONSTER_NAV.radius,map.bounds))continue;
+    if(habitat==="land"){
+      const y=monsterHabitatHeight(map,habitat,point);
+      // A dry point at the edge of a water rectangle may still be down its carved bank.
+      if(y<(map.waterLevel??y)-.05 || !isSafeWorldPoint(map,{...point,y},MONSTER_NAV.radius))continue;
+    }
+    best=point;bestDistance=distance;
+  }
+  return best;
+}
+
+function monsterHeight(life:Life, point:Point):number {
+  return monsterHabitatHeight(life.zone.map,life.habitat,point);
+}
+
 function canPlaceSpecial(life:Life, to:{x:number;y:number;z:number}):boolean {
   const {actor,zone:{map,obstacles}}=life;
-  return !isRestArea(map.id,to) && isSafeWorldPoint(map,to,MONSTER_NAV.radius) &&
-    isMonsterSegmentClear(actor,to,obstacles,MONSTER_NAV.radius,map.bounds) &&
+  return !isRestArea(map.id,to) && (life.habitat==="water" || isSafeWorldPoint(map,to,MONSTER_NAV.radius)) &&
+    isMonsterSegmentClear(actor,to,obstacles,MONSTER_NAV.radius,map.bounds,life.canTraverse) &&
     (!map.terrain || isWorldSegmentClear(map.id,actor,to));
 }
 function safeSpecialPoint(life:Life, point:Point):Point {
   const m=life.actor;
   for(const scale of [1,.75,.5,.25]){
     const x=m.x+(point.x-m.x)*scale,z=m.z+(point.z-m.z)*scale;
-    if(canPlaceSpecial(life,{x,y:groundAt(m.mapId,x,z),z}))return {x,z};
+    if(canPlaceSpecial(life,{x,y:monsterHeight(life,{x,z}),z}))return {x,z};
   }
   return {x:m.x,z:m.z};
 }
@@ -151,18 +181,26 @@ export class ForestEncounters {
       ...templeSpawns.map(spawn=>({spawn,zone:temple})),
       ...regionalSpawns.map(spawn=>({spawn,zone:regionalNavigation.get(spawn.mapId)!}))];
     for (const {spawn,zone} of spawns) {
-      const {id, x, z, level, name, special} = spawn;
+      const {id, level, name, special} = spawn;
+      const preferredHabitat=spawn.habitat??"land";
+      const home=findMonsterHome(zone,spawn,preferredHabitat);
+      // Keep the encounter available if an authored map loses its preferred habitat.
+      const habitat=home ? preferredHabitat : monsterHabitatAllows(zone.map,"land",spawn) ? "land" : "water";
+      const {x,z}=home??spawn;
+      const canTraverse:MonsterSegmentGuard | undefined=zone.map.waterLevel===undefined ? undefined :
+        (from,to)=>monsterHabitatSegmentClear(zone.map,habitat,from,to);
       const tier:MonsterTier = spawn.tier ?? (id === SHRINE_GUARDIAN.id ? "elite" : (this.tiers[id] ?? "normal"));
       const base=monsterProfile(level,tier==="boss"?"normal":tier);
       const profile:MonsterProfile=tier==="boss" ? {...base,tier,maxHp:Math.round(base.maxHp*(id===TITAN_BOSS.id?5:3.5)),
         attack:Math.round(base.attack*1.55),defense:Math.round(base.defense*1.3)} : base;
-      const actor=new Monster({id,x,y:groundAt(zone.map.id,x,z),z,hp:profile.maxHp,maxHp:profile.maxHp,
+      const actor=new Monster({id,x,y:monsterHabitatHeight(zone.map,habitat,{x,z}),z,hp:profile.maxHp,maxHp:profile.maxHp,
         alive:true,mapId:zone.map.id,level,tier,displayName:name,defense:profile.defense,
         ...(special?{specialRange:special.range,specialHalfWidth:special.halfWidth,
           specialInnerRange:special.innerRange??0,specialHalfAngle:special.halfAngle??0}:{})});
       if(!this.regionalMaps.has(zone.map.id))this.monsters.set(id,actor);
-      this.lives.set(id,{actor,zone,x,z,profile,special,respawnAt:0,lastAttack:-Infinity,returning:false,
-        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds)});
+      this.lives.set(id,{actor,zone,habitat,canTraverse,x,z,profile,special,respawnAt:0,lastAttack:-Infinity,returning:false,
+        nextChargeAt:0,windupUntil:0,interruptUntil:0,interruptResistUntil:0,tauntOwner:"",tauntUntil:0,tauntResistUntil:0,
+        nav:new MonsterRRTNavigator(zone.obstacles,zone.map.bounds,MONSTER_NAV.iterations,canTraverse)});
     }
   }
   profile(id:string):MonsterProfile | null { return this.lives.get(id)?.profile ?? null; }
@@ -195,7 +233,12 @@ export class ForestEncounters {
   canDisplace(id:string,to:{x:number;z:number}):boolean {
     const life=this.lives.get(id), monster=this.monsters.get(id);
     return Boolean(life && monster?.alive && !isRestArea(monster.mapId,to) &&
-      isMonsterSegmentClear(monster,to,life.zone.obstacles,MONSTER_NAV.radius,life.zone.map.bounds));
+      isMonsterSegmentClear(monster,to,life.zone.obstacles,MONSTER_NAV.radius,life.zone.map.bounds,life.canTraverse));
+  }
+  isWaterMonster(id:string):boolean { return this.lives.get(id)?.habitat==="water"; }
+  heightAt(id:string,point:Point):number | undefined {
+    const life=this.lives.get(id);
+    return life ? monsterHeight(life,point) : undefined;
   }
   kill(id:string,now:number,players?:MyRoomState["players"],blocked?:ReadonlySet<string>):boolean {
     const m=this.monsters.get(id),life=this.lives.get(id);
@@ -246,7 +289,7 @@ export class ForestEncounters {
       const m=this.monsters.get(id);
       if(!m)continue;
       if(!m.alive){
-        if(now>=life.respawnAt){m.x=life.x;m.z=life.z;m.y=groundAt(map.id,m.x,m.z);m.hp=m.maxHp;m.alive=true;m.aiState="patrol";m.targetId="";
+        if(now>=life.respawnAt){m.x=life.x;m.z=life.z;m.y=monsterHeight(life,m);m.hp=m.maxHp;m.alive=true;m.aiState="patrol";m.targetId="";
           life.lastAttack=-Infinity;life.returning=false;life.nav.clear();
           if(this.traceEnabled)this.traceEvent({kind:"respawned",now,monsterId:id,mapId:m.mapId,to:{x:m.x,y:m.y,z:m.z}});respawn(id);}
         continue;
@@ -268,7 +311,7 @@ export class ForestEncounters {
           const stage=m.specialStage;
           const phase=special.followups?.[stage-2]??special;
           const x=m.specialOriginX,z=m.specialOriginZ;
-          const origin=stage?{x,y:groundAt(map.id,x,z),z}:m;
+          const origin=stage?{x,y:monsterHeight(life,{x,z}),z}:m;
           const validOrigin=!(phase.forward || phase.lateral || phase.leap) || canPlaceSpecial(life,origin);
           const next=stage?special.followups?.[stage-1]:undefined;
           const force=phase.force??1.25;
@@ -327,7 +370,7 @@ export class ForestEncounters {
         m.targetId="";
         const retreat=life.retreat;
         if(!retreat || planarDistance(m,retreat)<=.16 ||
-          !canPlaceSpecial(life,{...retreat,y:groundAt(map.id,retreat.x,retreat.z)})){
+          !canPlaceSpecial(life,{...retreat,y:monsterHeight(life,retreat)})){
           life.retreat=undefined;
           m.aiState="grazing";
           continue;
@@ -373,12 +416,13 @@ export class ForestEncounters {
         }else{m.aiState="patrol";const phase=now/3000+life.x;
           destination={x:life.x+Math.cos(phase)*1.1,z:life.z+Math.sin(phase)*1.1};speed=.65;}
       }
-      const waypoint=life.nav.nextWaypoint(m,destination,now,m.aiState+":"+m.targetId);
+      const goal=life.canTraverse ? monsterHabitatGoal(map,life.habitat,m,destination) : destination;
+      const waypoint=life.nav.nextWaypoint(m,goal,now,m.aiState+":"+m.targetId);
       if(!waypoint)continue;
       const next=stepTowards(m,waypoint,speed*dt);
-      if(!isRestArea(m.mapId,next)&&isMonsterSegmentClear(m,next,obstacles,MONSTER_NAV.radius,map.bounds)){
+      if(!isRestArea(m.mapId,next)&&isMonsterSegmentClear(m,next,obstacles,MONSTER_NAV.radius,map.bounds,life.canTraverse)){
         const from=(this.traceEnabled || walk) ? {x:m.x,y:m.y,z:m.z} : undefined;
-        m.facing=facingTo(next.x-m.x,next.z-m.z);m.x=next.x;m.z=next.z;m.y=groundAt(map.id,m.x,m.z);
+        m.facing=facingTo(next.x-m.x,next.z-m.z);m.x=next.x;m.z=next.z;m.y=monsterHeight(life,next);
         if(from && this.traceEnabled)this.traceEvent({kind:"move",now,monsterId:id,mapId:m.mapId,from,to:{x:m.x,y:m.y,z:m.z}});
         if(from)walk?.(m,from);
       }

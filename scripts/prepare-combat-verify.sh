@@ -155,6 +155,7 @@ cp deploy/combat/progression.test.ts combat-verify/src/rooms/progression.test.ts
 cp deploy/combat/progression-transaction.test.ts combat-verify/src/rooms/progression-transaction.test.ts
 cp deploy/combat/world-warp-rules.test.ts combat-verify/src/rooms/world-warp-rules.test.ts
 cp deploy/combat/MonsterRRT.ts combat-verify/src/rooms/MonsterRRT.ts
+cp deploy/combat/MonsterHabitat.ts combat-verify/src/rooms/MonsterHabitat.ts
 cp deploy/combat/CharacterStore.ts combat-verify/src/rooms/CharacterStore.ts
 cp deploy/combat/Rebirth.ts combat-verify/src/rooms/Rebirth.ts
 cp deploy/combat/RebirthCombat.ts deploy/combat/rebirth-combat.test.ts deploy/combat/mastery-runtime.test.ts combat-verify/src/rooms/
