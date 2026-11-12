@@ -12,7 +12,7 @@ const map=WORLD_MAPS[RIVER_CITY],r=map.strategic!.rampart!;
 const feet=(p:{x:number;z:number},y=0)=>({...p,y});
 
 test("B01 preserves the two crossings, facility courts and independently walkable elevated circuits at the enlarged pitch",()=>{
-  assert.deepEqual(map.bounds,{minX:-248,maxX:248,minZ:-200,maxZ:200});
+  assert.deepEqual(map.bounds,{minX:-248,maxX:248,minZ:-200,maxZ:228});
   assert.deepEqual(map.strategic!.sites.filter(s=>s.kind==="bridge").map(s=>s.x),[-112,112]);
   for(let i=0;i<31;i++)assert.equal(isSafeWorldPoint(map,feet(gridPoint(i,21))),i===8 || i===22);
   assert.equal(r.gates.length,5);assert.equal(r.stairs.length,4);assert.equal(r.deck.length,8);

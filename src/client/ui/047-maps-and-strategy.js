@@ -498,11 +498,11 @@
     v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, "rgba(0,0,0,.55)");
     ctx.fillStyle = v; ctx.fillRect(0, 0, width, height);
     const boatDock = room?.state?.boatsAvailable ? map?.boatDock : null;
-    if (boatDock) {
-      const x = sx(boatDock.x), y = sy(boatDock.z);
+    if (boatDock) for(const port of map.boatPorts??[{shore:boatDock,name:"ท่าปล่อยเรือ"}]){
+      const x = sx(port.shore.x), y = sy(port.shore.z);
       mapDot(ctx, x, y, large ? 8 : 6, "#16475a", "#9ee9ff");
       mapText(ctx, "⚓︎", x, y, large ? 12 : 9, "#e0f8ff", 700);
-      if (large) mapText(ctx, "ท่าปล่อยเรือ", Math.max(45, Math.min(width - 45, x)), y - 15, 12, "#bfefff", 700);
+      if (large) mapText(ctx, port.name, Math.max(45, Math.min(width - 45, x)), y - 15, 12, "#bfefff", 700);
     }
     if(room?.state?.boatsAvailable)for(const gate of map?.waterGates||[]){
       const x=sx(gate.x),z=sy(gate.z),name=worldDefinitions?.[gate.targetMapId]?.name;
@@ -1224,6 +1224,23 @@
     const warLegend=services.some(npc=>npc.role==="war")?"<span>จุดแดงอ่อน · นายทหารรับศึก</span>":"";
     openDrawer("map",(inField?"แผนที่สนาม · ":"แผนที่")+(activeMap?.name || (activeMapId==="ritual_village"?"หมู่บ้านอาคม":"ป่าต้องห้าม")),
       `<p id="warMapObjective" class="war-map-objective" hidden></p><canvas id="bigMap" class="drawer-map" width="420" height="320"></canvas><div class="legend"><span><b>●</b> ตัวเรา</span><span>● ผู้เล่นอื่น</span><span>● ประตูวาร์ป</span><span>● มอนสเตอร์</span><span>● NPC ผู้ให้บริการ</span>${warLegend}<span>วงสีเขียว: เขตพัก</span>${inField?"<span>วงทองและเส้นประ · ทิศไปจุดยึด</span>":""}</div>`);
+    const boatPorts=room?.state?.boatsAvailable ? activeMap?.boatPorts : null;
+    if(boatPorts?.length){
+      const list=document.createElement("details"),summary=document.createElement("summary");
+      list.className="help-topic";summary.textContent="ท่าเรือในพื้นที่";list.append(summary);
+      for(const port of boatPorts){
+        const button=document.createElement("button");button.type="button";button.className="secondary";
+        button.textContent=(boatAtHelm()?"เทียบ":"เดินไป")+port.name;
+        button.onclick=()=>{
+          const me=ownServerCharacter();
+          if(boatAtHelm()){if(sailToPort(port.id))closeDrawer();return;}
+          if(!me || me.flying || me.boatId){toast("ลงจอดหรือจับหางเสือก่อนเลือกท่าเรือ");return;}
+          closeDrawer();pointMove(port.shore.x,port.shore.z);
+        };
+        list.append(button);
+      }
+      $("bigMap").parentElement.append(list);
+    }
     if(keeper?.mapId===activeMapId)services.unshift(keeper);
     services.sort((a,b)=>Number(b.role==="war")-Number(a.role==="war"));
     if(services.length){

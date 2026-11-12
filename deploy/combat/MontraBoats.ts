@@ -3,13 +3,14 @@ import { waterDepthAt } from "./GroundTerrain.js";
 import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
-  AUTHORITATIVE_BOAT_DEFINITIONS, type BoatBerth, type BoatWorldSnapshot,
+  AUTHORITATIVE_BOAT_DEFINITIONS, type BoatBerth, type BoatPort, type BoatWorldSnapshot,
 } from "./PirateBoatRules.js";
 
 export const BOAT_SHORES: Readonly<Record<string,Vec2>> = Object.fromEntries(Object.values(WORLD_MAPS)
   .flatMap(map=>map.boatHarbor?[[map.id,map.boatHarbor.shore]]:[]));
 export const BOAT_LAUNCH_RANGE = 3;
 export const BOAT_DECK = {width: 2.1, length: 5.2, y: .88};
+const PORT_BERTH_RANGE = 2.4;
 const starter = AUTHORITATIVE_BOAT_DEFINITIONS["training-dinghy"]!;
 // Pirate Fruit DeckSpace ratios, measured from Montra's water level.
 const halfWidth = BOAT_DECK.width * .41 * 1.08;
@@ -77,9 +78,24 @@ function toWorld(boat: BoatWorldSnapshot, point: Vec2): WorldPoint {
   return {x: boat.x + point.x*c + point.z*s, y: deckY(boat.islandId), z: boat.z - point.x*s + point.z*c};
 }
 
+function nearestPort(ports:readonly BoatPort[]|undefined,point:Vec2,side:"shore"|"berth",range=Infinity) {
+  let nearest:BoatPort|undefined;
+  for(const port of ports??[]){
+    const distance=Math.hypot(point.x-port[side].x,point.z-port[side].z);
+    if(distance<=range){nearest=port;range=distance;}
+  }
+  return nearest;
+}
+
 function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null {
   const map = getWorldMap(boat.islandId)!;
   const eye = {x:point.x,y:point.y+1,z:point.z};
+  const port=nearestPort(map.boatPorts,boat,"berth",PORT_BERTH_RANGE);
+  if(port){
+    const {x,z}=port.shore,y=groundAt(map.id,x,z);
+    if(waterDepthAt(map,x,z)<=.14 && isSafeWorldPoint(map,{x,y,z}) &&
+        Math.abs(y-point.y)<=1.3 && provinceShotClear(map,eye,{x,y:y+1,z}))return {x,y,z};
+  }
   for (let r = .5; r <= 4.5; r += .5) {
     for (let i = 0; i < 16; i++) {
       const a = i * Math.PI / 8;
@@ -113,7 +129,7 @@ export class MontraBoats {
     if(!gate || Math.hypot(boat.x-gate.x,boat.z-gate.z)>gate.range)return {reason:"boat_gate_range"};
     const destination=getWorldMap(gate.targetMapId);
     const berth=destination?.waterGates?.find(entry=>entry.targetMapId===boat.islandId);
-    const shore=destination?.boatHarbor?.shore;
+    const shore=(berth && nearestPort(destination?.boatPorts,berth,"berth")?.shore) ?? destination?.boatHarbor?.shore;
     if(!destination || !berth || !shore)return {reason:"boat_gate_unavailable"};
     const radius=AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius;
     if(!this.sim.berthAvailable(boat.entityId,destination.id,berth,radius))return {reason:"boat_gate_busy"};
@@ -139,22 +155,26 @@ export class MontraBoats {
     const boat = rider && this.sim.stateOf(rider.boatId);
     switch (intent.action) {
       case "launch": {
-        const shore = BOAT_SHORES[player.mapId];
         const map = getWorldMap(player.mapId);
+        const port=nearestPort(map?.boatPorts,player,"shore",BOAT_LAUNCH_RANGE);
+        const shore=(port??map?.boatHarbor)?.shore;
         const owned = this.sim.stateOf("boat-"+id);
         if (rider || !shore || !map || waterDepthAt(map,player.x,player.z)>.14 ||
             Math.hypot(player.x-shore.x, player.z-shore.z) > BOAT_LAUNCH_RANGE ||
-            owned?.passengerIds.length || !map.boatHarbor) return false;
+            owned?.passengerIds.length) return false;
         const launched = this.sim.summon({entityId:"boat-"+id,ownerId:id,definitionId:starter.id,
-          maxHp:starter.maxHp}, player.mapId, now);
+          maxHp:starter.maxHp}, player.mapId, now,port && port!==map.boatPorts?.[0]?port:undefined);
         return Boolean(launched);
       }
       case "board": {
         const target = this.sim.stateOf(intent.boatId);
         const map = getWorldMap(player.mapId), y = deckY(player.mapId);
-        if (rider || !target || !map || target.islandId !== player.mapId || Math.abs(target.speed) > 1 ||
+        if (rider || !target || !map || target.islandId !== player.mapId) return false;
+        const port=nearestPort(map.boatPorts,target,"berth",PORT_BERTH_RANGE);
+        const atLanding=port && Math.hypot(player.x-port.shore.x,player.z-port.shore.z)<=1.6;
+        if (Math.abs(target.speed) > 1 ||
             waterDepthAt(map,player.x,player.z)>.14 || Math.abs(player.y-y)>1.3 ||
-            Math.hypot(player.x-target.x, player.z-target.z) > 6.5 ||
+            (!atLanding && Math.hypot(player.x-target.x, player.z-target.z) > 6.5) ||
             !provinceShotClear(map, {x:player.x,y:player.y+1,z:player.z},
               {x:target.x,y:y+1,z:target.z}) ||
             !this.sim.board(intent.boatId, id, player.mapId, player.x, player.z)) return false;

@@ -62,7 +62,7 @@ function fixture(raySlope=0) {
   const tap = (type,x,z,hit=ground) => {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
-  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,
+  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,map,player,buttons,
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
 
@@ -171,4 +171,17 @@ test("tapping a water gate steers toward it and requests passage once in range",
   assert.equal(f.marker.enabled,false);
   f.boat.passage=1;
   assert.deepEqual(f.tick(300),{type:"boat_intent",action:"input",throttle:0,steer:0,passage:1});
+});
+
+test("port markers steer to the berth and anchor, and the launch control works at an alternate port",()=>{
+  const f=fixture(),port={id:"river_east",name:"East landing",shore:{x:15,z:46},berth:{x:15,z:52}};
+  f.map.boatPorts=[port];
+  f.tap("touch",15,52,{isEnabled:()=>true,metadata:{boatPortId:port.id}});
+  assert.ok(f.tick(100).throttle>0);
+  Object.assign(f.boat,{x:14.4,z:52,anchored:false});
+  assert.deepEqual(f.tick(200),{type:"boat_intent",action:"input",throttle:0,steer:0,anchor:true});
+  assert.equal(f.marker.enabled,false);
+  Object.assign(f.player,{boatId:"",x:port.shore.x,z:port.shore.z});
+  f.tick(300);
+  assert.equal(f.buttons.get("boatLaunch").hidden,false);
 });

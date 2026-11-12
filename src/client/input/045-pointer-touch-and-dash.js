@@ -79,7 +79,7 @@
     // monster and walkable ground. Fire only where the target is visible.
     const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
       mesh.metadata?.walkable === true || mesh.metadata?.sailingBoatId ||
-      (!targetedSkill && boatAtHelm() && mesh.metadata?.waterGateId) ||
+      (!targetedSkill && boatAtHelm() && (mesh.metadata?.waterGateId || mesh.metadata?.boatPortId)) ||
       mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
       (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
       (mesh === enemy && enemy.isEnabled()) ||
@@ -99,6 +99,7 @@
     cancelQuestNavigation();
     const hitMesh=picked.pickedMesh;
     if(hitMesh?.metadata?.waterGateId){sailThroughGate(hitMesh.metadata.waterGateId);return;}
+    if(hitMesh?.metadata?.boatPortId){sailToPort(hitMesh.metadata.boatPortId);return;}
     if (hitMesh?.metadata?.ghostCombatTargetId) {
       try { room.send("attack",{targetId:hitMesh.metadata.ghostCombatTargetId}); }
       catch (_) { toast("ส่งคำสั่งโจมตีผีไม่สำเร็จ"); }

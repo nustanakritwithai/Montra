@@ -5,6 +5,7 @@ type Position = Readonly<{x:number;z:number}>;
 export type BoatLane = readonly [Position,Position];
 export type BoatBerth = Position & Readonly<{heading:number}>;
 export type BoatHarbor = Readonly<{shore:Position;berth:BoatBerth;offshore:Position}>;
+export type BoatPort = BoatHarbor & Readonly<{id:string;name:string}>;
 export type WaterGate = BoatBerth & Readonly<{id:string;targetMapId:string;range:number}>;
 export const WATER_GATE_RANGE = 3.2;
 /** S17 — canonical naval tuning shared by the authoritative server and render client. */
@@ -62,51 +63,102 @@ type CanalLayout = Readonly<{
   channels:readonly (readonly Coordinate[])[];
   gates:readonly Coordinate[];
   dock?:HarborLayout;
-  maxX?:number;
+  ports?:readonly (HarborLayout & {id:string;name:string})[];
+  dockName?:string;
+  basins?:readonly WorldWall[];
+  bounds?:Partial<WorldMapDefinition["bounds"]>;
+  shorePaths?:readonly (readonly Coordinate[])[];
 }>;
 
 const point=([x,z]:Coordinate):Position=>({x,z});
 const canalRadius=7;
-const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x,z],direction:[0,1]});
-const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z],direction:[1,0]});
+const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x+2,z],direction:[0,1]});
+const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z+2],direction:[1,0]});
 
 // Each gate belongs to the corresponding neighbor in waterLinks. Author channels
 // around transfer pads and fort walls so the river crosses the map without opening land defenses.
 const canals:Readonly<Record<string,CanalLayout>>={
   ritual_village:{
-    channels:[[[-53,54],[53,54]],[[22,-53],[22,54]]],
-    gates:[[-53,54],[22,-53],[53,54]],
+    bounds:{maxZ:84},
+    channels:[[[-53,54],[53,54]],[[22,-53],[22,54]],[[0,54],[0,72]],[[-53,72],[53,72]]],
+    gates:[[-53,54],[22,-53],[53,54]],dockName:"ท่ากลางหมู่บ้าน",
+    ports:[
+      {id:"village_fields",name:"ท่าริมนา",shore:[-49,46],berth:[-49,51],direction:[1,0]},
+      {id:"village_market",name:"ท่าตลาดใต้",shore:[49,46],berth:[49,51],direction:[-1,0]},
+    ],
   },
   drowned_marsh:{
-    channels:[[[-112,-83],[-112,-34],[52,-34]]],
-    gates:[[-112,-83],[52,-34],[-41,-34]],
+    bounds:{minX:-144},
+    channels:[[[-112,-83],[-112,-34],[52,-34]],[[-112,-83],[-134,-83],[-134,-34],[-112,-34]]],
+    gates:[[-112,-83],[52,-34],[-41,-34]],dockName:"ท่าสุสานเรือพราย",
+    ports:[
+      {id:"marsh_island",name:"ท่าเกาะกอพราย",shore:[-124.5,-65],berth:[-130,-65],direction:[0,1]},
+      {id:"marsh_reeds",name:"ท่าเกาะกกผี",shore:[-22,-26],berth:[-22,-31.5],direction:[1,0]},
+    ],
+    shorePaths:[[[-22,-17],[-22,-26]]],
   },
   lotus_basin:{
-    channels:[[[-53,-35],[125,-35]],[[32,-35],[32,-92],[58,-92]]],
-    gates:[[-53,-35],[125,-35]],
-    dock:{shore:[58,-100],berth:[58,-95],direction:[0,1]},
+    bounds:{minX:-80},
+    channels:[[[-72,-35],[125,-35]],[[32,-35],[32,-92],[58,-92]],
+      [[-68,-35],[-68,22]],[[125,-35],[125,29],[105,29]]],
+    basins:[{x:-79,z:-6,width:22,length:29},{x:102,z:20,width:30,length:19}],
+    gates:[[-72,-35],[125,-35]],
+    dock:{shore:[58,-100],berth:[58,-95],direction:[0,1]},dockName:"ท่าบัวเหนือ",
+    ports:[
+      {id:"lotus_west",name:"ท่าบ่อตะวันตก",shore:[-56,12],berth:[-61,12],direction:[0,1]},
+      {id:"lotus_east",name:"ท่าเกาะบัวเพลิง",shore:[112,40],berth:[112,34],direction:[1,0]},
+    ],
+    shorePaths:[[[-22,8],[-42,12],[-56,12]],[[54,32],[82,41],[112,40]],[[52,-74],[48,-99],[58,-100]]],
   },
   river_watch:{
-    channels:[[[-100,-87],[-100,27]],[[-100,-3],[72,-3]]],
-    gates:[[-100,-87],[72,-3],[-38,-3],[24,-3]],
+    bounds:{maxX:104},
+    channels:[[[-100,-87],[-100,27]],[[-100,-3],[96,-3]],[[94,-3],[94,39],[90,39]]],
+    basins:[{x:83,z:25,width:21,length:28}],
+    gates:[[-100,-87],[96,-3],[-38,-3],[24,-3]],dockName:"ท่าคุ้งนอก",
+    ports:[{id:"watch_east",name:"ท่าคุ้งตะวันออก",shore:[82,39],berth:[88,39],direction:[0,1]}],
+    shorePaths:[[[50,20],[68,31],[82,39]]],
   },
   sam_lan_estuary:{
-    channels:[[[-193,-193],[-193,159],[-16,159],[-16,144],[0,144]]],
+    bounds:{maxZ:228},
+    channels:[[[-193,-193],[-193,204],[217,204],[217,-138]],[[-193,159],[-16,159],[-16,144],[0,144]],
+      [[217,202],[119,202]]],
+    basins:[{x:112,z:171,width:115,length:48}],
     gates:[[-193,-193]],
-    dock:{shore:[0,134],berth:[0,140],direction:[1,0]},
+    dock:{shore:[0,134],berth:[0,140],direction:[1,0]},dockName:"ท่าสามลานกลาง",
+    ports:[
+      {id:"sam_lan_west",name:"ท่าสามลานตะวันตก",shore:[-185,76],berth:[-190.5,76],direction:[0,1]},
+      {id:"sam_lan_east",name:"ท่าสามลานตะวันออก",shore:[207.5,52],berth:[213,52],direction:[0,1]},
+      {id:"sam_lan_gulf",name:"ท่าอ่าวสามลาน",shore:[128,220],berth:[128,214],direction:[1,0]},
+    ],
+    shorePaths:[[[-112,144],[-155,121],[-185,112],[-185,76]],[[112,144],[163,126],[185,112],[207.5,52]],
+      [[0,176],[53,192],[100,216],[128,220]]],
   },
   forbidden_forest:{
-    channels:[[[-53,-45],[-14,-45],[-14,-49],[39,-49],[39,-57],[53,-57]]],
-    gates:[[53,-57],[-53,-45]],dock:southBank(0,-49),
+    bounds:{maxX:82},
+    channels:[[[-53,-45],[-14,-45],[-14,-49],[39,-49],[39,-57],[75,-57]],[[69,-57],[69,-80]]],
+    basins:[{x:62,z:-87,width:20,length:22}],
+    gates:[[75,-57],[-53,-45]],dock:southBank(0,-49),dockName:"ท่ากลางป่า",
+    ports:[{id:"forest_east",name:"ท่าชายป่าตะวันออก",shore:[61,-73],berth:[66.5,-73],direction:[0,1]}],
+    shorePaths:[[[38,-80],[53,-74],[61,-73]]],
   },
   bound_temple:{
-    channels:[[[-43,3],[43,3]]],gates:[[43,3],[-43,3]],dock:southBank(0,3),
+    bounds:{minX:-72},
+    channels:[[[-65,3],[43,3]],[[-63,3],[-63,-31]]],
+    basins:[{x:-72,z:-38,width:18,length:22}],
+    gates:[[43,3],[-65,3]],dock:southBank(0,3),dockName:"ท่าหน้าวัด",
+    ports:[{id:"temple_west",name:"ท่าศาลาวัดตะวันตก",shore:[-53,-25],berth:[-59,-25],direction:[0,1]}],
+    shorePaths:[[[0,26],[-23,17],[-45,14],[-53,-25]]],
   },
   moon_cemetery:{
-    channels:[[[29,-97],[29,41]]],gates:[[29,-97],[29,41]],dock:eastBank(29,-8),
+    bounds:{minX:-76},
+    channels:[[[29,-97],[29,41]],[[29,41],[-69,41]]],
+    basins:[{x:-75,z:33,width:24,length:15}],
+    gates:[[29,-97],[29,41]],dock:eastBank(29,-8),dockName:"ท่าศาลาคนเฝ้า",
+    ports:[{id:"cemetery_west",name:"ท่าริมป่าช้า",shore:[-46,49],berth:[-46,43],direction:[1,0]}],
+    shorePaths:[[[-18,25],[-30,38],[-46,49]]],
   },
   mantra_capital:{
-    channels:[[[-35,37],[43,37],[43,-58]]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),maxX:50,
+    channels:[[[-35,37],[43,37],[43,-58]]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),bounds:{maxX:50},
   },
   bamboo_frontier:{
     channels:[[[-38,-93],[-38,45]]],gates:[[-38,-93]],dock:eastBank(-38,38),
@@ -121,7 +173,7 @@ const canals:Readonly<Record<string,CanalLayout>>={
     channels:[[[-272,92],[272,92]]],gates:[[-272,92],[272,92]],dock:southBank(0,92),
   },
   naga_cavern:{
-    channels:[[[-127,4],[47,4]]],gates:[[-127,4],[47,4]],dock:southBank(-8,4),
+    channels:[[[-127,4],[47,4]]],gates:[[-127,4],[47,4]],dock:southBank(-16,4),
   },
   fallen_city:{
     channels:[[[27,-103],[27,47]]],gates:[[27,47],[27,-103]],dock:eastBank(27,0),
@@ -142,6 +194,11 @@ const originalShore:Readonly<Record<string,Position>>={
   ritual_village:{x:0,z:46},drowned_marsh:{x:-104,z:-68},river_watch:{x:-92.7,z:24},
 };
 
+function makeHarbor(dock:HarborLayout):BoatHarbor {
+  return {shore:point(dock.shore),offshore:point(dock.direction),
+    berth:{...point(dock.berth),heading:Math.atan2(...dock.direction)}};
+}
+
 function canalWater([a,b]:BoatLane):WorldWall {
   return {x:Math.min(a.x,b.x)-canalRadius,z:Math.min(a.z,b.z)-canalRadius,
     width:Math.abs(b.x-a.x)+2*canalRadius,length:Math.abs(b.z-a.z)+2*canalRadius};
@@ -161,11 +218,8 @@ export function addWaterways(map:WorldMapDefinition,maps:Readonly<Record<string,
   const layout=canals[map.id];
   if(!layout || layout.gates.length<neighbors.length)throw new Error("missing_canal_layout:"+map.id);
   const lanes=layout.channels.flatMap(channel=>channel.slice(1).map((end,i):BoatLane=>[point(channel[i]),point(end)]));
-  const water=[...map.water??[],...lanes.map(canalWater)];
-  const harbor:BoatHarbor=layout.dock?{
-    shore:point(layout.dock.shore),offshore:point(layout.dock.direction),
-    berth:{...point(layout.dock.berth),heading:Math.atan2(...layout.dock.direction)},
-  }:{
+  const water=[...map.water??[],...lanes.map(canalWater),...layout.basins??[]];
+  const harbor:BoatHarbor=layout.dock?makeHarbor(layout.dock):{
     shore:originalShore[map.id],offshore:BOAT_DOCK_OFFSHORE_DIRECTIONS[map.id],berth:BOAT_DOCK_SPAWNS[map.id],
   };
   const waterGates=neighbors.map((targetMapId,i)=>{
@@ -174,8 +228,13 @@ export function addWaterways(map:WorldMapDefinition,maps:Readonly<Record<string,
   });
   // Keep the previous bounds for saves made around the former southern docks.
   const legacyExtension=!layout.dock || map.id==="lotus_basin" || map.id==="sam_lan_estuary"?0:21;
-  const bounds={...map.bounds,maxX:layout.maxX??map.bounds.maxX,maxZ:map.bounds.maxZ+legacyExtension};
-  return {...map,bounds,water,boatHarbor:harbor,boatLanes:lanes,waterGates};
+  const bounds={...map.bounds,maxZ:map.bounds.maxZ+legacyExtension,...layout.bounds};
+  const boatPorts:BoatPort[]=[
+    {...harbor,id:map.id+"_main",name:layout.dockName??"ท่าเรือ"+map.name},
+    ...layout.ports?.map(port=>({...makeHarbor(port),id:port.id,name:port.name}))??[],
+  ];
+  const paths=layout.shorePaths?[...map.paths??[],...layout.shorePaths.map(path=>path.map(point))]:map.paths;
+  return {...map,bounds,water,paths,boatHarbor:harbor,boatPorts,boatLanes:lanes,waterGates};
 }
 
 export type BoatWorldState = 'docked' | 'sailing' | 'sunk' | 'respawning';

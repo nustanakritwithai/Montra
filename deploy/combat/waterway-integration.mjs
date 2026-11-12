@@ -18,7 +18,8 @@ const {defineServer,defineRoom}=await import("colyseus");
 const {MyRoom}=await import("./src/rooms/MyRoom.ts");
 const {getWorldMap,groundAt,WORLD_MAPS}=await import("./src/rooms/WorldMaps.ts");
 const {characterStore}=await import("./src/rooms/CharacterStore.ts");
-const village=getWorldMap("ritual_village"),marsh=getWorldMap("drowned_marsh");
+const village=getWorldMap("ritual_village"),marsh=getWorldMap("drowned_marsh"),lotus=getWorldMap("lotus_basin");
+const watch=getWorldMap("river_watch"),estuary=getWorldMap("sam_lan_estuary");
 const toMarsh=village.waterGates.find(gate=>gate.targetMapId===marsh.id);
 const toVillage=marsh.waterGates.find(gate=>gate.targetMapId===village.id);
 const visited=new Set();
@@ -27,7 +28,8 @@ class WaterGateRoom extends MyRoom {
     await super.onJoin(client,options);
     if(visited.has(options.guestToken))return;
     visited.add(options.guestToken);
-    const map=options.marsh?marsh:village,{x,z}=map.boatHarbor.shore;
+    const map=options.lotus?lotus:options.marsh?marsh:village;
+    const {x,z}=(options.lotus?map.boatPorts.find(port=>port.id==="lotus_west"):map.boatHarbor).shore;
     Object.assign(this.state.players.get(client.sessionId),{mapId:map.id,x,z,y:groundAt(map.id,x,z)});
   }
 }
@@ -77,12 +79,12 @@ function navigator(point,boat){
     clearSailingDestination(){scope.sailingDestination=null;}};
   return runInNewContext(steeringSource+"\nsailingInputForDestination;",scope);
 }
-async function sail(room,id,point){
+async function sail(room,id,point,range=2.5){
   const boat=boats(room).get(id),steer=navigator(point,boat),start=Date.now();
   const budget=Math.max(30000,Math.hypot(boat.x-point.x,boat.z-point.z)*450+15000);
   while(Date.now()-start<budget){
     const boat=boats(room).get(id);
-    if(Math.hypot(boat.x-point.x,boat.z-point.z)<2.5)return;
+    if(Math.hypot(boat.x-point.x,boat.z-point.z)<range)return;
     command(room,"input",{...steer(boat,Date.now()-start),anchor:false,passage:boat.passage});
     await wait(105);
   }
@@ -106,7 +108,7 @@ const passengerOptions=opts();
 try{
   for(const map of Object.values(WORLD_MAPS)){
     const definition={...map,boatDock:{deck:{length:5.2}}};
-    const points=[map.boatHarbor.berth,...map.waterGates];
+    const points=[...map.boatPorts.map(port=>port.berth),...map.waterGates];
     for(const from of points)for(const to of points)if(from!==to)
       assert.ok(findCourse(definition,from,to).length, map.id+" course "+JSON.stringify({from,to}));
   }
@@ -150,7 +152,6 @@ try{
   await rejected(pilot,"input",{throttle:1,steer:0,anchor:false,passage:0},"boat_action_unavailable");
   assert.equal(boat().speed,0);
 
-  const lotus=getWorldMap("lotus_basin");
   const toLotus=marsh.waterGates.find(gate=>gate.targetMapId===lotus.id);
   const backToMarsh=lotus.waterGates.find(gate=>gate.targetMapId===marsh.id);
   assert.ok(Math.hypot(boat().x-toLotus.x,boat().z-toLotus.z)>160);
@@ -171,7 +172,8 @@ try{
   await leave(passenger.room);
   const rejoined=observe(await sdk.joinById(pilot.room.roomId,passengerOptions));
   await until(()=>me(rejoined.room)?.mapId===marsh.id && !me(rejoined.room).boatId,"passenger reconnects at the marsh bank");
-  assert.ok(Math.hypot(me(rejoined.room).x-marsh.boatHarbor.shore.x,me(rejoined.room).z-marsh.boatHarbor.shore.z)<.1);
+  const nearestBank=marsh.boatPorts.find(port=>port.id==="marsh_reeds").shore;
+  assert.ok(Math.hypot(me(rejoined.room).x-nearestBank.x,me(rejoined.room).z-nearestBank.z)<.1);
   assert.equal(boat().helmId,pilot.room.sessionId);
 
   const turn={x:toVillage.x,z:toVillage.z+8};
@@ -184,6 +186,51 @@ try{
   assert.equal(boat().hp,hp);
   assert.equal(boats(pilot.room).size,1);
   console.log("PASS waterways: sailing to gates, occupied berth, save failure, two riders, preserved hull and helm, stale input, full marsh crossing, reconnect and return");
+  await leave(pilot.room);
+  await leave(rejoined.room);
+
+  const portPilot=observe(await sdk.create("my_room",{...opts(),lotus:true})).room;
+  const portRider=observe(await sdk.joinById(portPilot.roomId,{...opts(),lotus:true})).room;
+  await until(()=>me(portPilot)?.mapId===lotus.id && me(portRider)?.mapId===lotus.id,"crew at west lotus port");
+  const vessel=await launch(portPilot),ship=()=>boats(portPilot).get(vessel);
+  const west=lotus.boatPorts.find(port=>port.id==="lotus_west");
+  assert.ok(Math.hypot(ship().x-west.berth.x,ship().z-west.berth.z)<.1);
+  command(portRider,"board",{boatId:vessel});
+  await until(()=>me(portRider).boatId===vessel,"board at the alternate port");
+  const hull=ship().hp;
+
+  async function cross(map,destination,passage){
+    const gate=map.waterGates.find(entry=>entry.targetMapId===destination.id);
+    await sail(portPilot,vessel,gate);
+    command(portPilot,"warp",{gateId:gate.id});
+    await until(()=>ship()?.mapId===destination.id && me(portRider).mapId===destination.id,"crew enters "+destination.id);
+    assert.equal(ship().passage,passage);
+    assert.equal(ship().hp,hull);
+  }
+  async function landAt(map,id,boardAgain){
+    const port=map.boatPorts.find(entry=>entry.id===id);
+    await sail(portPilot,vessel,port.berth,1.4);
+    command(portPilot,"input",{throttle:0,steer:0,anchor:true,passage:ship().passage});
+    await until(()=>ship().anchored && Math.abs(ship().speed)<.4,"anchored at "+id);
+    for(const room of [portRider,portPilot]){
+      command(room,"exit");
+      await until(()=>!me(room).boatId,"shore at "+id);
+      assert.ok(Math.hypot(me(room).x-port.shore.x,me(room).z-port.shore.z)<.1,id+" dry landing");
+    }
+    if(!boardAgain)return;
+    for(const room of [portPilot,portRider]){
+      command(room,"board",{boatId:vessel});
+      await until(()=>me(room).boatId===vessel,"board again at "+id);
+    }
+    command(portPilot,"helm");
+    await until(()=>ship().helmId===portPilot.sessionId,"resume from "+id);
+  }
+  await cross(lotus,watch,1);
+  await landAt(watch,"watch_east",true);
+  console.log("PASS Lotus alternate-port launch, Watch east-port landing and reboard with two riders");
+  await cross(watch,estuary,2);
+  await landAt(estuary,"sam_lan_west",false);
+  console.log("PASS same boat and both riders reached the Sam Lan west port");
 }catch(error){
   console.error(error);
   process.exitCode=1;

@@ -14,9 +14,9 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("forest keeps the expanded bounds and original entrance", () => {
+test("forest expands east for the river and keeps its original entrance", () => {
   const map = getWorldMap("forbidden_forest")!;
-  assert.equal(map.bounds.maxX - map.bounds.minX, 120);
+  assert.equal(map.bounds.maxX - map.bounds.minX, 142);
   assert.equal(map.bounds.maxZ - map.bounds.minZ, 141);
   assert.deepEqual(map.spawn, {x:0,y:0,z:12});
 });
@@ -24,7 +24,7 @@ test("movement uses the selected map bounds and rejects injected fields", () => 
   const forest = getWorldMap("forbidden_forest")!;
   assert.deepEqual(parseMoveCommand({x:30,z:-45}, forest.bounds), {x:30,z:-45});
   assert.equal(parseMoveCommand({x:30,z:-45}), null);
-  assert.equal(parseMoveCommand({x:61,z:-45}, forest.bounds), null);
+  assert.equal(parseMoveCommand({x:83,z:-45}, forest.bounds), null);
   assert.equal(parseMoveCommand({x:30,z:-45,speed:999}, forest.bounds), null);
 });
 test("dash works beyond old bounds and still stops at the real forest edge", () => {
@@ -32,8 +32,8 @@ test("dash works beyond old bounds and still stops at the real forest edge", () 
   const free = (x:number,z:number) => isSafeWorldPoint(map,{x,y:0,z});
   const step = advanceDash({x:30,z:-40},{dx:1,dz:0},.675,free,map.bounds);
   assert.ok(step.x > 30.6 && !step.blocked);
-  const edge = advanceDash({x:59.5,z:-40},{dx:1,dz:0},4.5,free,map.bounds);
-  assert.ok(edge.blocked && edge.x <= 59.6 + 1e-8);
+  const edge = advanceDash({x:81.5,z:-40},{dx:1,dz:0},4.5,free,map.bounds);
+  assert.ok(edge.blocked && edge.x <= 81.6 + 1e-8);
 });
 test("saved locations beyond the old boundary remain in the same map", () => {
   const point = {x:30,y:groundAt("forbidden_forest",30,-45),z:-45};

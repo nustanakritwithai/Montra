@@ -62,6 +62,11 @@
     const map=worldDefinitions?.[activeMapId],gate=map?.waterGates?.find(entry=>entry.id===id);
     if(gate)return setSailingDestination(gate,map.waterLevel,gate);
   }
+  function sailToPort(id) {
+    if(!boatAtHelm())return false;
+    const map=worldDefinitions[activeMapId],port=map?.boatPorts?.find(entry=>entry.id===id);
+    return Boolean(port && setSailingDestination(port.berth,map.waterLevel,undefined,port));
+  }
   function sailingCourse(map,start,end) {
     if(!map.boatLanes?.length)return [end];
     const radius=map.boatDock.deck.length/2, bounds=map.bounds;
@@ -110,12 +115,12 @@
     }
     return [];
   }
-  function setSailingDestination(point,waterY,gate) {
+  function setSailingDestination(point,waterY,gate,port) {
     const boat = ownBoatState(),map=worldDefinitions[activeMapId];
     const course=sailingCourse(map,boat,point);
     if(!course.length){toast("ไม่พบร่องน้ำไปยังจุดนี้");return false;}
     cancelQuestNavigation("",false);
-    sailingDestination = {x:point.x,z:point.z,gate,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    sailingDestination = {x:point.x,z:point.z,gate,port,course,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
     if (!sailingMarker) {
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
@@ -151,7 +156,11 @@
     }
     if (distance <= 1.35 || now-goal.progress.at >= 2800) {
       clearSailingDestination();
-      if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
+      if(goal.port && distance<=1.35 && course?.length===1){
+        requestedBoatAnchor=true;
+        toast("ถึง"+goal.port.name+" · แตะขึ้นฝั่งเมื่อเรือหยุด");
+      }else if(goal.port)toast("ทางเข้าท่าติดขัด · ลองเข้าจากอีกมุม");
+      else if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
       return {throttle:0,steer:0};
     }
     const bearing = Math.atan2(dx,dz);
@@ -195,15 +204,21 @@
 
   function updateSailing(now, dt) {
     const state = mode === "live" ? room?.state : null;
-    const dock = state?.boatsAvailable ? worldDefinitions?.[activeMapId]?.boatDock : null;
+    const map = state?.boatsAvailable ? worldDefinitions?.[activeMapId] : null;
+    const dock=map?.boatDock;
     const player = dock ? ownServerCharacter() : null;
     const seen = new Set();
-    let nearestId = "", nearestDistance = 6.5;
+    let nearestId = "", nearestDistance = Infinity;
     if (dock) state.boats?.forEach((boat,id)=>{
       if (boat.mapId !== activeMapId || boat.sunk) return;
       seen.add(id);
       const distance = player ? Math.hypot(player.x-boat.x,player.z-boat.z) : Infinity;
-      if (distance <= nearestDistance && Math.abs(boat.speed) <= 1) {nearestDistance=distance;nearestId=id;}
+      const atLanding=player && map.boatPorts?.some(port=>
+        Math.hypot(player.x-port.shore.x,player.z-port.shore.z)<=1.6 &&
+        Math.hypot(boat.x-port.berth.x,boat.z-port.berth.z)<=2.4);
+      if (distance <= (atLanding?10:6.5) && distance <= nearestDistance && Math.abs(boat.speed) <= 1) {
+        nearestDistance=distance;nearestId=id;
+      }
       let node = sailingMeshes.get(id);
       if(node && node.metadata.mapId!==boat.mapId){node.dispose();node=null;}
       if (!node) {
@@ -239,7 +254,8 @@
       }
     }
     const onLand = player?.alive && !player.boatId && !player.flying && !player.mounted;
-    $("boatLaunch").hidden = !(onLand && Math.hypot(player.x-dock.x,player.z-dock.z) <= dock.range);
+    const launchPoints=map?.boatPorts?.map(port=>port.shore)??[dock];
+    $("boatLaunch").hidden = !(onLand && launchPoints.some(shore=>Math.hypot(player.x-shore.x,player.z-shore.z)<=dock.range));
     $("boatBoard").hidden = !(onLand && nearestId);
     $("boatBoard").dataset.boatId = nearestId;
     $("boatHelm").hidden = !(boat && (!boat.helmId || helm));

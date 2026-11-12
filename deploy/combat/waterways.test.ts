@@ -4,7 +4,7 @@ import {randomBytes} from "node:crypto";
 import {mkdtemp} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
-import {boatCanSail} from "./MontraBoats.js";
+import {boatCanSail,MontraBoats} from "./MontraBoats.js";
 import {groundAt,isSafeWorldPoint,WORLD_MAPS} from "./WorldMaps.js";
 import {waterDepthAt} from "./GroundTerrain.js";
 import {CharacterStore} from "./CharacterStore.js";
@@ -39,6 +39,31 @@ test("all enabled maps have a river across their terrain and separated two-way w
     }
   }
   assert.deepEqual([...seen].sort(),Object.keys(WORLD_MAPS).sort());
+});
+
+test("every port launches a boardable boat and returns both riders to its bank",()=>{
+  const ids=new Set<string>();
+  for(const map of Object.values(WORLD_MAPS))for(const port of map.boatPorts??[]){
+    assert.ok(!ids.has(port.id),port.id);
+    ids.add(port.id);
+    const boats=new MontraBoats(),id="pilot";
+    const shore={...port.shore,y:groundAt(map.id,port.shore.x,port.shore.z)};
+    const actor=()=>({...shore,mapId:map.id,boatId:"",facing:0,combatState:"idle"});
+    const pilot=actor(),passenger=actor();
+    assert.ok(isSafeWorldPoint(map,shore) && waterDepthAt(map,shore.x,shore.z)<=.14,port.id+" dry bank");
+    assert.ok(boats.act(id,pilot,{action:"launch"},0),port.id+" launch");
+    const [boat]=boats.snapshot();
+    assert.deepEqual({x:boat.x,z:boat.z},{x:port.berth.x,z:port.berth.z});
+    assert.ok(!boats.act("another_owner",passenger,{action:"launch"},0),port.id+" occupied berth");
+    for(const [rider,player] of [[id,pilot],["passenger",passenger]] as const)
+      assert.ok(boats.act(rider,player,{action:"board",boatId:boat.entityId},100),port.id+" board");
+    assert.ok(boats.act(id,pilot,{action:"helm"},200),port.id+" helm");
+    for(const [rider,player] of [[id,pilot],["passenger",passenger]] as const){
+      assert.ok(boats.act(rider,player,{action:"exit"},300),port.id+" disembark");
+      assert.deepEqual({x:player.x,y:player.y,z:player.z},shore,port.id+" landing");
+    }
+  }
+  assert.equal(ids.size,Object.keys(WORLD_MAPS).length+13);
 });
 
 test("one failed crew save rolls back the whole SQLite arrival",async()=>{

@@ -20,6 +20,7 @@ interface BoatRuntime extends BoatWorldSnapshot {
   throttle: number;
   steer: number;
   lastInputAt: number;
+  launchHarbor?: BoatHarbor;
 }
 
 const snapshotOf = (boat: BoatRuntime): BoatWorldSnapshot => ({
@@ -57,10 +58,10 @@ export class BoatSimulation {
     return boat ? snapshotOf(boat) : null;
   }
 
-  summon(canonical: CanonicalBoat, islandId: string, now = Date.now()): BoatWorldSnapshot | null {
+  summon(canonical: CanonicalBoat, islandId: string, now = Date.now(), launchHarbor?:BoatHarbor): BoatWorldSnapshot | null {
     const definition = AUTHORITATIVE_BOAT_DEFINITIONS[canonical.definitionId];
-    const dock = this.harborFor(islandId)?.berth;
-    if (!definition || !dock) return null;
+    const harbor = launchHarbor ?? this.harborFor(islandId);
+    if (!definition || !harbor) return null;
     const previous = this.boats.get(canonical.entityId);
     if (previous && (previous.state === 'sunk' || previous.state === 'respawning')
       && previous.respawnAt !== undefined && now < previous.respawnAt) return null;
@@ -68,6 +69,7 @@ export class BoatSimulation {
       islandId,
       canonical.entityId,
       definition.collisionRadius,
+      harbor,launchHarbor?0:6,
     );
     if (!spawn) return null;
     const boat: BoatRuntime = {
@@ -77,7 +79,7 @@ export class BoatSimulation {
       islandId,
       x: spawn.x,
       z: spawn.z,
-      heading: dock.heading,
+      heading: harbor.berth.heading,
       speed: 0,
       passage: 0,
       hp: previous && previous.hp > 0
@@ -91,6 +93,7 @@ export class BoatSimulation {
       throttle: 0,
       steer: 0,
       lastInputAt: 0,
+      launchHarbor,
     };
     this.removePassenger(canonical.ownerId);
     this.boats.set(boat.entityId, boat);
@@ -107,7 +110,7 @@ export class BoatSimulation {
   transfer(entityId:string,mapId:string,berth:BoatBerth,now:number):BoatWorldSnapshot {
     const boat=this.boats.get(entityId)!;
     Object.assign(boat,berth,{islandId:mapId,passage:boat.passage+1,speed:0,anchor:true,state:"docked",
-      throttle:0,steer:0,lastInputAt:now});
+      throttle:0,steer:0,lastInputAt:now,launchHarbor:undefined});
     return snapshotOf(boat);
   }
 
@@ -201,11 +204,11 @@ export class BoatSimulation {
       previous.set(boat.entityId, { x: boat.x, z: boat.z });
       if (boat.state === 'sunk' || boat.state === 'respawning') {
         if (boat.respawnAt !== undefined && now >= boat.respawnAt) {
-          const dock = this.harborFor(boat.islandId)?.berth;
-          if(!dock)continue;
-          const spawn = this.openDockSpawn(boat.islandId, boat.entityId, AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius);
+          const harbor = boat.launchHarbor ?? this.harborFor(boat.islandId);
+          if(!harbor)continue;
+          const spawn = this.openDockSpawn(boat.islandId, boat.entityId, AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius, harbor);
           if (!spawn) continue;
-          boat.x = spawn.x; boat.z = spawn.z; boat.heading = dock.heading;
+          boat.x = spawn.x; boat.z = spawn.z; boat.heading = harbor.berth.heading;
           boat.hp = boat.maxHp; boat.state = 'docked'; boat.anchor = true;
           boat.speed = 0; boat.respawnAt = undefined;
         }
@@ -264,11 +267,11 @@ export class BoatSimulation {
     islandId: string,
     replacingEntityId: string,
     collisionRadius: number,
+    harbor:BoatHarbor,
+    maxOffset=6,
   ): { x: number; z: number } | null {
-    const harbor=this.harborFor(islandId);
-    if(!harbor)return null;
     const {berth:dock,offshore}=harbor;
-    for (let distance = 0; distance <= 6; distance += 2) {
+    for (let distance = 0; distance <= maxOffset; distance += 2) {
       const x = dock.x + offshore.x * distance;
       const z = dock.z + offshore.z * distance;
       if(this.berthAvailable(replacingEntityId,islandId,{x,z},collisionRadius))return {x,z};

@@ -71,6 +71,7 @@
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     if(map.waterLevel!==undefined)buildWaterSurface(map);
     if(state?.boatsAvailable && map.waterGates?.length)buildWaterwayGates(map);
+    if(state?.boatsAvailable && map.boatPorts?.length)buildBoatPorts(map);
     // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
     scatterGroundPatches(map,map.terrain?terrainPaint.floor:ground.material,REGION_GROUNDS[activeMapId]?.[0]||MAP_FLOORS[activeMapId]||"grass",
       (x,z,r)=>(!river || z+r*3<river.z)&&!nearMapPath(map,x,z,r+2.5)&&
@@ -256,6 +257,31 @@
     setTargetedSkill(null);
     try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
+  }
+
+  function buildBoatPorts(map) {
+    const mooring=mat("mooring marker","#8ed1ea","#54bbdc");
+    expansionResources.push(mooring);
+    for(const port of map.boatPorts){
+      const {shore,berth}=port;
+      const height=terrainHeight(map.terrain,shore.x,shore.z);
+      const direction=Math.atan2(berth.x-shore.x,berth.z-shore.z);
+      const quay=new B.TransformNode("wooden boat landing",scene);
+      quay.parent=expansionRoot;quay.position.set(shore.x,Math.max(height,map.waterLevel),shore.z);quay.rotation.y=direction;
+      const pierPart=(name,x,y,z,width,h,depth,material)=>{
+        const part=B.MeshBuilder.CreateBox(name,{width,height:h,depth},scene);
+        part.parent=quay;part.position.set(x,y,z);part.material=material;part.isPickable=false;
+      };
+      pierPart("landing planks",0,.025,.25,2.65,.11,3.2,provinceFx.plank);
+      for(const x of [-1.15,1.15])for(const z of [-1.1,1.7])
+        pierPart("mooring post",x,-.1,z,.25,1.1,.25,woodenAlt);
+      const ring=B.MeshBuilder.CreateTorus("mooring",{diameter:3.7,thickness:.09,tessellation:24},scene);
+      ring.parent=expansionRoot;ring.position.set(berth.x,map.waterLevel+.065,berth.z);ring.material=mooring;ring.isPickable=false;
+      const pick=B.MeshBuilder.CreateGround("mooring pick",{width:4.6,height:4.6},scene);
+      pick.parent=expansionRoot;pick.position.copyFrom(ring.position);pick.visibility=.001;
+      pick.metadata={boatPortId:port.id,noShadow:true};
+      expansionLabel(port.name,shore.x,shore.z,11,2.1+(map.reliefLabels?0:height));
+    }
   }
 
   function buildWaterwayGates(map) {
