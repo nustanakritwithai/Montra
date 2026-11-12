@@ -73,12 +73,14 @@ type CanalLayout = Readonly<{
 
 const point=([x,z]:Coordinate):Position=>({x,z});
 const canalRadius=7;
-const capitalCanal={west:-44,east:44,north:-70,south:38,radius:6};
+const capitalCanal={west:-46,east:46,north:-72,south:40,radius:7};
+export const CAPITAL_MOAT_WIDTH=2*capitalCanal.radius;
 export const CAPITAL_MOAT={minX:capitalCanal.west-capitalCanal.radius,maxX:capitalCanal.east+capitalCanal.radius,
   minZ:capitalCanal.north-capitalCanal.radius,maxZ:capitalCanal.south+capitalCanal.radius};
 const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x+2,z],direction:[0,1]});
 const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z+2],direction:[1,0]});
-const capitalDock=southBank(-12,capitalCanal.south);
+const capitalDock:HarborLayout={shore:[-12,capitalCanal.south+capitalCanal.radius+2],
+  berth:[-12,capitalCanal.south+2],direction:[1,0]};
 
 // Each gate belongs to the corresponding neighbor in waterLinks. Author channels
 // around transfer pads and fort walls so the river crosses the map without opening land defenses.

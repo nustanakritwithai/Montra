@@ -16,18 +16,25 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
   const bridges=map.walkBridges!;
   const feet=(x:number,z:number)=>({x,z,y:groundAt(map.id,x,z)});
   assert.equal(bridges.length,4);
-  assert.deepEqual(CAPITAL_SIEGE.moat,{minX:-50,maxX:50,minZ:-76,maxZ:44});
+  assert.deepEqual(CAPITAL_SIEGE.moat,{minX:-53,maxX:53,minZ:-79,maxZ:47});
   for(const [x,z] of [[-37,-36],[37,-36],[18,-63],[18,31]]){
     assert.equal(waterDepthAt(map,x,z),0,"new dry bank at "+x+","+z);
     assert.ok(isSafeWorldPoint(map,feet(x,z)),"walkable bank at "+x+","+z);
   }
-  for(const [x,z] of [[-43,-69],[0,-69],[43,-69],[43,-16],[43,37],[0,37],[-43,37],[-43,-16]]){
-    assert.ok(waterDepthAt(map,x,z)>.4,"wet moat at "+x+","+z);
+  for(const [from,to] of map.boatLanes!){
+    const steps=Math.ceil(Math.hypot(to.x-from.x,to.z-from.z));
+    for(let i=0;i<=steps;i++){
+      const x=from.x+(to.x-from.x)*i/steps,z=from.z+(to.z-from.z)*i/steps;
+      assert.ok(waterDepthAt(map,x,z)>.4,"wet moat at "+x+","+z);
+    }
   }
   for(const b of bridges){
     const vertical=b.axis==="z",point=(along:number,across=b.z)=>vertical?feet(across,along):feet(along,across);
     const [start,left,right,end]=b.x,mid=(left+right)/2;
-    assert.ok(waterDepthAt(map,point(mid).x,point(mid).z)>0,b.id+" deck spans water");
+    const lane=map.boatLanes!.find(([from,to])=>vertical?from.z===mid && to.z===mid:from.x===mid && to.x===mid);
+    assert.ok(lane,b.id+" deck is centered on its water lane");
+    for(const p of [point(start),point(end)])assert.equal(waterDepthAt(map,p.x,p.z),0,b.id+" ramp meets dry ground");
+    for(const p of [point(left),point(mid),point(right)])assert.ok(waterDepthAt(map,p.x,p.z)>.4,b.id+" deck spans water");
     assert.equal(point(mid).y,b.height,b.id+" deck height");
     for(let along=start;along<end;along+=.25){
       const from=point(along),to=point(Math.min(end,along+.25));

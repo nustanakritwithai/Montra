@@ -1,5 +1,5 @@
-import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
-import {CAPITAL_MOAT} from "./PirateBoatRules.js";
+import type { WalkBridge, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import {CAPITAL_MOAT, CAPITAL_MOAT_WIDTH} from "./PirateBoatRules.js";
 import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, forwardCamps} from "./CastlePilot.js";
 import {RIVER_CITY,CITY_CELL,riverFacilities,riverGateSpecs,riverNodes,riverPaths,riverPosts,gridPoint} from "./RiverCity.js";
 
@@ -102,6 +102,20 @@ const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
+const capitalSouthBridgeX=2.5;
+function capitalBridge(side:Side,across:number,width:number):WalkBridge {
+  const vertical=side==="north" || side==="south";
+  const outerFirst=side==="north" || side==="west";
+  const outer=vertical?(outerFirst?CAPITAL_MOAT.minZ:CAPITAL_MOAT.maxZ):
+    (outerFirst?CAPITAL_MOAT.minX:CAPITAL_MOAT.maxX);
+  const bankStart=outerFirst?outer:outer-CAPITAL_MOAT_WIDTH;
+  const bankEnd=bankStart+CAPITAL_MOAT_WIDTH;
+  const center=(bankStart+bankEnd)/2;
+  // The high deck is centered over the channel; the shorter ramp fits the inner bank.
+  return {id:"capital_bridge_"+side,axis:vertical?"z":undefined,z:across,width,height:3.35,thickness:.25,
+    x:[bankStart-(outerFirst?5.5:3.3),center-3.5,center+3.5,bankEnd+(outerFirst?3.3:5.5)]};
+}
+
 export const CAPITAL_WARP_POINTS={south:[-2,30],west:[-37,-10],north:[-5,-62],east:[37,-10]} as const;
 export const CAPITAL_SIEGE={
   moat:CAPITAL_MOAT,
@@ -153,12 +167,12 @@ type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles"|"w
 const hubs:Record<string,Hub>={
   mantra_capital:{name:"นครเวียงมนตรา",bounds:{minX:-72,maxX:72,minZ:-95,maxZ:64},
     walkBridges:[
-      {id:"capital_bridge_north",axis:"z",x:[-82,-72.5,-66.5,-59.8],z:0,width:6,height:3.35,thickness:.25},
-      {id:"capital_bridge_south",axis:"z",x:[27.8,34.7,41,49],z:4,width:6,height:3.35,thickness:.25},
-      {id:"capital_bridge_west",x:[-56,-46,-42.5,-35.7],z:-14,width:4.5,height:3.35,thickness:.25},
-      {id:"capital_bridge_east",x:[35.7,42.5,46,56],z:-14,width:4.5,height:3.35,thickness:.25},
+      capitalBridge("north",0,6),
+      capitalBridge("south",capitalSouthBridgeX,5),
+      capitalBridge("west",-14,4.5),
+      capitalBridge("east",-14,4.5),
     ],
-    paths:trails([[0,56],[4,50],[4,26],[0,22],[0,-14],[0,-58],[0,-87]],[[-62,-14],[-34,-14],[0,-14],[34,-14],[62,-14]],
+    paths:trails([[0,56],[capitalSouthBridgeX,54],[capitalSouthBridgeX,26],[0,22],[0,-14],[0,-58],[0,-87]],[[-62,-14],[-34,-14],[0,-14],[34,-14],[62,-14]],
       [[0,12],[-17,8],[-22,-14],[-16,-32],[0,-40],[18,-32],[22,-14],[18,8],[0,12]],
       [[-62,-87],[0,-87],[62,-87],[62,56],[0,56],[-62,56],[-62,-87]],
       [[-67,-16],[-62,-16]],[[67,-16],[62,-16]],

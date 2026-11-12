@@ -252,7 +252,8 @@
   }
   function buildWaterSurface(map){
     const positions=[],normals=[],uvs=[],indices=[],colors=[];
-    const riverAreas=connectedRiverAreas(map),river=riverAreas.length>0,inMarsh=map.id==="drowned_marsh";
+    const inCapital=map.id==="mantra_capital",inMarsh=map.id==="drowned_marsh";
+    const riverAreas=inCapital?[]:connectedRiverAreas(map),river=riverAreas.length>0;
     const shallow=B.Color3.FromHexString("#8cddf2"),deep=B.Color3.FromHexString("#3b96cd");
     const marsh=B.Color3.FromHexString("#3c7a74"),tint=new B.Color3();
     for(const polygon of waterSurfacePolygons(map)){
@@ -261,7 +262,9 @@
         positions.push(x,map.waterLevel,z);normals.push(0,1,0);uvs.push(x/8,z/8);
         const depth=Math.max(0,map.waterLevel-.05-bed);
         const marshAlpha=Math.min(1,depth*5);
-        if(river){
+        if(inCapital){
+          colors.push(1,1,1,1);
+        }else if(river){
           let blue=0;
           if(riverAreas.some(area=>waterAreaContains(area,x,z)))blue=inMarsh?marshRiverBlend(map.boatLanes,x,z):1;
           const depthTint=Math.min(1,depth/1.2);
@@ -277,8 +280,14 @@
     }
     const mesh=new B.Mesh(map.id+" water surface",scene),data=new B.VertexData();
     Object.assign(data,{positions,normals,uvs,indices,colors});data.applyToMesh(mesh);
-    const material=river?new B.StandardMaterial(map.id+" river water",scene):regionWater("drowned_marsh").clone(map.id+" marsh water");
-    if(river){
+    const material=inCapital||river?new B.StandardMaterial(map.id+" water",scene):regionWater("drowned_marsh").clone(map.id+" marsh water");
+    if(inCapital){
+      // The siege moat must read clearly over the grass and stone of its bed.
+      material.disableLighting=true;
+      material.emissiveColor=B.Color3.FromHexString("#286783");
+      material.transparencyMode=B.Material.MATERIAL_OPAQUE;
+      material.backFaceCulling=false;
+    }else if(river){
       material.disableLighting=true;
       material.emissiveColor=new B.Color3(.82,.82,.82);
       material.transparencyMode=B.Material.MATERIAL_ALPHABLEND;
@@ -286,7 +295,7 @@
       material.alpha=.72;
     }
     material.emissiveTexture=riverRipple;
-    mesh.parent=expansionRoot;mesh.material=material;mesh.hasVertexAlpha=true;
+    mesh.parent=expansionRoot;mesh.material=material;mesh.hasVertexAlpha=!inCapital;
     mesh.isPickable=false;mesh.metadata={noShadow:true};
     expansionResources.push(material);
   }
