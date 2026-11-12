@@ -66,6 +66,30 @@ test("every port launches a boardable boat and returns both riders to its bank",
   assert.equal(ids.size,Object.keys(WORLD_MAPS).length+13);
 });
 
+test("a stopped boat can turn 180 degrees in under three seconds without drifting",()=>{
+  const map=WORLD_MAPS.ritual_village,harbor=map.boatHarbor!;
+  const id="pilot",boats=new MontraBoats();
+  const pilot={...harbor.shore,y:0,mapId:map.id,boatId:"",facing:0,combatState:"idle"};
+  const crew=new Map([[id,pilot]]);
+  assert.ok(boats.act(id,pilot,{action:"launch"},0));
+  const [start]=boats.snapshot();
+  assert.ok(boats.act(id,pilot,{action:"board",boatId:start.entityId},0));
+  assert.ok(boats.act(id,pilot,{action:"helm"},0));
+  let quarterTurn=0,halfTurn=0;
+  for(let now=50;now<3000;now+=50){
+    if(now%100===0)assert.ok(boats.act(id,pilot,{action:"input",throttle:0,steer:1},now));
+    boats.tick(now,.05,crew,()=>true);
+    const [ship]=boats.snapshot();
+    const turn=start.heading-ship.heading;
+    if(!quarterTurn && turn>=Math.PI/2)quarterTurn=now;
+    if(turn>=Math.PI){halfTurn=now;break;}
+  }
+  assert.ok(quarterTurn>0 && quarterTurn<=1500);
+  assert.ok(halfTurn>0);
+  const [ship]=boats.snapshot();
+  assert.deepEqual({x:ship.x,z:ship.z,hp:ship.hp},{x:start.x,z:start.z,hp:start.hp});
+});
+
 test("one failed crew save rolls back the whole SQLite arrival",async()=>{
   const store=new CharacterStore(await mkdtemp(join(tmpdir(),"montra-crew-save-")),true);
   try {

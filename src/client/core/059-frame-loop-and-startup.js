@@ -178,7 +178,7 @@
     // rudder can still rotate, without thrust pushing the hull into the bank.
     if(goal.aligning && (Math.abs(headingError)>.035 || Math.abs(boat.speed)>.25)){
       const movingBackward=boat.speed<0?-1:1;
-      return {throttle:0,steer:-movingBackward*Math.sign(headingError)};
+      return {throttle:0,steer:-movingBackward*Math.max(-1,Math.min(1,headingError*5))};
     }
     goal.aligning=false;
     const direction = reverse ? -1 : 1;

@@ -182,12 +182,13 @@ try {
 
   const farWater=river.z+20;
   diver.send("move",{x:0,z:farWater});
-  const turnDeadline=Date.now()+15000;
+  const turnDeadline=Date.now()+3500;
   while(ship().heading>.06 && Date.now()<turnDeadline){
     command(captain,"input",{throttle:0,steer:1,anchor:false});
     await wait(105);
   }
   assert.ok(ship().heading<=.06,"turn toward the middle of the river");
+  command(captain,"input",{throttle:0,steer:0,anchor:true});
   await until(()=>Math.abs(me(diver).z-farWater)<.2 && me(diver).y<-1,"diver walks on the bed away from the boat",12000);
   command(diver,"board",{boatId:vessel});
   await until(()=>diverErrors.includes("boat_action_unavailable"),"distant boarding rejected");

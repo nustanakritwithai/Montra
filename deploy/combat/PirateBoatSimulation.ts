@@ -226,7 +226,8 @@ export class BoatSimulation {
         : definition.drag * 8;
       const step = Math.max(-rate * dt, Math.min(rate * dt, target - boat.speed));
       boat.speed += step;
-      const turnFactor = Math.max(0.12, Math.min(1, Math.abs(boat.speed) / 3));
+      // The pilot can pivot with the paddle even when the hull is stopped.
+      const turnFactor = Math.max(.85, Math.min(1, Math.abs(boat.speed) / 3));
       boat.heading -= boat.steer * definition.turnSpeed * turnFactor * (boat.speed < 0 ? -1 : 1) * dt;
       boat.x += Math.sin(boat.heading) * boat.speed * dt;
       boat.z += Math.cos(boat.heading) * boat.speed * dt;

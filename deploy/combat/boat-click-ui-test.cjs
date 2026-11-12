@@ -194,9 +194,13 @@ test("a river route aligns the hull before thrusting out of a berth",()=>{
   f.tap("touch",16,54,{isEnabled:()=>true,metadata:{waterGateId:"water_ritual_village_to_drowned_marsh"}});
   const turn=f.tick(100);
   assert.equal(turn.throttle,0);
-  assert.ok(turn.steer<0);
+  assert.equal(turn.steer,-1);
+  f.boat.heading=Math.atan2(16,3)-.1;
+  const correction=f.tick(200);
+  assert.equal(correction.throttle,0);
+  assert.ok(Math.abs(correction.steer+.5)<1e-6);
   f.boat.heading=Math.atan2(16,3);
-  assert.ok(f.tick(200).throttle>0);
+  assert.ok(f.tick(300).throttle>0);
 });
 
 test("the boarding and paddle icons retain their commands and accessible helm states",()=>{
