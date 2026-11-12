@@ -12,12 +12,28 @@ process.env.MONTRA_CIVILIAN_WAR_FIELDS="1";
 process.env.MONTRA_CASTLE_PILOT="1";
 process.env.MONTRA_WAR_ROUTES="1";
 const {GuildStore}=await import("./GuildStore.js");
-const {getWarDefinition,warSites,WAR_DURATION}=await import("./TerritoryWar.js");
+const {getWarDefinition,isRestrictedWarPosition,warSites,WAR_DURATION}=await import("./TerritoryWar.js");
 const {isRestArea,getWorldMap,groundAt,isSafeWorldPoint}=await import("./WorldMaps.js");
 const {MyRoom}=await import("./MyRoom.js");
 const {warWindows}=await import("./WarSchedule.js");
 const {CITY_PRODUCTION_SITE,CITY_MINING_SITE}=await import("./CityProductionRules.js");
 const tuesday=Date.UTC(2026,10,10,13),DAY=86_400_000;
+
+test("the capital battle uses the dry outer bank while the old war entry stays in town",()=>{
+  const mapId="mantra_capital",map=getWorldMap(mapId)!,war=getWarDefinition(mapId)!,field=war.isolated!;
+  assert.equal(war.seatsPerSide,5);
+  assert.equal(war.durationMs,8*60_000);
+  assert.deepEqual([war.entry.x,war.entry.z],[-4,-14]);
+  assert.ok(isRestrictedWarPosition(mapId,war.entry));
+  assert.ok(isRestArea(mapId,war.entry));
+  for(const p of [field.attack,field.defend,war.flag,war.relay!,...field.landmarks!]){
+    assert.equal(isRestrictedWarPosition(mapId,p),false);
+    assert.ok(isSafeWorldPoint(map,{...p,y:groundAt(mapId,p.x,p.z)}));
+  }
+  assert.ok(isRestrictedWarPosition(mapId,{x:43,z:-14}));
+  assert.equal(isRestrictedWarPosition("ritual_village",{x:0,z:0}),false);
+  for(const p of [war.flag,war.relay!])assert.equal(Math.hypot(p.x-field.attack.x,p.z-field.attack.z),Math.hypot(p.x-field.defend.x,p.z-field.defend.z));
+});
 
 test("weekly UTC windows preserve a fixed local start, exact lock and cutoff",()=>{
   const next=warWindows("moon_pass",tuesday-1,WAR_DURATION);
@@ -107,11 +123,13 @@ test("civic battle points are walkable and capital protection is scoped to the r
   const room=new MyRoom() as unknown as {
     field?:{site:string;seq:number};
     isProtectedArea(site:string,point:{x:number;z:number}):boolean;
+    canOccupy(x:number,z:number,y:number,flying:boolean,mapId:string):boolean;
   };
   for(const site of ["mantra_capital","ritual_village"]){
     const map=getWorldMap(site)!,rules=getWarDefinition(site)!.isolated!;
     assert.ok(isRestArea(site,map.spawn));
     assert.ok(room.isProtectedArea(site,map.spawn));
+    if(site==="mantra_capital")assert.ok(room.canOccupy(map.spawn.x,map.spawn.z,0,false,site));
     for(const p of [rules.flag,rules.relay,rules.attack,rules.defend].filter(p=>p!==undefined)){
       assert.ok(isSafeWorldPoint(map,{...p,y:groundAt(site,p.x,p.z)}),site+" "+JSON.stringify(p));
     }
@@ -119,6 +137,11 @@ test("civic battle points are walkable and capital protection is scoped to the r
     assert.equal(room.isProtectedArea(site,rules.flag),false);
     assert.equal(room.isProtectedArea(site,rules.attack),true);
     assert.equal(room.isProtectedArea(site,rules.defend),true);
+    if(site==="mantra_capital"){
+      assert.equal(room.canOccupy(map.spawn.x,map.spawn.z,0,false,site),false);
+      assert.equal(room.canOccupy(43,-14,0,false,site),false);
+      assert.ok(room.canOccupy(rules.flag.x,rules.flag.z,0,false,site));
+    }
     room.field=undefined;
   }
 });

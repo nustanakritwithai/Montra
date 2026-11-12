@@ -158,22 +158,28 @@
     return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
   }
   function walkBridgeAt(map,x,z,radius=0){
-    return map?.walkBridges?.find(b=>x>=b.x[0]+radius && x<=b.x[3]-radius && Math.abs(z-b.z)<=b.width/2-radius);
+    return map?.walkBridges?.find(b=>{
+      const along=b.axis==="z"?z:x,across=b.axis==="z"?x:z;
+      return along>=b.x[0]+radius && along<=b.x[3]-radius && Math.abs(across-b.z)<=b.width/2-radius;
+    });
   }
   function walkHeight(map,x,z){
     const bridge=walkBridgeAt(map,x,z);
     if(!bridge)return map?.terrain?terrainHeight(map.terrain,x,z):0;
     const [start,left,right,end]=bridge.x;
-    return bridge.height*Math.min(1,(x-start)/(left-start),(end-x)/(end-right));
+    const along=bridge.axis==="z"?z:x;
+    return bridge.height*Math.min(1,(along-start)/(left-start),(end-along)/(end-right));
   }
   function walkBridgeTransitionClear(map,from,x,z){
     for(const bridge of map.walkBridges??[])for(const side of [-1,1]){
-      const edge=bridge.z+side*bridge.width/2;
-      if(((from.z-edge)*side>0)===((z-edge)*side>0))continue;
-      const at=from.x+(x-from.x)*(edge-from.z)/(z-from.z);
+      const vertical=bridge.axis==="z",fromAlong=vertical?from.z:from.x,toAlong=vertical?z:x;
+      const fromAcross=vertical?from.x:from.z,toAcross=vertical?x:z,edge=bridge.z+side*bridge.width/2;
+      if(((fromAcross-edge)*side>0)===((toAcross-edge)*side>0))continue;
+      const at=fromAlong+(toAlong-fromAlong)*(edge-fromAcross)/(toAcross-fromAcross);
       if(at<bridge.x[0] || at>bridge.x[3])continue;
-      const bed=map.terrain?terrainHeight(map.terrain,at,edge):0;
-      if(walkHeight(map,at,edge)-bed>.4)return false;
+      const hitX=vertical?edge:at,hitZ=vertical?at:edge;
+      const bed=map.terrain?terrainHeight(map.terrain,hitX,hitZ):0;
+      if(walkHeight(map,hitX,hitZ)-bed>.4)return false;
     }
     return true;
   }
@@ -342,32 +348,36 @@
       return mesh;
     };
     for(const bridge of map.walkBridges){
-      const {x,z,width,height,thickness}=bridge;
+      const {x,z,width,height,thickness}=bridge,vertical=bridge.axis==="z";
+      const bridgeBox=(name,along,y,across,length,h,depth,material,angle=0)=>{
+        const mesh=box(name,vertical?across:along,y,vertical?along:across,length,h,depth,material);
+        if(vertical)mesh.rotation.y=-Math.PI/2;
+        mesh.rotation.z=angle;
+        return mesh;
+      };
       const profile=[0,height,height,0];
       for(let i=1;i<x.length;i++){
         const dx=x[i]-x[i-1],dy=profile[i]-profile[i-1];
         const cx=(x[i]+x[i-1])/2,cy=(profile[i]+profile[i-1])/2;
         const angle=Math.atan2(dy,dx),length=Math.hypot(dx,dy);
-        const deck=box("walk bridge deck",cx+Math.sin(angle)*thickness/2,cy-Math.cos(angle)*thickness/2,z,length,thickness,width,provinceFx.plank);
-        deck.rotation.z=angle;deck.parent=expansionRoot;deck.isPickable=true;
+        const deck=bridgeBox("walk bridge deck",cx+Math.sin(angle)*thickness/2,cy-Math.cos(angle)*thickness/2,z,length,thickness,width,provinceFx.plank,angle);
+        deck.parent=expansionRoot;deck.isPickable=true;
         deck.metadata={walkable:true,walkBridgeId:bridge.id};
         for(const side of [-1,1]){
           const edge=z+side*(width/2-.1);
-          const rail=box("bridge handrail",cx,cy+.78,edge,length,.12,.12,woodenAlt);
-          rail.rotation.z=angle;trim.push(rail);
+          trim.push(bridgeBox("bridge handrail",cx,cy+.78,edge,length,.12,.12,woodenAlt,angle));
           for(let j=0,n=Math.ceil(dx/3);j<n;j++){
             const t=(j+.5)/n;
-            trim.push(box("bridge railing post",x[i-1]+dx*t,profile[i-1]+dy*t+.38,edge,.15,.85,.15,darkWood));
+            trim.push(bridgeBox("bridge railing post",x[i-1]+dx*t,profile[i-1]+dy*t+.38,edge,.15,.85,.15,darkWood));
           }
         }
       }
       for(const foot of [x[1]-.3,x[2]+.3])for(const side of [-1,1]){
-        const edge=z+side*(width/2-.23),bed=terrainHeight(map.terrain,foot,edge);
-        trim.push(box("bridge bank pier",foot,(bed+height-thickness)/2,edge,.46,height-thickness-bed,.52,darkWood));
-        trim.push(box("bridge lantern",foot,height+1.12,edge,.3,.42,.3,glowMat));
+        const edge=z+side*(width/2-.23),bed=terrainHeight(map.terrain,vertical?edge:foot,vertical?foot:edge);
+        trim.push(bridgeBox("bridge bank pier",foot,(bed+height-thickness)/2,edge,.46,height-thickness-bed,.52,darkWood));
+        trim.push(bridgeBox("bridge lantern",foot,height+1.12,edge,.3,.42,.3,glowMat));
       }
-      addLightSpot(x[1]-.3,height+1.18,z,"#ffc47c",.8);
-      addLightSpot(x[2]+.3,height+1.18,z,"#ffc47c",.8);
+      for(const along of [x[1]-.3,x[2]+.3])addLightSpot(vertical?z:along,height+1.18,vertical?along:z,"#ffc47c",.8);
     }
     for(const {mesh} of mergeByCell(trim)){mesh.parent=expansionRoot;mesh.isPickable=false;}
   }

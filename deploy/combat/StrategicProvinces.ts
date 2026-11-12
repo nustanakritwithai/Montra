@@ -1,4 +1,5 @@
 import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import {CAPITAL_MOAT} from "./PirateBoatRules.js";
 import {CASTLE_ENABLED, CASTLE_ID, castleObjectives, forwardCamps} from "./CastlePilot.js";
 import {RIVER_CITY,CITY_CELL,riverFacilities,riverGateSpecs,riverNodes,riverPaths,riverPosts,gridPoint} from "./RiverCity.js";
 
@@ -101,6 +102,14 @@ const site=(kind:ProvinceSite["kind"],name:string,x:number,z:number,direction?:"
 const wall=(x:number,z:number,width:number,length:number):WorldWall=>({x,z,width,length});
 const trails=(...routes:XY[][])=>routes.map(route=>route.map(([x,z])=>({x,z})));
 
+export const CAPITAL_SIEGE={
+  moat:CAPITAL_MOAT,
+  entry:site("fort","จุดสมัครศึกนคร",-4,-14),
+  flag:site("fort","ธงชิงนคร · ลานใต้",0,56),
+  relay:{name:"หอกลองแนวเหนือ",x:0,z:-87,radius:4,effect:"banner" as const},
+  attack:{x:-67,z:-16},defend:{x:67,z:-16},
+  landmarks:[site("grove","ค่ายเสบียงตะวันตก",-61,9),site("grove","ลานตีโอบตะวันออก",61,9)],
+};
 export const PROVINCES:Readonly<Record<string,Province>>={
   [RIVER_CITY]:{kind:"territory",rampart:riverWalls(),riverCity:{facilities:riverFacilities,nodes:riverNodes,posts:riverPosts},
     hint:"จากค่ายใต้ข้ามสะพานไม้สองฝั่ง คุมตลาดหรือคลังแล้วเข้าลานบัญชาการทางประตูใต้หรือประตูข้าง",
@@ -114,9 +123,9 @@ export const PROVINCES:Readonly<Record<string,Province>>={
     sites:[site("fort","ธงรวมพลไตรเวียง",0,308),site("bridge","สะพานขบวนเสบียง",0,221),
       site("port","ท่าน้ำตะวันตก",-245,35),site("shrine","ช่องเขาตะวันออก",277,35),site("market","คลังเสบียงหลวง",-96,-39),
       site("tower","หอกลองหลวง",9,54),site("mine","โรงช่างประตู",95,-39),site("palace","มหาปราสาทไตรเวียง",0,-76)]}}:{}),
-  mantra_capital:{kind:"capital",rampart:ramparts.mantra_capital,hint:"ลานพระนครเชื่อมหมู่บ้าน สองเขตล่า และด่านจันทรา",sites:[
+  mantra_capital:{kind:"capital",rampart:ramparts.mantra_capital,hint:"ข้ามสะพานสี่ทิศสู่ถนนวงแหวนรอบคูเมือง ลานธงอยู่ใต้ หอกลองอยู่เหนือ",sites:[
     site("palace","คุ้มหลวงเวียงมนตรา",0,-35),site("market","ตลาดสี่ประตู",-16,1),
-    site("tower","หอกลองประกาศ",17,-14),site("shrine","ศาลหลักเมือง",0,-14)]},
+    site("tower","หอกลองประกาศ",17,-14),site("shrine","ศาลหลักเมือง",0,-14),CAPITAL_SIEGE.entry,...CAPITAL_SIEGE.landmarks]},
   moon_pass:{kind:"territory",rampart:ramparts.moon_pass,hint:"ข้ามสะพานรางแร่ไปโรงคัดแร่ทางตะวันออก แล้วเลาะช่องขนเงินกลับประตูข้างเหมือง ห้องโลกมีรถรางขึ้นลงเหมือง",safeRoads:[0,1],
     railPath:4,relay:{name:"โรงคัดแร่จันทร์",x:82,z:-58,radius:4,effect:"gate"},sites:[
     site("fort","ลานธงจันทรา",12,-36),site("market","ตลาดชายด่าน",-24,-20),site("mine","เหมืองเงินจันทร์",32,-25),
@@ -136,14 +145,25 @@ export const PROVINCES:Readonly<Record<string,Province>>={
     site("bridge","สะพานเกล็ดนาค",-22,-27),site("bridge","สะพานท่าบัว",22,-27),site("bridge","สะพานไข่มุก",104,-27)]},
 };
 
-type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles"> & {
+type Hub = Pick<WorldMapDefinition,"name"|"paths"|"water"|"walls"|"obstacles"|"walkBridges"> & {
   bounds?:WorldMapDefinition["bounds"];
   stations?:readonly [readonly [id:string,x:number,z:number,label:string],readonly [id:string,x:number,z:number,label:string]];
 };
 const hubs:Record<string,Hub>={
-  mantra_capital:{name:"นครเวียงมนตรา",paths:trails([[0,26],[0,-14],[0,-58]],[[-34,-14],[0,-14],[34,-14]],
-    [[0,12],[-17,8],[-22,-14],[-16,-32],[0,-40],[18,-32],[22,-14],[18,8],[0,12]]),
-    walls:[wall(-16,-45,6,5),wall(10,-45,6,5),wall(-15,-4,7,3),wall(9,-5,7,4),wall(24,-25,4,4)],obstacles:[]},
+  mantra_capital:{name:"นครเวียงมนตรา",bounds:{minX:-72,maxX:72,minZ:-95,maxZ:64},
+    walkBridges:[
+      {id:"capital_bridge_north",axis:"z",x:[-82,-72.5,-66.5,-59.8],z:0,width:6,height:3.35,thickness:.25},
+      {id:"capital_bridge_south",axis:"z",x:[27.8,34.7,41,49],z:4,width:6,height:3.35,thickness:.25},
+      {id:"capital_bridge_west",x:[-56,-46,-42.5,-35.7],z:-14,width:4.5,height:3.35,thickness:.25},
+      {id:"capital_bridge_east",x:[35.7,42.5,46,56],z:-14,width:4.5,height:3.35,thickness:.25},
+    ],
+    paths:trails([[0,56],[4,50],[4,26],[0,22],[0,-14],[0,-58],[0,-87]],[[-62,-14],[-34,-14],[0,-14],[34,-14],[62,-14]],
+      [[0,12],[-17,8],[-22,-14],[-16,-32],[0,-40],[18,-32],[22,-14],[18,8],[0,12]],
+      [[-62,-87],[0,-87],[62,-87],[62,56],[0,56],[-62,56],[-62,-87]],
+      [[-67,-16],[-62,-16]],[[67,-16],[62,-16]]),
+    walls:[wall(-16,-45,6,5),wall(10,-45,6,5),wall(-15,-4,7,3),wall(9,-5,7,4),wall(24,-25,4,4),
+      wall(-29,-93,8,2),wall(21,-93,8,2),wall(-29,61,8,2),wall(21,61,8,2),
+      wall(-68,-41,2,9),wall(66,-41,2,9),wall(-68,22,2,9),wall(66,22,2,9)],obstacles:[]},
   moon_pass:{name:"ด่านผนึกจันทรา",bounds:{minX:-58,maxX:122,minZ:-106,maxZ:66},
     stations:[["moon_cart_up",41,17,"ขึ้นรถรางไปเหมืองบน"],["moon_cart_down",93,-76,"นั่งรถรางกลับลานล่าง"]],
     paths:trails([[0,26],[-30,16],[-30,6],[-30,-45],[0,-58]],[[-30,6],[-34,6]],

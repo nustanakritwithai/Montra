@@ -10,7 +10,7 @@ import {MIXED_SKILLS_ENABLED,hotbarState,hotbarSchool,availableHotbarSlot,valida
 import { FORGE_CATALOG } from "./ForgeRules.js";
 import { accounts } from "./AccountService.js";
 import { Room, matchMaker, type Client, type CloseCode } from "colyseus";
-import { WAR_ENTRY_RADIUS, WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, getWarDefinition, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
+import { WAR_ENTRY_RADIUS, WAR_PARTICIPATION_INTERVAL_MS, WAR_SUPPLY_INTERVAL_MS, warSites, getWarDefinition, isRestrictedWarPosition, warEntryDamageFactor, warParticipationExperience, type Battlefield, type WarSide } from "./TerritoryWar.js";
 import {parseGovernmentOrder} from "./TerritoryGovernment.js";
 import {parseWarRegistration,SCHEDULED_WARS_ENABLED} from "./WarSchedule.js";
 import {parseRouteOrder} from "./WarRoutes.js";
@@ -232,9 +232,9 @@ for(const site of Object.keys(warSites)){
   const arena=getWarDefinition(site)?.isolated,map=WORLD_MAPS[site];
   if(!arena || !map)continue;
   const restAreas=[{...arena.attack,radius:4,name:"ฐานฝ่ายบุก"},{...arena.defend,radius:4,name:"ฐานฝ่ายรับ"}];
-  const strategic=map.strategic && {...map.strategic,safeRoads:[] as number[],relay:arena.relay,sites:[arena.flag]};
+  const strategic=map.strategic && {...map.strategic,safeRoads:[] as number[],relay:arena.relay,sites:[arena.flag,...arena.landmarks??[]]};
   isolatedBattleWorldDefinitions.set(site,encodeBattleWorld({
-    ...WORLD_MAPS,[site]:{...map,strategic,battlefield:true,portals:[],restAreas,camps:[],boss:undefined,guardian:undefined},
+    ...WORLD_MAPS,[site]:{...map,strategic,battlefield:true,blockedInner:arena.blockedInner,portals:[],restAreas,camps:[],boss:undefined,guardian:undefined},
   }));
 }
 const swordTreeCatalog=JSON.stringify({core:SWORD_CORE,coreLevels:MUAY_CORE_LEVELS,corePointLevels:MUAY_CORE_POINT_LEVELS,coreManaPerRank:1,coreProgress:Array.from({length:9},(_,rank)=>swordCoreProgress(rank)),schools:SWORD_SCHOOLS,nodes:SWORD_NODES,pvpDamage:SWORD_PVP_DAMAGE_MULTIPLIER,rankLevels:SKILL_RANK_LEVELS,rankPractice:SKILL_RANK_PRACTICE,rankable:SWORD_RANKABLE_SKILLS});
@@ -4707,7 +4707,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private isProtectedArea(mapId:string,point:{x:number;z:number}):boolean {
     const arena=this.field?.site===mapId?getWarDefinition(mapId)?.isolated:undefined;
-    return arena?[arena.attack,arena.defend].some(spawn=>planarDistance(point,spawn)<=4):isRestArea(mapId,point);
+    return arena?isRestrictedWarPosition(mapId,point) || [arena.attack,arena.defend].some(spawn=>planarDistance(point,spawn)<=4):isRestArea(mapId,point);
   }
 
   private async enterTerritory(client:Client,start:boolean,message:unknown){
@@ -5037,7 +5037,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const visiblePilot=view?.throne && s.phase==="battle"?{...view,points:view.points.map(point=>
         point.id>=4 && (!inField || !p.alive || planarDistance(p,castleObjectives[point.id-1])>18)?{...point,progress:0}:point)}:view;
       const rules=getWarDefinition(p.mapId),arena=rules?.isolated;
-      const local=s?{site:p.mapId,civic:arena && {flag:arena.flag,relay:arena.relay,
+      const local=s?{site:p.mapId,civic:arena && {flag:arena.flag,entry:arena.entry,relay:arena.relay,
         durationMs:rules.durationMs,seatsPerSide:rules.seatsPerSide},phase:ownBattle?s.phase:"finished",owner:s.owner,attackName:s.attackName,defendName:s.defendName,
         progress:Math.trunc(s.progress),goal:s.goal,seconds:s.seconds,attack,defend,inField,side:this.warSeats.get(c.sessionId)?.side,
         pilot:visiblePilot,river:inField && ownBattle && s.river?{...s.river,supplied:seat && riverSupplied(s.river,seat.side)}:undefined,
@@ -7627,6 +7627,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private canOccupy(x: number, z: number, feetY: number, flying = false, mapId = DEFAULT_MAP_ID): boolean {
+    if(this.field?.site===mapId && isRestrictedWarPosition(mapId,{x,z}))return false;
     if (this.homeWalls.get(mapId)?.some(wall=>homeWallBlocks(wall.cell,wall.rotation,{x,z}))) return false;
     const map=getWorldMap(mapId);
     if(mapId!==DEFAULT_MAP_ID || map?.terrain || map?.water?.length){
@@ -7652,7 +7653,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean;boatId?:string},x:number,z:number){
-    if(player.boatId)return;
+    if(player.boatId || this.field?.site===player.mapId && isRestrictedWarPosition(player.mapId,{x,z}))return;
     const map=getWorldMap(player.mapId);
     if(map?.terrain){
       if(!player.flying && !walkBridgeTransitionClear(map,player,x,z))return;

@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { PROVINCES, type Province, type ProvinceSite } from "./StrategicProvinces.js";
+import { CAPITAL_SIEGE, PROVINCES, type Province, type ProvinceSite } from "./StrategicProvinces.js";
 import {CIVILIAN_WAR_FIELDS_ENABLED,hasWarSchedule,WAR_CITY_CAP,WarSchedule,warWindows,type WarRegistration} from "./WarSchedule.js";
 import {ALL_MAP_WARS_ENABLED,FRONTIER_WAR_FIELDS,FRONTIER_SIZES} from "./WarMapProfiles.js";
 import {getWorldMap} from "./WorldMaps.js";
@@ -30,12 +30,13 @@ export function warEntryDamageFactor(attackerLevel:number,defenderLevel:number):
 type FieldPoint=Readonly<{x:number;z:number}>;
 type IsolatedField=Readonly<{
   flag:ProvinceSite;relay?:Province["relay"];attack:FieldPoint;defend:FieldPoint;
+  entry?:ProvinceSite;blockedInner?:typeof CAPITAL_SIEGE.moat;landmarks?:readonly ProvinceSite[];
 }>;
 const civicFields:Readonly<Record<string,IsolatedField & {durationMs:number}>>={
   mantra_capital:{
-    flag:{kind:"fort",name:"ธงลานพระนคร",x:-4,z:-14},
-    relay:{name:"หอกลองประกาศ",x:17,z:-14,radius:4,effect:"banner"},
-    attack:{x:0,z:18},defend:{x:0,z:-41},durationMs:8*60_000,
+    entry:CAPITAL_SIEGE.entry,flag:CAPITAL_SIEGE.flag,relay:CAPITAL_SIEGE.relay,
+    attack:CAPITAL_SIEGE.attack,defend:CAPITAL_SIEGE.defend,blockedInner:CAPITAL_SIEGE.moat,
+    landmarks:CAPITAL_SIEGE.landmarks,durationMs:8*60_000,
   },
   ritual_village:{
     flag:{kind:"fort",name:"ธงลานนอกหมู่บ้าน",x:-32,z:23},
@@ -65,7 +66,7 @@ for(const [site,mode] of Object.entries(cityBattleModes)){
   if(mode==="civic"){
     if(CIVILIAN_WAR_FIELDS_ENABLED){
       const civic=civicFields[site];
-      warDefinitions.set(site,{mode,isolated:civic,flag:civic.flag,entry:civic.flag,relay:civic.relay,
+      warDefinitions.set(site,{mode,isolated:civic,flag:civic.flag,entry:civic.entry??civic.flag,relay:civic.relay,
         durationMs:civic.durationMs,seatsPerSide:WAR_SIDE_SIZE});
     }
     continue;
@@ -88,6 +89,10 @@ if(ALL_MAP_WARS_ENABLED){
   }
 }
 export function getWarDefinition(site:string){return warDefinitions.get(site);}
+export function isRestrictedWarPosition(site:string,point:FieldPoint):boolean {
+  const inner=getWarDefinition(site)?.isolated?.blockedInner;
+  return Boolean(inner && point.x>=inner.minX && point.x<=inner.maxX && point.z>=inner.minZ && point.z<=inner.maxZ);
+}
 const warDuration=(site:string)=>warDefinitions.get(site)!.durationMs;
 export const warSites=Object.fromEntries([...warDefinitions].map(([site,{flag}])=>[site,flag]));
 export type WarMember={id:string;officer:boolean;commander?:boolean};

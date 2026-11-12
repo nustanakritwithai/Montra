@@ -257,6 +257,17 @@
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
     }
+    for(const bridge of map?.walkBridges || []){
+      const [start,,,end]=bridge.x,vertical=bridge.axis==="z";
+      const x=vertical?bridge.z-bridge.width/2:start,z=vertical?start:bridge.z-bridge.width/2;
+      ctx.fillStyle="#c8a271";
+      ctx.fillRect(sx(x),sy(z),(vertical?bridge.width:end-start)*scale,(vertical?end-start:bridge.width)*scale);
+    }
+    if(map?.blockedInner){
+      const b=map.blockedInner,x=sx(b.minX),z=sy(b.minZ),w=sx(b.maxX)-x,h=sy(b.maxZ)-z;
+      ctx.fillStyle="rgba(16,20,23,.46)";ctx.fillRect(x,z,w,h);
+      ctx.strokeStyle="#d8ae6b";ctx.lineWidth=large?2:1;ctx.strokeRect(x,z,w,h);
+    }
     const fogOrigin = getLocalAvatar();
     if (fogOrigin) {
       const x = sx(fogOrigin.x), y = sy(fogOrigin.z);
@@ -313,8 +324,9 @@
       mapDot(ctx,sx(obj.x),sy(obj.z),large?8:2.5,color,"#122825");
       if(large)mapText(ctx,String(obj.id),sx(obj.x),sy(obj.z)+3,10,"#ffffff");
     }
-    const isolated=territoryState?.local?.site===activeMapId?territoryState.local.civic:null;
-    const relay=isolated?.relay || map?.strategic?.relay;
+    const war=territoryState?.local?.site===activeMapId?territoryState.local:null;
+    const isolated=war?.civic;
+    const relay=(war?.inField || !isolated?.entry ? isolated?.relay : null) || map?.strategic?.relay;
     if(relay){
       const control=territoryState?.local?.relay;
       const color=control?.contested?"#ffb984":control?.side==="attack"?"#ff9181":control?.side==="defend"?"#83dfd2":"#ffe2a1";
@@ -323,7 +335,7 @@
       if(large)mapText(ctx,relay.name,x,y+17,11,color);
     }
     const sites=map?.strategic?.sites || [];
-    const flag=isolated?.flag;
+    const flag=war?.inField?isolated?.flag:isolated?.entry || isolated?.flag;
     const landmarks=flag && !sites.some(s=>s.kind==="fort" && s.x===flag.x && s.z===flag.z)?[...sites,flag]:sites;
     for (const site of landmarks) {
       if(map?.strategic?.objectives)continue;
@@ -590,7 +602,8 @@
       ?{to:point,title,radius,step}:null;
     if(!local.inField){
       if(!muster || !local.canStart || local.phase!=="open")return null;
-      return target(river?.nodes?.A || flag,river?"ค่ายใต้ A · จุดเปิดศึก":"จุดเปิดศึก · "+(flag?.name || map.name),
+      const entry=local.civic?.entry || flag;
+      return target(river?.nodes?.A || entry,river?"ค่ายใต้ A · จุดเปิดศึก":"จุดเปิดศึก · "+(entry?.name || map.name),
         5,"เข้าใกล้จุดเปิดศึกบนพื้น แล้วเปิดกระดานศึก");
     }
     if(local.phase!=="battle")return null;
@@ -892,7 +905,7 @@
     const details=duration && Number.isInteger(s.civic.seatsPerSide)
       ?s.civic.seatsPerSide+" ต่อ "+s.civic.seatsPerSide+" · "+duration:duration;
     if(details)$("warFlag").textContent+=" · "+details;
-    button.textContent=s.inField?"กลับห้องโลก":s.canStart?"เปิดศึกที่ธง · "+(details || "5 นาที"):"เข้าร่วมสนามรบ";
+    button.textContent=s.inField?"กลับห้องโลก":s.canStart?(s.civic?.entry?"เปิดศึกที่จุดสมัคร · ":"เปิดศึกที่ธง · ")+(details || "5 นาที"):"เข้าร่วมสนามรบ";
     if(riverCity){
       $("warFlag").textContent="B01 · เปิดศึกที่ค่ายใต้ (0, 176) · 5 ต่อ 5 · 10 นาที · คุมตลาดหรือคลังให้ได้ก่อนชิงลานบัญชาการ กองบุกต้องมีช่องผ่านทั้งสองวงกำแพง คุมโรงช่างเพื่อทุบประตูแรงขึ้น";
       if(s.canStart)button.textContent="เปิดศึกที่ค่ายใต้ · 10 นาที";

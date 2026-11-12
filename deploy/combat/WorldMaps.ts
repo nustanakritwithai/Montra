@@ -41,6 +41,8 @@ export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; lev
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
 export type WalkBridge = Readonly<{
   id:string; z:number; width:number; height:number; thickness:number;
+  // x is the longitudinal profile and z is its transverse center for the existing wire format.
+  axis?:"z";
   x:readonly [approachStart:number, deckStart:number, deckEnd:number, approachEnd:number];
 }>;
 export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
@@ -241,14 +243,18 @@ export function isRestArea(mapId: string, point: {x:number; z:number}): boolean 
   return map.restAreas?.some(a=>Math.hypot(point.x-a.x,point.z-a.z)<=a.radius) ?? false;
 }
 export function walkBridgeAt(map:WorldMapDefinition|undefined,x:number,z:number){
-  return map?.walkBridges?.find(bridge=>x>=bridge.x[0] && x<=bridge.x[3] && Math.abs(z-bridge.z)<=bridge.width/2);
+  return map?.walkBridges?.find(bridge=>{
+    const along=bridge.axis==="z"?z:x,across=bridge.axis==="z"?x:z;
+    return along>=bridge.x[0] && along<=bridge.x[3] && Math.abs(across-bridge.z)<=bridge.width/2;
+  });
 }
 function walkSurface(map:WorldMapDefinition|undefined,x:number,z:number){
   const bridge=walkBridgeAt(map,x,z);
   if(bridge){
     const [start,left,right,end]=bridge.x;
-    if(x<left)return {height:bridge.height*(x-start)/(left-start),grade:bridge.height/(left-start)};
-    if(x>right)return {height:bridge.height*(end-x)/(end-right),grade:bridge.height/(end-right)};
+    const along=bridge.axis==="z"?z:x;
+    if(along<left)return {height:bridge.height*(along-start)/(left-start),grade:bridge.height/(left-start)};
+    if(along>right)return {height:bridge.height*(end-along)/(end-right),grade:bridge.height/(end-right)};
     return {height:bridge.height,grade:0};
   }
   return map?.terrain?groundSample(map.terrain,x,z):{height:0,grade:0};
@@ -258,12 +264,14 @@ export function groundAt(mapId:string,x:number,z:number){
 }
 export function walkBridgeTransitionClear(map:WorldMapDefinition,from:{x:number;z:number},x:number,z:number){
   for(const bridge of map.walkBridges??[])for(const side of [-1,1]){
-    const edge=bridge.z+side*bridge.width/2;
-    if(((from.z-edge)*side>0)===((z-edge)*side>0))continue;
-    const at=from.x+(x-from.x)*(edge-from.z)/(z-from.z);
+    const vertical=bridge.axis==="z",fromAlong=vertical?from.z:from.x,toAlong=vertical?z:x;
+    const fromAcross=vertical?from.x:from.z,toAcross=vertical?x:z,edge=bridge.z+side*bridge.width/2;
+    if(((fromAcross-edge)*side>0)===((toAcross-edge)*side>0))continue;
+    const at=fromAlong+(toAlong-fromAlong)*(edge-fromAcross)/(toAcross-fromAcross);
     if(at<bridge.x[0] || at>bridge.x[3])continue;
-    const bed=map.terrain?groundSample(map.terrain,at,edge).height:0;
-    if(walkSurface(map,at,edge).height-bed>.4)return false;
+    const hitX=vertical?edge:at,hitZ=vertical?at:edge;
+    const bed=map.terrain?groundSample(map.terrain,hitX,hitZ).height:0;
+    if(walkSurface(map,hitX,hitZ).height-bed>.4)return false;
   }
   return true;
 }
@@ -291,8 +299,11 @@ function clearOfObstacles(map:WorldMapDefinition,from:Feet,to:Feet){
 export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate:ClosedGates=false):boolean{
   const r=map.strategic?.rampart;
   if(map.terrain && !terrainRayClear(map.terrain,from,to))return false;
-  if(map.walkBridges?.some(b=>rayHitsBox(from,to,{x:b.x[1],y:b.height-b.thickness,z:b.z-b.width/2},
-    {x:b.x[2],y:b.height,z:b.z+b.width/2})))return false;
+  if(map.walkBridges?.some(b=>{
+    const vertical=b.axis==="z",near=b.z-b.width/2,far=b.z+b.width/2;
+    return rayHitsBox(from,to,{x:vertical?near:b.x[1],y:b.height-b.thickness,z:vertical?b.x[1]:near},
+      {x:vertical?far:b.x[2],y:b.height,z:vertical?b.x[2]:far});
+  }))return false;
   if(map.id===DEFAULT_MAP_ID)return !wallBlocksShot(from,to);
   if(!WORLD_EXPANSION)return true;
   if(!r)return !map.walls?.some(w=>segmentIntersectsExpandedWall(from,to,w,0)) && clearOfObstacles(map,from,to);

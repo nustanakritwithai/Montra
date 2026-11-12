@@ -72,6 +72,9 @@ type CanalLayout = Readonly<{
 
 const point=([x,z]:Coordinate):Position=>({x,z});
 const canalRadius=7;
+const capitalCanal={west:-43,east:43,north:-69,south:37};
+export const CAPITAL_MOAT={minX:capitalCanal.west-canalRadius,maxX:capitalCanal.east+canalRadius,
+  minZ:capitalCanal.north-canalRadius,maxZ:capitalCanal.south+canalRadius};
 const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x+2,z],direction:[0,1]});
 const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z+2],direction:[1,0]});
 
@@ -170,7 +173,10 @@ const canals:Readonly<Record<string,CanalLayout>>={
     shorePaths:[[[-18,25],[-30,38],[-46,49]]],
   },
   mantra_capital:{
-    channels:[[[-35,37],[43,37],[43,-58]]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),bounds:{maxX:50},
+    channels:[[
+      [capitalCanal.west,capitalCanal.south],[capitalCanal.east,capitalCanal.south],
+      [capitalCanal.east,capitalCanal.north],[capitalCanal.west,capitalCanal.north],[capitalCanal.west,capitalCanal.south],
+    ]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),
   },
   bamboo_frontier:{
     channels:[[[-38,-93],[-38,45]]],gates:[[-38,-93]],dock:eastBank(-38,38),
@@ -239,7 +245,7 @@ export function addWaterways(map:WorldMapDefinition,maps:Readonly<Record<string,
     return {...gate,heading:gateHeading(gate,lanes),id:"water_"+map.id+"_to_"+targetMapId,targetMapId,range:WATER_GATE_RANGE};
   });
   // Keep the previous bounds for saves made around the former southern docks.
-  const legacyExtension=!layout.dock || map.id==="lotus_basin" || map.id==="sam_lan_estuary"?0:21;
+  const legacyExtension=!layout.dock || map.id==="mantra_capital" || map.id==="lotus_basin" || map.id==="sam_lan_estuary"?0:21;
   const bounds={...map.bounds,maxZ:map.bounds.maxZ+legacyExtension,...layout.bounds};
   const boatPorts:BoatPort[]=[
     {...harbor,id:map.id+"_main",name:layout.dockName??"ท่าเรือ"+map.name},

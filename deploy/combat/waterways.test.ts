@@ -7,7 +7,42 @@ import {tmpdir} from "node:os";
 import {boatCanSail,BOAT_DECK,MontraBoats} from "./MontraBoats.js";
 import {groundAt,isSafeWorldPoint,provinceShotClear,walkBridgeTransitionClear,WORLD_MAPS} from "./WorldMaps.js";
 import {playerWaterDepth,WATER_EXPOSURE,wadingSpeedScale,waterDepthAt} from "./GroundTerrain.js";
+import {CAPITAL_SIEGE} from "./StrategicProvinces.js";
 import {CharacterStore} from "./CharacterStore.js";
+
+test("the capital moat has four walkable bridges and a connected dry outer road",()=>{
+  const map=WORLD_MAPS.mantra_capital;
+  const bridges=map.walkBridges!;
+  const feet=(x:number,z:number)=>({x,z,y:groundAt(map.id,x,z)});
+  assert.equal(bridges.length,4);
+  for(const [x,z] of [[-43,-69],[0,-69],[43,-69],[43,-16],[43,37],[0,37],[-43,37],[-43,-16]]){
+    assert.ok(waterDepthAt(map,x,z)>.4,"wet moat at "+x+","+z);
+  }
+  for(const b of bridges){
+    const vertical=b.axis==="z",point=(along:number,across=b.z)=>vertical?feet(across,along):feet(along,across);
+    const [start,left,right,end]=b.x,mid=(left+right)/2;
+    assert.ok(waterDepthAt(map,point(mid).x,point(mid).z)>0,b.id+" deck spans water");
+    assert.equal(point(mid).y,b.height,b.id+" deck height");
+    for(let along=start;along<end;along+=.25){
+      const from=point(along),to=point(Math.min(end,along+.25));
+      assert.ok(isSafeWorldPoint(map,from),b.id+" unsafe ramp at "+along);
+      assert.ok(walkBridgeTransitionClear(map,from,to.x,to.z),b.id);
+    }
+    const beside=point(mid,b.z+b.width);
+    assert.equal(walkBridgeTransitionClear(map,point(mid),beside.x,beside.z),false,b.id+" side rail");
+  }
+  const routes=map.paths!.slice(3),moat=CAPITAL_SIEGE.moat;
+  for(const route of routes)for(let i=1;i<route.length;i++){
+    const a=route[i-1],b=route[i],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)*2);
+    for(let step=0;step<=steps;step++){
+      const t=step/steps,p=feet(a.x+(b.x-a.x)*t,a.z+(b.z-a.z)*t);
+      assert.ok(p.x<moat.minX || p.x>moat.maxX || p.z<moat.minZ || p.z>moat.maxZ);
+      assert.equal(waterDepthAt(map,p.x,p.z),0);
+      assert.ok(isSafeWorldPoint(map,p),"unsafe outer road at "+p.x+","+p.z);
+    }
+  }
+  for(const gate of map.portals)assert.ok(isSafeWorldPoint(map,feet(gate.x,gate.z)),gate.id);
+});
 
 test("all enabled maps have a river across their terrain and separated two-way water gates",()=>{
   const queue=["ritual_village"],seen=new Set(queue);
@@ -62,7 +97,8 @@ test("the village bend has room to turn and approach gates, with a dry path to i
   const port=map.boatPorts!.find(p=>p.id==="village_south_bend")!;
   assert.deepEqual(path.at(-1),port.shore);
   for(const [i,a] of path.slice(0,-1).entries()){
-    const b=path[i+1],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
+    const b:{x:number;z:number}=path[i+1];
+    const steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
     for(let j=0;j<=steps;j++){
       const x=a.x+(b.x-a.x)*j/steps,z=a.z+(b.z-a.z)*j/steps;
       assert.equal(waterDepthAt(map,x,z),0,`dry path ${x},${z}`);
@@ -119,7 +155,8 @@ test("the marsh is mostly low wading ground with an open river and an east landi
   const path=map.paths!.find(points=>points.at(-1)?.x===port.shore.x && points.at(-1)?.z===port.shore.z);
   assert.ok(path);
   for(const [i,a] of path.slice(0,-1).entries()){
-    const b=path[i+1],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
+    const b:{x:number;z:number}=path[i+1];
+    const steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
     for(let j=0;j<=steps;j++){
       const x=a.x+(b.x-a.x)*j/steps,z=a.z+(b.z-a.z)*j/steps;
       assert.equal(waterDepthAt(map,x,z),0,`dry east path at ${x},${z}`);
