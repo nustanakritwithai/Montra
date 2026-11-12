@@ -465,7 +465,7 @@
   // fewer, larger leaf cards in the middle distance and to a sparse silhouette further out, small undergrowth
   // and gear trims drop away once they are a few pixels, and everything stops drawing where the fog has
   // swallowed it, so the cut is never seen. Instances share their master's levels (one update per master).
-  const viewLods = []; let viewLodKey = "", viewLodAdds = 0;
+  const viewLods = new Set(); let viewLodKey = "";
   const viewRange = { cull: 300, far: 160, mid: 110, small: 120, detail: 100 };
   function trackViewLod(mesh, steps) {
     if (!mesh || typeof mesh.addLODLevel !== "function") return mesh;
@@ -475,13 +475,13 @@
       const level = mesh.getLODLevels().find(l => l.distanceOrScreenCoverage === d);
       if (level) levels.push([level, band]);
     });
-    // Map switches dispose whole batches: drop their entries now and then so the list does not grow.
-    if (++viewLodAdds % 256 === 0) for (let i = viewLods.length - 1; i >= 0; i--) if (viewLods[i].mesh.isDisposed()) viewLods.splice(i, 1);
-    viewLods.push({ mesh, levels }); viewLodKey = "";
+    const entry = { mesh, levels };
+    viewLods.add(entry); viewLodKey = "";
+    mesh.onDisposeObservable.addOnce(() => { viewLods.delete(entry); viewLodKey = ""; });
     return mesh;
   }
   function updateViewDistance() {
-    const R = camera.radius, F = scene.fogEnd, S = scene.fogStart, key = Math.round(R) + ":" + Math.round(F) + ":" + viewLods.length;
+    const R = camera.radius, F = scene.fogEnd, S = scene.fogStart, key = Math.round(R) + ":" + Math.round(F) + ":" + viewLods.size;
     if (key === viewLodKey) return; viewLodKey = key;
     // Past ~93% fog a mesh is the fog colour to within a shade; the ground under it is fogged the same.
     const cull = Math.max(R + 30, F - (F - S) * .07);

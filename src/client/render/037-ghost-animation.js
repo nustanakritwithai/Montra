@@ -72,6 +72,6 @@
     for (let i = soulMeshes.length - 1; i >= 0; i--) {
       const s = soulMeshes[i], p = (now - s.born) / 1600;
       if (p >= 1) { s.soul.dispose(); soulMeshes.splice(i, 1); continue; }
-      s.soul.position.y += dt * 2.2; s.soul.position.x += Math.sin(t * 6 + i) * dt * .6; s.soul.visibility = 1 - p; s.soul.scaling.setAll(1 - p * .5);
+      s.soul.position.y += dt * 2.2; s.soul.position.x += Math.sin(now * .006 + i) * dt * .6; s.soul.visibility = 1 - p; s.soul.scaling.setAll(1 - p * .5);
     }
   }
