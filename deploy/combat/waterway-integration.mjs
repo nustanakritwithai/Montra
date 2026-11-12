@@ -40,7 +40,7 @@ await new Promise((resolve,reject)=>listener.close(error=>error?reject(error):re
 const server=defineServer({rooms:{my_room:defineRoom(WaterGateRoom)}});
 await server.listen(port,"127.0.0.1");
 const sdk=new Client("http://127.0.0.1:"+port),open=new Set();
-const opts=()=>({worldVersion:1,atlasVersion:1,atlasReliefVersion:1,originalReliefVersion:1,provinceVersion:1,
+const opts=()=>({worldVersion:1,atlasVersion:1,atlasReliefVersion:1,originalReliefVersion:1,provinceVersion:1,riverCityVersion:1,
   guestToken:"mt1_"+randomBytes(32).toString("hex")});
 const me=room=>room.state?.players?.get(room.sessionId);
 const boats=room=>room.state.boats;
