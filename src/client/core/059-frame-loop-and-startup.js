@@ -38,8 +38,7 @@
     if (!map?.boatDock || !Number.isFinite(x) || !Number.isFinite(z)) return null;
     const bounds = map.bounds;
     if (x < bounds.minX || x > bounds.maxX || z < bounds.minZ || z > bounds.maxZ) return null;
-    // The village river is drawn separately from the world map's walkable terrain.
-    const waters = map.id === "ritual_village" ? [{x:-80,z:48,width:160,length:40}] : (map.water || []);
+    const waters = map.id === "ritual_village" ? [villageRiver] : (map.water || []);
     const margin = map.boatDock.deck.length/2 + .1;
     let destination = null, adjustment = Infinity;
     for (const w of waters) {
@@ -57,9 +56,11 @@
     if (!boatAtHelm()) return;
     const ray = scene.createPickingRay(px,py,B.Matrix.Identity(),camera);
     if (Math.abs(ray.direction.y) < .00001) return;
-    const t = -ray.origin.y/ray.direction.y;
+    const map = worldDefinitions?.[activeMapId];
+    const waterY = map?.id === "ritual_village" ? villageWaterLevel : 0;
+    const t = (waterY-ray.origin.y)/ray.direction.y;
     if (t < 0) return;
-    const point = sailingWaterDestination(ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z,worldDefinitions?.[activeMapId]);
+    const point = sailingWaterDestination(ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z,map);
     if (!point) return;
     cancelQuestNavigation("",false);
     const boat = ownBoatState();
@@ -68,7 +69,7 @@
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
     }
-    sailingMarker.position.set(point.x,.15,point.z);
+    sailingMarker.position.set(point.x,waterY+.15,point.z);
     sailingMarker.setEnabled(true);
     requestedBoatAnchor = false;
   }

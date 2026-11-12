@@ -97,7 +97,7 @@
       const up=B.Vector3.TransformNormal(B.Axis.Y,inv);
       let v=0;
       for(const a of anchors){
-        const dy=terrain?terrainHeight(terrain,a.x,a.z):0;
+        const dy=terrain && !a.fixedHeight?terrainHeight(terrain,a.x,a.z):0;
         for(let k=0;k<a.count;k++,v+=3){points[v]+=up.x*dy;points[v+1]+=up.y*dy;points[v+2]+=up.z*dy;}
       }
       mesh.setVerticesData(kind,points);mesh.refreshBoundingInfo();

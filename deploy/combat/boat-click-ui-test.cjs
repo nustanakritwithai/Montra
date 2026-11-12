@@ -6,11 +6,13 @@ const vm = require("node:vm");
 
 const root = resolve(__dirname,"../..");
 const core = readFileSync(resolve(root,"src/client/core/059-frame-loop-and-startup.js"),"utf8");
+const village = readFileSync(resolve(root,"src/client/world/014-ritual-village.js"),"utf8");
 const pointer = readFileSync(resolve(root,"src/client/input/045-pointer-touch-and-dash.js"),"utf8");
 const sailing = core.slice(0,core.indexOf("  // Cooldown labels"));
 const picking = pointer.slice(0,pointer.indexOf('  ui.world.addEventListener("pointercancel"'));
+const villageWater = village.slice(village.indexOf("  const villageWaterLevel"),village.indexOf("  const lanternPaper"));
 
-function fixture() {
+function fixture(raySlope=0) {
   const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
   const marker = {enabled:false,position:{set(x,y,z){Object.assign(this,{x,y,z});}},
     setEnabled(enabled){this.enabled=enabled;}};
@@ -27,7 +29,7 @@ function fixture() {
       assert.equal(x,90,"pick uses canvas-relative CSS pixels");
       assert.equal(y,90,"touch uses the same canvas coordinates");
       rayCalls++;
-      return {origin:{x:point.x,y:5,z:point.z},direction:{x:0,y:-1,z:0}};
+      return {origin:{x:point.x-raySlope*5,y:5,z:point.z},direction:{x:raySlope,y:-1,z:0}};
     },
   };
   const sandbox = {
@@ -47,7 +49,7 @@ function fixture() {
     ui:{world:{addEventListener:(event,handler)=>{canvasEvents[event]=handler;},
       getBoundingClientRect:()=>({left:10,top:20,width:300,height:300}),setPointerCapture(){}}},
   };
-  vm.runInNewContext(sailing+"\n"+picking,sandbox);
+  vm.runInNewContext(villageWater+"\n"+sailing+"\n"+picking,sandbox);
   const tick = value=>{now=value;sandbox.updateSailing(now,.02);return packets.at(-1);};
   tick(0);
   const pointerEvent = (kind,type,id=1) => canvasEvents[kind]({button:0,pointerType:type,pointerId:id,clientX:100,clientY:110});
@@ -82,6 +84,14 @@ test("a touch on open water uses the same input, even without a ground mesh",()=
   assert.ok(f.tick(100).throttle<0,"the existing helm can reverse toward a target behind it");
   f.tick(3100);
   assert.equal(f.marker.enabled,false,"no motion or turn clears a blocked destination");
+});
+
+test("a tilted ray intersects the visible village river surface",()=>{
+  const f = fixture(2);
+  f.tap("touch",15,54);
+  assert.equal(f.marker.enabled,true);
+  assert.ok(Math.abs(f.marker.position.x-14.95)<1e-6);
+  assert.ok(Math.abs(f.marker.position.y-.175)<1e-6);
 });
 
 test("taps on land and attack targets stay distinct from sailing",()=>{

@@ -133,21 +133,22 @@
       ctx.stroke();
     }
     if (activeMapId === "ritual_village") {
-      // Canals with moonlit ripples, the boardwalk and stilt houses.
-      for (const [a, b] of [[bounds.minX, -8.5], [8.5, bounds.maxX]]) {
-        const water = ctx.createLinearGradient(sx(a), 0, sx(b), 0);
+      for (const area of villageWaters) {
+        const x0 = Math.max(bounds.minX,area.x), x1 = Math.min(bounds.maxX,area.x+area.width);
+        const z0 = Math.max(bounds.minZ,area.z), z1 = Math.min(bounds.maxZ,area.z+area.length);
+        const water = ctx.createLinearGradient(sx(x0), 0, sx(x1), 0);
         water.addColorStop(0, "#0e2a3a"); water.addColorStop(.5, "#14384b"); water.addColorStop(1, "#0e2a3a");
-        ctx.fillStyle = water; ctx.fillRect(sx(a), top, sx(b) - sx(a), h);
+        ctx.fillStyle = water; ctx.fillRect(sx(x0), sy(z0), sx(x1)-sx(x0), sy(z1)-sy(z0));
         ctx.strokeStyle = "rgba(150,190,220,.18)"; ctx.lineWidth = 1;
-        for (let z = bounds.minZ + 2; z < bounds.maxZ; z += 3.4) {
-          const mid = (a + b) / 2 + Math.sin(z) * 2;
+        for (let z = z0 + 2; z < z1; z += 3.4) {
+          const mid = (x0 + x1) / 2 + Math.sin(z) * 2;
           ctx.beginPath(); ctx.moveTo(sx(mid - 1.4), sy(z)); ctx.lineTo(sx(mid + 1.4), sy(z)); ctx.stroke();
         }
       }
-      ctx.fillStyle = "#5a3e2b"; ctx.fillRect(sx(-5.55), top, sx(5.55) - sx(-5.55), h);
+      ctx.fillStyle = "#5a3e2b"; ctx.fillRect(sx(-5.55), sy(-18), sx(5.55) - sx(-5.55), sy(18)-sy(-18));
       if (large) {
         ctx.strokeStyle = "rgba(20,12,8,.45)"; ctx.lineWidth = 1; ctx.beginPath();
-        for (let z = bounds.minZ; z <= bounds.maxZ; z += 1.15) { ctx.moveTo(sx(-5.55), sy(z)); ctx.lineTo(sx(5.55), sy(z)); }
+        for (let z = -18; z <= 18; z += 1.15) { ctx.moveTo(sx(-5.55), sy(z)); ctx.lineTo(sx(5.55), sy(z)); }
         ctx.stroke();
       }
       ctx.strokeStyle = "#2a1c13"; ctx.lineWidth = 1.5 * u; ctx.strokeRect(sx(-5.55), top, sx(5.55) - sx(-5.55), h);

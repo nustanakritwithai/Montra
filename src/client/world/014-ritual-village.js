@@ -2,6 +2,11 @@
   // Everything here is decorative and non-pickable (taps still land on the
   // walkable ground). Parts are merged by material to keep draw calls low.
   const villageParts = [], villageBatches=[];
+  const villageWaterLevel = .025;
+  const villageCanals = [{x:-19.7,z:-26,width:11.2,length:74},{x:8.5,z:-26,width:11.2,length:74}];
+  const villageRiver = {x:-80,z:48,width:160,length:40};
+  const villagePond = {x:-50,z:-50,width:14,length:10};
+  const villageWaters = [...villageCanals,villageRiver,villagePond];
   const lanternPaper = mat("red paper lantern", "#b8452f", "#d4572a");
   const candleMat = mat("candle flame", "#ffe2b0", "#ffb24a");
   const waxMat = mat("candle wax", "#e9dcc2");
@@ -40,7 +45,19 @@
     if (parent) m.parent = parent;
     villageParts.push(m); return m;
   }
-  function vpool(x, z, radius, y) { villageParts.push(lightPool(x, z, radius, y)); }
+  function vpool(x, z, radius, y) {
+    const mesh = lightPool(x, z, radius, y);
+    villageParts.push(mesh);
+    return mesh;
+  }
+  function fixedVillageWater(mesh) {
+    (mesh.metadata ??= {}).villageWater = true;
+    return mesh;
+  }
+  function villageWaterSurface(name, area) {
+    return fixedVillageWater(vbox(name, area.x + area.width / 2, villageWaterLevel - .04,
+      area.z + area.length / 2, area.width, .08, area.length, water));
+  }
   function makeLantern(x, z) {
     vbox("lantern pole", x, 1.1, z, .13, 2.2, .13, darkWood);
     vbox("lantern arm", x, 2.18, z, .5, .07, .07, darkWood);
@@ -95,8 +112,10 @@
     vpool(lanternX, z + size / 2 - .1, 2.2, .07);
   }
   function longTailBoat(x, z, angle, sailingBoat = false) {
-    const node = new B.TransformNode("boat", scene); node.position.set(x, 0, z); node.rotation.y = angle;
-    if (sailingBoat) node.metadata = {sailingBoat};
+    const node = new B.TransformNode("boat", scene);
+    node.position.set(x, sailingBoat ? 0 : villageWaterLevel, z);
+    node.rotation.y = angle;
+    node.metadata = {sailingBoat,villageWater:!sailingBoat};
     vbox("boat hull", 0, -.02, 0, .95, .34, 3.2, darkWood, node);
     vbox("boat floor", 0, .14, 0, .75, .04, 3.0, wooden, node);
     for (const end of [-1, 1]) {
@@ -120,18 +139,24 @@
       if (Math.round(z) % 2 === 0) makeLantern(x + Math.sign(x) * .3, z);
     }
   }
-  // Canals (visible just above the walkable ground) and the southern river.
-  for (const x of [-14.1, 14.1]) {
-    vbox("canal", x, -.09, 11, 11.2, .08, 74, water);
+  // Water stays level while the terrain rises out of it at the banks.
+  for (const canal of villageCanals) {
+    villageWaterSurface("canal", canal);
+    const x = canal.x + canal.width / 2;
     for (let i = 0; i < 24; i++) {
       const z = -24 + i * 3;
-      vbox("moon streak", x + (noise(i, x) - .5) * 6, -.04, z, 1.2 + noise(i, 3) * 1.6, .01, .12, moonStreak);
+      fixedVillageWater(vbox("moon streak", x + (noise(i, x) - .5) * 6, villageWaterLevel + .01,
+        z, 1.2 + noise(i, 3) * 1.6, .01, .12, moonStreak));
     }
   }
-  vbox("river", 0, -.13, 74, 240, .08, 52, water);
-  for (let i = 0; i < 40; i++) vbox("moon streak", (noise(i, 41) - .5) * 120, -.08, 50 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak);
+  // Extend the river past the playable area so it continues into the backdrop.
+  const riverSurface = villageWaterSurface("river", {...villageRiver,x:-120,width:240,length:52});
+  for (let i = 0; i < 40; i++) {
+    fixedVillageWater(vbox("moon streak", (noise(i, 41) - .5) * 120, villageWaterLevel + .01,
+      50 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak));
+  }
   // South pier: stepped landing, mooring posts and moored long-tail boats.
-  for (let s = 0; s < 3; s++) vbox("pier step", 0, -.08 - s * .07, 46.4 + s * .9, 8.5 - s * .6, .12, .9, woodenAlt);
+  for (let s = 0; s < 3; s++) vbox("pier step", 0, .065 - s * .03, 46.4 + s * .9, 8.5 - s * .6, .12, .9, woodenAlt);
   for (const x of [-4, 4]) vbox("mooring post", x, .3, 49, .25, 1.4, .25, darkWood);
   boatNodes.push(longTailBoat(-6.2, 51.5, .25), longTailBoat(6.5, 52.2, -.18), longTailBoat(-14.4, 15.5, .05), longTailBoat(13.6, -16.5, Math.PI - .08), longTailBoat(-24, 54, 1.4));
   // The east house at z 3.4 stands behind the climbable watchwall: no veranda there.
@@ -210,13 +235,13 @@
   const riverWater = water.clone("river water");
   const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
   riverWater.emissiveTexture = riverRipple;
-  scene.getMeshByName("river").material = riverWater;
+  riverSurface.material = riverWater;
   const lotusPad = mat("lotus pad", "#3a6b44", "#0b1f10"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");
   for (const side of [-1, 1]) {
     for (let i = 0; i < 22; i++) {
       const x = side * (15.4 + noise(i, side + 90) * 3.8), z = -19 + noise(i, side + 91) * 38, d = .7 + noise(i, 92) * .6;
-      vcyl("lotus pad", x, -.035, z, .02, d, d, lotusPad, 10);
-      if (i % 3 === 0) vcyl("lotus bloom", x + .1, .07, z, .22, .3, 0, lotusBloom, 6);
+      fixedVillageWater(vcyl("lotus pad", x, villageWaterLevel + .015, z, .02, d, d, lotusPad, 10));
+      if (i % 3 === 0) fixedVillageWater(vcyl("lotus bloom", x + .1, villageWaterLevel + .12, z, .22, .3, 0, lotusBloom, 6));
     }
     for (let i = 0; i < 34; i++) {
       const h = .7 + noise(i, side + 93) * .8;
@@ -224,10 +249,10 @@
     }
   }
   for (const [x, z] of [[-16.5, -7], [17.2, -1], [-17.8, 6.5], [16.4, 9], [-15.8, 17], [3, 53], [-9, 56], [14, 58], [-30, 54], [28, 55]]) {
-    vcyl("krathong", x, 0, z, .14, .55, .7, lotusPad, 8);
-    vcyl("krathong petals", x, .1, z, .16, .5, .2, lotusBloom, 8);
-    vcyl("krathong flame", x, .26, z, .14, .08, 0, candleMat, 4);
-    vpool(x, z, 1.3, .03);
+    fixedVillageWater(vcyl("krathong", x, villageWaterLevel, z, .14, .55, .7, lotusPad, 8));
+    fixedVillageWater(vcyl("krathong petals", x, villageWaterLevel + .1, z, .16, .5, .2, lotusBloom, 8));
+    fixedVillageWater(vcyl("krathong flame", x, villageWaterLevel + .26, z, .14, .08, 0, candleMat, 4));
+    fixedVillageWater(vpool(x, z, 1.3, villageWaterLevel + .03));
   }
   // Dark banks beyond the canals so the quarter never floats in a void.
   // ---- The expanded village (120 m). Positions match VILLAGE_LAYOUT / VILLAGE_BUILDINGS on the server:
@@ -333,8 +358,12 @@
     for (let i = 0; i < 9; i++) vcyl("rice", x - 2 + (i % 3) * 2 + noise(i, x) * .6, .2, z - 2 + Math.floor(i / 3) * 2 + noise(i, z) * .6, .45, .32, .05, riceMat, 4);
   }
   house(-49.5, -27.5, 3.6); house(-49.5, 16.5, 3.6); house(-26, -34, 3.2, false);
-  vbox("field pond", -43, -.09, -45, 14, .08, 10, water);
-  for (let i = 0; i < 10; i++) { const d = .7 + noise(i, 97) * .5; vcyl("lotus pad", -48 + noise(i, 98) * 10, -.035, -48 + noise(i, 99) * 6, .02, d, d, lotusPad, 10); }
+  villageWaterSurface("field pond", villagePond);
+  for (let i = 0; i < 10; i++) {
+    const d = .7 + noise(i, 97) * .5;
+    fixedVillageWater(vcyl("lotus pad", -48 + noise(i, 98) * 10, villageWaterLevel + .015,
+      -48 + noise(i, 99) * 6, .02, d, d, lotusPad, 10));
+  }
   for (const [x, z] of [[-30, -46], [-56, -40], [-58, 4], [-30, 22], [-56, 24], [-22, -24]]) villageTreeNodes.push(placeThaiTree(x < -50 ? "tan" : "maprao", x, 0, z, { scale: .7 + noise(Math.round(x), Math.round(z)) * .15 }));
   for (const [x, z] of [[-33, -16], [-47, 2]]) { // scarecrows
     vbox("scarecrow post", x, 1, z, .12, 2, .12, darkWood); vbox("scarecrow arms", x, 1.5, z, 1.4, .1, .1, darkWood);
@@ -371,7 +400,11 @@
   }
   {
     // Per material and per map cell, so the camera only draws the blocks of the village it can see.
-    const anchorsOf = parts => parts.map(p=>{p.computeWorldMatrix(true);const c=p.getBoundingInfo().boundingBox.centerWorld;return {x:c.x,z:c.z,count:p.getTotalVertices()};});
+    const anchorsOf = parts => parts.map(p => {
+      p.computeWorldMatrix(true);
+      const c = p.getBoundingInfo().boundingBox.centerWorld;
+      return {x:c.x,z:c.z,count:p.getTotalVertices(),fixedHeight:p.metadata?.villageWater || p.parent?.metadata?.villageWater};
+    });
     for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf })) villageBatches.push({ mesh, anchors: info });
     boatNodes.forEach(node => node.dispose());
   }
