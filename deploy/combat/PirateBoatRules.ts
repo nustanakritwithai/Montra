@@ -61,6 +61,7 @@ type HarborLayout = Readonly<{
 }>;
 type CanalLayout = Readonly<{
   channels:readonly (readonly Coordinate[])[];
+  channelRadius?:number;
   gates:readonly Coordinate[];
   dock?:HarborLayout;
   ports?:readonly (HarborLayout & {id:string;name:string})[];
@@ -72,11 +73,12 @@ type CanalLayout = Readonly<{
 
 const point=([x,z]:Coordinate):Position=>({x,z});
 const canalRadius=7;
-const capitalCanal={west:-43,east:43,north:-69,south:37};
-export const CAPITAL_MOAT={minX:capitalCanal.west-canalRadius,maxX:capitalCanal.east+canalRadius,
-  minZ:capitalCanal.north-canalRadius,maxZ:capitalCanal.south+canalRadius};
+const capitalCanal={west:-44,east:44,north:-70,south:38,radius:6};
+export const CAPITAL_MOAT={minX:capitalCanal.west-capitalCanal.radius,maxX:capitalCanal.east+capitalCanal.radius,
+  minZ:capitalCanal.north-capitalCanal.radius,maxZ:capitalCanal.south+capitalCanal.radius};
 const eastBank=(x:number,z:number):HarborLayout=>({shore:[x+8,z],berth:[x+2,z],direction:[0,1]});
 const southBank=(x:number,z:number):HarborLayout=>({shore:[x,z+8],berth:[x,z+2],direction:[1,0]});
+const capitalDock=southBank(-12,capitalCanal.south);
 
 // Each gate belongs to the corresponding neighbor in waterLinks. Author channels
 // around transfer pads and fort walls so the river crosses the map without opening land defenses.
@@ -176,7 +178,9 @@ const canals:Readonly<Record<string,CanalLayout>>={
     channels:[[
       [capitalCanal.west,capitalCanal.south],[capitalCanal.east,capitalCanal.south],
       [capitalCanal.east,capitalCanal.north],[capitalCanal.west,capitalCanal.north],[capitalCanal.west,capitalCanal.south],
-    ]],gates:[[-35,37],[43,-58],[26,37]],dock:southBank(0,37),
+    ]],channelRadius:capitalCanal.radius,
+    gates:[[-35,capitalCanal.south],[capitalCanal.east,-58],[26,capitalCanal.south]],
+    dock:capitalDock,shorePaths:[[[capitalDock.shore[0],56],capitalDock.shore]],
   },
   bamboo_frontier:{
     channels:[[[-38,-93],[-38,45]]],gates:[[-38,-93]],dock:eastBank(-38,38),
@@ -217,9 +221,9 @@ function makeHarbor(dock:HarborLayout):BoatHarbor {
     berth:{...point(dock.berth),heading:Math.atan2(...dock.direction)}};
 }
 
-function canalWater([a,b]:BoatLane):WorldWall {
-  return {x:Math.min(a.x,b.x)-canalRadius,z:Math.min(a.z,b.z)-canalRadius,
-    width:Math.abs(b.x-a.x)+2*canalRadius,length:Math.abs(b.z-a.z)+2*canalRadius};
+function canalWater([a,b]:BoatLane,radius:number):WorldWall {
+  return {x:Math.min(a.x,b.x)-radius,z:Math.min(a.z,b.z)-radius,
+    width:Math.abs(b.x-a.x)+2*radius,length:Math.abs(b.z-a.z)+2*radius};
 }
 
 function gateHeading(gate:Position,lanes:readonly BoatLane[]):number {
@@ -236,7 +240,8 @@ export function addWaterways(map:WorldMapDefinition,maps:Readonly<Record<string,
   const layout=canals[map.id];
   if(!layout || layout.gates.length<neighbors.length)throw new Error("missing_canal_layout:"+map.id);
   const lanes=layout.channels.flatMap(channel=>channel.slice(1).map((end,i):BoatLane=>[point(channel[i]),point(end)]));
-  const water=[...map.water??[],...lanes.map(canalWater),...layout.basins??[]];
+  const radius=layout.channelRadius??canalRadius;
+  const water=[...map.water??[],...lanes.map(lane=>canalWater(lane,radius)),...layout.basins??[]];
   const harbor:BoatHarbor=layout.dock?makeHarbor(layout.dock):{
     shore:originalShore[map.id],offshore:BOAT_DOCK_OFFSHORE_DIRECTIONS[map.id],berth:BOAT_DOCK_SPAWNS[map.id],
   };

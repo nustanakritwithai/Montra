@@ -5,8 +5,9 @@ import {mkdtemp} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {boatCanSail,BOAT_DECK,MontraBoats} from "./MontraBoats.js";
-import {groundAt,isSafeWorldPoint,provinceShotClear,walkBridgeTransitionClear,WORLD_MAPS} from "./WorldMaps.js";
+import {groundAt,isSafeWorldPoint,provinceShotClear,segmentIntersectsExpandedWall,walkBridgeTransitionClear,WORLD_MAPS} from "./WorldMaps.js";
 import {playerWaterDepth,WATER_EXPOSURE,wadingSpeedScale,waterDepthAt} from "./GroundTerrain.js";
+import {BOAT_BOARD_RANGE} from "./PirateBoatRules.js";
 import {CAPITAL_SIEGE} from "./StrategicProvinces.js";
 import {CharacterStore} from "./CharacterStore.js";
 
@@ -15,6 +16,11 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
   const bridges=map.walkBridges!;
   const feet=(x:number,z:number)=>({x,z,y:groundAt(map.id,x,z)});
   assert.equal(bridges.length,4);
+  assert.deepEqual(CAPITAL_SIEGE.moat,{minX:-50,maxX:50,minZ:-76,maxZ:44});
+  for(const [x,z] of [[-37,-36],[37,-36],[18,-63],[18,31]]){
+    assert.equal(waterDepthAt(map,x,z),0,"new dry bank at "+x+","+z);
+    assert.ok(isSafeWorldPoint(map,feet(x,z)),"walkable bank at "+x+","+z);
+  }
   for(const [x,z] of [[-43,-69],[0,-69],[43,-69],[43,-16],[43,37],[0,37],[-43,37],[-43,-16]]){
     assert.ok(waterDepthAt(map,x,z)>.4,"wet moat at "+x+","+z);
   }
@@ -30,6 +36,14 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
     }
     const beside=point(mid,b.z+b.width);
     assert.equal(walkBridgeTransitionClear(map,point(mid),beside.x,beside.z),false,b.id+" side rail");
+    const edge=b.z-b.width/2;
+    const footprint=vertical?{x:edge,z:start,width:b.width,length:end-start}:
+      {x:start,z:edge,width:end-start,length:b.width};
+    for(const {id,shore,berth} of map.boatPorts!){
+      // The pier and pavilion fit within five metres of shore; boarding has a larger radius.
+      assert.equal(segmentIntersectsExpandedWall(shore,shore,footprint,5),false,id+" pier vs "+b.id);
+      assert.equal(segmentIntersectsExpandedWall(berth,berth,footprint,BOAT_BOARD_RANGE),false,id+" berth vs "+b.id);
+    }
   }
   const routes=map.paths!.slice(3),moat=CAPITAL_SIEGE.moat;
   for(const route of routes)for(let i=1;i<route.length;i++){
