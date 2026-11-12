@@ -13,7 +13,7 @@ export const TITAN_BOSS = {
 // Each home sits on a foot route outside portals and rest wards.
 export const REGIONAL_BOSSES=[
   boss("bound_temple","อสูรระฆังผนึก",20,-23,-45,"spirit","สะเก็ดระฆังผนึก","ตุ้มหูเสียงระฆัง"),
-  boss("drowned_marsh","พญาพรายเรือล่ม",22,-53,-82,"hunter","เกล็ดพรายเรือล่ม","แหวนพรายกระแสน้ำ"),
+  {...boss("drowned_marsh","พญาพรายเรือล่ม",22,-57,-74,"hunter","เกล็ดพรายเรือล่ม","แหวนพรายกระแสน้ำ"),habitat:"water" as const},
   boss("moon_cemetery","ท้าวเงาจันทร์ดับ",32,55,-82,"spirit","เศษจันทร์ดับ","ตุ้มหูจันทร์ดับ"),
   boss("moon_pass","อสูรเฝ้าสายแร่",34,61,-51,"guard","ผลึกสายแร่","สร้อยผลึกจันทรา"),
   boss("bamboo_frontier","ขุนอสูรไผ่แดง",35,-68,-82,"grove","ข้อไผ่อาคม","สร้อยไผ่แดง"),

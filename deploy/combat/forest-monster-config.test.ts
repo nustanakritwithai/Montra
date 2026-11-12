@@ -5,12 +5,16 @@ import { SHRINE_GUARDIAN, WORLD_MAPS, getWorldMap, groundAt, isRestArea, isSafeW
 import { parseAttackCommand } from "./GameRules.js";
 import { grantRewardPotion, makeStarterInventory, INVENTORY_STACK_LIMIT } from "./ItemRules.js";
 import { FOREST_RESPAWN_MS, ForestEncounters } from "./ForestEncounters.js";
-import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS, HIMMAPAN_SPAWNS } from "./WorldAtlas.js";
+import { ATLAS_SPAWNS, FRONTIER_SPAWNS, HIMMAPAN_REPLACEMENTS, HIMMAPAN_REPLACED_TARGETS, HIMMAPAN_SPAWNS } from "./WorldAtlas.js";
 import { waterDepthAt } from "./GroundTerrain.js";
 import { advanceForestObjective } from "./ForestObjectives.js";
+import { regionalBossOn } from "./RegionalBosses.js";
 
+const marshBoss=regionalBossOn("drowned_marsh")!;
+const marshHomes=[...ATLAS_SPAWNS.filter(spawn=>!HIMMAPAN_REPLACED_TARGETS.has(spawn.id)),...HIMMAPAN_SPAWNS,marshBoss]
+  .filter(spawn=>spawn.mapId==="drowned_marsh");
 const waterMonsters=new Set<string>(HIMMAPAN_SPAWNS.filter(spawn=>"habitat" in spawn && spawn.habitat==="water").map(spawn=>spawn.id));
-for(const id of ["atlas_drowned_marsh_2_1","atlas_drowned_marsh_2_2","atlas_drowned_marsh_3_1"])waterMonsters.add(id);
+for(const {id} of marshHomes)waterMonsters.add(id);
 function isValidMonsterSurface(map:WorldMapDefinition, monster:Monster):boolean {
   if(waterMonsters.has(monster.id))return waterDepthAt(map,monster.x,monster.z)>0 && monster.y===map.waterLevel;
   return isSafeWorldPoint(map,monster);
@@ -329,6 +333,12 @@ test("wild encounters spawn, patrol and respawn in the intended habitat on every
   assert.ok(state.monsters.size>100);
   for(const id of waterMonsters)assert.ok(state.monsters.get(id)?.alive,id);
   const initial=new Map([...state.monsters].map(([id,m])=>[id,{x:m.x,y:m.y,z:m.z}]));
+  const marsh=WORLD_MAPS.drowned_marsh;
+  for(const {id,x,z} of marshHomes){
+    assert.deepEqual(initial.get(id),{x,y:marsh.waterLevel,z},id+" authored surface");
+    const depth=waterDepthAt(marsh,x,z),bed=groundAt(marsh.id,x,z);
+    assert.ok(depth>.1 && depth<.45 && isSafeWorldPoint(marsh,{x,y:bed,z},.7),id+" walkable shallows");
+  }
   check();
   for(let frame=1;frame<=80;frame++){
     tick(frame*50,.05);
@@ -337,11 +347,17 @@ test("wild encounters spawn, patrol and respawn in the intended habitat on every
   for(const id of waterMonsters)assert.ok(forest.kill(id,4000));
   tick(4000+FOREST_RESPAWN_MS,0);
   check();
+  assert.equal(state.monsters.get(marshBoss.id)?.alive,false);
   for(const id of waterMonsters){
+    if(id===marshBoss.id)continue;
     const monster=state.monsters.get(id)!;
     assert.equal(monster.alive,true);
     assert.deepEqual({x:monster.x,y:monster.y,z:monster.z},initial.get(id));
   }
+  tick(4000+marshBoss.respawnMs,0);
+  const boss=state.monsters.get(marshBoss.id)!;
+  assert.equal(boss.alive,true);
+  assert.deepEqual({x:boss.x,y:boss.y,z:boss.z},initial.get(boss.id));
 });
 
 
