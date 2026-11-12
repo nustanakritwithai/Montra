@@ -11,5 +11,6 @@ assert.equal(actor.node.parent,root);assert.ok(children.every(child=>child.isPic
 listeners[0]();assert.equal(skeletons[0].disposed,true,'model skeleton is released when its map is disposed');
 assert.match(source,/attachNpcAvatar\(root,npc\.id,look\.robe,\[body,head,cap\]\)/);
 for(const role of ['questRangerRoot','defenseKeeperRoot','escortRoot','quartermasterRoot','trainerNpcRoot'])assert.ok(source.includes(`attachNpcAvatar(${role},`),role+' uses the player model');
-assert.match(source,/const weaponModels = npcOptions \? \{\}/);assert.match(source,/const familiars = npcOptions \? \[\]/);
+assert.match(source,/const weaponModels = npcOptions \? \{\}/);
+assert.doesNotMatch(source,/familiarMats|familiarSpin|"familiar (?:head|tail)"/,'avatar rigs have no ambient orbiting spirits');
 console.log('PASS: NPCs reuse the player model while preserving their own hitboxes and cleaning up skeletons');

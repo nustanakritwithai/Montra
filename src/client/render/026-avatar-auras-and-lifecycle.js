@@ -162,7 +162,7 @@
       spawnFootstepDust(a, speed, m);
     }
     if (Math.sign(s)) a.stepSign = Math.sign(s);
-    const flare = a.skin ? animateSkin(a, m, speed, s, c, t, now, dt) : 0;
+    if (a.skin) animateSkin(a, m, speed, s, c, t, now, dt);
     for (let i = 0; i < 2; i++) {
       const dir = i ? -1 : 1;
       r.legs[i].rotation.x = flying ? .25 + i * .2 : dir * s * .6 * m;
@@ -172,14 +172,6 @@
       r.elbows[i].rotation.x = .22 + m * .25;
     }
     r.body.position.y = (a.mounted ? .35 : 0) + Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
-    // Familiars spin faster, widen and swell while being summoned.
-    a.familiarSpin = (a.familiarSpin || 0) + dt * (1 + flare * 4);
-    for (const f of r.familiars) {
-      const angle = a.familiarSpin * f.speed + f.offset, sign = Math.sign(f.speed), rad = f.radius * (1 + flare * .5);
-      f.node.position.set(Math.cos(angle) * rad, f.height + flare * .8 + Math.sin(t * 2.3 + f.offset) * .22, Math.sin(angle) * rad);
-      f.node.scaling.setAll(1 + flare * .7);
-      f.node.rotation.y = -angle - sign * Math.PI / 2; // tail trails behind the orbit
-    }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
     if ((a.swingUntil || 0) > now) {
       const p = 1 - (a.swingUntil - now) / 380;

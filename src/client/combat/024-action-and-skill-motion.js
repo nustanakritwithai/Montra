@@ -66,7 +66,7 @@
       return;
     }
     const [motion, move] = muayMotion(skillId);
-    playAction(a, motion, { move, reverse: skillId === "lopburi_reverse", finisher: /_finish$/.test(skillId) });
+    playAction(a, motion, { move, reverse: skillId === "lopburi_reverse" });
   }
   function releaseMuayHold(id) {
     const a = avatars.get(id); if (!a) return;

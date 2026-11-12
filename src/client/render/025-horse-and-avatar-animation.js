@@ -321,7 +321,7 @@
     showGatherTool(a, act && now < act.end && !dead ? GATHER_TOOLS[act.type] : null);
     for (const arc of Object.values(fx.slashes)) arc.setEnabled(false);
     fx.orb.setEnabled(false); fx.vial.setEnabled(false); fx.seal.setEnabled(false);
-    let flare = 0, spin = 0;
+    let spin = 0;
     if (act && now < act.end && !dead) {
       const p = act.hold ?? (now - act.start) / (act.end - act.start); // hold: frozen frame for previews
       const w = Math.min(1, p / .12, (1 - p) / .22);
@@ -418,9 +418,9 @@
       switch (act.type) {
         case "m_basic": punchMove(act.side, strike, w); fistArc(.52, act.side); break;
         case "m_jab": punchMove(-1, ease((p - .2) / .25), w); fistArc(.45, -1); break;
-        case "m_cross": punchMove(1, strike, w); fistArc(.52, 1); if (act.finisher) flare = w * .4; break;
-        case "m_hook": punchMove(1, ease((p - .3) / .3), w, true); fistArc(.58, 1, .9, .16); if (act.finisher) flare = w * .4; break;
-        case "m_elbow": elbowMove(1, ease((p - .25) / .3), w); fistArc(.52, 1, .6); if (act.finisher) flare = w * .4; break;
+        case "m_cross": punchMove(1, strike, w); fistArc(.52, 1); break;
+        case "m_hook": punchMove(1, ease((p - .3) / .3), w, true); fistArc(.58, 1, .9, .16); break;
+        case "m_elbow": elbowMove(1, ease((p - .25) / .3), w); fistArc(.52, 1, .6); break;
         case "m_knee": kneeMove(1, ease((p - .2) / .3), w); break;
         case "m_teep": teepMove(Math.min(1, p / .7), w); break;
         case "m_step": { const go = w * (1 - ease((p - .4) / .15)); lungeMove(go); punchMove(1, ease((p - .45) / .2), w - go); fistArc(.62, 1); break; }
@@ -468,7 +468,7 @@
           const k = ease(p / .6);
           bend(.35, -1.1 * k, 0, w); mix("Hips", 0, -.8 * k, 0, w);
           mix("RightArm", -.9, -.4, 1.0, w); mix("RightForeArm", 0, 1.2, 0, w); mix("LeftArm", -1.3, .6, -.6, w); mix("LeftForeArm", 0, -1.0, 0, w);
-          mix("LeftUpLeg", -.4 * k, 0, .2, w); off[1] -= .1 * w; flare = w * .3; break;
+          mix("LeftUpLeg", -.4 * k, 0, .2, w); off[1] -= .1 * w; break;
         }
         case "m_held": {
           bend(.6, 0, 0, w); mix("Head", .4, 0, 0, w); off[1] -= .1 * w; off[2] += .05 * w;
@@ -489,7 +489,7 @@
           mix("RightArm", -.3, .1, .15, rise * wing); mix("RightForeArm", 0, .6, 0, rise * wing); mix("LeftArm", -.3, -.1, -.15, rise * wing); mix("LeftForeArm", 0, -.6, 0, rise * wing);
           mix("LeftUpLeg", -.5, 0, .05, rise * wing); mix("LeftLeg", .9, 0, 0, rise * wing); bend(-.12, 0, 0, rise);
           spin = ease((p - .55) / .4) * Math.PI * 2;
-          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.2); fx.seal.visibility = w * .7; fx.seal.rotation.y = p * 2; flare = w * .35; break;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.2); fx.seal.visibility = w * .7; fx.seal.rotation.y = p * 2; break;
         }
         case "stab": case "punch":
           weight(strike, .9); spine([.05, -.6, .08], [.32, .55, -.05]);
@@ -566,7 +566,7 @@
           bend(-.25, 0, 0, up); mix("Head", -.3, 0, 0, up); mix("Hips", 0, -.2, 0, up);
           mix("RightArm", -2.9, 0, .5, up); mix("RightForeArm", 0, .2, 0, up);
           mix("LeftArm", -.25, 0, -.85, up); mix("LeftForeArm", 0, -.2, 0, up);
-          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 3 * p); fx.seal.visibility = 1 - p; flare = up * .4; break;
+          fx.seal.setEnabled(true); fx.seal.material = arriveSeal; fx.seal.scaling.setAll(2 + 3 * p); fx.seal.visibility = 1 - p; break;
         }
         case "dance": {
           // Ram daab khu: a bow over crossed blades, then a turning sword dance.
@@ -578,7 +578,7 @@
           mix("RightArm", -1.4 + .7 * Math.sin(ph), .3, .9, dw); mix("RightForeArm", 0, .9 + .4 * Math.cos(ph), 0, dw); mix("RightHand", Math.sin(ph * 2) * 1.1, 0, 0, dw);
           mix("LeftArm", -1.4 - .7 * Math.sin(ph), -.3, -.9, dw); mix("LeftForeArm", 0, -.9 - .4 * Math.cos(ph), 0, dw); mix("LeftHand", -Math.sin(ph * 2) * 1.1, 0, 0, dw);
           mix(Math.sin(ph) > 0 ? "LeftUpLeg" : "RightUpLeg", -.55, 0, 0, dw * Math.abs(Math.sin(ph))); bend(.1, Math.sin(ph) * .25, 0, dw);
-          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.4); fx.seal.visibility = dw * .8; fx.seal.rotation.y = p * 3; flare = dw * .3;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal; fx.seal.scaling.setAll(2.4); fx.seal.visibility = dw * .8; fx.seal.rotation.y = p * 3;
           break;
         }
         case "smash":
@@ -642,7 +642,7 @@
           mix("LeftForeArm", 0, -.15, 0, w); mix("RightForeArm", 0, .15, 0, w); mix("Head", -.45 * up, 0, 0, w);
           mix("LeftUpLeg", -.1, 0, .25, w); mix("RightUpLeg", -.1, 0, -.25, w); mix("LeftLeg", .2, 0, 0, w); mix("RightLeg", .2, 0, 0, w);
           off[1] -= .05 * w;
-          flare = w; fx.seal.setEnabled(true); fx.seal.material = summonSeal;
+          fx.seal.setEnabled(true); fx.seal.material = summonSeal;
           fx.seal.scaling.setAll(1.5 + 3.5 * ease(p / .5)); fx.seal.visibility = w; fx.seal.rotation.y = p * 2; break;
         }
         case "drink": {
@@ -721,5 +721,4 @@
       setHandPose(a, left, right, dt);
     }
     updateAvatarCloth(a, dt, now);
-    return flare;
   }

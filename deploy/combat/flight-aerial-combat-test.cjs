@@ -41,7 +41,7 @@ const engine = realBabylon ? new B.NullEngine() : null;
 const scene = realBabylon ? new B.Scene(engine) : {};
 if (realBabylon) scene.activeCamera = new B.FreeCamera('flight-test-camera', new B.Vector3(0, 3, -10), scene);
 function avatar(id = 'local') {
-  return vm.runInNewContext(avatarLiteral + '\navatar;', { id, parent: new B.TransformNode(id, scene), local: id === 'local', npcOptions: null, halo: null, weaponModels: {}, body: null, arms: [], elbows: [], legs: [], knees: [], familiars: [] });
+  return vm.runInNewContext(avatarLiteral + '\navatar;', { id, parent: new B.TransformNode(id, scene), local: id === 'local', npcOptions: null, halo: null, weaponModels: {}, body: null, arms: [], elbows: [], legs: [], knees: [] });
 }
 function button() {
   const attributes = {};

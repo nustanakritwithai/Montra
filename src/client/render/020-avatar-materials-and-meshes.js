@@ -100,8 +100,7 @@
   const daabSteel = mat("daab steel", "#a8b0b8", "#161a20"); daabSteel.specularColor = B.Color3.FromHexString("#eef4ff"); daabSteel.specularPower = 64;
   const daabEdge = mat("daab edge", "#e8f0ff", "#5a6a88");
   const weaponBoneMat = mat("carved bone grip", "#d9ccb0"), weaponTalismanMat = mat("wand talisman", "#e8d9a8", "#2a2210"), crookWoodMat = mat("crook wood", "#b89a6a");
-  // Far-camera identity: a yantra shawl (read from above), glowing amulets
-  // and three familiar spirits orbiting the shaman.
+  // Far-camera identity: a yantra shawl and glowing amulets.
   const shawlCloth = (name, base, trim) => {
     const m = mat(name, "#ffffff", "#140404");
     m.diffuseTexture = paintTexture(name, 128, (c, s) => {
@@ -115,8 +114,6 @@
   };
   const shawlHero = shawlCloth("hero yantra shawl", "#9c1f18", "#e8b85a"), shawlFriend = shawlCloth("ally yantra shawl", "#1d3f6e", "#9fe3e0");
   const amuletGlow = mat("glowing amulet", "#f2c66a", "#c8861c"); glowMats.add(amuletGlow);
-  const familiarMats = [["phi phrai", "#8dffbf", "#2fe08a"], ["kuman thong", "#ffd76a", "#e0a11c"], ["phi hong", "#ff7a62", "#e02f1e"]]
-    .map(([name, hex, glowHex]) => { const m = mat(name, hex, glowHex); m.alpha = .88; glowMats.add(m); return m; });
   function mergedSegment(parts, pivot, name) {
     for (const p of parts) p.isPickable = false;
     const mesh = parts.length > 1 ? B.Mesh.MergeMeshes(parts, true, true, undefined, false, true) : parts[0];
@@ -385,22 +382,13 @@
       tool_sickle: createHeldWeapon("tool_sickle"),
     };
     if(!npcOptions)attachCrescentBlade(weaponModels.arcane_sword);
-    // Three familiar spirits: a glowing head with a tapering wisp tail.
-    const familiars = npcOptions ? [] : familiarMats.map((material, k) => {
-      const spirit = new B.TransformNode("familiar", scene); spirit.parent = parent;
-      const head = B.MeshBuilder.CreateSphere("familiar head", { diameter: .5, segments: 6 }, scene);
-      const tail = B.MeshBuilder.CreateCylinder("familiar tail", { height: .95, diameterTop: .44, diameterBottom: 0, tessellation: 6 }, scene);
-      tail.position.set(0, -.42, .24); tail.rotation.x = -.6;
-      for (const m of [head, tail]) { m.parent = spirit; m.material = material; m.isPickable = false; }
-      return { node: spirit, radius: 1.45 + k * .3, height: 1.8 + k * .4, speed: (1.1 + k * .25) * (k % 2 ? -1 : 1), offset: k * 2.1 };
-    });
     const avatar = {
       id, node: parent, local, npc:Boolean(npcOptions),npcCloth:npcOptions?.cloth,pathId:npcOptions?"seer":"", x: 0, y: 0, z: 0,
       targetX: 0, targetY: 0, targetZ: 0,
       heading: 0, desiredHeading: 0, facingLockUntil: 0,
       serverFacing: null, hitFlashUntil: 0, dashUntil: 0, flightHalo: halo,
       weaponModels, weaponId: "",
-      rig: { body, arms, elbows, legs, knees, familiars }, phase: 0, moveBlend: 0, swingUntil: 0,
+      rig: { body, arms, elbows, legs, knees }, phase: 0, moveBlend: 0, swingUntil: 0,
     };
     attachShamanModel(avatar);
     return avatar;
