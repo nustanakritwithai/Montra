@@ -21,6 +21,7 @@ export type GhostSkillCommand = {action: "skill"; combatId: string; targetId: st
 export type GhostCommand = Placement
   | GhostCombatCommand | GhostSkillCommand
   | {action: "read" | "summon" | "recall" | "switch"}
+  | {action: "heal"; npcId: string}
   | {action: "capture"; targetId: string};
 
 function isSlot(value: unknown): value is number {
@@ -52,6 +53,8 @@ export function parseGhostCommand(message: unknown): GhostCommand | null {
       return count === 1 ? {action: input.action} : null;
     case "capture":
       return count === 2 && isTargetId(input.targetId) ? {action: "capture", targetId: input.targetId} : null;
+    case "heal":
+      return count === 2 && isTargetId(input.npcId) ? {action: "heal", npcId: input.npcId} : null;
     case "attack":
       return count === 3 && isInstanceId(input.combatId) && isTargetId(input.targetId)
         ? {action: "attack", combatId: input.combatId, targetId: input.targetId} : null;

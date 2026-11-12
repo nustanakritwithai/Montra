@@ -12,6 +12,7 @@ process.env.MONTRA_CHARACTER_DIR = await mkdtemp(join(tmpdir(),"montra-ghost-poo
 process.env.MONTRA_ECONOMY_ENABLED = "1";
 process.env.MONTRA_ACCOUNTS_REQUIRED = "0";
 process.env.MONTRA_WORLD_EXPANSION = "1";
+process.env.MONTRA_CASTLE_PILOT = "1";
 
 const {defineServer,defineRoom} = await import("colyseus");
 const {MyRoom} = await import("./src/rooms/MyRoom.ts");
@@ -19,6 +20,9 @@ const {characterStore} = await import("./src/rooms/CharacterStore.ts");
 const {isGhostPool,GHOST_POOL_CAPACITY} = await import("./src/rooms/GhostPool.ts");
 const {legacyCapturedGhostSource} = await import("./src/rooms/ForestEncounters.ts");
 const {isPotGhost} = await import("./src/rooms/LegacyGhostPot.ts");
+const {serviceNpcsFor} = await import("./src/rooms/ServiceNpcs.ts");
+const {groundAt} = await import("./src/rooms/WorldMaps.ts");
+const {riverNodes} = await import("./src/rooms/RiverCity.ts");
 
 let fixture;
 class GhostTestRoom extends MyRoom {
@@ -344,12 +348,51 @@ try {
   await wait(700);
   await rejected(a,"attack",{combatId:returned.combatId,targetId},"ghost_combat_inactive");
 
-  Object.assign(owner,{x:0,z:0});
+  const healer=serviceNpcsFor("ritual_village").find(npc=>npc.role==="ghostHealer");
+  assert.ok(healer);
+  const treatment={npcId:healer.id};
+  await wait(700);
+  const tooFar=await command(a,"heal",treatment,"heal_near_npc");
+  assert.deepEqual(tooFar.fainted,[reserved.instanceId],"a remote request cannot revive the ghost");
+  const clinic={x:healer.x,y:healer.y,z:healer.z};
+  Object.assign(owner,clinic);
+  await wait(700);
+  const inCombat=await command(a,"heal",treatment,"heal_in_combat");
+  assert.deepEqual(inCombat.fainted,[reserved.instanceId],"combat blocks treatment even at the healer");
   await wait(5100);
-  const rested=await command(a,"read",{},"ready");
-  assert.deepEqual(rested.fainted,[],"a parked ghost recovers when its owner rests");
+  await rejected(a,"heal",{...treatment,ownerId:b.room.sessionId},"invalid_ghost_pot");
+  const wrongNpc=await command(a,"heal",{npcId:"ritual_village_mentor"},"heal_near_npc");
+  assert.deepEqual(wrongNpc.fainted,[reserved.instanceId],"another service cannot heal the ghost");
+  await wait(700);
+  const revived=await command(a,"heal",treatment,"healed");
+  assert.deepEqual(revived.fainted,[],"the healer revives a defeated companion");
+  assert.deepEqual(revived.pool,defeated.pool,"treatment preserves roster slots and revision");
+  await wait(700);
   const recovered=await command(a,"summon",{},"summoned");
   assert.equal(recovered.combatHealth.hp,ghostMaxHp);
+  const healedGuardian=fixture.state.summons.get(a.room.sessionId);
+  fixture.prepareTarget();
+  prey.hp=prey.maxHp;
+  Object.assign(healedGuardian,{x:0,y:0,z:14});
+  const skillId=recovered.skills[0].skillId;
+  await wait(700);
+  const used=await combatCommand(a,"skill",{combatId:recovered.combatId,targetId,skillId},"skill");
+  assert.equal(used.usesLeft,recovered.skills[0].usesLeft-1);
+  const injured=fixture.combatGhost(healedGuardian.combatTargetId);
+  assert.ok(injured);
+  fixture.hitGhost(injured,prey.id,1);
+  Object.assign(owner,clinic);
+  await wait(5100);
+  const rested=await command(a,"read",{},"ready");
+  assert.equal(rested.combatHealth.hp,ghostMaxHp-1,"ordinary rest does not heal the active companion");
+  const treated=await command(a,"heal",treatment,"healed");
+  assert.equal(treated.combatId,recovered.combatId,"treatment keeps the same companion summoned");
+  assert.deepEqual(treated.combatHealth,{hp:ghostMaxHp,maxHp:ghostMaxHp});
+  assert.equal(treated.skills[0].usesLeft,recovered.skills[0].usesLeft);
+  assert.equal(treated.skills[0].remainingMs,0);
+  await until(()=>b.room.state.summons.get(a.room.sessionId)?.hp===ghostMaxHp,"healed HP replicated");
+  await wait(700);
+  await command(a,"heal",treatment,"heal_healthy");
   Object.assign(owner,{x:-10,z:-56});
   a.room.send("warp",{portalId:"village_to_forest"});
   await until(()=>owner.mapId==="forbidden_forest","owner warped through a real portal");
@@ -398,13 +441,36 @@ try {
   assert.equal(blocked.pool.collection.length,GHOST_POOL_CAPACITY);
   assert.equal(fixture.state.monster.alive,true);
 
+  const fullPlayer=fixture.state.players.get(full.room.sessionId);
+  const maps=JSON.parse(full.room.state.worldDefinition).maps;
+  for(const mapId of ["mantra_capital","sam_lan_estuary","moon_pass","river_watch","tri_wiang_castle"]){
+    const map=maps[mapId], localHealer=map.serviceNpcs.find(npc=>npc.role==="ghostHealer");
+    assert.ok(localHealer,`${mapId} healer is advertised to the client`);
+    const market=map.strategic.sites.find(site=>site.kind==="market");
+    const approach=mapId==="sam_lan_estuary"?riverNodes.T:mapId==="tri_wiang_castle"?map.spawn:market;
+    Object.assign(fullPlayer,{mapId,x:approach.x,y:groundAt(mapId,approach.x,approach.z),z:approach.z});
+    fixture.ghostHealth.set(full.room.sessionId,new Map([[fullCollection[0].instanceId,0]]));
+    full.room.send("move",{x:localHealer.x,z:localHealer.z});
+    await until(()=>Math.hypot(fullPlayer.x-localHealer.x,fullPlayer.z-localHealer.z)<0.28,
+      `walk to healer in ${mapId}`,12000);
+    if(mapId==="mantra_capital"){
+      const remote=await command(full,"heal",treatment,"heal_near_npc");
+      assert.deepEqual(remote.fainted,[fullCollection[0].instanceId],"another city's healer ID cannot treat a local player");
+      await wait(700);
+    }
+    const treatedInCity=await command(full,"heal",{npcId:localHealer.id},"healed");
+    assert.deepEqual(treatedInCity.fainted,[],`${mapId} healer revives a reserve companion`);
+    assert.deepEqual(treatedInCity.pool,blocked.pool);
+    await wait(700);
+  }
+
   delete process.env.MONTRA_GHOST_WORKER;
   const disabled=observe(await client().create("my_room",options()));
   await until(()=>disabled.room.state?.players?.size===1,"disabled room state");
   assert.equal(disabled.room.state.ghostPotAvailable,false);
   send(disabled,"read");
   await until(()=>disabled.rejections.includes("ghost_pot_unavailable"),"worker disabled");
-  console.log("PASS ghost pool and combat: C# lifecycle, legacy skills, basic attacks, skill range/cooldown/uses, PvE/PvP damage, fainting, recovery, warp, owner knockout, ownership, stale orders, safe areas, party, reconnect and saves");
+  console.log("PASS ghost pool and combat: C# lifecycle, legacy skills, basic attacks, skill range/cooldown/uses, PvE/PvP damage, six village and city healers, warp, owner knockout, ownership, stale orders, safe areas, party, reconnect and saves");
 } catch(error) {
   console.error(error);
   process.exitCode=1;

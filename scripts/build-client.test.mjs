@@ -33,8 +33,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/057-npcs-and-objectives.js",
-  "bytes": 39849,
-  "sha256": "fe65716b2921e8f9884ce0e145d5467d3fd0660d5d371069fd8586ee3ba75847"
+  "bytes": 40034,
+  "sha256": "7e3f8c02b8e0a3a6b6281981b31e308849a1590ec70086075caee76d199319aa"
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
@@ -93,8 +93,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/015-forest-gates-and-services.js",
-  "bytes": 36775,
-  "sha256": "f0ab4bca9ff71ad731be224a994eb0464a8144775351641572fb6547429401e8"
+  "bytes": 37093,
+  "sha256": "3b9a694df74c7ffdbbbad37d2e020a08b5e0c4a7cf4a0328951300941db2d577"
 },
 {
   "path": "world/014-ritual-village.js",
@@ -179,8 +179,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 37819,
-    "sha256": "d80600b3b2c6473fa36bfbeb690166811c248c112007fbfde8c9741fe3dcebb3"
+    "bytes": 39172,
+    "sha256": "b10923859670316ed5b508485510b5495da7d73c8be033277e0c43d514df1905"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
@@ -284,8 +284,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2123115);
-  assert.equal(hash(bytes), '3abf8150359344d6f9c2bd26f3dde33195d3bdab398f5ec89af2080de243fa6b');
+  assert.equal(bytes.length, 2124971);
+  assert.equal(hash(bytes), 'b5fd3b0ffd03d56ec964740cbf122dbb1943882b4e96e2f1ae5017004db3033f');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

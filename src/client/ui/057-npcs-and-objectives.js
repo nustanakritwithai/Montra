@@ -32,11 +32,16 @@
     const persona=service.persona || "guide";
     if(speakBtn)bindSpeechButton(speakBtn, service.dialogue, persona, "🔊 ฟังเสียงพูดไทย");
     const action=$("serviceNpcAction");action.textContent=service.action;
+    if(npc.role==="ghostHealer"){
+      action.dataset.ghostHealer="true";
+      action.disabled=Boolean(ghostPoolPending);
+    }
     const marketHere=npc.role==="market" && room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,activeMapId);
     if(marketHere)action.textContent="เปิดตลาดประจำเมือง";
     action.onclick=()=>{
       const handlers={smith:openSmith,market:marketHere?openCityMarket:openEconomy,guild:openGuild,
         party:openParty,travel:openMap,strategy:openStrategicMap,guide:openHelp,war:openWarPanel,
+        ghostHealer:()=>requestGhostTreatment(npc.id),
         cityWarehouse:()=>openCityProduction("warehouse"),cityFactory:()=>openCityProduction("factory"),
         cityMissions:openCityMission,cityHall:openCityGovernance,
         mentor:()=>{const path=ownServerCharacter()?.pathId,books={muay_boran:openMuayBook,phutthaisawan:openSwordTree,blade:openBladeBook,sentinel:openSentinelBook,seer:openOccultBook,mender:openOccultBook};

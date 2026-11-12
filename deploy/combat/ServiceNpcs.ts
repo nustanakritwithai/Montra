@@ -1,7 +1,8 @@
-import { WORLD_MAPS, getWorldMap, groundAt, isSafeWorldPoint, isWorldSegmentClear, type WorldMapDefinition } from "./WorldMaps.js";
+import { WORLD_MAPS, getWorldMap, groundAt, isRestArea, isSafeWorldPoint, isWorldSegmentClear, type WorldMapDefinition } from "./WorldMaps.js";
+import { CASTLE_ID } from "./CastlePilot.js";
 import { objectiveRanger } from "./ForestObjectives.js";
 import { getWarDefinition, WAR_ENTRY_RADIUS } from "./TerritoryWar.js";
-import { RIVER_WAREHOUSE_PLOT } from "./RiverCity.js";
+import { RIVER_CITY, RIVER_WAREHOUSE_PLOT, riverNodes } from "./RiverCity.js";
 import {
   CITY_GOVERNANCE_ENABLED, CITY_HAUL_ENABLED, CITY_MINING_ENABLED, CITY_MINING_SITE, CITY_MISSIONS_ENABLED,
   CITY_PRODUCTION_ENABLED, CITY_PRODUCTION_SITE, CITY_TRADE_CONTRACTS_ENABLED,
@@ -19,6 +20,7 @@ const regionalServices={
 } as const;
 export const NPC_SERVICES={
   ...regionalServices,
+  ghostHealer:{name:"หมอขวัญคู่หู",action:"รักษาคู่หูทั้งหมด",dialogue:"ข้าฟื้นพลังชีวิต ชุบคู่หูที่พ่ายแพ้ และเติมจำนวนครั้งใช้สกิลให้ฟรี"},
   war:{name:"นายทหารรับศึก",action:"เปิดกระดานศึก",dialogue:"ดูผู้ครองพื้นที่และสถานะศึกที่นี่ นายทหารและผู้บัญชาการยื่นท้าชิงได้ที่จุดนี้"},
   cityWarehouse:{name:"นายคลังเมือง",action:"เปิดคลังเมือง",dialogue:"ตรวจสต็อก ฝากวัตถุดิบ และติดตามโครงการขยายคลังของกิลด์"},
   cityFactory:{name:"ช่างโรงงานเมือง",action:"เปิดโรงงานเมือง",dialogue:"ตรวจสูตร คิวผลิต และผลผลิตของโรงงานเมือง"},
@@ -43,6 +45,12 @@ const siteOrder:Record<RegionalService,readonly string[]>={
 };
 type Point={x:number;z:number};
 type GroundPoint=Point & {y:number};
+const healerLandmarks:Readonly<Record<string,{anchor:Point;approach?:Point} | undefined>>={
+  ritual_village:{anchor:{x:0,z:-3}},
+  [RIVER_CITY]:{anchor:riverNodes.D,approach:{x:riverNodes.D.x,z:riverNodes.D.z+8}},
+  [CASTLE_ID]:{anchor:{x:-32,z:315}},
+};
+
 function anchorsFor(map:WorldMapDefinition,role:RegionalService):Point[]{
   if(map.id==="ritual_village")return [villageAnchors[role]];
   const sites=map.strategic?.sites ?? [],points:Point[]=[];
@@ -65,7 +73,7 @@ function nearbyRoad(map:WorldMapDefinition,point:{x:number;y:number;z:number}):b
     isSafeWorldPoint(map,{x:p.x,y:groundAt(map.id,p.x,p.z),z:p.z}) && isWorldSegmentClear(map.id,point,p)));
 }
 
-/** Decorative access to existing services; all original server checks remain in force. */
+/** Assign stable interaction points to the services available on each map. */
 export function serviceNpcsFor(mapId:string):ServiceNpc[] {
   const cached=placementCache.get(mapId);if(cached)return cached.map(npc=>({...npc}));
   const map=getWorldMap(mapId);if(!map)return [];
@@ -75,7 +83,8 @@ export function serviceNpcsFor(mapId:string):ServiceNpc[] {
     [roles[index%roles.length],roles[(index+3)%roles.length],roles[(index+5)%roles.length]];
   const keeper=objectiveRanger(mapId),placed:ServiceNpc[]=[];
   const place=(role:NpcService,anchors:Point[],distances:number[],roleIndex:number,radius=2.7,
-    fits:(point:GroundPoint)=>boolean=point=>nearbyRoad(map,point))=>{
+    // Village services use curated land anchors. Its added paths connect the river banks.
+    fits:(point:GroundPoint)=>boolean=point=>mapId==="ritual_village" || nearbyRoad(map,point))=>{
     // A war entry can share its center with a portal or sit next to a camp.
     const portalGap=role==="war"?3.1:role==="travel"?4.5:8;
     const campGap=role==="war"?4:8;
@@ -117,6 +126,18 @@ export function serviceNpcsFor(mapId:string):ServiceNpc[] {
     if(moon && CITY_GOVERNANCE_ENABLED)place("cityHall",anchorsFor(map,"strategy"),cityDistances,4);
     if(CITY_MINING_ENABLED && (CITY_MISSIONS_ENABLED || CITY_HAUL_ENABLED || CITY_TRADE_CONTRACTS_ENABLED))
       place("cityMissions",anchorsFor(map,"market"),cityDistances,5);
+  }
+  const market=map.strategic?.sites.find(site=>site.kind==="market");
+  const marketHealer=map.strategic?.kind==="capital" || mapId==="moon_pass" || mapId==="river_watch";
+  const healer=healerLandmarks[mapId] ?? (marketHealer && market ? {anchor:market,approach:market} : undefined);
+  if(healer){
+    const {anchor,approach=map.spawn}=healer,radius=2.7;
+    place("ghostHealer",[anchor],[0,1.5,3],0,radius,point=>
+      (map.strategic?.kind==="capital" ||
+        (map.restAreas ?? []).some(area=>Math.hypot(point.x-area.x,point.z-area.z)+radius<=area.radius) ||
+        // The castle's south road protects a 3m strip. Keep the interaction circle centered on it.
+        (mapId===CASTLE_ID && point.z===anchor.z && isRestArea(mapId,point))) &&
+      isWorldSegmentClear(mapId,approach,point));
   }
   placementCache.set(mapId,placed);return placed.map(npc=>({...npc}));
 }

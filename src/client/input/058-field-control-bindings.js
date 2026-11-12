@@ -75,7 +75,7 @@
   let ghostPotReadAt = -Infinity, ghostPotReads = 0;
   const ghostPendingLabels = {capture:"กำลังจับ…",summon:"กำลังเรียก…",recall:"กำลังเก็บ…",switch:"กำลังสลับ…",
     select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…",
-    attack:"กำลังส่งคำสั่งโจมตี…",follow:"กำลังเรียกให้ตาม…",skill:"กำลังใช้วิชาผี…"};
+    attack:"กำลังส่งคำสั่งโจมตี…",follow:"กำลังเรียกให้ตาม…",skill:"กำลังใช้วิชาผี…",heal:"กำลังรักษาคู่หู…"};
   const ghostSkillLabels = {SK_NORMAL_01:"พุ่งชน", SK_NORMAL_02:"จู่โจมเร็ว"};
 
   function ghostPoolView(state) {
@@ -164,7 +164,7 @@
     catch (_) { if (retry) toast("โหลดทีมคู่หูไม่สำเร็จ"); }
   }
   function sendGhostPoolCommand(action, args = {}, next = null) {
-    if (mode !== "live" || !room || !ghostPotState || ghostPoolPending) return;
+    if (mode !== "live" || !room || (!ghostPotState && action !== "heal") || ghostPoolPending) return;
     const target = room;
     ghostPoolPending = {action, next, timer:setTimeout(() => {
       clearGhostPoolPending();
@@ -181,6 +181,12 @@
       syncGhostPoolUi();
       toast("ส่งคำสั่งหม้ออาคมไม่สำเร็จ");
     }
+  }
+  function requestGhostTreatment(npcId) {
+    if (mode !== "live" || !room) return toast("เข้าโหมดออนไลน์เพื่อรักษาคู่หู");
+    if (room.state?.ghostPotAvailable !== true) return toast("ห้องนี้ยังไม่เปิดระบบคู่หู");
+    if (ownServerCharacter()?.persistent === false) return toast("เลือกตัวละครที่บันทึกบนเซิร์ฟเวอร์เพื่อรักษาคู่หู");
+    sendGhostPoolCommand("heal",{npcId});
   }
   function ghostPoolCommandLabel(action) {
     return {summon:"เรียก",recall:"เก็บ",switch:"สลับ"}[action] || "เรียก";
@@ -297,6 +303,8 @@
     const state = ghostPotState, view = ghostPoolView(state), companion = view?.active ?? view?.selected;
     group.hidden = mode !== "live" || !room;
     syncGhostCaptureTarget();
+    const healerAction = $("serviceNpcAction");
+    if (healerAction?.dataset.ghostHealer === "true") healerAction.disabled = Boolean(ghostPoolPending);
     summon.hidden = group.hidden;
     $("ghostCompanionAction").textContent = view?.active ? "คู่หู" : "เรียกคู่หู";
     summon.title = view?.active ? "ทีมคู่หู · " + companion.name : "เรียก " + (companion?.name ?? "คู่หู");
@@ -364,6 +372,9 @@
       captured:"จับ" + (captured?.name || "ผี") + "เข้าคลังแล้ว", escaped:"ผีหนีรอด ลองใหม่ได้อีกครั้ง",
       summoned:"เรียกผีออกจากหม้อแล้ว", recalled:"เก็บผีกลับหม้อแล้ว", switched:"สลับเป็น" + (state.ghost?.name || "ผีที่เลือก") + "แล้ว",
       defeated:"ผีพ่ายแพ้และกลับเข้าหม้อ", fainted:"ผีตัวนี้ต้องพักฟื้นที่เขตปลอดภัย",
+      healed:"หมอขวัญรักษาคู่หูทั้งหมดแล้ว", heal_healthy:"คู่หูทั้งหมดพร้อมใช้งาน",
+      heal_empty:"ยังไม่มีคู่หูให้รักษา", heal_near_npc:"เดินเข้าใกล้หมอขวัญคู่หูในเมืองเพื่อรักษา",
+      heal_in_combat:"รอให้พ้นการต่อสู้ก่อนรักษาคู่หู",
       war_ended:"สงครามจบแล้ว ผีกลับเข้าหม้อ",
       unavailable:"หม้ออาคมยังใช้ไม่ได้", target_changed:"เป้าหมายเปลี่ยนไป ลองจับใหม่",
       stale:"คลังผีเปลี่ยนแล้ว เลือกช่องใหม่อีกครั้ง", active_locked:"เก็บผีที่เรียกออกมาก่อนย้ายเข้าคลัง",

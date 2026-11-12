@@ -315,6 +315,7 @@
     strategy:{color:"#a08145",action:"ดูแผนที่ยุทธศาสตร์",persona:"warrior",dialogue:"ตรวจด่าน เส้นทาง และเวลาของสงครามแต่ละพื้นที่ได้"},
     mentor:{color:"#785b53",action:"ดูวิชาอาชีพ",persona:"elder",dialogue:"มาตรวจวิชาของเจ้าได้ การเรียนบางวิชายังต้องทำที่ลานหมู่บ้าน"},
     guide:{color:"#74835b",action:"เปิดคู่มือ",persona:"guide",dialogue:"หากเพิ่งมาถึง ข้าช่วยอธิบายวิธีเล่นและการเดินทางได้"},
+    ghostHealer:{color:"#4caa87",action:"รักษาคู่หูทั้งหมด",persona:"elder",dialogue:"ข้าฟื้นพลังชีวิต ชุบคู่หูที่พ่ายแพ้ และเติมจำนวนครั้งใช้สกิลให้ฟรี"},
     war:{color:"#9d4949",action:"เปิดกระดานศึก",persona:"warrior",dialogue:"ดูผู้ครองพื้นที่และสถานะศึกที่นี่ นายทหารและผู้บัญชาการยื่นท้าชิงได้ที่จุดนี้"},
     cityWarehouse:{color:"#7c633c",action:"เปิดคลังเมือง",persona:"guide",dialogue:"ตรวจสต็อก ฝากวัตถุดิบ และติดตามโครงการขยายคลังของกิลด์"},
     cityFactory:{color:"#a55d3f",action:"เปิดโรงงานเมือง",persona:"warrior",dialogue:"ตรวจสูตร คิวผลิต และผลผลิตของโรงงานเมือง"},

@@ -5069,6 +5069,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private healGhostsAtNpc(client: Client, owner: Player, npcId: string) {
+    const id = client.sessionId;
+    const npc = serviceNpcsFor(owner.mapId).find(candidate => candidate.role === "ghostHealer" && candidate.id === npcId);
+    if (this.field || !npc || owner.flying || !onMapGround(owner) ||
+        distance3d(owner, npc) > npc.radius || !this.isProtectedArea(owner.mapId, owner) ||
+        !this.bodyPathClear(owner.mapId, owner, npc)) return this.sendGhostPot(client, "heal_near_npc");
+    const active = this.activeGhosts.get(id);
+    if (this.isFighting(id) || active?.order) return this.sendGhostPot(client, "heal_in_combat");
+    if (!this.ghostPools.get(id)?.collection.length) return this.sendGhostPot(client, "heal_empty");
+
+    const guardian = active && this.state.summons.get(id);
+    const activeInjured = guardian?.kind === "captured_ghost" && guardian.hp < guardian.maxHp;
+    if (activeInjured) guardian.hp = guardian.maxHp;
+    const restoredHealth = this.ghostHealth.delete(id);
+    const restoredSkills = this.ghostSkillUsage.delete(id);
+    this.sendGhostPot(client, activeInjured || restoredHealth || restoredSkills ? "healed" : "heal_healthy");
+  }
+
   private getGhostTarget(id: string, owner: Player, guardian: SummonedGuardian, targetId: string) {
     if (id === targetId || !this.ghostBattleAllows(id) || !this.sameCombatMap(id, targetId) ||
         this.isProtectedArea(owner.mapId, guardian) || distance3d(owner, guardian) > RULES.capturedGhostLeashDistance) return null;
@@ -5194,6 +5212,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.ghostControlPending.has(id)) return this.reject(client, "ghost_pot_busy");
     if (!this.gates.get(id)?.summon.consume(this.simulatedMs)) return this.reject(client, "ghost_pot_busy");
 
+    if (input.action === "heal") return this.healGhostsAtNpc(client, owner, input.npcId);
     const current = this.activeGhosts.get(id);
     if (input.action === "attack" || input.action === "follow") return this.orderGhost(client, owner, input, current);
     const pool = this.ghostPools.get(id) ?? makeGhostPool();
