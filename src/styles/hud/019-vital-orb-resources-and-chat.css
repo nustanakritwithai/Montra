@@ -41,7 +41,7 @@
 .chat-harvest .harvest-action:not([hidden]) { display:grid; place-items:center; width:44px; height:44px; padding:0; }
 .chat-harvest .harvest-action img { width:24px; height:24px; object-fit:contain; pointer-events:none; }
 .field-prompts .field-action-icon:not([hidden]), .chat-harvest .field-action-icon:not([hidden]) {
-  position:relative; display:grid; place-items:center; width:44px; height:44px; min-height:44px; padding:0;
+  position:relative; inset:auto; display:grid; place-items:center; width:44px; height:44px; min-height:44px; padding:0;
 }
 .field-action-icon img { display:block; object-fit:contain; pointer-events:none; }
 .field-action-icon[data-helm-active="true"] { border-color:#ffd98a; box-shadow:0 0 8px #ffd98a66; }

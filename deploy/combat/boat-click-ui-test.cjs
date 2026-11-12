@@ -327,3 +327,10 @@ test("boarding and disembarking alternate in one fixed-size slot",()=>{
   assert.equal(access.hidden,true);
   assert.equal(panel.hidden,true);
 });
+
+test("water icons reset the floating warp offsets in the boat and chat rows",()=>{
+  const css=readFileSync(resolve(root,"styles.css"),"utf8");
+  const rule=css.match(/\.field-prompts \.field-action-icon:not\(\[hidden\]\),\s*\.chat-harvest \.field-action-icon:not\(\[hidden\]\)\s*\{([^}]+)\}/)?.[1] ?? "";
+  assert.match(rule,/position:relative/);
+  assert.match(rule,/\binset:\s*auto\s*;/, "the old warp-button left and bottom offsets must not shift icons out of their rows");
+});
