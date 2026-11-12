@@ -235,6 +235,7 @@
     actions.className = "ghost-pool-buttons";
     if (view.active) {
       const recall = makeButton("เก็บคู่หู",() => {ghostTeamOpen = false;sendGhostPoolCommand("recall");});
+      recall.className = "ghost-recall-action";
       recall.disabled = Boolean(ghostPoolPending || ghostPotState.combatAvailable === false);
       actions.append(recall);
     }
@@ -292,14 +293,11 @@
     const group = $("ghostFieldActions"), summon = $("ghostSummonButton");
     if (!group || !summon) return;
     const caption = $("ghostFieldStatus");
-    const attack = $("ghostAttackButton"), follow = $("ghostFollowButton"), team = $("ghostTeamButton");
+    const attack = $("ghostAttackButton"), follow = $("ghostFollowButton");
     const state = ghostPotState, view = ghostPoolView(state), companion = view?.active ?? view?.selected;
     group.hidden = mode !== "live" || !room;
     syncGhostCaptureTarget();
     summon.hidden = group.hidden;
-    team.hidden = group.hidden;
-    team.disabled = Boolean(ghostPoolPending);
-    $("ghostCompanionPortrait").textContent = ghostPortrait(companion);
     $("ghostCompanionAction").textContent = view?.active ? "คู่หู" : "เรียกคู่หู";
     summon.title = view?.active ? "ทีมคู่หู · " + companion.name : "เรียก " + (companion?.name ?? "คู่หู");
     summon.setAttribute("aria-label",summon.title);
@@ -553,7 +551,6 @@
     syncGhostPoolUi();
     if (ghostTeamOpen) $("ghostTeamMenu").querySelector("button:not(:disabled)")?.focus();
   }
-  $("ghostTeamButton")?.addEventListener("click",() => openGhostPool());
   $("ghostSummonButton")?.addEventListener("click", () => {
     const view = ghostPoolView(ghostPotState);
     if (ghostPoolPending) return;

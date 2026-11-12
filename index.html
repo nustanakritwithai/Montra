@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-water-button-offset" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -111,11 +111,10 @@
         <button id="ghostCatchReceipt" class="orb-action ghost-catch-receipt" type="button" hidden>จัดเข้าทีม</button>
         <span id="ghostFieldStatus" class="ghost-field-status" role="status" hidden></span>
         <div class="ghost-field-buttons">
-          <button id="ghostFollowButton" class="orb-action ghost-icon-action" type="button" aria-label="หยุดโจมตีและให้คู่หูตาม" title="ให้ตาม" hidden><span aria-hidden="true">↩</span><small>ตาม</small></button>
-          <button id="ghostSkillButton" class="orb-action ghost-icon-action" type="button" aria-expanded="false" aria-controls="ghostSkillMenu" aria-label="สกิลคู่หู" title="สกิลคู่หู" hidden><span aria-hidden="true">✦</span><small id="ghostSkillActionLabel">สกิล</small></button>
-          <button id="ghostAttackButton" class="orb-action ghost-icon-action" type="button" aria-label="เลือกเป้าให้คู่หูโจมตี" aria-pressed="false" hidden><span aria-hidden="true">⚔</span><small id="ghostAttackActionLabel">โจมตี</small></button>
-          <button id="ghostTeamButton" class="orb-action ghost-icon-action" type="button" aria-haspopup="dialog" aria-controls="drawer" aria-label="จัดทีมคู่หู" title="จัดทีมคู่หู" hidden><span aria-hidden="true">▦</span><small>จัดทีม</small></button>
-          <button id="ghostSummonButton" class="orb-action ghost-companion-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" hidden><span id="ghostCompanionPortrait" aria-hidden="true">👻</span><small id="ghostCompanionAction">เรียกคู่หู</small><progress id="ghostCompanionHealth" aria-label="พลังชีวิตคู่หู" max="1" value="0" hidden></progress></button>
+          <button id="ghostFollowButton" class="orb-action ghost-icon-action" type="button" aria-label="หยุดโจมตีและให้คู่หูตาม" title="ให้ตาม" hidden><img class="ghost-action-art" src="./assets/ui/companion-follow.webp" width="24" height="24" alt="" draggable="false"><small>ตาม</small></button>
+          <button id="ghostSkillButton" class="orb-action ghost-icon-action" type="button" aria-expanded="false" aria-controls="ghostSkillMenu" aria-label="สกิลคู่หู" title="สกิลคู่หู" hidden><img class="ghost-action-art" src="./assets/ui/companion-skill.webp" width="24" height="24" alt="" draggable="false"><small id="ghostSkillActionLabel">สกิล</small></button>
+          <button id="ghostAttackButton" class="orb-action ghost-icon-action" type="button" aria-label="เลือกเป้าให้คู่หูโจมตี" aria-pressed="false" hidden><img class="ghost-action-art" src="./assets/ui/companion-attack.webp" width="24" height="24" alt="" draggable="false"><small id="ghostAttackActionLabel">โจมตี</small></button>
+          <button id="ghostSummonButton" class="orb-action ghost-companion-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" hidden><img class="ghost-action-art" src="./assets/ui/companion-summon.webp" width="24" height="24" alt="" draggable="false"><small id="ghostCompanionAction">เรียกคู่หู</small><progress id="ghostCompanionHealth" aria-label="พลังชีวิตคู่หู" max="1" value="0" hidden></progress></button>
         </div>
       </div>
       <div class="skill-bar learned-bar" aria-label="วิชาที่เรียนและจัดไว้">
@@ -169,8 +168,8 @@
         </div>
         <section id="menu-character" data-journal-panel="character" aria-label="ตัวละครและวิชา"><div class="menu-tiles">
           <button id="menuCharacter" type="button"><span class="drawer-nav-icon" data-menu-icon="character" aria-hidden="true">๛</span><strong>สถานะตัวละคร<small>สเตตัส บัฟ และอาชีพ</small></strong></button>
+          <button id="ghostPoolButton" type="button" aria-controls="drawer"><span class="drawer-nav-icon" aria-hidden="true"><img class="ghost-action-art" src="./assets/ui/companion-team.webp" width="24" height="24" alt="" draggable="false"></span><strong>จัดทีมคู่หู<small>ทีม 3 ช่องและคลังมอนสเตอร์</small></strong></button>
           <button id="skillLoadoutButton" type="button" aria-label="จัดสกิล · ปรับแต่งช่องสกิล" aria-controls="drawer" hidden><span class="drawer-nav-icon" data-menu-icon="skills" aria-hidden="true">✧</span><strong>จัดสกิล<small>เลือกวิชาลง 4 ช่องลัด</small></strong></button>
-          <button id="ghostPoolButton" type="button" aria-controls="drawer"><span class="drawer-nav-icon" aria-hidden="true">👻</span><strong>จัดทีมคู่หู<small>ทีม 3 ช่องและคลังมอนสเตอร์</small></strong></button>
           <button id="menuHome" type="button"><span class="drawer-nav-icon" aria-hidden="true">⌂</span><strong>เรือนส่วนตัว<small>จัดเรือน ทำสวน ทำอาหาร และดูความหิว</small></strong></button>
           <button id="menuBag" type="button"><span class="drawer-nav-icon" data-menu-icon="bag" aria-hidden="true">▣</span><strong>กระเป๋า<small>ใช้ยาและสวมอาวุธ</small></strong></button>
           <button id="swordTreeButton" class="book-entry" type="button"><span class="drawer-nav-icon" data-menu-icon="skills">⚔</span><strong>ผังวิชาดาบ<small>Knowledge Graph 4 ทิศ</small></strong></button>
@@ -312,6 +311,6 @@
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
   <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
-  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader-city-trade-combat-feedback-trade-contracts-samlan-market-unified-hits-combo-counter-trade-routes-target-hud-market-contributions-bag-108-neutral-return-quick-potion-slot-himmapan-mountain-guild-city-npcs-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-sky-horizon-monster-menu-ghost-jar-water-action-icons-left-chat-fishing-shared-boat-access" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
+  <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader-city-trade-combat-feedback-trade-contracts-samlan-market-unified-hits-combo-counter-trade-routes-target-hud-market-contributions-bag-108-neutral-return-quick-potion-slot-himmapan-mountain-guild-city-npcs-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-sky-horizon-monster-menu-ghost-jar-water-action-icons-left-chat-fishing-shared-boat-access-companion-art-team-menu" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>
