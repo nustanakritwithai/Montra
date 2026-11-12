@@ -299,7 +299,7 @@ test("disembarking is available away from the docks once the boat stops",()=>{
   assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"exit"});
 });
 
-test("boarding and disembarking alternate in one fixed-size slot",()=>{
+test("boarding and disembarking alternate in one compact circular slot",()=>{
   const html=readFileSync(resolve(root,"index.html"),"utf8");
   const accessMarkup=html.match(/<div id="boatAccess"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? "";
   assert.match(accessMarkup, /<button id="boatBoard"[^>]*aria-label="ขึ้นเรือ"/);
@@ -307,6 +307,7 @@ test("boarding and disembarking alternate in one fixed-size slot",()=>{
   const css=readFileSync(resolve(root,"src/styles/hud/016-field-layout-and-account.css"),"utf8");
   assert.match(css, /\.boat-access:not\(\[hidden\]\)\s*\{[^}]*width:44px; height:44px/);
   assert.match(css, /\.boat-access > \.warp-button\s*\{[^}]*grid-area:1 \/ 1/);
+  assert.match(css, /\.boat-access > \.warp-button::before\s*\{[^}]*inset:6px;[^}]*border-radius:50%/);
 
   const f=fixture();
   const access=f.buttons.get("boatAccess");
