@@ -31,6 +31,12 @@ export function groundSample(t:GroundTerrain,x:number,z:number){
 const WATER_LEVEL = .025;
 const SHORE_HEIGHT = -.025;
 const MAX_WATER_DEPTH = 1.45;
+const DEEP_POOL_DEPTH = 2.65;
+
+export const WATER_EXPOSURE = Object.freeze({
+  wadingDepth:.10, deepDepth:.45, fullSlowDepth:1.2, mouthHeight:2.2,
+  graceSeconds:3, staminaRate:.08, healthRate:.05,
+});
 
 function containsWaterArea(area:WorldWall,x:number,z:number):boolean {
   return x>=area.x && x<=area.x+area.width && z>=area.z && z<=area.z+area.length;
@@ -41,6 +47,18 @@ export function waterDepthAt(map:WorldMapDefinition,x:number,z:number):number {
       z<map.bounds.minZ || z>map.bounds.maxZ || !map.water?.some(area=>containsWaterArea(area,x,z)))return 0;
   const bed=groundSample(map.terrain,x,z).height;
   return bed<SHORE_HEIGHT ? map.waterLevel-bed : 0;
+}
+
+export function playerWaterDepth(map:WorldMapDefinition|undefined,player:Point & {boatId?:string}):number {
+  if(map?.id!=="drowned_marsh" || map.waterLevel===undefined || player.boatId ||
+    player.y>=map.waterLevel || !waterDepthAt(map,player.x,player.z))return 0;
+  return map.waterLevel-player.y;
+}
+
+export function wadingSpeedScale(depth:number):number {
+  if(depth<WATER_EXPOSURE.wadingDepth)return 1;
+  const {deepDepth,fullSlowDepth}=WATER_EXPOSURE;
+  return .85-.20*Math.max(0,Math.min(1,(depth-deepDepth)/(fullSlowDepth-deepDepth)));
 }
 
 // Split the perimeter of the union so adjoining rectangles share a bed.
@@ -95,11 +113,12 @@ export function waterTerrain(map:WorldMapDefinition) {
   const carve=waterCarving(waters,shelves.size ? .34 : MAX_WATER_DEPTH);
   // The marsh floor is a shallow shelf. Only the channels and old pools have deeper beds.
   const carveChannel=shelves.size?waterCarving(waters.filter(area=>!shelves.has(area)),MAX_WATER_DEPTH):null;
+  const carveDeepPool=map.deepPools?.length?waterCarving(map.deepPools,DEEP_POOL_DEPTH):null;
   const heights=zs.map(z=>xs.map(x=>{
     const height=base?groundSample(base,
       Math.max(base.xs[0],Math.min(base.xs.at(-1)!,x)),
       Math.max(base.zs[0],Math.min(base.zs.at(-1)!,z))).height:0;
-    const depth=Math.max(carve(x,z),carveChannel?.(x,z)??0);
+    const depth=Math.max(carve(x,z),carveChannel?.(x,z)??0,carveDeepPool?.(x,z)??0);
     if(!depth)return height;
     let bed=height-depth;
     // Keep authored hilltops above the water with a walkable bank around them.

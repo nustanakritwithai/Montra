@@ -64,6 +64,7 @@ export type WorldMapDefinition = Readonly<{
   walls?: readonly WorldWall[];
   water?: readonly WorldWall[];
   shallowWater?: readonly WorldWall[];
+  deepPools?: readonly WorldWall[];
   waterLevel?: number;
   boatHarbor?: BoatHarbor;
   boatPorts?: readonly BoatPort[];

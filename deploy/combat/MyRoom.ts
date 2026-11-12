@@ -55,6 +55,7 @@ import {
   MonsterRRTNavigator, isMonsterSegmentClear, MONSTER_NAV, MONSTER_WALLS,
 } from "./MonsterRRT.js";
 import { monsterHabitatGoal, monsterHabitatSegmentClear } from "./MonsterHabitat.js";
+import { playerWaterDepth, WATER_EXPOSURE, wadingSpeedScale } from "./GroundTerrain.js";
 import { parseDashCommand, advanceDash, type DashDirection } from "./DashRules.js";
 import type { CharacterSnapshot } from "./CharacterStore.js";
 import {MASTERY_ENABLED,masteryBonuses,masteryCapacity,masteryPreview,encodeMasteryVitals,scaleResource,type MasteryMode} from "./RebirthCombat.js";
@@ -838,6 +839,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private extraStaminaRegen=new WeakMap<Player,number>();
   private extraRestManaRegen=new WeakMap<Player,number>();
   private hpRegenRemainder = new Map<string, number>();
+  private waterExposure = new WeakMap<Player, {seconds:number; damageRemainder:number}>();
   private playerRespawnAt = new Map<string, number>();
   private playerSpawn = new Map<string, Vec2>();
   private gates = new Map<string, Gates>();
@@ -6306,6 +6308,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if(!player?.alive || !this.persistentCharacters.has(id))return this.reject(client,"mount_unavailable");
       if(player.mounted){this.dismount(id,"manual");return;}
       if(player.boatId)return this.reject(client,"boat_disembark_first");
+      if(playerWaterDepth(getWorldMap(player.mapId),player)>=WATER_EXPOSURE.deepDepth)return this.reject(client,"mount_deep_water");
       if(this.simulatedMs-(this.lastMountMs.get(id) ?? -Infinity)<1000)return this.reject(client,"mount_cooldown");
       if(this.pendingWarps.has(id) || this.pendingItemUses.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id) ||
         this.climbs.has(id) || this.flightTransitions.has(id) || player.flying || !onMapGround(player) || this.activeDashes.has(id) ||
@@ -7512,24 +7515,64 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.supportManaCombatUntil.set(id,this.simulatedMs + PROGRESSION.combatQuietMs);
   }
 
+  private updateWaterExposure(id:string,player:Player,dt:number):boolean {
+    const depth=playerWaterDepth(getWorldMap(player.mapId),player);
+    const {wadingDepth,deepDepth,mouthHeight,graceSeconds,staminaRate,healthRate}=WATER_EXPOSURE;
+    if(depth>=deepDepth && player.mounted)this.dismount(id,"deep_water");
+    if(depth<mouthHeight || this.isProtectedArea(player.mapId,player)){
+      this.waterExposure.delete(player);
+      player.waterState=depth>=deepDepth?"deep":depth>=wadingDepth?"wading":"";
+      return false;
+    }
+
+    let exposure=this.waterExposure.get(player);
+    if(!exposure){
+      exposure={seconds:0,damageRemainder:0};
+      this.waterExposure.set(player,exposure);
+    }
+    exposure.seconds+=dt;
+    const drainSeconds=Math.min(dt,Math.max(0,exposure.seconds-graceSeconds));
+    player.waterState=drainSeconds>0?"drowning":"submerged";
+    const staminaPerSecond=player.maxStamina*staminaRate;
+    const staminaSeconds=Math.min(drainSeconds,player.stamina/staminaPerSecond);
+    player.stamina=Math.max(0,player.stamina-drainSeconds*staminaPerSecond);
+    const pending=exposure.damageRemainder+(drainSeconds-staminaSeconds)*player.maxHp*healthRate;
+    const damage=Math.floor(pending+1e-9);
+    exposure.damageRemainder=pending-damage;
+    if(damage){
+      player.hp=Math.max(0,player.hp-damage);
+      if(!player.hp)this.knockoutPlayer(id,"water");
+    }
+    return true;
+  }
+
   private updateResources(dt: number): void {
     const now = Date.now();
     for (const [id, player] of this.state.players) {
-      if (!player.alive || this.pendingWarps.has(id)) continue;
+      if (!player.alive) continue;
+      if (this.pendingWarps.has(id)) {
+        this.waterExposure.delete(player);
+        player.waterState="";
+        continue;
+      }
       this.refreshMastery(id);
+      const submerged=this.updateWaterExposure(id,player,dt);
+      if(!player.alive)continue;
       const recovery=1+masteryBonuses(this.rebirthStates.get(id),this.masteryMode(id)).regen;
       const fighting = this.isFighting(id);
       // HP saves are integer-valued in legacy snapshots. Keep fractional regen
       // in a transient accumulator instead of rounding up on each save/rejoin.
-      const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * recovery * dt;
-      const healed = Math.floor(pending + 1e-9);
-      player.hp = Math.min(player.maxHp, player.hp + healed);
-      this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
-      const needs = this.needs.get(id);
-      const nutritionRegen = needs && (now >= needs.hungryAt || now >= needs.thirstyAt) ? 0.6 : 1;
-      const staminaRegen = (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) +
-        (this.extraStaminaRegen.get(player) ?? 0);
-      player.stamina = Math.min(player.maxStamina, player.stamina + staminaRegen * nutritionRegen * recovery * dt);
+      if(!submerged){
+        const pending = (this.hpRegenRemainder.get(id) ?? 0) + (fighting ? PROGRESSION.hpRegenIn : PROGRESSION.hpRegenOut) * recovery * dt;
+        const healed = Math.floor(pending + 1e-9);
+        player.hp = Math.min(player.maxHp, player.hp + healed);
+        this.hpRegenRemainder.set(id, player.hp >= player.maxHp ? 0 : pending - healed);
+        const needs = this.needs.get(id);
+        const nutritionRegen = needs && (now >= needs.hungryAt || now >= needs.thirstyAt) ? 0.6 : 1;
+        const staminaRegen = (fighting ? PROGRESSION.staminaRegenIn : PROGRESSION.staminaRegenOut) +
+          (this.extraStaminaRegen.get(player) ?? 0);
+        player.stamina = Math.min(player.maxStamina, player.stamina + staminaRegen * nutritionRegen * recovery * dt);
+      }
       const manaFighting = fighting || this.simulatedMs < (this.supportManaCombatUntil.get(id) ?? 0);
       const manaRegen = manaFighting ? PROGRESSION.manaRegenIn : Math.max(PROGRESSION.manaRegenOut, player.maxMana / 20)+(this.extraRestManaRegen.get(player)??0);
       player.mana = Math.min(player.maxMana, player.mana + manaRegen * recovery * dt);
@@ -7629,14 +7672,15 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // The boat tick carries riders. A target lock must never chase onto the bank.
       if (player.boatId) continue;
       const groundMastery=1+masteryBonuses(this.rebirthStates.get(sessionId),this.masteryMode(sessionId)).movement;
-      const moveSpeed=player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
-        (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1);
+      const waterSpeed=wadingSpeedScale(playerWaterDepth(getWorldMap(player.mapId),player));
+      const moveSpeed=(player.flying ? FLIGHT.horizontalSpeed : player.mounted ? RULES.mountedSpeed : RULES.playerSpeed * groundMastery * (this.sentinelAnchors.has(sessionId)?0.6:1) *
+        (this.bladeCloaks.has(sessionId) && this.bladeBooks.get(sessionId)?.learned.includes("quiet_step") ? 1+BLADE_LESSONS.quiet_step.power : 1))*waterSpeed;
 
       const dash = this.activeDashes.get(sessionId);
       if (dash) {
         const move = advanceDash(
           player, dash,
-          Math.min(dash.remaining, RULES.dashSpeed * dt),
+          Math.min(dash.remaining, RULES.dashSpeed * waterSpeed * dt),
           (x, z) => this.canMoveOnSurface(player,x,z),
           getWorldMap(player.mapId)!.bounds,
         );
@@ -7862,7 +7906,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return true;
   }
 
-  private knockoutPlayer(id: string, cause: "pk" | "monster", attackerId = "") {
+  private knockoutPlayer(id: string, cause: "pk" | "monster" | "water", attackerId = "") {
     this.clearPrototypeTransient(id);
     if(this.warCargo.delete(id))try{this.clients.find(client=>client.sessionId===id)?.send("war_supply_notice",{action:"lost"});}catch{}
     this.endPriestSanctuary(id);this.priestRegens.delete(id);
@@ -7887,6 +7931,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.applyStats(id, victim, this.statAllocations.get(id) ?? emptyAllocations());
     victim.hp = 0;
     this.hpRegenRemainder.delete(id);
+    this.waterExposure.delete(victim);
+    victim.waterState="";
     victim.alive = false;
     this.updateWarBanners();
     victim.combatState = "dead";

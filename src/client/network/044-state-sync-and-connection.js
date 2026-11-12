@@ -1362,7 +1362,7 @@
       joined.onMessage("player_down", info => {
         { const fallen=avatars.get(info?.playerId); if (room === joined && fallen) { SFX("down",{x:fallen.x,z:fallen.z,important:true}); eventFx("down",fallen); } }
         if (room === joined && info?.playerId === localId) {
-          toast("ตัวละครหมดสติ · รอเกิดใหม่");
+          toast(info?.source === "water" ? "จมน้ำหมดสติ · รอเกิดใหม่" : "ตัวละครหมดสติ · รอเกิดใหม่");
         }
       });
       joined.onMessage("player_respawn", info => {
@@ -1710,6 +1710,7 @@
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
         else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
+        else if (info?.reason === "mount_deep_water") toast("ขึ้นจากน้ำลึกก่อนขี่ม้า");
         else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
         else if (typeof info?.reason === "string" && /^(ghost_|invalid_ghost_pot$)/.test(info.reason)) {
           clearGhostPoolPending();

@@ -57,6 +57,7 @@ export const Player = schema({
   skillHotbarVersion: t.number().default(MIXED_SKILLS_ENABLED?1:0),
   skillHotbarData: t.string().default(""),
   boatId: t.string().default(""),
+  waterState: t.string().default(""), // transient server-owned wading or drowning state
 }, "MontraPlayer");
 
 export type Player = SchemaType<typeof Player>;

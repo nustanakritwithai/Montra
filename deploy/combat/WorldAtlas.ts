@@ -16,7 +16,7 @@ type Region = {
   id:string; name:string; range:readonly [number,number]; hint:string; courts:readonly Court[];
   routes:readonly (readonly XY[])[]; marker:XY; scatter:readonly XY[];
   bounds?:WorldMapDefinition["bounds"]; rest?:RestArea;
-  walls?:WorldWall[]; pools?:WorldWall[]; shallowWater?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
+  walls?:WorldWall[]; pools?:WorldWall[]; shallowWater?:WorldWall[]; deepPools?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
   huntTrail?:WorldMapDefinition["huntTrail"]; extraBridges?:readonly XY[];
 };
 const point=([x,z]:XY):XZ=>({x,z});
@@ -46,7 +46,7 @@ const regions:Region[]=[
      [[22,-17],[31,-13],[42,-13],[58,-21],[72,-16]],[[0,-43],[34,-44],[58,-50],[78,-60],[96,-65]]],
    pools:[wall(48,-99,20,14),wall(108,-68,24,14),wall(85,24,32,11)],
    marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45],[58,13],[88,-45],[39,-83],[119,-85]]},
-  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ลุยแอ่งโคลนไปเกาะกกผีและโป๊ะอวนขาด หรือล่องร่องน้ำจากสุสานเรือพรายไปท่าคุ้งบึงตะวันออก",
+  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ลุยแอ่งโคลนไปเกาะกกผีและโป๊ะอวนขาด ระวังแอ่งน้ำลึกทางตะวันตก",
    bounds:{minX:-156,maxX:90,minZ:-112,maxZ:72},huntTrail:{name:"สายแพโคมเขียว",path:3},rest:{name:"แพพักโคมเขียว",x:-101,z:-15,radius:5},
    crossings:[-6,-29],extraBridges:[[-62,-4],[-88,-27],[85,-4],[85,-27]],
    courts:[["เกาะกกผี",-32,12,[10,12,14],"พรายกอกก",undefined,"water"],["ท่าน้ำจมน้ำ",34,-14,[15,17],"เงาคนแจว",undefined,"water"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ",undefined,"water"],
@@ -57,6 +57,7 @@ const regions:Region[]=[
      [[-22,-17],[-44,-12],[-64,-16],[-76,-12]],[[-63,-61],[-64,-51],[-39,-53],[0,-43]],
      [[0,26],[18,27],[40,26],[64,26],[85,26],[85,-34]]],
    pools:[wall(-121,-90,16,45),wall(-66,-98,22,9),wall(-112,9,25,14)],
+   deepPools:[wall(-111,14,30,28)],
    shallowWater:[wall(-153,-105,23,55),wall(-151,-33,41,96),wall(-111,2,35,59),wall(-75,17,45,45),
      wall(-29,36,52,29),wall(25,30,57,36),wall(44,-16,37,39),wall(24,-23,33,33),wall(-45,0,24,23),
      wall(-48,-106,37,37),wall(-93,-109,25,40),wall(8,-104,74,45),wall(14,-58,67,19),
@@ -181,8 +182,9 @@ export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
     strategic:province,
     paths:region.routes.map(route=>route.map(point)),walls:region.walls,
     boss:region.id==="spirit_rift"?RIFT_WARDEN:undefined,
-    water:region.pools||region.shallowWater?[...(water??[]),...region.pools??[],...region.shallowWater??[]]:water,
+    water:region.pools||region.shallowWater||region.deepPools?[...(water??[]),...region.pools??[],...region.shallowWater??[],...region.deepPools??[]]:water,
     ...(region.shallowWater?{shallowWater:region.shallowWater}:{}),
+    ...(region.deepPools?{deepPools:region.deepPools}:{}),
     obstacles:[{id:"landmark",...point(region.marker),radius:2.2},...region.scatter.map((p,i)=>({id:"relic-"+i,...point(p),radius:1.1}))]};
   return [map.id,{...map,...atlasRelief(map)}];
 })));

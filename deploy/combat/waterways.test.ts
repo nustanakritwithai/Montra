@@ -6,7 +6,7 @@ import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {boatCanSail,BOAT_DECK,MontraBoats} from "./MontraBoats.js";
 import {groundAt,isSafeWorldPoint,provinceShotClear,walkBridgeTransitionClear,WORLD_MAPS} from "./WorldMaps.js";
-import {waterDepthAt} from "./GroundTerrain.js";
+import {playerWaterDepth,WATER_EXPOSURE,wadingSpeedScale,waterDepthAt} from "./GroundTerrain.js";
 import {CharacterStore} from "./CharacterStore.js";
 
 test("all enabled maps have a river across their terrain and separated two-way water gates",()=>{
@@ -126,6 +126,20 @@ test("the marsh is mostly low wading ground with an open river and an east landi
       assert.ok(isSafeWorldPoint(map,{x,y:groundAt(map.id,x,z),z}));
     }
   }
+});
+
+test("marsh water resistance uses the player's height and leaves a wading escape from the deep pool",()=>{
+  const map=WORLD_MAPS.drowned_marsh;
+  const foot=(x:number,z:number)=>({x,y:groundAt(map.id,x,z),z});
+  const pool=foot(-96,28),shelf=foot(-78,28);
+  assert.ok(playerWaterDepth(map,pool)>WATER_EXPOSURE.mouthHeight);
+  assert.ok(Math.abs(wadingSpeedScale(playerWaterDepth(map,pool))-.65)<1e-8);
+  assert.equal(wadingSpeedScale(playerWaterDepth(map,shelf)),.85);
+  assert.equal(wadingSpeedScale(playerWaterDepth(map,foot(19,26))),1);
+  assert.equal(playerWaterDepth(map,{...pool,y:map.waterLevel!+.5}),0,"above the water");
+  assert.equal(playerWaterDepth(map,{...pool,boatId:"boat"}),0,"aboard");
+  assert.equal(playerWaterDepth(WORLD_MAPS.ritual_village,{x:0,y:-3,z:0}),0,"pilot is limited to the marsh");
+  for(let x=pool.x;x<=shelf.x;x+=.5)assert.ok(isSafeWorldPoint(map,foot(x,pool.z)),x+" walkable exit");
 });
 
 test("market bridge joins dry approaches above a navigable canal",()=>{

@@ -21,18 +21,19 @@
     bar.append(el);
     return { el, hp: el.querySelector(".vo-hp"), mp: el.querySelector(".vo-mp"), hpn: el.querySelector(".vo-hpn"), mpn: el.querySelector(".vo-mpn"), segs: [...el.querySelectorAll(".vo-seg")], last: "" };
   })();
-  function updateVitalOrb(hp, maxHp, st, maxSt, mp, maxMp) {
+  function updateVitalOrb(hp, maxHp, st, maxSt, mp, maxMp, waterState) {
     if (!vitalOrb) return;
     const fh = Math.max(0, Math.min(1, hp / (maxHp || 1))), hasMp = Number.isFinite(mp) && maxMp > 0, fm = hasMp ? Math.max(0, Math.min(1, mp / maxMp)) : 0;
     const fs = Number.isFinite(st) && maxSt > 0 ? Math.max(0, Math.min(1, st / maxSt)) : 1, lit = Math.round(fs * ORB_SEGS);
     const attackHint = "โจมตีปกติ · แตะเพื่อโจมตีมอนสเตอร์";
-    const key = [fh.toFixed(3), fm.toFixed(3), lit, hasMp, Math.ceil(hp), Math.round(mp), maxHp, maxMp, maxSt, st, attackHint].join("|"); if (key === vitalOrb.last) return; vitalOrb.last = key;
+    const key = [fh.toFixed(3), fm.toFixed(3), lit, hasMp, Math.ceil(hp), Math.round(mp), maxHp, maxMp, maxSt, st, attackHint, waterState].join("|"); if (key === vitalOrb.last) return; vitalOrb.last = key;
     vitalOrb.hp.setAttribute("y", (11 + 78 * (1 - fh)).toFixed(1)); vitalOrb.hp.setAttribute("height", (78 * fh).toFixed(1));
     vitalOrb.mp.setAttribute("y", (11 + 78 * (1 - fm)).toFixed(1)); vitalOrb.mp.setAttribute("height", (78 * fm).toFixed(1));
     vitalOrb.segs.forEach((s, i) => s.classList.toggle("on", i < lit));
     vitalOrb.hpn.textContent = Math.max(0, Math.ceil(hp)); vitalOrb.mpn.textContent = hasMp ? Math.round(mp) : "–";
     vitalOrb.el.classList.toggle("low", fh < .3); vitalOrb.el.classList.toggle("no-mana", !hasMp); vitalOrb.el.classList.toggle("tired", lit <= ORB_SEGS * .2);
     vitalOrb.el.title = attackHint + " · เลือด " + Math.ceil(hp) + "/" + Math.ceil(maxHp) + " · มานา " + (hasMp ? Math.round(mp) + "/" + Math.round(maxMp) : "ยังไม่เปิดใช้") + " · กำลัง " + (Number.isFinite(st) && maxSt > 0 ? Math.round(st) + "/" + Math.round(maxSt) : "เต็ม");
+    if (waterState) vitalOrb.el.title += " · " + fxInfo("water_" + waterState)[1];
     vitalOrb.el.setAttribute("aria-label", vitalOrb.el.title);
   }
   const orbWide = matchMedia("(min-width: 820px) and (min-height: 520px), (pointer: fine) and (min-width: 700px) and (orientation: landscape)");
@@ -383,12 +384,15 @@
     blade: ["◈", "ปลุกคมดาบ", "good"], sentinel: ["⛨", "ยันต์คุ้มกาย", "good"], seer: ["✦", "เพ่งจิต", "good"], mender: ["✚", "พรฟื้นกาย", "good"],
     mender_ward: ["⛨", "ยันต์คุ้มชีพ", "good"], ward: ["⛨", "คุ้มกัน", "good"], party_ward: ["⛨", "แนวพิทักษ์", "good"],
     curse: ["☠", "ติดคำสาป", "bad"], poison: ["☣", "ติดพิษ", "bad"], bleed: ["🩸", "เลือดไหล", "bad"], stun: ["✸", "มึนงง", "bad"], slow: ["❄", "ช้าลง", "bad"],
+    water_wading: ["≈", "ลุยน้ำ · เดินช้าลง", "bad"], water_deep: ["≈", "น้ำลึก · เดินช้าลง", "bad"],
+    water_submerged: ["!", "หายใจไม่ออก · ขึ้นฝั่ง", "bad"], water_drowning: ["!", "จมน้ำ · รีบขึ้นฝั่ง", "bad"],
     held: ["⛓", "ถูกจับล็อก", "bad"], down: ["✝", "หมดสติ", "bad"], cloak: ["◐", "อำพราง", "good"], opening: ["➽", "เปิดฉาก", "good"], counter: ["↺", "สวนกลับได้", "good"], mark: ["✶", "รอยอาคม", "good"],
   };
   const fxInfo = id => STATUS_FX[id] || [id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "☠" : "✧", "ผลวิชา", id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "bad" : "good"];
   // Effects on the local player: server status (polled while live) plus states the client already tracks.
   function selfEffects(me) {
     const now = performance.now(), out = [];
+    if (me?.alive && STATUS_FX["water_" + me.waterState]) out.push(["water_" + me.waterState, null]);
     if (mode === "live" && me && room?.state?.progressionAvailable === true && now - lastCharacterStatusRequest >= 3000) { lastCharacterStatusRequest = now; try { room.send("get_character_status", {}); } catch {} }
     for (const e of characterStatus?.effects || []) {
       if (typeof e?.id !== "string" || !Number.isFinite(e.remainingMs)) continue;
@@ -422,8 +426,13 @@
     const orbFx = document.querySelector(".orb-fx"), sorted = [...list].sort((a, b) => (fxInfo(a[0])[2] === "bad" ? 0 : 1) - (fxInfo(b[0])[2] === "bad" ? 0 : 1));
     if (orbFx) { orbFx.hidden = !sorted.length; orbFx.innerHTML = fxBoxesHtml(sorted, sorted.length > 5 ? 4 : 5); }
   }
+  let wasUnderwater = false;
   function updateHud(now) {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
+    const waterState = me?.alive ? me.waterState : "";
+    const underwater = waterState === "submerged" || waterState === "drowning";
+    if (underwater && !wasUnderwater) toast("หายใจไม่ออก · ขึ้นฝั่ง");
+    wasUnderwater = underwater;
     chatBox?.potion.render(me);
     updateResourceHud(me);
     // Player card.
@@ -447,7 +456,7 @@
       updateMeterValue(bar,value,max,value+" จาก "+max);
     }
     updateResourceStrip(); updateSelfStatus(me); updateExpBase(me);
-    updateVitalOrb(hp, maxHp, hasSt ? Number(me.stamina) : NaN, hasSt ? Number(me.maxStamina) : 0, Number(me?.mana), Number(me?.maxMana) || 0);
+    updateVitalOrb(hp, maxHp, hasSt ? Number(me.stamina) : NaN, hasSt ? Number(me.maxStamina) : 0, Number(me?.mana), Number(me?.maxMana) || 0, waterState);
     const xpMax = Number(me?.xpToNext) || 0, xp = Number(me?.experience) || 0;
     const hasXp = me && room?.state?.progressionAvailable === true;
     hudSet($("hudXpRow"), "xpRow", !hasXp, "hidden");
