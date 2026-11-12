@@ -46,6 +46,9 @@
       if (file === shrineGlaiveFile) {
         model.scaling.setAll(.27);
         model.position.set(.02, .16, 0);
+      } else {
+        // Roll the blade around its length, keeping the mirrored twin grips.
+        model.rotate(B.Axis.Y, kind === "thai_right" ? -Math.PI / 2 : Math.PI / 2, B.Space.LOCAL);
       }
       for (const mesh of model.getChildMeshes()) mesh.isPickable = false;
       request.model = model;

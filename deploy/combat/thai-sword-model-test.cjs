@@ -16,7 +16,7 @@ function fixture() {
   const instances = [];
   const context = {
     scene: {}, MAX_LIGHTS: 4,
-    B: { SceneLoader: {
+    B: { Axis: { Y: 'blade axis' }, Space: { LOCAL: 'local' }, SceneLoader: {
       IsPluginForExtensionAvailable: () => true,
       LoadAssetContainerAsync(base, file) {
         assert.equal(base, './assets/weapons/');
@@ -50,6 +50,7 @@ function fixture() {
         const model = {
           file: request.file, mesh, disposed: false, scaling: { setAll() {} }, position: { set() {} },
           getChildMeshes() { return [mesh]; }, dispose() { this.disposed = true; },
+          rotate(...roll) { this.roll = roll; },
         };
         instances.push(model);
         return { rootNodes: [model] };
@@ -81,6 +82,24 @@ test('each Thai sword profile has separable gameplay and scabbard geometry', () 
   assert.equal(heldBladeFile('wp_twins_10', 'thai_dual'), swordFile(8));
   assert.equal(heldBladeFile('arcane_sword', 'arcane_sword'), swordFile(1));
   assert.equal(heldBladeFile('shrine_glaive', 'arcane_sword'), 'crescent-blade-lod2.glb');
+});
+
+test('Thai swords roll by a quarter-turn about the blade, mirrored for twin grips', async () => {
+  const { avatar, fetches, instances, equip, finish, settle } = fixture();
+  equip('wp_twins_1');
+  await finish(fetches[0]);
+  for (const [kind, angle] of [['thai_left', Math.PI / 2], ['thai_right', -Math.PI / 2]]) {
+    assert.deepEqual(instances.find(model => model.parent === avatar.weaponModels[kind]).roll,
+      ['blade axis', angle, 'local']);
+  }
+  equip('arcane_sword', '');
+  await settle();
+  assert.deepEqual(instances.at(-1).roll, ['blade axis', Math.PI / 2, 'local']);
+
+  equip('shrine_glaive', '');
+  await finish(fetches[1]);
+  assert.equal(instances.at(-1).file, 'crescent-blade-lod2.glb');
+  assert.equal(instances.at(-1).roll, undefined);
 });
 
 test('a late load never replaces the current sword and both hands share one fetch', async () => {
