@@ -51,7 +51,7 @@ export function waterDepthAt(map:WorldMapDefinition,x:number,z:number):number {
 }
 
 export function playerWaterDepth(map:WorldMapDefinition|undefined,player:Point & {boatId?:string}):number {
-  if(map?.id!=="drowned_marsh" || map.waterLevel===undefined || player.boatId ||
+  if(!map || (map.id!=="drowned_marsh" && map.id!=="mantra_capital") || map.waterLevel===undefined || player.boatId ||
     player.y>=map.waterLevel || !waterDepthAt(map,player.x,player.z))return 0;
   return map.waterLevel-player.y;
 }

@@ -16,13 +16,13 @@ const villageWater = village.slice(village.indexOf("  const villageWaterLevel"),
 const terrainCell = terrain.slice(terrain.indexOf("  function terrainCell"),terrain.indexOf("  // ---- Ground patches"));
 const waterDepth = terrain.slice(terrain.indexOf("  function terrainHeight"),terrain.indexOf("  const waterPolygons"));
 
-function fixture(raySlope=0) {
+function fixture(raySlope=0,mapId="ritual_village") {
   const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
   const marker = {enabled:false,position:{set(x,y,z){Object.assign(this,{x,y,z});}},
     setEnabled(enabled){this.enabled=enabled;}};
   const player = {boatId:"boat",alive:true,x:0,z:51,combatState:"idle"};
-  const boat = {mapId:"ritual_village",x:0,z:51,speed:0,heading:Math.PI/2,helmId:"local",anchored:true};
-  const map = {id:"ritual_village",bounds:{minX:-60,maxX:60,minZ:-60,maxZ:60},
+  const boat = {mapId,x:0,z:51,speed:0,heading:Math.PI/2,helmId:"local",anchored:true};
+  const map = {id:mapId,bounds:{minX:-60,maxX:60,minZ:-60,maxZ:60},
     waterLevel:.025,water:[{x:-80,z:48,width:160,length:40}],
     waterGates:[{id:"water_ritual_village_to_drowned_marsh",x:16,z:54,range:3.2}],
     terrain:{xs:[-60,60],zs:[-60,48,51,60],heights:[[0,0],[0,0],[-.66,-.66],[-1.45,-1.45]]},
@@ -40,6 +40,10 @@ function fixture(raySlope=0) {
       return {origin:{x:point.x-raySlope*5,y:5,z:point.z},direction:{x:raySlope,y:-1,z:0}};
     },
   };
+  const vector=()=>({set(x,y,z){Object.assign(this,{x,y,z});}});
+  const wake={position:vector(),rotation:{},scaling:vector(),setEnabled(value){this.enabled=value;},dispose(){this.disposed=true;}};
+  const model={position:{x:boat.x,z:boat.z},rotation:{y:boat.heading},scaling:{set(){}},
+    onDisposeObservable:{addOnce(fn){model.onDispose=fn;}},dispose(){model.onDispose?.();}};
   const sandbox = {
     $: id=>{
       if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[],setAttribute(name,value){this[name]=value;}});
@@ -52,8 +56,8 @@ function fixture(raySlope=0) {
     targetedSkill:null,MONSTER_ID:"possessed-1",orderGhostAttack:id=>ghostOrders.push(id),
     fieldTargetVisible:id=>!foggedTargets.has(id),
     requestMonsterAttack:()=>attacks++,pointMove:()=>walks++,marker:{clone:()=>marker},
-    camera:{},scene,B:{Matrix:{Identity:()=>({})},MeshBuilder:{CreateBox:()=>({position:{}})}},
-    longTailBoat:(x,z,heading)=>({position:{x,z},rotation:{y:heading},scaling:{set(){}},dispose(){}}),
+    camera:{},scene,B:{Matrix:{Identity:()=>({})},MeshBuilder:{CreateBox:()=>({position:{}}),CreateGround:()=>wake}},
+    longTailBoat:()=>model,paintTexture:()=>({}),mat:()=>({}),
     addEventListener:(event,handler)=>{windowEvents[event]=handler;},document:{addEventListener(){}},
     ui:{world:{addEventListener:(event,handler)=>{canvasEvents[event]=handler;},
       getBoundingClientRect:()=>({left:10,top:20,width:300,height:300}),setPointerCapture(){}}},
@@ -67,7 +71,7 @@ function fixture(raySlope=0) {
   const tap = (type,x,z,hit=ground) => {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
-  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,map,player,buttons,foggedTargets,
+  return {tick,tap,pointerEvent,marker,boat,model,wake,enemy,windowEvents,ghostOrders,packets,map,player,buttons,foggedTargets,
     helmPose:()=>sandbox.sailingHelmPose("local"),
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
@@ -90,6 +94,24 @@ test("the pilot stays aft of the rendered bow during turns and reverse travel",(
   assert.equal(f.helmPose(),null);
 });
 
+test("capital boats bob with the pilot and leave a wake behind their travel",()=>{
+  const f=fixture(0,"mantra_capital");
+  Object.assign(f.boat,{z:55,speed:4});
+  f.tick(600);
+  const forward=f.wake.position.x;
+  assert.ok(f.wake.enabled && forward<f.model.position.x);
+  assert.ok(Math.abs(f.model.position.y-f.map.waterLevel)>.005);
+  assert.ok(Math.abs(f.helmPose().y-f.model.position.y-f.map.boatDock.deck.y)<1e-6);
+  f.boat.speed=-4;
+  f.tick(950);
+  assert.ok(f.wake.enabled && f.wake.position.x>f.model.position.x);
+  f.boat.speed=0;
+  f.tick(1000);
+  assert.equal(f.wake.enabled,false);
+  f.boat.sunk=true;
+  f.tick(1050);
+  assert.equal(f.wake.disposed,true);
+});
 test("mouse clicks sail toward water, turn, and stop at the marker",()=>{
   const f = fixture();
   f.tap("mouse",15,54);

@@ -21,6 +21,10 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
     assert.equal(waterDepthAt(map,x,z),0,"new dry bank at "+x+","+z);
     assert.ok(isSafeWorldPoint(map,feet(x,z)),"walkable bank at "+x+","+z);
   }
+  const deep=feet(7,-72),shallows=feet(7,-65.6);
+  assert.ok(Math.abs(wadingSpeedScale(playerWaterDepth(map,deep))-.65)<1e-8);
+  assert.equal(wadingSpeedScale(playerWaterDepth(map,shallows)),.85);
+  assert.equal(playerWaterDepth(map,{...deep,boatId:"boat"}),0,"riders stay above the water resistance");
   for(const [from,to] of map.boatLanes!){
     const centerDepth=waterDepthAt(map,(from.x+to.x)/2,(from.z+to.z)/2);
     assert.ok(centerDepth>=2.9 && centerDepth<=3.05,"the middle of the moat is three metres deep");
@@ -38,6 +42,7 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
     for(const p of [point(start),point(end)])assert.equal(waterDepthAt(map,p.x,p.z),0,b.id+" ramp meets dry ground");
     for(const p of [point(left),point(mid),point(right)])assert.ok(waterDepthAt(map,p.x,p.z)>.4,b.id+" deck spans water");
     assert.equal(point(mid).y,b.height,b.id+" deck height");
+    assert.equal(playerWaterDepth(map,point(mid)),0,b.id+" keeps full walking speed");
     for(let along=start;along<end;along+=.25){
       const from=point(along),to=point(Math.min(end,along+.25));
       assert.ok(isSafeWorldPoint(map,from),b.id+" unsafe ramp at "+along);
@@ -201,7 +206,7 @@ test("marsh water resistance uses the player's height and leaves a wading escape
   assert.equal(wadingSpeedScale(playerWaterDepth(map,foot(19,26))),1);
   assert.equal(playerWaterDepth(map,{...pool,y:map.waterLevel!+.5}),0,"above the water");
   assert.equal(playerWaterDepth(map,{...pool,boatId:"boat"}),0,"aboard");
-  assert.equal(playerWaterDepth(WORLD_MAPS.ritual_village,{x:0,y:-3,z:0}),0,"pilot is limited to the marsh");
+  assert.equal(playerWaterDepth(WORLD_MAPS.ritual_village,{x:0,y:-3,z:0}),0,"other waterways keep their movement rules");
   for(let x=pool.x;x<=shelf.x;x+=.5)assert.ok(isSafeWorldPoint(map,foot(x,pool.z)),x+" walkable exit");
 });
 

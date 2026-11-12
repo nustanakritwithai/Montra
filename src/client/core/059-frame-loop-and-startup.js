@@ -234,6 +234,52 @@
       z:node.position.z+stern*Math.cos(heading),facing:player.combatState==="idle"?heading+Math.PI:null};
   }
 
+  let capitalWakeMaterial;
+  function updateCapitalBoatWater(node,boat,map,now) {
+    const level=map.waterLevel;
+    const phase=now*.0018+node.position.x*.21+node.position.z*.16;
+    const bob=.055*Math.sin(phase)+.024*Math.sin(phase*1.7);
+    node.metadata.waterBob=bob;
+    node.position.y=level+bob;
+    const speed=Math.min(1,Math.abs(boat.speed)/5);
+    const moving=speed>.1;
+    let wake=node.metadata.waterWake;
+    if(!wake && moving){
+      if(!capitalWakeMaterial){
+        const texture=paintTexture("sailing wake foam",128,(c,s)=>{
+          c.clearRect(0,0,s,s);
+          const fade=c.createLinearGradient(0,s,0,0);
+          fade.addColorStop(0,"rgba(255,255,255,.9)");
+          fade.addColorStop(.58,"rgba(255,255,255,.55)");
+          fade.addColorStop(1,"rgba(255,255,255,0)");
+          c.strokeStyle=fade;c.lineCap="round";
+          for(const side of [-1,1])for(let i=0;i<3;i++){
+            c.lineWidth=2.6-i*.55;
+            c.beginPath();c.moveTo(s*(.5+side*(.05+i*.055)),s*(.98-i*.13));
+            c.quadraticCurveTo(s*(.5+side*.2),s*.5,s*(.5+side*(.48-i*.045)),s*.06);c.stroke();
+          }
+        });
+        texture.hasAlpha=true;
+        capitalWakeMaterial=mat("sailing wake","#b6e3e9","#a2dbe4");
+        capitalWakeMaterial.opacityTexture=texture;capitalWakeMaterial.disableLighting=true;
+        capitalWakeMaterial.disableDepthWrite=true;
+      }
+      wake=B.MeshBuilder.CreateGround("sailing wake",{width:3.2,height:4},scene);
+      wake.material=capitalWakeMaterial;wake.isPickable=false;wake.metadata={noShadow:true};
+      node.metadata.waterWake=wake;
+      node.onDisposeObservable.addOnce(()=>wake.dispose());
+    }
+    if(!wake)return;
+    const heading=node.rotation.y+(boat.speed<0?Math.PI:0);
+    const trail=map.boatDock.deck.length*.38+1.4;
+    const x=node.position.x-Math.sin(heading)*trail,z=node.position.z-Math.cos(heading)*trail;
+    wake.setEnabled(moving && worldWaterDepth(map,x,z)>.2);
+    wake.position.set(x,level+.035,z);
+    wake.rotation.y=heading;
+    wake.scaling.set(.72+.28*speed,1,.68+.55*speed);
+    wake.visibility=.22+.58*speed;
+  }
+
   function updateSailing(now, dt) {
     const state = mode === "live" ? room?.state : null;
     const map = state?.boatsAvailable ? worldDefinitions?.[activeMapId] : null;
@@ -271,6 +317,7 @@
       const yaw = boat.heading-node.rotation.y;
       const turn = Math.atan2(Math.sin(yaw),Math.cos(yaw));
       node.rotation.y += turn*blend;
+      if(map.id==="mantra_capital")updateCapitalBoatWater(node,boat,map,now);
       const paddle=node.metadata.sternPaddle;
       if(paddle){
         const stroke=boat.helmId?Math.min(1,Math.abs(boat.speed)/3+Math.abs(turn)*5):0;
@@ -518,7 +565,9 @@
       a.node.scaling.set(dashing ? 1.07 : 1, dashing ? 0.94 : 1, dashing ? 1.07 : 1);
       const flash = (a.hitFlashUntil || 0) > now;
       a.node.scaling.set(flash ? 1.07 : 1, flash ? 1.04 : 1, flash ? 1.07 : 1);
-      a.node.position.set(a.x, a.y, a.z);
+      const passengerBoat=!helmPose && mode==="live" && activeMapId==="mantra_capital"
+        ? sailingMeshes.get(room?.state?.players?.get(a.id)?.boatId) : null;
+      a.node.position.set(a.x, a.y+(passengerBoat?.metadata.waterBob??0), a.z);
       // Far characters pose (skeleton, hands, cloth) at a lower rate; their position above still moves
       // every frame, so walking stays smooth and only the limbs step at 15 or 8 poses a second.
       a.poseAcc = (a.poseAcc || 0) + dt;
@@ -652,6 +701,10 @@
     if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
+    if(capitalWaterRipples && activeMapId==="mantra_capital"){
+      capitalWaterRipples.uOffset=(capitalWaterRipples.uOffset+dt*.031)%1;
+      capitalWaterRipples.vOffset=(capitalWaterRipples.vOffset+dt*.017)%1;
+    }
     motes.emitter.copyFrom(camera.target);
     if (typeof updateWeather === "function") updateWeather(dt);
     if (typeof updateBanners === "function") updateBanners(dt, elapsed);

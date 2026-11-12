@@ -17,6 +17,7 @@ const end = source.indexOf('  // Clip each footprint', start);
 assert.ok(start >= 0 && end > start, 'water rendering fixture boundaries');
 
 class Color3 {
+  constructor(r, g, b) { Object.assign(this, { r, g, b }); }
   static FromHexString(hex) { return { hex, r: 0, g: 0, b: 0 }; }
   static LerpToRef(from, to, factor, out) {
     for (const key of ['r', 'g', 'b']) out[key] = from[key] + (to[key] - from[key]) * factor;
@@ -34,6 +35,7 @@ const B = {
       return { fillRect() {}, beginPath() {}, moveTo() {}, quadraticCurveTo() {}, stroke() {} };
     }
     update() { this.ready = true; }
+    isReady() { return this.ready; }
     clone() { return new B.DynamicTexture(); }
   },
   VertexData: class { applyToMesh(mesh) { mesh.data = this; } },
@@ -56,23 +58,32 @@ const map = {
   ],
   waterLevel: .025,
 };
-const { riverRipple } = vm.runInNewContext(
-  materials.slice(paintStart, paintEnd) + village.slice(rippleStart, rippleEnd) + '\n({riverRipple})',
+const { riverRipple, paintTexture, paintCanalRipples } = vm.runInNewContext(
+  materials.slice(paintStart, paintEnd) + village.slice(rippleStart, rippleEnd) + '\n({riverRipple, paintTexture, paintCanalRipples})',
   { B, scene: {}, noise: () => .5, water: { clone: () => ({}) }, riverSurface: {} },
 );
 assert.equal(riverRipple.ready, true, 'the ripple canvas must be uploaded before it can render');
 vm.runInNewContext(source.slice(start, end) + '\nbuildWaterSurface(map);', {
-  B, map, scene: {}, riverRipple, expansionRoot: {}, expansionResources: [],
+  B, map, scene: {}, riverRipple, paintTexture, paintCanalRipples, expansionRoot: {}, expansionResources: [],
 });
 
 assert.equal(meshes.length, 1, 'one moat mesh for the whole ring');
 const mesh = meshes[0];
-assert.equal(mesh.material.emissiveTexture, riverRipple);
+assert.ok(mesh.material.emissiveTexture.isReady(), 'capital ripples upload before use');
+assert.notEqual(mesh.material.emissiveTexture, riverRipple, 'capital waves have their own size and speed');
+vm.runInNewContext(source.slice(start, end) + '\nbuildWaterSurface(map);', {
+  B, map, scene: {}, riverRipple, paintTexture: () => ({ isReady: () => false }),
+  paintCanalRipples, expansionRoot: {}, expansionResources: [],
+});
+assert.equal(meshes[1].material.emissiveTexture, undefined, 'the opaque surface renders without the ripple texture');
+assert.equal(meshes[1].material.transparencyMode, B.Material.MATERIAL_OPAQUE);
 assert.equal(mesh.material.transparencyMode, B.Material.MATERIAL_OPAQUE);
 assert.equal(mesh.material.backFaceCulling, false);
 assert.equal(mesh.hasVertexAlpha, false);
 assert.equal(mesh.isPickable, false);
-const { positions, indices } = mesh.data;
+const { positions, indices, colors } = mesh.data;
+assert.ok(colors.some((v, i) => i % 4 === 0 && v < .4), 'deeper water has its own color');
+assert.ok(colors.some((v, i) => i % 4 === 0 && v > .5), 'the bank edge is lighter');
 const vertices = indices.map(i => [positions[i * 3], positions[i * 3 + 2]]);
 const edge = ([ax, az], [bx, bz], x, z) => (bx - ax) * (z - az) - (bz - az) * (x - ax);
 function covers(x, z) {

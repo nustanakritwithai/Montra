@@ -7519,7 +7519,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const depth=playerWaterDepth(getWorldMap(player.mapId),player);
     const {wadingDepth,deepDepth,mouthHeight,graceSeconds,staminaRate,healthRate}=WATER_EXPOSURE;
     if(depth>=deepDepth && player.mounted)this.dismount(id,"deep_water");
-    if(depth<mouthHeight || this.isProtectedArea(player.mapId,player)){
+    if(depth<mouthHeight || player.mapId!=="drowned_marsh" || this.isProtectedArea(player.mapId,player)){
       this.waterExposure.delete(player);
       player.waterState=depth>=deepDepth?"deep":depth>=wadingDepth?"wading":"";
       return false;
