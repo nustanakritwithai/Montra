@@ -33,6 +33,7 @@ export function buildSite(output, revision, source = root) {
   for (const file of [
     'assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb',
     ...swords, 'assets/mounts/buffalo-lod1-animated.glb', 'assets/mounts/buffalo-lod2-animated.glb', 'assets/ui/buffalo-mount.webp',
+    'assets/ui/atlas/montra-atlas-background.webp',
   ]) {
     assert(statSync(join(output, file)).size > 0, `Missing asset: ${file}`);
   }

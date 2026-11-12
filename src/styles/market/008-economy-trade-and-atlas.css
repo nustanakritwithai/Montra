@@ -72,7 +72,7 @@
 .guild-management-panel .field { margin:0; }
 .guild-management-panel select { margin-top:4px; }
 .drawer:has(.strategy-atlas) {
-  width:min(100%,760px);
+  width:min(100%,520px);
   max-height:calc(100dvh - max(12px,env(safe-area-inset-top)));
 }
 .strategy-atlas {
@@ -97,13 +97,17 @@
   border:1px solid #817051;border-radius:12px;
   background:radial-gradient(ellipse at top right,#34463c,#142b30 55%,#101e24);
 }
-.atlas-board {position:relative;width:100%;min-width:312px;height:827px;isolation:isolate}
+.atlas-board {
+  position:relative;width:100%;min-width:312px;aspect-ratio:400 / 827;isolation:isolate;
+  background:linear-gradient(#06191814,#06191829),
+    url("./assets/ui/atlas/montra-atlas-background.webp") center / 100% 100% no-repeat;
+}
 .atlas-board svg {position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.atlas-board line {stroke:#8b9a88;stroke-width:1.5;vector-effect:non-scaling-stroke}
+.atlas-board line {stroke:#b2b8a0;stroke-width:1.5;vector-effect:non-scaling-stroke}
 .atlas-board line[data-atlas-link="waterGates"] {stroke:#70abb9;stroke-dasharray:6 4}
 .atlas-board[data-travel="portals"] line[data-atlas-link="waterGates"],
 .atlas-board[data-travel="waterGates"] line[data-atlas-link="portals"] {opacity:.24}
-.atlas-board line.route {stroke:var(--atlas-gold);stroke-width:3}
+.atlas-board line.route {stroke:var(--atlas-gold);stroke-width:3;filter:drop-shadow(0 0 2px #071a1d)}
 .atlas-board line[data-atlas-link="waterGates"].route {stroke:var(--atlas-water)}
 .atlas-cell {
   position:absolute;transform:translate(-50%,-50%);width:27%;max-width:150px;min-height:48px;
