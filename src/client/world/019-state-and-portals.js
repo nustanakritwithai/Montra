@@ -261,26 +261,70 @@
 
   function buildBoatPorts(map) {
     const mooring=mat("mooring marker","#8ed1ea","#54bbdc");
-    expansionResources.push(mooring);
+    const roof=mat("boat landing roof","#225c62","#0b2529");
+    expansionResources.push(mooring,roof);
+    const deck=map.boatDock.deck;
     for(const port of map.boatPorts){
       const {shore,berth}=port;
+      const parts=new Map();
       const height=terrainHeight(map.terrain,shore.x,shore.z);
+      const level=Math.max(height,map.waterLevel);
       const direction=Math.atan2(berth.x-shore.x,berth.z-shore.z);
-      const quay=new B.TransformNode("wooden boat landing",scene);
-      quay.parent=expansionRoot;quay.position.set(shore.x,Math.max(height,map.waterLevel),shore.z);quay.rotation.y=direction;
-      const pierPart=(name,x,y,z,width,h,depth,material)=>{
-        const part=B.MeshBuilder.CreateBox(name,{width,height:h,depth},scene);
-        part.parent=quay;part.position.set(x,y,z);part.material=material;part.isPickable=false;
+      const sin=Math.sin(direction),cos=Math.cos(direction);
+      const position=(x,z)=>({x:shore.x+x*cos+z*sin,z:shore.z-x*sin+z*cos});
+      const place=(mesh,x,y,z,material)=>{
+        const world=position(x,z);
+        mesh.position.set(world.x,level+y,world.z);mesh.rotation.y=direction;mesh.material=material;
+        if(!parts.has(material))parts.set(material,[]);
+        parts.get(material).push(mesh);
+        return mesh;
       };
-      pierPart("landing planks",0,.025,.25,2.65,.11,3.2,provinceFx.plank);
-      for(const x of [-1.15,1.15])for(const z of [-1.1,1.7])
-        pierPart("mooring post",x,-.1,z,.25,1.1,.25,woodenAlt);
+      const box=(name,x,y,z,width,h,depth,material)=>
+        place(B.MeshBuilder.CreateBox(name,{width,height:h,depth},scene),x,y,z,material);
+      const post=(x,z,top)=>{
+        const p=position(x,z),base=Math.min(0,terrainHeight(map.terrain,p.x,p.z)-level)-.14;
+        box("landing post",x,(top+base)/2,z,.25,top-base,.25,darkWood);
+      };
+      const heading=berth.heading-direction;
+      const hull=(Math.abs(Math.cos(heading))*deck.length+Math.abs(Math.sin(heading))*deck.width)/2;
+      const pierEnd=Math.min(4,Math.hypot(berth.x-shore.x,berth.z-shore.z)-hull-.45);
+      box("landing deck",0,.015,(pierEnd-2.9)/2,3.5,.14,pierEnd+2.9,provinceFx.plank);
+      for(const x of [-1.6,1.6]){
+        for(const z of [-2.65,-.25])post(x,z,2.7);
+        post(x,pierEnd-.2,.8);
+        box("landing rail",x,.54,(pierEnd-.45)/2,.13,.14,pierEnd-.05,woodenAlt);
+        box("landing lantern",x,2.13,.02,.29,.4,.29,glowMat);
+        box("lantern cap",x,2.36,.02,.39,.085,.39,darkWood);
+      }
+
+      // An open Thai-style pavilion frames the dry launch pad on both approaches.
+      const pitch=.52,halfSpan=2.3,rise=halfSpan*Math.tan(pitch),eave=2.7;
+      for(const side of [-1,1]){
+        box("landing roof slope",side*halfSpan/2,eave+rise/2,-1.4,halfSpan/Math.cos(pitch),.15,3.9,roof).rotation.z=-side*pitch;
+        box("landing eave",side*halfSpan,eave,-1.4,.15,.15,4.05,gold);
+      }
+      box("landing ridge",0,eave+rise,-1.4,.17,.17,4.12,gold);
+      for(const z of [.45,-3.25]){
+        box("anchor sign",0,2.38,z,1.16,.8,.12,roof);
+        const face=z+Math.sign(z)*.08;
+        place(B.MeshBuilder.CreateTorus("anchor eye",{diameter:.21,thickness:.045,tessellation:12},scene),0,2.62,face,gold).rotation.x=Math.PI/2;
+        box("anchor shaft",0,2.36,face,.065,.39,.05,gold);
+        box("anchor stock",0,2.45,face,.38,.055,.05,gold);
+        for(const side of [-1,1])box("anchor arm",side*.16,2.21,face,.35,.06,.05,gold).rotation.z=side*.42;
+      }
+      addLightSpot(shore.x,level+2.15,shore.z,"#ffc47c",.8);
+      place(B.MeshBuilder.CreateTorus("launch point",{diameter:1.95,thickness:.065,tessellation:24},scene),0,.13,.65,mooring);
       const ring=B.MeshBuilder.CreateTorus("mooring",{diameter:3.7,thickness:.09,tessellation:24},scene);
       ring.parent=expansionRoot;ring.position.set(berth.x,map.waterLevel+.065,berth.z);ring.material=mooring;ring.isPickable=false;
       const pick=B.MeshBuilder.CreateGround("mooring pick",{width:4.6,height:4.6},scene);
       pick.parent=expansionRoot;pick.position.copyFrom(ring.position);pick.visibility=.001;
       pick.metadata={boatPortId:port.id,noShadow:true};
-      expansionLabel(port.name,shore.x,shore.z,11,2.1+(map.reliefLabels?0:height));
+      expansionLabel("จุดปล่อยเรือ · "+port.name,shore.x,shore.z,12,5+level-(map.reliefLabels?height:0));
+      for(const group of parts.values()){
+        const mesh=group.length===1?group[0]:B.Mesh.MergeMeshes(group,true,true);
+        mesh.parent=expansionRoot;mesh.isPickable=false;
+        trackViewLod(mesh,[["cull",null]]);
+      }
     }
   }
 
