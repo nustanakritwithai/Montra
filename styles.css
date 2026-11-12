@@ -2621,6 +2621,8 @@ button.gx-with-emblem { justify-content: center; }
 .ghost-field-actions[hidden], .ghost-field-actions .orb-action[hidden], .ghost-field-status[hidden] { display: none; }
 .ghost-field-buttons { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; max-width: 100%; }
 .ghost-field-actions .orb-action { min-width: 44px; min-height: 44px; padding: 4px 7px; border-radius: 10px; font-size: 12px; }
+.ghost-field-actions .ghost-pot-action { grid-template-rows: 28px auto; align-content: center; width: 44px; height: 44px; padding: 1px 2px; font-size: 9px; }
+.ghost-pot-action img { display: block; object-fit: contain; pointer-events: none; }
 .ghost-field-actions .orb-action:disabled { opacity: .5; }
 .ghost-field-status { max-width: 100%; padding: 3px 6px; border-radius: 6px; background: #0c1825f5; color: #dff4ff; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
 .ghost-field-skills { display: grid; gap: 4px; padding: 4px; width: max-content; max-width: 100%; max-height: min(146px, 28dvh); overflow: auto; overscroll-behavior: contain; touch-action: pan-y; pointer-events: auto; border-radius: 10px; background: #0c1825f5; }

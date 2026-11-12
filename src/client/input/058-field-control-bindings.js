@@ -178,7 +178,8 @@
     poolButton.hidden = !view;
     summon.hidden = !action;
     const captureLabel = view ? "จับ" : state?.active ? "เก็บ" : state?.ghost ? "เรียก" : "จับ";
-    capture.textContent = captureLabel;
+    const labelNode = $("ghostPotActionLabel");
+    if (labelNode && labelNode.textContent !== captureLabel) labelNode.textContent = captureLabel;
     capture.title = view?.active ? "เก็บผีก่อนจับตัวถัดไป" : !view && state?.active ? "เก็บผีกลับหม้อ"
       : !view && state?.ghost ? "เรียก" + state.ghost.name : "จับผีใส่หม้อ";
     capture.setAttribute("aria-label",capture.title);

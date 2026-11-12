@@ -8,11 +8,20 @@ const barStart = html.indexOf('class="skill-bar learned-bar"');
 const bar = html.slice(barStart, html.indexOf('id="fishingPanel"'));
 const ghostRow = html.slice(html.indexOf('id="ghostFieldActions"'), barStart);
 assert.match(bar, /<button id="fly" class="orb-action[^"]*"[^>]* hidden>/);
-for (const id of ['ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostPoolButton']) {
+for (const id of ['ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton']) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
   assert.match(ghostRow, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
   assert.doesNotMatch(bar, new RegExp(`id="${id}"`));
 }
+const characterMenu = html.slice(html.indexOf('id="menu-character"'), html.indexOf('id="menu-travel"'));
+assert.equal(html.split('id="ghostPoolButton"').length, 2);
+assert.match(characterMenu, /<button id="ghostPoolButton"[^>]* hidden>.*จัดการมอนสเตอร์/);
+assert.doesNotMatch(ghostRow, /id="ghostPoolButton"/);
+assert.match(ghostRow, /<button id="ghostPotButton"[^>]*><img src="\.\/assets\/ui\/ghost-capture-jar\.webp" alt=""/);
+const jarArtwork = readFileSync('assets/ui/ghost-capture-jar.webp');
+assert.equal(jarArtwork.toString('ascii', 0, 4), 'RIFF');
+assert.equal(jarArtwork.toString('ascii', 8, 12), 'WEBP');
+assert.match(read('src/client/ui/046-drawers-and-chat.js'), /ghostPool:"character"/);
 const hudCss=read('src/styles/hud/022-chat-compose-and-vitals.css');
 assert.match(hudCss,/\.ghost-field-actions\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column/);
 assert.match(hudCss,/\.ghost-field-buttons\s*\{[^}]*flex-wrap:\s*wrap/);
@@ -47,6 +56,7 @@ function get(id) {
   return nodes.get(id);
 }
 const button=get("ghostPotButton");
+const captureLabel=get("ghostPotActionLabel");
 const nativeSet=button.setAttribute;
 button.setAttribute=(name,value)=>{attributes[name]=value;nativeSet.call(button,name,value);};
 const drawerBody=node();
@@ -78,6 +88,7 @@ assert.equal(sent.length, 0);
 handlers.ghost_pot_state({ active: false, ghost: null });
 assert.equal(button.hidden, false);
 assert.equal(attributes['aria-label'], 'จับผีใส่หม้อ');
+assert.equal(captureLabel.textContent, 'จับ');
 click();
 assert.equal(sent.length, 0);
 assert.equal(notices.length, 1);
@@ -87,11 +98,14 @@ assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"capture","targetId":"fo
 
 handlers.ghost_pot_state({ active: false, ghost: { name: 'ผีป่า' } });
 assert.equal(attributes['aria-label'], 'เรียกผีป่า');
+assert.equal(captureLabel.textContent, 'เรียก');
 click();
 assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"summon"}']);
 handlers.ghost_pot_state({ active: true, ghost: { name: 'ผีป่า' } });
 assert.equal(attributes['aria-pressed'], 'true');
 assert.equal(attributes['aria-label'], 'เก็บผีกลับหม้อ');
+assert.equal(captureLabel.textContent, 'เก็บ');
+assert.equal(button.textContent, '', 'updating the action label leaves the image intact');
 click();
 assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"recall"}']);
 
@@ -110,6 +124,7 @@ assert.equal(get("ghostPoolButton").hidden,false);
 assert.equal(get("ghostSummonButton").textContent,"เก็บ");
 assert.equal(button.disabled,true);
 handlers["ghostPoolButton:click"]();
+assert.equal(context.drawerActive, "ghostPool");
 function find(key, root=drawerBody) {
   if (root.dataset.ghostPoolKey===key) return root;
   return root.children.map(child=>find(key,child)).find(Boolean);
