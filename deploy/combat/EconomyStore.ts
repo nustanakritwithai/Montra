@@ -769,6 +769,16 @@ export class EconomyStore {
     });
   }
 
+  saveTravelGroup(records:readonly {id:string;snapshot:object;inventory:InventorySnapshot}[]):void {
+    for(const record of records)characterId(record.id);
+    this.transaction(()=>{
+      for(const record of records){
+        this.requireSettledMonsterReward(record.id);
+        this.writeCharacter(record.id,record.snapshot,record.inventory);
+      }
+    });
+  }
+
   /** Stage a fully computed reward before attempting to replace the character. */
   stageMonsterReward(id:string,snapshot:object):void {
     characterId(id);

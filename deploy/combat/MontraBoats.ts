@@ -1,16 +1,13 @@
 import { stepTowards, type Vec2 } from "./GameRules.js";
 import { waterDepthAt } from "./GroundTerrain.js";
-import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, type WorldPoint } from "./WorldMaps.js";
+import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
-  AUTHORITATIVE_BOAT_DEFINITIONS, BOAT_DOCK_SPAWNS, type BoatWorldSnapshot,
+  AUTHORITATIVE_BOAT_DEFINITIONS, type BoatBerth, type BoatWorldSnapshot,
 } from "./PirateBoatRules.js";
 
-export const BOAT_SHORES: Readonly<Record<string, Vec2>> = {
-  ritual_village: {x: 0, z: 46},
-  river_watch: {x: -92.7, z: 24},
-  drowned_marsh: {x: -104, z: -68},
-};
+export const BOAT_SHORES: Readonly<Record<string,Vec2>> = Object.fromEntries(Object.values(WORLD_MAPS)
+  .flatMap(map=>map.boatHarbor?[[map.id,map.boatHarbor.shore]]:[]));
 export const BOAT_LAUNCH_RANGE = 3;
 export const BOAT_DECK = {width: 2.1, length: 5.2, y: .88};
 const starter = AUTHORITATIVE_BOAT_DEFINITIONS["training-dinghy"]!;
@@ -21,8 +18,9 @@ const halfLength = BOAT_DECK.length * .31 * 1.08;
 type BoatIntent =
   | {action: "launch" | "helm" | "release" | "exit"}
   | {action: "board"; boatId: string}
+  | {action: "warp"; gateId: string}
   | {action: "walk"; x: number; z: number}
-  | {action: "input"; throttle: number; steer: number; anchor?: boolean};
+  | {action: "input"; throttle: number; steer: number; anchor?: boolean; passage?: number};
 
 export function parseBoatIntent(message: unknown): BoatIntent | null {
   if (!message || typeof message !== "object" || Array.isArray(message)) return null;
@@ -34,15 +32,20 @@ export function parseBoatIntent(message: unknown): BoatIntent | null {
     case "board":
       return count === 2 && typeof input.boatId === "string" && /^boat-[\w-]{1,64}$/.test(input.boatId)
         ? {action: "board", boatId: input.boatId} : null;
+    case "warp":
+      return count===2 && typeof input.gateId==="string" && /^water_[a-z_]{1,90}$/.test(input.gateId)
+        ? {action:"warp",gateId:input.gateId} : null;
     case "walk":
       return count === 3 && typeof input.x === "number" && typeof input.z === "number" &&
         Number.isFinite(input.x) && Number.isFinite(input.z) ? {action: "walk", x: input.x, z: input.z} : null;
     case "input":
-      if (count !== (input.anchor === undefined ? 3 : 4) ||
+      if (count !== 3+Number(input.anchor!==undefined)+Number(input.passage!==undefined) ||
           typeof input.throttle !== "number" || !Number.isFinite(input.throttle) || Math.abs(input.throttle) > 1 ||
           typeof input.steer !== "number" || !Number.isFinite(input.steer) || Math.abs(input.steer) > 1 ||
-          (input.anchor !== undefined && typeof input.anchor !== "boolean")) return null;
-      return {action: "input", throttle: input.throttle, steer: input.steer, anchor: input.anchor as boolean | undefined};
+          (input.anchor !== undefined && typeof input.anchor !== "boolean") ||
+          (input.passage!==undefined && (!Number.isSafeInteger(input.passage) || Number(input.passage)<0))) return null;
+      return {action: "input", throttle: input.throttle, steer: input.steer,
+        anchor: input.anchor as boolean | undefined, passage:input.passage as number|undefined};
     default: return null;
   }
 }
@@ -53,7 +56,7 @@ function deckY(mapId:string) {
 
 export function boatCanSail(mapId: string, x: number, z: number, radius: number) {
   const map = getWorldMap(mapId);
-  if (!map || !BOAT_SHORES[mapId] || x - radius < map.bounds.minX || x + radius > map.bounds.maxX ||
+  if (!map?.boatHarbor || x - radius < map.bounds.minX || x + radius > map.bounds.maxX ||
       z - radius < map.bounds.minZ || z + radius > map.bounds.maxZ || waterDepthAt(map,x,z)<.45) return false;
   for (let i = 0; i < 16; i++) {
     const a = i * Math.PI / 8;
@@ -93,15 +96,45 @@ function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null
 
 type Rider = {boatId: string; position: Vec2; shore: WorldPoint; target?: Vec2};
 type BoatPlayer = WorldPoint & {mapId: string; boatId: string; facing: number; combatState: string};
+type BoatTransit = {boat:BoatWorldSnapshot;mapId:string;berth:BoatBerth;shore:WorldPoint};
 
 export class MontraBoats {
-  private readonly sim = new BoatSimulation(boatCanSail);
+  private readonly sim = new BoatSimulation(boatCanSail,id=>getWorldMap(id)?.boatHarbor);
   private readonly riders = new Map<string, Rider>();
 
   snapshot() { return this.sim.serialize(); }
   safeSave(id: string) { return this.riders.get(id)?.shore; }
 
-  act(id: string, player: BoatPlayer, intent: BoatIntent, now: number): boolean {
+  prepareTransit(id:string,player:BoatPlayer,gateId:string):BoatTransit|{reason:string} {
+    const boat=this.sim.stateOf(player.boatId);
+    if(!boat || boat.helmId!==id || boat.islandId!==player.mapId || boat.state==="sunk" || boat.state==="respawning")
+      return {reason:"boat_gate_helm"};
+    const gate=getWorldMap(boat.islandId)?.waterGates?.find(entry=>entry.id===gateId);
+    if(!gate || Math.hypot(boat.x-gate.x,boat.z-gate.z)>gate.range)return {reason:"boat_gate_range"};
+    const destination=getWorldMap(gate.targetMapId);
+    const berth=destination?.waterGates?.find(entry=>entry.targetMapId===boat.islandId);
+    const shore=destination?.boatHarbor?.shore;
+    if(!destination || !berth || !shore)return {reason:"boat_gate_unavailable"};
+    const radius=AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius;
+    if(!this.sim.berthAvailable(boat.entityId,destination.id,berth,radius))return {reason:"boat_gate_busy"};
+    const shorePoint={...shore,y:groundAt(destination.id,shore.x,shore.z)};
+    if(!isSafeWorldPoint(destination,shorePoint))return {reason:"boat_gate_unavailable"};
+    return {boat,mapId:destination.id,berth:{x:berth.x,z:berth.z,heading:berth.heading},shore:shorePoint};
+  }
+
+  commitTransit(transit:BoatTransit,players:ReadonlyMap<string,BoatPlayer>,now:number) {
+    const boat=this.sim.transfer(transit.boat.entityId,transit.mapId,transit.berth,now);
+    for(const id of boat.passengerIds){
+      const player=players.get(id)!,rider=this.riders.get(id)!;
+      rider.shore=transit.shore;
+      rider.target=undefined;
+      player.mapId=boat.islandId;
+      player.facing+=boat.heading-transit.boat.heading;
+      Object.assign(player,toWorld(boat,rider.position));
+    }
+  }
+
+  act(id: string, player: BoatPlayer, intent: Exclude<BoatIntent,{action:"warp"}>, now: number): boolean {
     const rider = this.riders.get(id);
     const boat = rider && this.sim.stateOf(rider.boatId);
     switch (intent.action) {
@@ -111,7 +144,7 @@ export class MontraBoats {
         const owned = this.sim.stateOf("boat-"+id);
         if (rider || !shore || !map || waterDepthAt(map,player.x,player.z)>.14 ||
             Math.hypot(player.x-shore.x, player.z-shore.z) > BOAT_LAUNCH_RANGE ||
-            owned?.passengerIds.length || !BOAT_DOCK_SPAWNS[player.mapId]) return false;
+            owned?.passengerIds.length || !map.boatHarbor) return false;
         const launched = this.sim.summon({entityId:"boat-"+id,ownerId:id,definitionId:starter.id,
           maxHp:starter.maxHp}, player.mapId, now);
         return Boolean(launched);
@@ -150,7 +183,7 @@ export class MontraBoats {
       case "walk":
         return this.walkLocal(id,intent);
       case "input":
-        return Boolean(boat && boat.helmId === id &&
+        return Boolean(boat && boat.helmId === id && (intent.passage===undefined || intent.passage===boat.passage) &&
           this.sim.setInput(now,id,boat.entityId,intent.throttle,intent.steer,intent.anchor));
     }
   }

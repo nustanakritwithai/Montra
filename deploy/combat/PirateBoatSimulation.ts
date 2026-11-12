@@ -2,10 +2,10 @@
 import {
   AUTHORITATIVE_BOAT_DEFINITIONS,
   BOAT_BOARD_RANGE,
-  BOAT_DOCK_OFFSHORE_DIRECTIONS,
-  BOAT_DOCK_SPAWNS,
   BOAT_INPUT_MIN_INTERVAL_MS,
   BOAT_RESPAWN_MS,
+  type BoatBerth,
+  type BoatHarbor,
   type BoatWorldSnapshot,
 } from './PirateBoatRules.js';
 
@@ -31,6 +31,7 @@ const snapshotOf = (boat: BoatRuntime): BoatWorldSnapshot => ({
   z: boat.z,
   heading: boat.heading,
   speed: boat.speed,
+  passage: boat.passage,
   hp: boat.hp,
   maxHp: boat.maxHp,
   anchor: boat.anchor,
@@ -44,7 +45,8 @@ const snapshotOf = (boat: BoatRuntime): BoatWorldSnapshot => ({
 export class BoatSimulation {
   private readonly boats = new Map<string, BoatRuntime>();
 
-  constructor(private readonly navigable: (mapId: string, x: number, z: number, radius: number) => boolean) {}
+  constructor(private readonly navigable: (mapId: string, x: number, z: number, radius: number) => boolean,
+    private readonly harborFor: (mapId:string)=>BoatHarbor|undefined) {}
 
   serialize(): BoatWorldSnapshot[] {
     return [...this.boats.values()].map(snapshotOf);
@@ -57,7 +59,7 @@ export class BoatSimulation {
 
   summon(canonical: CanonicalBoat, islandId: string, now = Date.now()): BoatWorldSnapshot | null {
     const definition = AUTHORITATIVE_BOAT_DEFINITIONS[canonical.definitionId];
-    const dock = BOAT_DOCK_SPAWNS[islandId];
+    const dock = this.harborFor(islandId)?.berth;
     if (!definition || !dock) return null;
     const previous = this.boats.get(canonical.entityId);
     if (previous && (previous.state === 'sunk' || previous.state === 'respawning')
@@ -77,6 +79,7 @@ export class BoatSimulation {
       z: spawn.z,
       heading: dock.heading,
       speed: 0,
+      passage: 0,
       hp: previous && previous.hp > 0
         ? Math.min(canonical.maxHp, previous.hp)
         : canonical.maxHp,
@@ -91,6 +94,20 @@ export class BoatSimulation {
     };
     this.removePassenger(canonical.ownerId);
     this.boats.set(boat.entityId, boat);
+    return snapshotOf(boat);
+  }
+
+  berthAvailable(entityId:string,mapId:string,point:{x:number;z:number},radius:number) {
+    return this.navigable(mapId,point.x,point.z,radius) && [...this.boats.values()].every(other=>
+      other.entityId===entityId || other.islandId!==mapId || other.state==="sunk" || other.state==="respawning" ||
+      Math.hypot(point.x-other.x,point.z-other.z)>=radius+AUTHORITATIVE_BOAT_DEFINITIONS[other.definitionId]!.collisionRadius+1);
+  }
+
+  // The caller has checked the berth and committed all rider saves in this event turn.
+  transfer(entityId:string,mapId:string,berth:BoatBerth,now:number):BoatWorldSnapshot {
+    const boat=this.boats.get(entityId)!;
+    Object.assign(boat,berth,{islandId:mapId,passage:boat.passage+1,speed:0,anchor:true,state:"docked",
+      throttle:0,steer:0,lastInputAt:now});
     return snapshotOf(boat);
   }
 
@@ -184,7 +201,8 @@ export class BoatSimulation {
       previous.set(boat.entityId, { x: boat.x, z: boat.z });
       if (boat.state === 'sunk' || boat.state === 'respawning') {
         if (boat.respawnAt !== undefined && now >= boat.respawnAt) {
-          const dock = BOAT_DOCK_SPAWNS[boat.islandId]!;
+          const dock = this.harborFor(boat.islandId)?.berth;
+          if(!dock)continue;
           const spawn = this.openDockSpawn(boat.islandId, boat.entityId, AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius);
           if (!spawn) continue;
           boat.x = spawn.x; boat.z = spawn.z; boat.heading = dock.heading;
@@ -247,21 +265,13 @@ export class BoatSimulation {
     replacingEntityId: string,
     collisionRadius: number,
   ): { x: number; z: number } | null {
-    const dock = BOAT_DOCK_SPAWNS[islandId]!;
-    const offshore = BOAT_DOCK_OFFSHORE_DIRECTIONS[islandId] ?? { x: 0, z: -1 };
-    const live = [...this.boats.values()].filter((boat) =>
-      boat.entityId !== replacingEntityId
-      && boat.islandId === islandId
-      && boat.state !== 'sunk'
-      && boat.state !== 'respawning');
+    const harbor=this.harborFor(islandId);
+    if(!harbor)return null;
+    const {berth:dock,offshore}=harbor;
     for (let distance = 0; distance <= 6; distance += 2) {
       const x = dock.x + offshore.x * distance;
       const z = dock.z + offshore.z * distance;
-      const clear = live.every((boat) => {
-        const otherRadius = AUTHORITATIVE_BOAT_DEFINITIONS[boat.definitionId]!.collisionRadius;
-        return Math.hypot(boat.x - x, boat.z - z) >= collisionRadius + otherRadius + 1;
-      });
-      if (clear && this.navigable(islandId,x,z,collisionRadius)) return { x, z };
+      if(this.berthAvailable(replacingEntityId,islandId,{x,z},collisionRadius))return {x,z};
     }
     return null;
   }

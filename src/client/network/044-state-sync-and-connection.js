@@ -1579,6 +1579,18 @@
         if (room !== joined) return;
         if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
         if (info?.reason === "boat_action_unavailable") {toast("เข้าใกล้ท่าเรือ หรือหยุดเรือชิดฝั่งก่อนขึ้นลง");return;}
+        const waterGateMessage={
+          boat_gate_helm:"จับหางเสือก่อนผ่านประตูน้ำ",
+          boat_gate_range:"ขับเรือเข้าใกล้ประตูน้ำอีกนิด",
+          boat_gate_busy:"ปลายทางมีเรืออยู่ · รอให้ทางว่างแล้วแตะประตูอีกครั้ง",
+          boat_gate_crew_busy:"ลูกเรือยังไม่พร้อมเดินทาง",
+          boat_gate_crew_version:"ให้ลูกเรือเปิดเกมใหม่เพื่ออัปเดตแผนที่",
+          boat_gate_cooldown:"รอสักครู่ก่อนผ่านประตูน้ำอีกครั้ง",
+          boat_gate_combat:"รอให้ลูกเรือพ้นการต่อสู้ก่อน",
+          boat_gate_unavailable:"ประตูน้ำนี้ยังใช้ไม่ได้",
+          boat_gate_save_failed:"บันทึกการเดินทางไม่สำเร็จ · เรือยังอยู่ฝั่งเดิม",
+        }[info?.reason];
+        if(waterGateMessage){toast(waterGateMessage);return;}
         if (info?.reason === "boat_disembark_first") {toast("ขึ้นฝั่งก่อนใช้คำสั่งนี้");return;}
         if (info?.reason === "boat_deck_only") {toast("แตะบนดาดฟ้าเพื่อเดิน หรือกดขึ้นฝั่ง");return;}
         if (info?.reason === "boat_unavailable") return;

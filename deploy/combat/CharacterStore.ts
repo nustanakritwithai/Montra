@@ -9,7 +9,7 @@ import {validateMixedSkillLoadouts,type MixedSkillLoadouts} from './SkillHotbar.
  */
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { makeClassInventory, makeStarterInventory, grantStarterWeapons, validateInventory, type InventorySnapshot } from "./ItemRules.js";
@@ -216,7 +216,47 @@ export class CharacterStore {
   }
   close(): void { this.economyDb?.close(); this.economyDb = undefined; }
   private guardLegacyMode(): void {
-    if (!this.economyEnabled && existsSync(path.join(this.directory, "economy.sqlite"))) throw new Error("economy_database_requires_economy_mode");
+    if(this.economyEnabled)return;
+    if(existsSync(path.join(this.directory,"economy.sqlite")))throw new Error("economy_database_requires_economy_mode");
+    this.recoverTravelGroup();
+  }
+
+  private get travelJournal() {return path.join(this.directory,"water-gate-arrival.json");}
+
+  private writeTravelFile(file:string,value:unknown):void {
+    const temp=path.join(this.directory,"."+randomUUID()+".tmp");
+    try {
+      writeFileSync(temp,JSON.stringify(value)+"\n",{flag:"wx",mode:0o600,flush:true});
+      renameSync(temp,file);
+    } finally {
+      if(existsSync(temp))unlinkSync(temp);
+    }
+  }
+
+  private recoverTravelGroup():void {
+    if(!existsSync(this.travelJournal))return;
+    const raw:unknown=JSON.parse(readFileSync(this.travelJournal,"utf8"));
+    if(!Array.isArray(raw) || !raw.length)throw new Error("invalid_water_gate_journal");
+    const snapshots=raw.map(value=>validateSnapshot(value,value?.id));
+    for(const snapshot of snapshots)this.writeTravelFile(this.location(snapshot.id),snapshot);
+    unlinkSync(this.travelJournal);
+  }
+
+  /** Save the whole crew before the room publishes the boat's new map. */
+  saveTravelGroup(characters:readonly CharacterSnapshot[]):void {
+    const records=characters.map(character=>{
+      const snapshot=validateSnapshot(character.mapId===CASTLE_ID?{...character,castleLayout:2}:character,character.id);
+      if(!snapshot.inventory)throw new Error("inventory_record_missing");
+      return {id:snapshot.id,snapshot,inventory:snapshot.inventory};
+    });
+    this.guardLegacyMode();
+    if(this.economyEnabled){this.economy.saveTravelGroup(records);return;}
+    if(records.some(({id})=>this.writes.has(id) || existsSync(this.rewardPath(id))))throw new Error("character_write_pending");
+    mkdirSync(this.directory,{recursive:true,mode:0o700});
+    this.writeTravelFile(this.travelJournal,records.map(record=>record.snapshot));
+    // The journal is the commit. Replaying it after a failed rename is idempotent.
+    try {this.recoverTravelGroup();}
+    catch(error){console.error("MONTRA water gate save recovery pending",error);}
   }
 
   private location(id: string): string {

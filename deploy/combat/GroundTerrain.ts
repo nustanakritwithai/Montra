@@ -65,7 +65,7 @@ export function waterTerrain(map:WorldMapDefinition) {
   if(!waters?.length)return {};
   const {minX,maxX,minZ,maxZ}=map.bounds;
   const cuts=(axis:"x"|"z",min:number,max:number,existing:number[]|undefined)=>{
-    const points=new Set(existing ?? [min,max]);
+    const points=new Set([min,max,...existing??[]]);
     for(const area of waters){
       const start=area[axis],size=axis==="x"?area.width:area.length,inset=Math.min(1.25,size/4);
       for(const p of [start,start+inset,start+size/2,start+size-inset,start+size]){
@@ -81,7 +81,9 @@ export function waterTerrain(map:WorldMapDefinition) {
     .map(p=>({...p,height:groundSample(base,p.x,p.z).height})).filter(p=>p.height>0):[];
   const banksX=shoreline(waters,true),banksZ=shoreline(waters,false);
   const heights=zs.map(z=>xs.map(x=>{
-    const height=base?groundSample(base,x,z).height:0;
+    const height=base?groundSample(base,
+      Math.max(base.xs[0],Math.min(base.xs.at(-1)!,x)),
+      Math.max(base.zs[0],Math.min(base.zs.at(-1)!,z))).height:0;
     if(!waters.some(area=>containsWaterArea(area,x,z)))return height;
     let distance=MAX_WATER_DEPTH/.22;
     for(const {at,start,end} of banksX)distance=Math.min(distance,Math.hypot(x-at,Math.max(start-z,0,z-end)));

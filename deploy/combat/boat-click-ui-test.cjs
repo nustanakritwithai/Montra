@@ -23,6 +23,7 @@ function fixture(raySlope=0) {
   const boat = {mapId:"ritual_village",x:0,z:51,speed:0,heading:Math.PI/2,helmId:"local",anchored:true};
   const map = {id:"ritual_village",bounds:{minX:-60,maxX:60,minZ:-60,maxZ:60},
     waterLevel:.025,water:[{x:-80,z:48,width:160,length:40}],
+    waterGates:[{id:"water_ritual_village_to_drowned_marsh",x:16,z:54,range:3.2}],
     terrain:{xs:[-60,60],zs:[-60,48,51,60],heights:[[0,0],[0,0],[-.66,-.66],[-1.45,-1.45]]},
     boatDock:{x:0,z:46,range:3,deck:{width:2.1,length:5.2,y:.88}}};
   const ground = {isEnabled:()=>true,metadata:{walkable:true}};
@@ -158,4 +159,16 @@ test("tapping the deck anchors the boat and another water tap resumes the course
   f.tap("touch",12,53);
   assert.equal(f.tick(300).anchor,false);
   assert.equal(f.marker.enabled,true);
+});
+
+test("tapping a water gate steers toward it and requests passage once in range",()=>{
+  const f=fixture(),gateId="water_ritual_village_to_drowned_marsh";
+  f.boat.passage=0;
+  f.tap("touch",16,54,{isEnabled:()=>true,metadata:{waterGateId:gateId}});
+  assert.ok(f.tick(100).throttle>0);
+  Object.assign(f.boat,{x:14,z:54,anchored:false});
+  assert.deepEqual(f.tick(200),{type:"boat_intent",action:"warp",gateId});
+  assert.equal(f.marker.enabled,false);
+  f.boat.passage=1;
+  assert.deepEqual(f.tick(300),{type:"boat_intent",action:"input",throttle:0,steer:0,passage:1});
 });

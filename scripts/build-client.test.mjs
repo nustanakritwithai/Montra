@@ -38,8 +38,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "input/045-pointer-touch-and-dash.js",
-  "bytes": 15466,
-  "sha256": "c16405a2b2eb4356295fa53d6c27032ab1641e4a2c178cb0682c8ae51b736554"
+  "bytes": 15632,
+  "sha256": "7cfa0d8d87548584f9a6981deb8caaaa71b93b4c32a8e7664a3f770dec11bbc8"
 },
 {
   "path": "render/027-summon-models-and-animation.js",
@@ -73,8 +73,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/019-state-and-portals.js",
-  "bytes": 23744,
-  "sha256": "b494774ff2cc558ec1d0ba595cd70e07e1b20cf0a4e2c2b71d385c94d43b8c85"
+  "bytes": 24681,
+  "sha256": "12e426b4594d8887ebb204c2fba766063d866c6b813098f2fce6815bfa2b9f91"
 },
 {
   "path": "world/018-region-dressing.js",
@@ -108,8 +108,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 41603,
-  "sha256": "0c900bc0062935b5f8a76f3d2bcdce49bd6ee826462ebf26bb27ea303f3997ee"
+  "bytes": 41658,
+  "sha256": "9783696be06d183b93d3405e8f281d1ff9aab317299cd80769db74b0da2a5c63"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -138,13 +138,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 164424,
-  "sha256": "5d2500edd346eab01b7fbecd3ec517c13146df6643fcbc35baefb2335c6f4ca5"
+  "bytes": 165732,
+  "sha256": "1de9bb6b092a3862d239e51100261cc20d09719ab08860207166225b72154606"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 28705,
-  "sha256": "dde578b03852e764d50de95773e6530c1905ff36ffb9fc789be4ab25a7759abe"
+  "bytes": 29735,
+  "sha256": "a95decb14c39f87d9d60097baa4975a1e21fabb1b0c7da69138b703c101ec7d7"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -194,8 +194,8 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/047-maps-and-strategy.js",
-    "bytes": 104723,
-    "sha256": "d44314e8f8b0a653dfd7797a3ddb3c19eddc1859931c248261a449c26df3d8df"
+    "bytes": 105564,
+    "sha256": "31df787e7a2afe33fb04c6a99356bdf9740dd7beddd080d304e1c7caefe9a94c"
   },
   {
     "path": "ui/055-market-and-trade.js",
@@ -279,8 +279,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2094270);
-  assert.equal(hash(bytes), '643ef129655e265d3bdeff10e665b2f626118d896e6729fe288a31577e4b7444');
+  assert.equal(bytes.length, 2098607);
+  assert.equal(hash(bytes), '46479738d23875dc29c03d7b724d2710c76f148a7316580e1fb1262e9f9e428f');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

@@ -6,6 +6,7 @@ import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, BOSS_RESPAWN_MS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
 import {regionalBossOn} from "./RegionalBosses.js";
 import { originalRelief } from "./AtlasRelief.js";
+import { addWaterways, type BoatHarbor, type WaterGate } from "./PirateBoatRules.js";
 import { makeHubs, onRampart, type Province } from "./StrategicProvinces.js";
 export type WorldWall = Readonly<{x:number;z:number;width:number;length:number;rampart?:boolean}>;
 export function segmentIntersectsExpandedWall(
@@ -59,6 +60,8 @@ export type WorldMapDefinition = Readonly<{
   walls?: readonly WorldWall[];
   water?: readonly WorldWall[];
   waterLevel?: number;
+  boatHarbor?: BoatHarbor;
+  waterGates?: readonly WaterGate[];
   bridges?: readonly Readonly<{x:number;z:number}>[];
   huntTrail?: Province["huntTrail"];
   region?: Readonly<{range:readonly [number,number];hint:string;noFlight:boolean}>;
@@ -194,7 +197,7 @@ const maps: Record<string,WorldMapDefinition>={
 export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>{
   if(!WORLD_EXPANSION)return [id,map];
   const reliefMap=id===DEFAULT_MAP_ID?{...map,water:[VILLAGE_RIVER]}:map;
-  const raised={...map,...originalRelief(reliefMap)};
+  const raised=addWaterways({...map,...originalRelief(reliefMap)},maps);
   const world={...raised,...waterTerrain(raised)},boss=regionalBossOn(id);
   if(boss){
     const {id:bossId,name,level,x,z,strikeRadius,respawnMs}=boss;

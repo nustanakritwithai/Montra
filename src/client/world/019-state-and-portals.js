@@ -70,6 +70,7 @@
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     if(map.waterLevel!==undefined)buildWaterSurface(map);
+    if(state?.boatsAvailable && map.waterGates?.length)buildWaterwayGates(map);
     // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
     scatterGroundPatches(map,map.terrain?terrainPaint.floor:ground.material,REGION_GROUNDS[activeMapId]?.[0]||MAP_FLOORS[activeMapId]||"grass",
       (x,z,r)=>(!river || z+r*3<river.z)&&!nearMapPath(map,x,z,r+2.5)&&
@@ -255,6 +256,21 @@
     setTargetedSkill(null);
     try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
     ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
+  }
+
+  function buildWaterwayGates(map) {
+    const material=mat("water gate","#a3eee5","#78dbcf");
+    expansionResources.push(material);
+    for(const gate of map.waterGates){
+      const y=map.waterLevel+.1;
+      const ring=B.MeshBuilder.CreateTorus("water gate",{diameter:5.2,thickness:.13,tessellation:28},scene);
+      ring.parent=expansionRoot;ring.position.set(gate.x,y,gate.z);ring.material=material;ring.isPickable=false;
+      const pick=B.MeshBuilder.CreateGround("water gate pick",{width:5.2,height:5.2},scene);
+      pick.parent=expansionRoot;pick.position.set(gate.x,y,gate.z);pick.visibility=.001;
+      pick.metadata={waterGateId:gate.id,noShadow:true};
+      expansionLabel("ล่องไป "+worldDefinitions[gate.targetMapId].name,gate.x,gate.z,11,
+        y+2.6-(map.reliefLabels?terrainHeight(map.terrain,gate.x,gate.z):0));
+    }
   }
 
   function switchWorld(mapId) {

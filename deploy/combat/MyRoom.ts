@@ -70,7 +70,7 @@ import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, HOME_MAP, HOME_BUILD_GRID, homeMapId, homeWallBlocks, isHomeMap, getWorldMap, groundAt, surfaceLayer, meleeHeightBlocked, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION, type WorldPortal } from "./WorldMaps.js";
 import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
 import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
-import { checkWarp, checkWarpDestination, type WarpContext, WARP_COMBAT_LOCK_MS } from "./WarpRules.js";
+import { checkWarp, checkWarpDestination, type WarpContext, WARP_COMBAT_LOCK_MS, WARP_COOLDOWN_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
 import { saveBugReport } from "./BugReports.js";
 import { BuffBook, POSSESSION_BUFF, possessionCoolingDown, rememberPossessionCooldown } from "./Buffs.js";
@@ -5344,6 +5344,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.reject(client,"boat_unavailable");
     }
     if (!this.gates.get(id)?.move.consume(this.simulatedMs)) return this.reject(client,"move_rate_limited");
+    if(intent.action==="warp")return this.warpBoat(client,player,intent.gateId);
     if (!this.boatWorld.act(id,player,intent,this.simulatedMs)) {
       return this.reject(client,intent.action==="walk" ? "boat_deck_only" : "boat_action_unavailable");
     }
@@ -5356,12 +5357,47 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
   }
 
+  private warpBoat(client:Client,player:Player,gateId:string) {
+    const transit=this.boatWorld.prepareTransit(client.sessionId,player,gateId);
+    if("reason" in transit)return this.reject(client,transit.reason);
+    const crew=new Map<string,Player>(),saves:CharacterSnapshot[]=[];
+    for(const id of transit.boat.passengerIds){
+      const rider=this.state.players.get(id);
+      if(!rider?.alive || rider.boatId!==transit.boat.entityId || rider.mapId!==transit.boat.islandId ||
+          this.pendingWarps.has(id) || this.pendingCharacterLeaves.has(id) || this.pendingItemUses.has(id) ||
+          this.pendingRewards.has(id) || this.ghostControlPending.has(id) || this.bladeCloaks.has(id) || this.basicAttackPaused(id))
+        return this.reject(client,"boat_gate_crew_busy");
+      if(!this.canEnterWorldMap(id,transit.mapId))return this.reject(client,"boat_gate_crew_version");
+      if(this.simulatedMs-(this.lastWarpMs.get(id)??-Infinity)<WARP_COOLDOWN_MS)
+        return this.reject(client,"boat_gate_cooldown");
+      if(this.simulatedMs-this.warpCombatTime(id)<WARP_COMBAT_LOCK_MS)
+        return this.reject(client,"boat_gate_combat");
+      const snapshot=this.captureCharacterSnapshot(id);
+      if(!snapshot)return this.reject(client,"boat_gate_crew_busy");
+      crew.set(id,rider);
+      // Water maps store the ground layer. Disconnected riders return to the destination bank.
+      saves.push({...snapshot,mapId:transit.mapId,x:transit.shore.x,y:0,z:transit.shore.z});
+    }
+    try {characterStore.saveTravelGroup(saves);}
+    catch(error){
+      console.error("MONTRA water gate save failed",error);
+      return this.reject(client,"boat_gate_save_failed");
+    }
+    this.boatWorld.commitTransit(transit,crew,this.simulatedMs);
+    this.updateBoats(0);
+    for(const [id,rider] of crew){
+      const connection=this.clients.find(peer=>peer.sessionId===id);
+      this.finishWorldWarp(id,rider,connection);
+      try {connection?.send("warp_complete",{mapId:rider.mapId});} catch { /* disconnected */ }
+    }
+  }
+
   private updateBoats(dt: number) {
     const boats = this.boatWorld.tick(this.simulatedMs,dt,this.state.players,id=>!this.basicAttackPaused(id));
     for (const [id,boat] of boats) {
       const state = {mapId:boat.islandId, x:boat.x, z:boat.z, heading:boat.heading, speed:boat.speed,
         hp:boat.hp, maxHp:boat.maxHp, anchored:boat.anchor, sunk:boat.state==="sunk" || boat.state==="respawning",
-        helmId:boat.helmId ?? ""};
+        helmId:boat.helmId ?? "",passage:boat.passage};
       const previous = this.state.boats.get(id);
       if (previous) Object.assign(previous,state);
       else this.state.boats.set(id,new SailingBoat(state));
@@ -6034,25 +6070,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (!player || !this.persistentCharacters.has(id)) return this.reject(client, "character_not_persistent");
       if (player.boatId) return this.reject(client,"boat_disembark_first");
       if (this.pendingItemUses.has(id) || this.pendingWarps.has(id)) return this.reject(client, "character_busy");
-      const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
-        [...this.attackTargets.values()].includes(id);
       const result = checkWarp(message, {
         mapId: player.mapId, position: player, alive: player.alive,
         flying: player.flying, climbing: this.climbs.has(id),
         dashing: this.activeDashes.has(id), changingHeight: this.flightTransitions.has(id),
-        lastCombatMs: engaged ? this.simulatedMs : (this.lastCombatMs.get(id) ?? -Infinity),
+        lastCombatMs: this.warpCombatTime(id),
         lastWarpMs: this.lastWarpMs.get(id) ?? -Infinity, nowMs: this.simulatedMs,
       });
       if ("reason" in result) return this.reject(client, result.reason);
       const portal = result.portal;
-      if(getWorldMap(portal.targetMapId)?.reliefLabels && !isAtlasMap(portal.targetMapId) && !this.originalReliefClients.has(id))return this.reject(client,"world_client_update_required");
-      if(isAtlasMap(portal.targetMapId) && getWorldMap(portal.targetMapId)?.terrain && !this.reliefClients.has(id))return this.reject(client,"world_client_update_required");
-      if(portal.targetMapId===RIDGE_PASS && !this.terrainClients.has(id))return this.reject(client,"world_client_update_required");
-      if(portal.targetMapId===RIVER_CITY && !this.riverClients.has(id))return this.reject(client,"world_client_update_required");
-      if(portal.targetMapId===CASTLE_ID && !this.castleClients.has(id))return this.reject(client,"world_client_update_required");
-      if(getWorldMap(portal.targetMapId)?.strategic && !this.provinceClients.has(id))return this.reject(client,"world_client_update_required");
-      if(isAtlasMap(portal.targetMapId) && !this.atlasClients.has(id))return this.reject(client,"world_client_update_required");
-      if(portal.targetMapId===TEMPLE_ID && !this.templeClients.has(id))return this.reject(client,"world_client_update_required");
+      if(!this.canEnterWorldMap(id,portal.targetMapId))return this.reject(client,"world_client_update_required");
       this.commitWarp(client, portal);
     },
     equip_weapon: (client:Client,message:unknown)=>this.equipItem(client,message,false),
@@ -6579,6 +6606,50 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       targets:targets.map(target=>target.id)},{afterNextPatch:true});
   }
 
+  private warpCombatTime(id:string) {
+    const engaged=this.attackTargets.has(id) || this.state.monster.targetId===id || this.forest.engaged(id) ||
+      [...this.attackTargets.values()].includes(id);
+    return engaged?this.simulatedMs:(this.lastCombatMs.get(id)??-Infinity);
+  }
+
+  private canEnterWorldMap(id:string,mapId:string) {
+    const map=getWorldMap(mapId),atlas=isAtlasMap(mapId);
+    return Boolean(map && (!map.reliefLabels || atlas || this.originalReliefClients.has(id)) &&
+      (!atlas || this.atlasClients.has(id) && (!map.terrain || this.reliefClients.has(id))) &&
+      (mapId!==RIDGE_PASS || this.terrainClients.has(id)) && (mapId!==RIVER_CITY || this.riverClients.has(id)) &&
+      (mapId!==CASTLE_ID || this.castleClients.has(id)) && (!map.strategic || this.provinceClients.has(id)) &&
+      (mapId!==TEMPLE_ID || this.templeClients.has(id)));
+  }
+
+  private finishWorldWarp(id:string,player:Player,client?:Client) {
+    this.clearPrototypeTransient(id);
+    player.targetId = ""; player.combatState = "idle"; player.flying = false;
+    const swordStance=this.swordCoreStances.delete(id),sentinelStance=this.sentinelCoreStances.delete(id);
+    this.swordCoreSequences.delete(id);
+    if(player.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");}
+    this.clearMuayCombo(id);
+    this.clearMuayCombosForTarget(id);
+    this.clearGrappleCountersFor(id,"warp");
+    this.destinations.delete(id);
+    this.attackTargets.delete(id);
+    for (const [otherId, targetId] of this.attackTargets) {
+      if (targetId === id) {
+        const other = this.state.players.get(otherId);
+        if (other) this.endAttack(otherId, other);
+      }
+    }
+    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    this.forest.clearTarget(id);
+    this.despawnSummon(id, "warp");
+    this.playerSpawn.set(id, getSafeMapSpawn(player.mapId));
+    this.lastWarpMs.set(id, this.simulatedMs);
+    if(client)try {
+      if(swordStance)this.sendSwordNotice(client,"sword_stance_end",{});
+      if(sentinelStance)this.sendSwordNotice(client,"sentinel_core_end",{});
+      if(player.pathId==="muay_boran")this.sendSwordNotice(client,"muay_counter_cleared",{});
+    } catch { /* disconnected */ }
+  }
+
   private commitWarp(client: Client, portal: WorldPortal) {
     const id = client.sessionId;
     const snapshot = this.captureCharacterSnapshot(id);
@@ -6604,31 +6675,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         // Once the durable write succeeds, commit the destination before
         // any optional notifications so a disconnected client cannot turn
         // a committed warp into a misleading disk-failure result.
-        this.clearPrototypeTransient(id);
         current.mapId = portal.targetMapId;
         current.x = portal.targetSpawn.x; current.y = portal.targetSpawn.y; current.z = portal.targetSpawn.z;
         if (isHomeMap(snapshot.mapId ?? "") || isHomeMap(current.mapId)) this.syncPlayerViews();
-        current.targetId = ""; current.combatState = "idle"; current.flying = false;
-        if(this.swordCoreStances.delete(id))this.sendSwordNotice(client,"sword_stance_end",{});
-        if(this.sentinelCoreStances.delete(id))this.sendSwordNotice(client,"sentinel_core_end",{});
-        this.swordCoreSequences.delete(id);
-        if(current.pathId==="muay_boran"){this.swordGuards.delete(id);this.clearMuayDefense(id,"cancelled");this.sendSwordNotice(client,"muay_counter_cleared",{});}
-        this.clearMuayCombo(id);
-        this.clearMuayCombosForTarget(id);
-        this.clearGrappleCountersFor(id,"warp");
-        this.destinations.delete(id);
-        this.attackTargets.delete(id);
-        for (const [otherId, targetId] of this.attackTargets) {
-          if (targetId === id) {
-            const other = this.state.players.get(otherId);
-            if (other) this.endAttack(otherId, other);
-          }
-        }
-        if (this.state.monster.targetId === id) this.state.monster.targetId = "";
-        this.forest.clearTarget(id);
-        this.despawnSummon(id, "warp");
-        this.playerSpawn.set(id, getSafeMapSpawn(portal.targetMapId));
-        this.lastWarpMs.set(id, this.simulatedMs);
+        this.finishWorldWarp(id,current,client);
         try { client.send("warp_complete", { mapId: current.mapId }); } catch { /* disconnected */ }
       } finally {
         this.pendingWarps.delete(id);

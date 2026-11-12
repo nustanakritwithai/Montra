@@ -14,10 +14,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("forest expands to 120 by 120 and preserves its original entrance", () => {
+test("forest adds a southern shipping lane and preserves its original entrance", () => {
   const map = getWorldMap("forbidden_forest")!;
   assert.equal(map.bounds.maxX - map.bounds.minX, 120);
-  assert.equal(map.bounds.maxZ - map.bounds.minZ, 120);
+  assert.equal(map.bounds.maxZ - map.bounds.minZ, 141);
   assert.deepEqual(map.spawn, {x:0,y:0,z:12});
 });
 test("movement uses the selected map bounds and rejects injected fields", () => {

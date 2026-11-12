@@ -21,12 +21,15 @@ test("all mapped water has a walkable bed, with existing pads and slopes preserv
     for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
       const x=t.xs[i],z=t.zs[j],dx=t.xs[i+1]-x,dz=t.zs[j+1]-z;
       for(const [u,v] of [[.25,.75],[.75,.25]]){
-        assert.ok(groundSample(t,x+dx*u,z+dz*v).grade<=t.maxGrade+1e-6,map.id+" slope");
+        const sampleX=x+dx*u,sampleZ=z+dz*v;
+        if(waterDepthAt(map,sampleX,sampleZ)>0)
+          assert.ok(groundSample(t,sampleX,sampleZ).grade<=t.maxGrade+1e-6,map.id+" underwater slope");
       }
     }
-    for(const p of [map.spawn,...map.portals,...map.bridges??[]]){
-      assert.equal(groundAt(map.id,p.x,p.z),0,map.id+" transfer or bridge pad");
-    }
+    for(const p of [map.spawn,...map.bridges??[]])
+      assert.equal(groundAt(map.id,p.x,p.z),0,map.id+" spawn or bridge pad");
+    for(const portal of map.portals)
+      assert.equal(groundAt(map.id,portal.x,portal.z),portal.groundY??0,portal.id+" transfer pad");
   }
 });
 

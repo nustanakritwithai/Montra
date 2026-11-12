@@ -148,6 +148,7 @@ export const SailingBoat = schema({
   anchored: t.boolean().default(true),
   sunk: t.boolean().default(false),
   helmId: t.string().default(""),
+  passage: t.number().default(0),
 }, "MontraSailingBoat");
 
 export const MyRoomState = schema({

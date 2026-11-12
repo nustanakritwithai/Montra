@@ -60,15 +60,15 @@
     if (!near && now - demoLastHitAt > 8000) return null;
     return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
   }
-  function travelRoute(maps,origin,target){
+  function travelRoute(maps,origin,target,links="portals"){
     if(!maps?.[origin] || !maps[target])return [];
-    if(travelRoutes?.maps!==maps || travelRoutes.origin!==origin){
+    if(travelRoutes?.maps!==maps || travelRoutes.origin!==origin || travelRoutes.links!==links){
       const routes=new Map([[origin,[origin]]]),queue=[origin];
-      for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]].portals){
+      for(let i=0;i<queue.length;i++)for(const gate of maps[queue[i]][links]||[]){
         const next=gate.targetMapId;
         if(maps[next] && !routes.has(next)){routes.set(next,[...routes.get(queue[i]),next]);queue.push(next);}
       }
-      travelRoutes={maps,origin,routes};
+      travelRoutes={maps,origin,links,routes};
     }
     return travelRoutes.routes.get(target)||[];
   }

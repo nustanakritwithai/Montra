@@ -504,6 +504,11 @@
       mapText(ctx, "⚓︎", x, y, large ? 12 : 9, "#e0f8ff", 700);
       if (large) mapText(ctx, "ท่าปล่อยเรือ", Math.max(45, Math.min(width - 45, x)), y - 15, 12, "#bfefff", 700);
     }
+    if(room?.state?.boatsAvailable)for(const gate of map?.waterGates||[]){
+      const x=sx(gate.x),z=sy(gate.z),name=worldDefinitions?.[gate.targetMapId]?.name;
+      mapDot(ctx,x,z,large?5:3,"#83e7d8","#173f45");
+      if(large && name)mapText(ctx,"ล่องไป "+name,Math.max(64,Math.min(width-64,x)),z-10,10,"#bbfff2",700);
+    }
     if(objective){
       const x=sx(objective.to.x),y=sy(objective.to.z),radius=large?12:6;
       ctx.strokeStyle="#ffdc84";ctx.lineWidth=large?2:1.5;
@@ -1176,6 +1181,16 @@
       const gate=maps[origin].portals.find(p=>p.targetMapId===path[1]);
       directions.textContent=gate?"ผ่าน "+(path.length-1)+" ประตู · "+path.map(p=>maps[p].name).join(" → ")+" · ประตูแรก ("+gate.x+", "+gate.z+")":id===origin?"● คุณอยู่ที่นี่":"ยังไม่มีเส้นทางจากจุดปัจจุบัน";
       detail.replaceChildren(title,description,directions);
+      if(room?.state?.boatsAvailable && id!==origin){
+        const waterPath=travelRoute(maps,origin,id,"waterGates");
+        const next=maps[origin].waterGates?.find(gate=>gate.targetMapId===waterPath[1]);
+        if(next){
+          const route=document.createElement("p");
+          route.textContent="ทางน้ำ · "+waterPath.map(key=>maps[key].name).join(" → ")+
+            " · ประตูแรก ("+next.x+", "+next.z+")";
+          detail.append(route);
+        }
+      }
       if(room?.state?.cityMarketSupported===true && Object.hasOwn(citySiteNames,id)){
         const price=document.createElement("div");price.id="atlasCityMarket";price.dataset.site=id;
         const market=document.createElement("button");market.type="button";market.className="secondary";

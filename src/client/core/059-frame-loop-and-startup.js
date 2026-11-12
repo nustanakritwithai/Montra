@@ -19,7 +19,7 @@
   }
   function boatAtHelm() {
     const boat = ownBoatState();
-    return Boolean(boat && boat.helmId === localId);
+    return Boolean(boat && boat.mapId===activeMapId && boat.helmId===localId);
   }
 
   function clearSailingDestination() {
@@ -55,9 +55,17 @@
     if (t < 0) return;
     const point = sailingWaterDestination(ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z,map);
     if (!point) return;
+    setSailingDestination(point,waterY);
+  }
+  function sailThroughGate(id) {
+    if(!boatAtHelm()){toast("จับหางเสือก่อนผ่านประตูน้ำ");return;}
+    const map=worldDefinitions?.[activeMapId],gate=map?.waterGates?.find(entry=>entry.id===id);
+    if(gate)setSailingDestination(gate,map.waterLevel,gate);
+  }
+  function setSailingDestination(point,waterY,gate) {
     cancelQuestNavigation("",false);
     const boat = ownBoatState();
-    sailingDestination = {...point,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    sailingDestination = {x:point.x,z:point.z,gate,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
     if (!sailingMarker) {
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
@@ -74,6 +82,11 @@
     if (!goal) return {throttle:0,steer:0};
     const dx = goal.x-boat.x, dz = goal.z-boat.z;
     const distance = Math.hypot(dx,dz);
+    if(goal.gate && distance<=goal.gate.range-.35){
+      clearSailingDestination();
+      sendBoatIntent("warp",{gateId:goal.gate.id});
+      return null;
+    }
     const progress = goal.progress;
     if (Math.hypot(boat.x-progress.x,boat.z-progress.z) >= .25 ||
         Math.abs(wrapSailingAngle(boat.heading-progress.heading)) >= .16) {
@@ -81,6 +94,7 @@
     }
     if (distance <= 1.35 || now-goal.progress.at >= 2800) {
       clearSailingDestination();
+      if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
       return {throttle:0,steer:0};
     }
     const bearing = Math.atan2(dx,dz);
@@ -134,8 +148,10 @@
       const distance = player ? Math.hypot(player.x-boat.x,player.z-boat.z) : Infinity;
       if (distance <= nearestDistance && Math.abs(boat.speed) <= 1) {nearestDistance=distance;nearestId=id;}
       let node = sailingMeshes.get(id);
+      if(node && node.metadata.mapId!==boat.mapId){node.dispose();node=null;}
       if (!node) {
         node = longTailBoat(boat.x,boat.z,boat.heading,true);
+        node.metadata={...node.metadata,mapId:boat.mapId};
         node.position.y = worldDefinitions[activeMapId]?.waterLevel ?? 0;
         node.scaling.set(dock.deck.width/.95,dock.deck.y/.16,dock.deck.length/5.1);
         const pick = B.MeshBuilder.CreateBox("sailing deck pick",{
@@ -154,10 +170,11 @@
     for (const [id,node] of sailingMeshes) if (!seen.has(id)) {node.dispose();sailingMeshes.delete(id);}
 
     const boat = player?.alive ? ownBoatState() : null;
-    const helm = Boolean(boat && boat.helmId === localId);
-    if (currentHelmBoat !== (helm ? player.boatId : "")) {
+    const helm = Boolean(boat && boat.mapId===activeMapId && boat.helmId===localId);
+    const helmKey=helm?player.boatId+":"+boat.mapId+":"+(boat.passage??0):"";
+    if (currentHelmBoat !== helmKey) {
       resetHelmControls();
-      currentHelmBoat = helm ? player.boatId : "";
+      currentHelmBoat = helmKey;
       nextHelmInput = 0;
       if (helm) {
         if (fishingSelect) clearFishing(false);
@@ -174,9 +191,11 @@
     boatPanel.hidden = !Array.from(boatPanel.children).some(button=>!button.hidden);
     if (!helm || now < nextHelmInput) return;
     nextHelmInput = now + 100;
-    const {throttle,steer} = sailingInputForDestination(boat,now);
+    const input=sailingInputForDestination(boat,now);
+    if(!input)return;
     if (requestedBoatAnchor === boat.anchored) requestedBoatAnchor = null;
-    sendBoatIntent("input",{throttle,steer,...(requestedBoatAnchor===null ? {} : {anchor:requestedBoatAnchor})});
+    sendBoatIntent("input",{...input,...(boat.passage===undefined?{}:{passage:boat.passage}),
+      ...(requestedBoatAnchor===null ? {} : {anchor:requestedBoatAnchor})});
   }
 
   // Cooldown labels must advance even in a quiet room with no schema patches.
