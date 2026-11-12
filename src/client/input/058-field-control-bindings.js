@@ -308,6 +308,7 @@
     const health = state?.combatHealth, meter = $("ghostCompanionHealth");
     meter.hidden = !view?.active || !(health?.maxHp > 0);
     meter.value = meter.hidden ? 0 : Math.max(0,Math.min(1,health.hp/health.maxHp));
+    $("ghostFieldHealth").hidden = meter.hidden;
     const aiming = targetedSkill === "ghostAttack";
     attack.hidden = !state?.combatId;
     attack.disabled = Boolean(ghostPoolPending);
@@ -328,11 +329,16 @@
     else if (result?.status === "following") combat = "ผีกลับมาตามแล้ว";
     else if (result?.status === "ended") combat = "ผีหยุดโจมตี " + result.targetName;
     const aim = state?.skills.find(skill => skill.skillId === ghostAimSkill)?.name ?? ghostSkillLabels[ghostAimSkill];
-    const detail = pending || (aiming ? (aim ? aim + " · " : "") + "แตะเป้าหมาย" : combat) || companionName;
-    const hp = health?.maxHp > 0 ? "HP " + Math.ceil(health.hp) + "/" + Math.ceil(health.maxHp) : "";
-    const text = [hp,detail].filter(Boolean).join(" · ");
-    caption.hidden = !text;
-    if (caption.textContent !== text) caption.textContent = text;
+    const detail = pending || (aiming ? (aim ? aim + " · " : "") + "แตะเป้าหมาย" : combat) ||
+      (view?.active ? state?.combatId ? "ตามผู้เล่น" : "เรียกแล้ว" : "");
+    const hp = meter.hidden ? "" : "HP " + Math.ceil(health.hp) + "/" + Math.ceil(health.maxHp);
+    meter.setAttribute("aria-valuetext", hp);
+    caption.hidden = group.hidden || !(view?.active || detail);
+    hudSet($("ghostFieldName"), "ghostFieldName", view?.active ? companionName : "คู่หู");
+    hudSet($("ghostFieldLevel"), "ghostFieldLevel", view?.active && Number(companion.level) > 0 ? "Lv " + companion.level : "");
+    hudSet($("ghostFieldHp"), "ghostFieldHp", hp);
+    hudSet($("ghostFieldDetail"), "ghostFieldDetail", detail);
+    hudSet($("ghostFieldOrderIcon"), "ghostFieldOrderArt", "./assets/ui/info/" + (aiming || ghostCombatTarget ? "target" : "follow") + ".webp", "src");
     if (renderPool) { syncGhostSkillMenu(); syncGhostTeamMenu(view); }
     if (renderPool && drawerActive === "ghostPool") {
       if (view) renderGhostPool(view);

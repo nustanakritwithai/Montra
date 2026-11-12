@@ -36,15 +36,14 @@
 
     <header class="top-hud">
       <div class="hud-journal">
-      <section class="identity panel" aria-label="ข้อมูลตัวละคร">
+      <section class="identity" aria-label="ข้อมูลตัวละคร">
         <div class="brand-row"><div class="brand">MONTRA <small>มนตรา</small></div><span id="modeBadge" class="badge">DEMO</span></div>
-        <button id="characterProfile" class="profile-trigger character" type="button" title="ข้อมูลตัวละคร" aria-haspopup="dialog" aria-controls="drawer">
-          <span class="portrait" id="classGlyph" aria-hidden="true"><svg class="portrait-figure" viewBox="0 0 48 48"><path d="M8 47V37c0-8 7-13 16-13s16 5 16 13v10" fill="#36594c"/><path d="m17 26 7 13 7-13-7 3Z" fill="#e8ba74"/><path d="M15 13c0-8 18-8 18 0v6c0 7-5 12-9 12s-9-5-9-12Z" fill="#ce9d71"/><path d="M13 18V12C13 3 34 2 35 13v7l-5-8-10 3-3 6Z" fill="#242421"/><path d="m12 14 1-5 20-1 2 5-11-2Z" fill="#bd963f"/><path d="m24 8 2 4-2 3-2-3Z" fill="#ffe6a1"/><path d="M19 20h2m6 0h2m-8 6h6" stroke="#563c30" stroke-width="1.5" stroke-linecap="round"/><path d="m10 37 9-5 5 9 5-9 9 5M24 41v7" fill="none" stroke="#b49450" stroke-width="2"/></svg><svg class="info-seal portrait-class"><use id="hudClassSeal" href="#seal-status"></use></svg><b id="levelBadge">1</b></span>
-          <span class="character-info"><span class="name"><span id="characterName">นที</span><span id="characterLevel">LV. 1</span></span>
-            <span id="characterClass" class="character-class">นักผจญภัย</span>
-            <span class="character-power" title="พลังรบประเมินจากสเตตัสและอุปกรณ์"><svg class="info-seal" aria-hidden="true"><use href="#seal-atk"></use></svg><span>พลังรบ ≈</span><b id="characterPower">—</b><span class="character-chevron" aria-hidden="true">›</span></span>
-          </span>
-        </button>
+        <div class="profile-card">
+          <button id="characterProfile" class="profile-trigger" type="button" title="ข้อมูลตัวละคร" aria-label="ข้อมูลตัวละคร" aria-haspopup="dialog" aria-controls="drawer">
+            <span class="portrait info-medallion" id="classGlyph" aria-hidden="true"><svg class="portrait-figure" viewBox="0 0 48 48"><defs><g id="hudPortraitFigure"><path d="M8 47V37c0-8 7-13 16-13s16 5 16 13v10" fill="#36594c"/><path d="m17 26 7 13 7-13-7 3Z" fill="#e8ba74"/><path d="M15 13c0-8 18-8 18 0v6c0 7-5 12-9 12s-9-5-9-12Z" fill="#ce9d71"/><path d="M13 18V12C13 3 34 2 35 13v7l-5-8-10 3-3 6Z" fill="#242421"/><path d="m12 14 1-5 20-1 2 5-11-2Z" fill="#bd963f"/><path d="m24 8 2 4-2 3-2-3Z" fill="#ffe6a1"/><path d="M19 20h2m6 0h2m-8 6h6" stroke="#563c30" stroke-width="1.5" stroke-linecap="round"/><path d="m10 37 9-5 5 9 5-9 9 5M24 41v7" fill="none" stroke="#b49450" stroke-width="2"/></g></defs><use href="#hudPortraitFigure"></use></svg><svg class="info-seal portrait-class"><use id="hudClassSeal" href="#seal-status"></use></svg><b id="levelBadge">1</b></span>
+          </button>
+          <div class="character-info"><strong id="characterName">นที</strong><span id="characterClass" class="character-class">นักผจญภัย</span></div>
+        </div>
         <div class="legacy-character-meters" hidden>
             <div class="hud-meter hp"><svg class="info-seal" aria-hidden="true"><use href="#seal-hp"></use></svg><div class="bar hp" role="progressbar" aria-label="พลังชีวิต"><i></i><em id="hpText">100/100</em></div></div>
             <div class="hud-meter st" id="hudStRow" hidden><svg class="info-seal" aria-hidden="true"><use href="#seal-stamina"></use></svg><div class="bar mp" id="staminaBar" role="progressbar" aria-label="กำลัง"><i></i><em id="staminaText"></em></div></div>
@@ -52,7 +51,15 @@
             <div class="hud-meter xp" id="hudXpRow" hidden><svg class="info-seal" aria-hidden="true"><use href="#seal-xp"></use></svg><div class="bar xp" id="expBar" role="progressbar" aria-label="ค่าประสบการณ์"><i></i></div><small id="expText" class="exp-text"></small></div>
         </div>
       </section>
-    <button id="quest" class="quest panel" type="button" aria-label="เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ" aria-pressed="false"><span class="quest-icon">◇</span><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress"></small><small id="questNavigationStatus" class="quest-progress">แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ</small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
+    <button id="quest" class="quest panel" type="button" aria-label="เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ" aria-pressed="false"><img class="quest-icon info-icon" src="./assets/ui/info/quest.webp" alt="" width="24" height="24" draggable="false"><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress" hidden></small><small id="questNavigationStatus" class="quest-progress" role="status" hidden></small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
+    <section class="monster-status panel" id="monsterStatus" aria-label="สถานะมอนสเตอร์" hidden>
+      <img class="info-icon target-portrait" src="./assets/ui/info/spirit.webp" alt="" width="30" height="30" draggable="false">
+      <div class="target-info">
+        <div class="monster-heading"><span id="targetName"></span><b id="targetLevel" class="target-level"></b></div>
+        <div class="target-health"><div class="monster-hp-track" aria-hidden="true"><div id="monsterBar"></div></div><strong id="monsterText"></strong></div>
+        <small id="monsterHint" class="sr-only"></small>
+      </div>
+    </section>
     <button id="partyFrames" class="party-frames" type="button" aria-label="สมาชิกปาร์ตี้ · แตะเพื่อเปิด" hidden></button>
       </div>
       <section class="location-area">
@@ -63,13 +70,6 @@
       </section>
     </header>
 
-    <section class="monster-status panel" id="monsterStatus" aria-label="สถานะมอนสเตอร์" hidden>
-      <div class="monster-heading">
-        <span id="targetName">ผีเข้าสิง · ตัวทดสอบ</span><b id="targetLevel" class="target-level"></b><strong id="monsterText">HP 100/100</strong>
-      </div>
-      <div class="monster-hp-track"><div id="monsterBar"></div></div>
-      <small id="monsterHint">แตะตัวผีเพื่อโจมตี</small>
-    </section>
     <section id="pkPanel" class="pk-panel panel" aria-label="Free PK ออนไลน์" hidden>
       <div class="pk-heading"><strong id="pkTitle">⚔ FREE PK</strong><span id="pkText">เปิดโจมตีผู้เล่น</span></div>
       <div class="pk-hp-track" id="pkHpTrack" hidden><div id="pkHpBar"></div></div>
@@ -105,16 +105,24 @@
       <div id="occultStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="bladeStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="sentinelStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
+      <div id="waterHudWarning" class="field-water-warning" role="status" hidden><img class="info-icon" src="./assets/ui/info/drown.webp" alt="" width="20" height="20"><strong id="waterHudText"></strong></div>
       <div id="ghostFieldActions" class="ghost-field-actions" role="group" aria-label="คู่หูมอนสเตอร์" hidden>
         <div id="ghostTeamMenu" class="ghost-team-menu" role="group" aria-label="ทีมคู่หู" hidden></div>
         <div id="ghostSkillMenu" class="ghost-field-skills" role="group" aria-label="สกิลคู่หู" hidden></div>
         <button id="ghostCatchReceipt" class="orb-action ghost-catch-receipt" type="button" hidden>จัดเข้าทีม</button>
-        <span id="ghostFieldStatus" class="ghost-field-status" role="status" hidden></span>
+        <div id="ghostFieldStatus" class="ghost-field-status" hidden>
+          <img class="info-icon" src="./assets/ui/info/spirit.webp" alt="" width="28" height="28" draggable="false">
+          <div class="ghost-field-info">
+            <div class="ghost-field-heading"><strong id="ghostFieldName"></strong><b id="ghostFieldLevel"></b></div>
+            <div class="ghost-field-health" id="ghostFieldHealth" hidden><progress id="ghostCompanionHealth" aria-label="พลังชีวิตคู่หู" max="1" value="0" hidden></progress><span id="ghostFieldHp"></span></div>
+            <div class="ghost-field-order"><img class="info-icon" id="ghostFieldOrderIcon" src="./assets/ui/info/follow.webp" alt="" width="14" height="14" draggable="false"><span id="ghostFieldDetail" role="status"></span></div>
+          </div>
+        </div>
         <div class="ghost-field-buttons">
           <button id="ghostFollowButton" class="orb-action ghost-icon-action" type="button" aria-label="หยุดโจมตีและให้คู่หูตาม" title="ให้ตาม" hidden><img class="ghost-action-art" src="./assets/ui/companion-follow.webp" width="24" height="24" alt="" draggable="false"><small>ตาม</small></button>
           <button id="ghostSkillButton" class="orb-action ghost-icon-action" type="button" aria-expanded="false" aria-controls="ghostSkillMenu" aria-label="สกิลคู่หู" title="สกิลคู่หู" hidden><img class="ghost-action-art" src="./assets/ui/companion-skill.webp" width="24" height="24" alt="" draggable="false"><small id="ghostSkillActionLabel">สกิล</small></button>
           <button id="ghostAttackButton" class="orb-action ghost-icon-action" type="button" aria-label="เลือกเป้าให้คู่หูโจมตี" aria-pressed="false" hidden><img class="ghost-action-art" src="./assets/ui/companion-attack.webp" width="24" height="24" alt="" draggable="false"><small id="ghostAttackActionLabel">โจมตี</small></button>
-          <button id="ghostSummonButton" class="orb-action ghost-companion-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" hidden><img class="ghost-action-art" src="./assets/ui/companion-summon.webp" width="24" height="24" alt="" draggable="false"><small id="ghostCompanionAction">เรียกคู่หู</small><progress id="ghostCompanionHealth" aria-label="พลังชีวิตคู่หู" max="1" value="0" hidden></progress></button>
+          <button id="ghostSummonButton" class="orb-action ghost-companion-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" hidden><img class="ghost-action-art" src="./assets/ui/companion-summon.webp" width="24" height="24" alt="" draggable="false"><small id="ghostCompanionAction">เรียกคู่หู</small></button>
         </div>
       </div>
       <div class="skill-bar learned-bar" aria-label="วิชาที่เรียนและจัดไว้">

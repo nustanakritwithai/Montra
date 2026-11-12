@@ -108,8 +108,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/041-character-hud-and-journey.js",
-  "bytes": 41602,
-  "sha256": "954d576017646c2b37f8ea82cf80104bd7c54f1b17a9ad3f736050a2aa3ccad5"
+  "bytes": 41475,
+  "sha256": "063fc4c2e006e973d3605a80c50cead8df4133f14aad688bb5c885c683674464"
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
@@ -179,8 +179,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 38508,
-    "sha256": "a0a03e5e7029f7ac8aec9de4226c48d326309d8ce56b7280c2516398758db295"
+    "bytes": 39102,
+    "sha256": "445ffb10616130abc8e604bc1126a1d0281ad636cfeeddd3a734a890e01572f3"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
@@ -189,8 +189,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 34016,
-  "sha256": "30710b590242a97e0abf8410eb7be79a4eb0c9bdcc69ff1068f0099adfb72e27"
+  "bytes": 33887,
+  "sha256": "af5caa4f6a7d23685b28161776ef19f603547cc1933d6f034aac4f0c00a43412"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
@@ -239,8 +239,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/042-vitals-chat-and-status.js",
-    "bytes": 42399,
-    "sha256": "ec6579c9fa27188423f1b4fec9d076637bb2ec3fadc2d4c9233ebba886c09164"
+    "bytes": 42905,
+    "sha256": "95976a1026a64aa6e312eb9867dd268a08c59ddd073d7c78278a4fcf99fa83a5"
   },
   {
     "path": "ui/056-party-guild-and-rebirth.js",
@@ -281,6 +281,11 @@ const reviewedReleaseFragments = new Map([
     "path": "combat/043-player-targeting.js",
     "bytes": 3342,
     "sha256": "08dac28c65cd0a467ff736a968d670aacae81f1a43036a2b68daa6082e42a995"
+  },
+  {
+    "path": "ui/050-character-and-equipment.js",
+    "bytes": 46980,
+    "sha256": "fed8969f39e6e003743896123f5828f46e93a8eaa4d5ec400e0a8d57c9823575"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -289,8 +294,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2133254);
-  assert.equal(hash(bytes), '3c48f8d449e2ce022e88c6f3eaaba69ddff518af7c18c8644ea5bc55279c4630');
+  assert.equal(bytes.length, 2133760);
+  assert.equal(hash(bytes), 'bbd148a8e28a949a4163191743e679ea42b9a53d870c7d8dc46ac0635f680bca');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

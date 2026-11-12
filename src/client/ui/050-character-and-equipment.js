@@ -117,6 +117,8 @@
     $("cpRing").style.setProperty("--p", (xpShare * 100).toFixed(1));
     $("cpLevel").textContent = String(num(c.level) || 1);
     $("cpPortraitSeal").setAttribute("href", "#seal-" + pathSeal(p.pathId));
+    const power = characterPowerEstimate(p);
+    $("cpPower").textContent = power === null ? "—" : power.toLocaleString("en-US");
     const path = getBuildCatalog()?.paths?.[p?.pathId];
     $("cpRole").textContent = path ? path.role + " · " + path.name : "ยังไม่เลือกสายอาชีพ";
     const sword = p?.pathId === "phutthaisawan" ? swordData() : null, muay = p?.pathId === "muay_boran" ? muayBookData() : null;
@@ -127,6 +129,12 @@
     $("cpHpBar").style.width = pctOf(c.hp, c.maxHp); $("cpHp").textContent = num(c.hp) + " / " + num(c.maxHp);
     $("cpStBar").style.width = pctOf(c.stamina, c.maxStamina);
     $("profileStamina").textContent = num(c.stamina) + " / " + num(c.maxStamina);
+    const hasMana = Number(c.maxMana) > 0;
+    $("cpManaBar").closest(".cp-bar").hidden = !hasMana;
+    if (hasMana) {
+      $("cpManaBar").style.width = pctOf(c.mana, c.maxMana);
+      $("cpMana").textContent = num(c.mana) + " / " + num(c.maxMana);
+    }
     $("cpXpBar").style.width = (xpShare * 100).toFixed(1) + "%";
     $("profileLevel").textContent = xpMax ? num(c.experience) + " / " + xpMax : "เลเวลสูงสุด";
     // The schema already includes buffs; weapon bonuses are applied separately by the server.
@@ -523,15 +531,15 @@
   function paperdollGridHtml() {
     const stageHtml =
       '<div class="doll-stage" id="paperdollStage">' +
-        '<div class="doll-portrait-ring">' +
+        '<div class="doll-portrait-ring info-medallion">' + profilePortrait +
           '<svg class="doll-portrait-seal" aria-hidden="true"><use id="paperdollSeal" href="#seal-status"></use></svg>' +
           '<b class="doll-level-pill" id="paperdollLevel">LV. 1</b>' +
         '</div>' +
         '<strong class="doll-name" id="paperdollName">นที</strong>' +
         '<span class="doll-path" id="paperdollPath">นักดาบ</span>' +
         '<div class="doll-cp" title="พลังรบประเมินจากสเตตัสและอุปกรณ์">' +
-          '<span class="doll-cp-icon">⚔</span>' +
-          '<span class="doll-cp-label">พลังรบ</span>' +
+          infoIcon("atk") +
+          '<span class="doll-cp-label">พลังรบ ≈</span>' +
           '<strong class="doll-cp-val" id="paperdollCp">100</strong>' +
         '</div>' +
         '<div class="doll-vitals-mini">' +
@@ -574,9 +582,9 @@
       ["magicAtk","โจมตีเวท","พลังโจมตีของวิชาที่ใช้ค่าเวท"],
       ["magicDef","ป้องกันเวท","ลดความเสียหายจากการโจมตีทางเวท"]
     ];
-    const tile = ([key,label]) => '<button class="cp-sigil" type="button" data-stat="'+key+'" title="'+label+'" aria-labelledby="statName-'+key+' statValue-'+key+'" aria-controls="statDetail-'+key+'" aria-expanded="false">'+seal(key)+'<strong id="statValue-'+key+'">—</strong><span class="cp-icon-name" id="statName-'+key+'">'+label+'</span></button>';
+    const tile = ([key,label]) => '<button class="cp-sigil" type="button" data-stat="'+key+'" aria-labelledby="statName-'+key+' statValue-'+key+'" aria-controls="statDetail-'+key+'" aria-expanded="false">'+infoIcon(key)+'<span class="cp-icon-name" id="statName-'+key+'">'+label+'</span><strong id="statValue-'+key+'">—</strong></button>';
     const note = ([key,label,hint]) => '<div id="statDetail-'+key+'" class="cp-inspect" hidden><strong>'+label+'</strong><span>'+hint+'</span><small id="statBonus-'+key+'"></small></div>';
-    const meter = (cls,id,label,bar,value) => '<div class="cp-bar '+cls+'" title="'+label+'">'+seal(id)+'<span class="cp-meter-name">'+label+'</span><div aria-hidden="true"><i id="'+bar+'"></i></div><strong id="'+value+'">—</strong></div>';
+    const meter = (cls,id,label,bar,value) => '<div class="cp-bar '+cls+'">'+infoIcon(id)+'<span class="cp-meter-name">'+label+'</span><div aria-hidden="true"><i id="'+bar+'"></i></div><strong id="'+value+'">—</strong></div>';
     openDrawer("character","ตัวละคร",
       '<div class="cp-tabs" role="group" aria-label="หมวดข้อมูลตัวละคร">' +
       '<button type="button" data-cp="equipment" class="on" aria-pressed="true">' + seal("mainHand") + 'ติดตั้งอุปกรณ์</button>' +
@@ -586,25 +594,24 @@
       '</div>' +
       '<section class="cp-page" data-page="equipment">' +
         '<div class="status-line"><span>สถานะอุปกรณ์</span><strong id="bagSaveStatus"></strong></div>' +
-        '<div class="status-line"><span>พลังชีวิต HP</span><strong id="bagHp"></strong></div>' +
         paperdollGridHtml() +
         '<div class="cp-equip-actions">' +
-          '<p class="note" style="text-align:center;margin:10px 0 4px;color:#a0b2ad;">แตะที่ช่องรอบตัวละครเพื่อเลือกติดตั้งหรือเปลี่ยนอุปกรณ์</p>' +
           '<button type="button" class="secondary" id="cpOpenBagBtn" style="width:100%;margin-top:4px;">🎒 เปิดกระเป๋าเก็บของ</button>' +
           '<button type="button" class="secondary" id="cpForge">ตีบวก / แปรรูปคุณภาพ · ช่างอาคม</button>' +
         '</div>' +
       '</section>' +
       '<div id="cpOffline" class="cp-offline" hidden><p>แผงสถานะตัวละครใช้ได้เมื่อเล่นออนไลน์</p><button class="primary" id="cpGoOnline" type="button">เข้าเล่นออนไลน์</button></div>' +
       '<section class="cp-page" data-page="status" hidden>' +
-        '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph" id="cpGlyph"><svg class="info-seal" aria-hidden="true"><use id="cpPortraitSeal" href="#seal-status"></use></svg></div><b><span class="sr-only">เลเวล </span><span id="cpLevel">1</span></b></div>' +
-        '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span></div></div>' +
+        '<div class="cp-hero"><div class="cp-ring" id="cpRing"><div class="cp-glyph info-medallion" id="cpGlyph">' + profilePortrait + '<svg class="info-seal" aria-hidden="true"><use id="cpPortraitSeal" href="#seal-status"></use></svg></div><b><span class="sr-only">เลเวล </span><span id="cpLevel">1</span></b></div>' +
+        '<div class="cp-hero-info"><strong id="profileName"></strong><span id="cpRole"></span><span id="cpSchool"></span><span class="cp-power">' + infoIcon("atk") + 'พลังรบ ≈ <b id="cpPower">—</b></span></div></div>' +
         '<div class="cp-bars">' +
-          meter("hp","hp","พลังชีวิต","cpHpBar","cpHp") + meter("st","stamina","กำลัง","cpStBar","profileStamina") + meter("xp","xp","ประสบการณ์","cpXpBar","profileLevel") +
+          meter("hp","hp","ชีวิต","cpHpBar","cpHp") + meter("mp","mana","มานา","cpManaBar","cpMana") +
+          meter("st","stamina","กำลัง","cpStBar","profileStamina") + meter("xp","xp","EXP","cpXpBar","profileLevel") +
         '</div>' +
         '<details id="cpEffects" class="cp-buffs" hidden><summary id="cpFxSummary"><span class="cp-fx-icons" id="cpFxIcons" aria-hidden="true"></span></summary><p id="cpFxNames"></p></details>' +
         '<details id="cpMastery" class="cp-mastery" hidden><summary id="cpMasterySummary">ความชำนาญ</summary><div id="cpMasteryGrid" class="cp-mastery-grid"></div><p id="cpMasteryTotals"></p></details>' +
         '<div id="cpPoints" class="cp-points" hidden>'+seal("points")+'<span id="cpPointsValue"></span></div>' +
-        '<div id="profileStats"><div class="cp-section-head"><h3>คุณสมบัติ</h3><button id="cpShowNames" type="button" aria-pressed="false">ชื่อไอคอน</button></div><div class="cp-sigils">'+stats.map(tile).join("")+'</div>'+stats.map(note).join("")+'</div>' +
+        '<div id="profileStats"><div class="cp-section-head"><h3>คุณสมบัติ</h3></div><div class="cp-sigils">'+stats.map(tile).join("")+'</div>'+stats.map(note).join("")+'</div>' +
         '<details id="cpChart" class="cp-chart"><summary>'+seal("radar")+'จุดเด่นตัวละคร</summary><p class="note" id="profileProgressionStatus"></p><svg id="cpRadar" class="cp-radar" viewBox="0 0 220 200" role="img" aria-label="กราฟจุดเด่นสเตตัส"></svg></details>' +
       '</section>' +
       '<section class="cp-page" data-page="class" hidden>' +
@@ -635,14 +642,6 @@
     bindBagControls();
     renderBag();
     const statusPage = ui.drawerBody.querySelector('[data-page="status"]');
-    const showNames = on => { statusPage.classList.toggle("cp-named",on); $("cpShowNames").setAttribute("aria-pressed", String(on)); };
-    let names = false;
-    try { names = localStorage.getItem("montra_stat_labels") === "1"; } catch {}
-    showNames(names);
-    $("cpShowNames").onclick = () => {
-      names = !names; showNames(names);
-      try { localStorage.setItem("montra_stat_labels", names ? "1" : "0"); } catch {}
-    };
     const sigils = statusPage.querySelectorAll("[data-stat]");
     for (const button of sigils) button.onclick = () => {
       const expand = button.getAttribute("aria-expanded") === "false";
@@ -655,7 +654,7 @@
     $("cpGoOnline").onclick = openOnline;
     openBuildFields(me);
     $("profileSaveStatus").textContent = durable ? "เก็บบน VPS" : "ยังไม่เปิดใช้ (DEMO/Server เดิม)";
-    $("profileSlot").textContent = durable ? "เซฟที่ " + (activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
+    $("profileSlot").textContent = durable ? "เซฟที่ " + (Number(me.characterSlot) || activeCharacterSlot || 1) + " / 3" : "ยังไม่ได้เข้าออนไลน์";
     $("switchCharacterSlot").onclick = openOnline;
     $("profileName").textContent = String(me?.characterName || "นที");
     renderProgressionProfile();

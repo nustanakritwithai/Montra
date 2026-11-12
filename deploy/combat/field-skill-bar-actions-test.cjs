@@ -86,6 +86,7 @@ const monster={alive:true,hp:1,mapId:"forbidden_forest",tier:"normal",level:5,x:
 const owner={alive:true,mapId:"forbidden_forest",x:0,y:0,z:0};
 const context = vm.createContext({
   $: get, document, ui:{drawerBody}, drawerActive:null,
+  hudSet(el,key,value,prop="textContent"){el[prop]=value;},
   openDrawer(name){context.drawerActive=name;},closeDrawer(){context.drawerActive=null;},
   setTimeout:()=>1,clearTimeout(){},
   mode: 'live', room: joined, joined, localId:"local", summonAvatars:new Map(), selectedForestTarget: null, targetedSkill:null,
@@ -209,40 +210,43 @@ assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
 assert.equal(get("ghostAttackButton").hidden,true,"legacy server has no combat control");
 handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
   pool:{...updated,selectedSlot:0,revision:7},combatHealth:{hp:100,maxHp:100},status:"switched"});
-assert.match(get("ghostFieldStatus").textContent,/HP 100\/100/);
+assert.equal(get("ghostFieldStatus").hidden,false);
+assert.equal(get("ghostFieldHp").textContent,"HP 100/100");
 handlers.ghost_damaged({ownerId:"local",combatId:"previous",attackerId:"mob",hp:15,maxHp:100});
-assert.match(get("ghostFieldStatus").textContent,/HP 100\/100/);
+assert.equal(get("ghostFieldHp").textContent,"HP 100/100");
 handlers.ghost_damaged({ownerId:"local",combatId:"current",attackerId:"mob",hp:83,maxHp:100});
-assert.match(get("ghostFieldStatus").textContent,/HP 83\/100/);
+assert.equal(get("ghostFieldHp").textContent,"HP 83/100");
 assert.equal(get("ghostCompanionHealth").value,.83);
 handlers["ghostAttackButton:click"]();
 assert.equal(context.targetedSkill,"ghostAttack");
 assert.equal(get("ghostAttackButton")["aria-pressed"],"true");
-assert.match(get("ghostFieldStatus").textContent,/แตะเป้าหมาย/);
+assert.match(get("ghostFieldDetail").textContent,/แตะเป้าหมาย/);
+assert.match(get("ghostFieldOrderIcon").src,/target\.webp$/);
 handlers.keydown({key:"Escape"});
 assert.equal(get("ghostAttackButton")["aria-pressed"],"false");
 handlers["ghostAttackButton:click"]();
 context.orderGhostAttack("opponent");
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"attack","combatId":"current","targetId":"opponent"}']);
-assert.match(get("ghostFieldStatus").textContent,/กำลังส่ง/);
+assert.match(get("ghostFieldDetail").textContent,/กำลังส่ง/);
 const confirmed={combatId:"current",targetId:"opponent",targetName:"คู่ต่อสู้"};
 handlers.ghost_combat_state({...confirmed,combatId:"previous",status:"ordered"});
 assert.equal(get("ghostFollowButton").hidden,true);
 handlers.ghost_combat_state({...confirmed,status:"ordered"});
 assert.equal(get("ghostFollowButton").hidden,false);
-assert.match(get("ghostFieldStatus").textContent,/คู่ต่อสู้/);
+assert.match(get("ghostFieldDetail").textContent,/คู่ต่อสู้/);
 const openPool = drawerBody.children[0];
 handlers.ghost_combat_state({...confirmed,status:"hit",damage:8,hp:12});
-assert.match(get("ghostFieldStatus").textContent,/โดน 8/);
+assert.match(get("ghostFieldDetail").textContent,/โดน 8/);
 assert.ok(openPool);
 assert.equal(drawerBody.children[0],openPool,"hit updates the HUD without rebuilding the open pool");
 handlers["ghostFollowButton:click"]();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"follow","combatId":"current"}']);
 handlers.ghost_combat_state({...confirmed,status:"hit",damage:3,hp:9});
-assert.match(get("ghostFieldStatus").textContent,/กำลังเรียก/);
+assert.match(get("ghostFieldDetail").textContent,/กำลังเรียก/);
 handlers.ghost_combat_state({combatId:"current",status:"following"});
 assert.equal(get("ghostFollowButton").hidden,true);
-assert.match(get("ghostFieldStatus").textContent,/กลับมาตาม/);
+assert.match(get("ghostFieldDetail").textContent,/กลับมาตาม/);
+assert.match(get("ghostFieldOrderIcon").src,/follow\.webp$/);
 handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
   pool:{...updated,selectedSlot:0,revision:7},skills:[
     {skillId:"SK_NORMAL_01",remainingMs:0,usesLeft:28},
@@ -257,12 +261,12 @@ assert.match(skillMenu.children[1].textContent,/จู่โจมเร็ว.*
 assert.equal(skillMenu.children[1].disabled,true);
 skillMenu.children[0].onclick();
 assert.equal(skillMenu.hidden,true);
-assert.match(get("ghostFieldStatus").textContent,/พุ่งชน.*แตะเป้าหมาย/);
+assert.match(get("ghostFieldDetail").textContent,/พุ่งชน.*แตะเป้าหมาย/);
 context.orderGhostAttack("opponent");
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"skill","combatId":"current","targetId":"opponent","skillId":"SK_NORMAL_01"}']);
-assert.match(get("ghostFieldStatus").textContent,/กำลังใช้วิชาผี/);
+assert.match(get("ghostFieldDetail").textContent,/กำลังใช้วิชาผี/);
 handlers.ghost_combat_state({...confirmed,status:"skill",skillId:"SK_NORMAL_01",hit:true,damage:11,hp:40,remainingMs:1800,usesLeft:27});
-assert.match(get("ghostFieldStatus").textContent,/พุ่งชน.*คู่ต่อสู้.*11/);
+assert.match(get("ghostFieldDetail").textContent,/พุ่งชน.*คู่ต่อสู้.*11/);
 handlers["ghostSkillButton:click"]();
 assert.equal(skillMenu.children[0].disabled,true);
 handlers.keydown({key:"Escape"});

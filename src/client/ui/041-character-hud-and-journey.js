@@ -13,19 +13,13 @@
   function updateCompactCharacterHud(me) {
     const path = getBuildCatalog()?.paths?.[me?.pathId];
     hudSet($("characterClass"), "class", path?.name || path?.role || "นักผจญภัย");
-    const power = characterPowerEstimate(me);
-    hudSet($("characterPower"), "power", power === null ? "—" : power.toLocaleString("en-US"));
-    $("characterProfile").setAttribute("aria-label", "ข้อมูลตัวละคร " + $("characterName").textContent + " · " + $("characterLevel").textContent + " · " + $("characterClass").textContent + (power === null ? "" : " · พลังรบประมาณ " + power));
+    $("characterProfile").setAttribute("aria-label", "ข้อมูลตัวละคร " + $("characterName").textContent + " · เลเวล " + (Number(me?.level) || 1) + " · " + $("characterClass").textContent);
   }
   function updateCharacterHud(me) {
     const name = typeof me?.characterName === "string" && me.characterName
       ? me.characterName : "นที";
     $("characterName").textContent = name;
-    const slot = me?.persistent ? (Number(me.characterSlot) || activeCharacterSlot || 1) : null;
     if (Number.isFinite(me?.level)) { if (hudLevel && me.level > hudLevel) { triggerVoiceGuidance("levelup"); SFX("levelup", { important: true }); floatAtPlayer(localId, "🌟 LEVEL UP! 🌟", "levelup", { drift: 0, rise: 85, life: 2500, big: true }); shakeCamera(0.48, 450); auraFx(getLocalAvatar(), "levelup"); } hudLevel = me.level; }
-    $("characterLevel").textContent = (slot ? "S" + slot + " · " : "") + "LV. " + (
-      Number.isFinite(me?.level) ? me.level : 1
-    );
     $("characterProfile").title = me?.persistent
       ? "แตะดูตัวละครถาวรและเปลี่ยนชื่อ" : "แตะดูข้อมูลตัวละคร";
   }
@@ -36,6 +30,8 @@
   const pathSeal = path => ({phutthaisawan:"twin", muay_boran:"fist", blade:"atk", sentinel:"def", seer:"spirit", mender:"heal"})[path] || "status";
   // Only internal seal ids are passed here; server-provided names are written as text.
   const seal = id => '<svg class="info-seal" aria-hidden="true" focusable="false"><use href="#seal-' + id + '"></use></svg>';
+  const infoIcon = id => '<img class="info-icon" src="./assets/ui/info/' + id + '.webp" alt="" width="24" height="24" draggable="false">';
+  const profilePortrait = '<svg class="portrait-figure" viewBox="0 0 48 48" aria-hidden="true" focusable="false"><use href="#hudPortraitFigure"></use></svg>';
   function updateMeterValue(el, value, max, description) {
     const attrs = {"aria-valuemin":"0","aria-valuemax":String(max),"aria-valuenow":String(Math.max(0,Math.min(max,value))),"aria-valuetext":description};
     for (const [name,v] of Object.entries(attrs)) if (el.getAttribute(name) !== v) el.setAttribute(name,v);
@@ -55,7 +51,7 @@
       }
       const m = st?.monsters?.get?.(id);
       if (!m || m.mapId !== activeMapId) return null;
-      return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", x: m.x, z: m.z };
+      return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", boss: m.tier === "boss", x: m.x, z: m.z };
     }
     if (!fieldPointVisible(enemy.position) || (!enemy.isEnabled() && now - demoLastHitAt > 2500)) return null;
     const near = hero && Math.hypot(hero.x - enemy.position.x, hero.z - enemy.position.z) < 9;

@@ -18,28 +18,35 @@
 .cp-hero { background:radial-gradient(ellipse at 9% 40%,#574229 0%,#25352d 43%,#14231e 85%); padding:12px 14px; }
 .cp-ring { width:62px; height:62px; }
 .cp-glyph { width:52px; height:52px; }
-.cp-glyph .info-seal { width:33px; height:33px; }
-.cp-bars { padding:6px 10px; margin:8px 0; gap:4px; border-inline-start:2px solid var(--field-line); }
-.cp-bar { position:relative; grid-template-columns:20px minmax(0,1fr) minmax(69px,auto); gap:8px; min-height:20px; }
-.cp-bar .info-seal { width:18px; height:18px; }
+.info-icon { display:block; object-fit:contain; flex:none; pointer-events:none; }
+.info-medallion { position:relative; isolation:isolate; }
+.info-medallion::after { content:""; position:absolute; z-index:1; inset:-6px; background:url("./assets/ui/info/medallion.webp") center/contain no-repeat; pointer-events:none; }
+.info-medallion .portrait-figure { position:absolute; inset:8%; width:84%; height:84%; }
+.cp-glyph .info-seal, .info-medallion .doll-portrait-seal { position:absolute; z-index:2; top:-2px; left:-2px; width:20px; height:20px; padding:3px; background:#253e32; border:1px solid #c8a468; border-radius:50%; }
+.cp-ring b,.doll-stage .doll-level-pill { z-index:2; }
+.cp-power { display:flex; gap:5px; align-items:center; color:#f6db9e; }
+.cp-power .info-icon,.doll-cp .info-icon { width:14px; height:14px; }
+.cp-bars { padding:8px 10px; margin:10px 0; gap:5px; border:1px solid var(--field-line); border-radius:10px; background:#10241f; }
+.cp-bar { position:relative; grid-template-columns:20px 38px minmax(0,1fr) minmax(60px,auto); gap:6px; min-height:21px; }
+.cp-bar[hidden] { display:none; }
+.cp-bar .info-icon { width:18px; height:18px; }
+.cp-bar.mp i { background:linear-gradient(90deg,#2658a5,#70caff); }
+.cp-bar.st i { background:linear-gradient(90deg,#996524,#eabf6c); }
 .cp-bar strong { font-variant-numeric:tabular-nums; text-align:right; }
 .cp-bar div { height:6px; }
-.cp-page:not(.cp-named) :is(.cp-icon-name,.cp-meter-name) { position:absolute; width:1px; height:1px; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
-.cp-named .cp-bar { grid-template-columns:20px auto minmax(0,1fr) minmax(69px,auto); }
 .cp-meter-name { font-size:11px; }
 .cp-section-head { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .cp-section-head h3 { margin:0; font-size:14px; }
-.cp-section-head button { min-height:44px; padding:0 8px; background:transparent; border:0; color:#e8cb99; font-size:12px; }
-.cp-section-head button[aria-pressed=true] { text-decoration:underline; text-underline-offset:4px; }
-.cp-sigils { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
-.cp-sigil { --sigil:#e2bc80; position:relative; min-width:0; min-height:60px; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:3px 8px; padding:8px 5px; background:linear-gradient(155deg,#263932,#13221f); color:var(--sigil); border:1px solid #9a885c62; border-radius:8px; }
+.cp-sigils { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:7px; margin-block:7px 9px; }
+.cp-sigil { --sigil:#e2bc80; position:relative; min-width:0; min-height:56px; display:grid; grid-template-columns:24px minmax(0,1fr); grid-template-rows:auto auto; align-items:center; column-gap:7px; padding:6px 8px; text-align:start; background:linear-gradient(155deg,#263932,#13221f); color:var(--sigil); border:1px solid #9a885c62; border-radius:8px; }
 .cp-sigil[data-stat=hp] { --sigil:#ffa59a; }
 .cp-sigil[data-stat=stamina] { --sigil:#8fd6f4; }
 .cp-sigil[data-stat=magicAtk] { --sigil:#d8b2ff; }
 .cp-sigil[data-stat=magicDef] { --sigil:#a3dfd3; }
-.cp-sigil .info-seal { width:24px; height:24px; }
+.cp-sigil .info-icon { grid-row:1 / 3; width:24px; height:24px; }
 .cp-sigil strong { color:#fff1d4; font-size:clamp(16px,3.7vw,20px); font-variant-numeric:tabular-nums; line-height:1.2; }
-.cp-icon-name { flex-basis:100%; font-size:11px; line-height:1.3; }
+.cp-icon-name { font-size:11px; line-height:1.3; overflow-wrap:anywhere; }
+.cp-sigil:focus-visible { outline:2px solid #f3c783; outline-offset:2px; }
 .cp-sigil:hover,.cp-sigil[aria-expanded=true] { border-color:var(--sigil); background:#32483b; }
 .cp-sigil[aria-expanded=true]::after { content:""; position:absolute; bottom:-1px; width:25%; height:3px; background:var(--sigil); border-radius:3px; }
 .cp-inspect { margin-top:7px; padding:8px 12px; border-inline-start:2px solid var(--field-gold); background:#20322b; font-size:13px; }

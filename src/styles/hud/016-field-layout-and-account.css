@@ -15,6 +15,9 @@
 .hud-journal .quest .quest-content { min-width:0; flex:1; }
 .hud-journal .quest .quest-content > span { display:none; }
 .hud-journal .quest strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.hud-journal .quest .quest-icon { width:24px; height:24px; }
+.hud-journal .quest .quest-progress { font-size:10px; color:#c4d8c9; }
+.hud-journal .quest .quest-progress[hidden],.hud-journal .quest-content:has(#questNavigationStatus:not([hidden])) #questProgress { display:none; }
 .hud-journal .party-frames { max-height:22dvh; overflow:auto; pointer-events:auto; }
 .location-area { width:min(32vw,150px); min-width:0; display:grid; grid-template-columns:minmax(0,1fr); justify-items:end; gap:5px; }
 .location-area .mini-map { width:clamp(60px,9vw,88px); height:clamp(60px,9vw,88px); }

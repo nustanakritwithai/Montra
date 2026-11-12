@@ -385,8 +385,11 @@
     const active=Boolean(questNavigation),war=ui.quest.dataset?.warGuide==="true";
     ui.quest.setAttribute("aria-pressed",String(active));
     ui.quest.setAttribute("aria-label",war?"ดูเป้าหมายศึกบนแผนที่":active?"หยุดเดินอัตโนมัติไปภารกิจ":"เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ");
-    const label=$("questNavigationStatus");if(label)label.textContent=war?"แตะเพื่อดูแผนที่สนาม":
-      message || (active?"กำลังเดิน · แตะเพื่อหยุด":"แตะเพื่อเดิน · รายละเอียดในเมนูภารกิจ");
+    const label=$("questNavigationStatus");
+    if(label){
+      label.textContent=message || (active?"กำลังเดิน · แตะเพื่อหยุด":"");
+      label.hidden=!label.textContent;
+    }
   }
   function cancelQuestNavigation(message="", stop=true) {
     const previous=questNavigation;if(!previous)return;
@@ -396,7 +399,7 @@
       const me=ownServerCharacter();
       if(me?.alive && me.mapId===previous.mapId && questNavigationPoint(me))try{room.send("move",{x:me.x,z:me.z});}catch{}
     }else if(stop && mode==="demo")demoDest=null;
-    marker.setEnabled(false);syncQuestNavigationUi(message);
+    marker.setEnabled(false);syncQuestNavigationUi();
     if(message)toast(message);
   }
   function startQuestNavigation() {

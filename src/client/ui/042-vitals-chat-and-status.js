@@ -388,11 +388,12 @@
     water_submerged: ["!", "หายใจไม่ออก · ขึ้นฝั่ง", "bad"], water_drowning: ["!", "จมน้ำ · รีบขึ้นฝั่ง", "bad"],
     held: ["⛓", "ถูกจับล็อก", "bad"], down: ["✝", "หมดสติ", "bad"], cloak: ["◐", "อำพราง", "good"], opening: ["➽", "เปิดฉาก", "good"], counter: ["↺", "สวนกลับได้", "good"], mark: ["✶", "รอยอาคม", "good"],
   };
+  const WATER_STATUS_ART = {water_wading:"shallow",water_deep:"deep"};
   const fxInfo = id => STATUS_FX[id] || [id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "☠" : "✧", "ผลวิชา", id && /curse|poison|bleed|stun|slow|weak|break/i.test(id) ? "bad" : "good"];
   // Effects on the local player: server status (polled while live) plus states the client already tracks.
   function selfEffects(me) {
     const now = performance.now(), out = [];
-    if (me?.alive && STATUS_FX["water_" + me.waterState]) out.push(["water_" + me.waterState, null]);
+    if (me?.alive && WATER_STATUS_ART["water_" + me.waterState]) out.push(["water_" + me.waterState, null]);
     if (mode === "live" && me && room?.state?.progressionAvailable === true && now - lastCharacterStatusRequest >= 3000) { lastCharacterStatusRequest = now; try { room.send("get_character_status", {}); } catch {} }
     for (const e of characterStatus?.effects || []) {
       if (typeof e?.id !== "string" || !Number.isFinite(e.remainingMs)) continue;
@@ -415,7 +416,8 @@
     return out;
   }
   const fxBoxesHtml = (list, max) => list.slice(0, max).map(([id, sec]) => { const [g, n, k] = fxInfo(id);
-    return `<span class="fx-box ${k}" title="${sgEsc(n)}${sec ? " · " + sec + " วินาที" : ""}"><i>${g}</i>${sec ? `<b>${sec > 99 ? "99+" : sec}</b>` : ""}</span>`; }).join("") + (list.length > max ? `<span class="fx-box more">+${list.length - max}</span>` : "");
+    const art = WATER_STATUS_ART[id];
+    return `<span class="fx-box ${k}" title="${sgEsc(n)}${sec ? " · " + sec + " วินาที" : ""}">${art ? infoIcon(art) : `<i>${g}</i>`}${sec ? `<b>${sec > 99 ? "99+" : sec}</b>` : ""}</span>`; }).join("") + (list.length > max ? `<span class="fx-box more">+${list.length - max}</span>` : "");
   const selfStatusBox = (() => { const card = document.querySelector(".hud-journal .identity"); if (!card) return null;
     const el = document.createElement("div"); el.className = "fx-row self-fx"; el.setAttribute("aria-label", "สถานะที่ติดอยู่"); card.after(el); return el; })();
   function updateSelfStatus(me) {
@@ -431,6 +433,8 @@
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
     const waterState = me?.alive ? me.waterState : "";
     const underwater = waterState === "submerged" || waterState === "drowning";
+    hudSet($("waterHudWarning"), "waterWarnVisible", !underwater, "hidden");
+    hudSet($("waterHudText"), "waterWarnText", underwater ? "จมน้ำ · ขึ้นฝั่ง" : "");
     if (underwater && !wasUnderwater) toast("หายใจไม่ออก · ขึ้นฝั่ง");
     wasUnderwater = underwater;
     chatBox?.potion.render(me);
@@ -476,11 +480,11 @@
     }
     updateCompactCharacterHud(me);
     // Target frame: only while there is a target.
-    const tg = hudCurrentTarget(now);
+    const tg = selectedForestTarget ? hudCurrentTarget(now) : null;
     syncGhostCaptureTarget();
     hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
     if (tg) {
-      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.elite ? " · ระดับสูง" : ""));
+      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.boss ? " · บอส" : tg.elite ? " · ชั้นสูง" : ""));
       hudSet(ui.monsterBar, "tgw", tg.alive ? pctOf(tg.hp, tg.maxHp) : "0%", "width");
       hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
       ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
@@ -509,6 +513,8 @@
       hudSet($("questProgress"),"qp",gd.progress || "");
       if(drawerActive==="quest" && $("huntStep"))$("huntStep").textContent=gd.step+" · "+(gd.progress || "");
     }
+    const progress = $("questProgress");
+    hudSet(progress, "questProgressEmpty", !progress.textContent, "hidden");
     const pointer=$("questPointer"),to=gd?.to;
     if(pointer && to && hero && Number.isFinite(to.x)){
       const dist=Math.hypot(to.x-hero.x,to.z-hero.z),radius=war?.radius || 3;
