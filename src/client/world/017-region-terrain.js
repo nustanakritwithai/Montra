@@ -157,9 +157,12 @@
     const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
     return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
   }
+  function waterAreaContains(area,x,z){
+    return x>=area.x && x<=area.x+area.width && z>=area.z && z<=area.z+area.length;
+  }
   function worldWaterDepth(map,x,z){
     if(map?.waterLevel===undefined || !map.terrain ||
-        !map.water?.some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length))return 0;
+        !map.water?.some(w=>waterAreaContains(w,x,z)))return 0;
     const bed=terrainHeight(map.terrain,x,z);
     return bed<map.waterLevel-.05 ? map.waterLevel-bed : 0;
   }
@@ -170,7 +173,7 @@
     for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
       const x=t.xs[i],z=t.zs[j],nx=t.xs[i+1],nz=t.zs[j+1];
       const cx=(x+nx)/2,cz=(z+nz)/2;
-      if(!map.water.some(w=>cx>=w.x && cx<=w.x+w.width && cz>=w.z && cz<=w.z+w.length))continue;
+      if(!map.water.some(w=>waterAreaContains(w,cx,cz)))continue;
       const a=[x,z,t.heights[j][i]],b=[nx,z,t.heights[j][i+1]];
       const c=[x,nz,t.heights[j+1][i]],d=[nx,nz,t.heights[j+1][i+1]];
       for(const face of [[a,b,d],[a,d,c]]){
@@ -191,20 +194,68 @@
     waterPolygons.set(map,polygons);
     return polygons;
   }
+  function connectedRiverAreas(map){
+    const areas=map.water??[];
+    const river=new Set(areas.filter(area=>map.boatLanes?.some(([from,to])=>
+      waterAreaContains(area,(from.x+to.x)/2,(from.z+to.z)/2))));
+    // Follow adjoining water areas from the channels into connected bends and harbors.
+    for(const area of river){
+      for(const other of areas){
+        if(river.has(other))continue;
+        const x=Math.min(area.x+area.width,other.x+other.width)-Math.max(area.x,other.x);
+        const z=Math.min(area.z+area.length,other.z+other.length)-Math.max(area.z,other.z);
+        if(x>=0 && z>=0 && (x>0 || z>0))river.add(other);
+      }
+    }
+    return [...river];
+  }
+  function marshRiverBlend(lanes,x,z){
+    let distance=Infinity;
+    for(const [from,to] of lanes){
+      const dx=to.x-from.x,dz=to.z-from.z,lengthSquared=dx*dx+dz*dz;
+      if(!lengthSquared)continue;
+      const t=Math.max(0,Math.min(1,((x-from.x)*dx+(z-from.z)*dz)/lengthSquared));
+      distance=Math.min(distance,Math.hypot(x-from.x-t*dx,z-from.z-t*dz));
+    }
+    // Blend the dredged channel into the surrounding marsh across its banks.
+    const blend=Math.max(0,Math.min(1,(11-distance)/7));
+    return blend*blend*(3-2*blend);
+  }
   function buildWaterSurface(map){
     const positions=[],normals=[],uvs=[],indices=[],colors=[];
+    const riverAreas=connectedRiverAreas(map),river=riverAreas.length>0,inMarsh=map.id==="drowned_marsh";
+    const shallow=B.Color3.FromHexString("#8cddf2"),deep=B.Color3.FromHexString("#3b96cd");
+    const marsh=B.Color3.FromHexString("#3c7a74"),tint=new B.Color3();
     for(const polygon of waterSurfacePolygons(map)){
       const start=positions.length/3;
       for(const [x,z,bed] of polygon){
         positions.push(x,map.waterLevel,z);normals.push(0,1,0);uvs.push(x/8,z/8);
-        colors.push(1,1,1,Math.min(1,Math.max(0,(map.waterLevel-.05-bed)*5)));
+        const depth=Math.max(0,map.waterLevel-.05-bed);
+        const marshAlpha=Math.min(1,depth*5);
+        if(river){
+          let blue=0;
+          if(riverAreas.some(area=>waterAreaContains(area,x,z)))blue=inMarsh?marshRiverBlend(map.boatLanes,x,z):1;
+          const depthTint=Math.min(1,depth/1.2);
+          const riverAlpha=Math.min(1,depth/.32)*(.35+.26*depthTint);
+          B.Color3.LerpToRef(shallow,deep,depthTint,tint);
+          B.Color3.LerpToRef(marsh,tint,blue,tint);
+          colors.push(tint.r,tint.g,tint.b,.72*marshAlpha*(1-blue)+riverAlpha*blue);
+        }else{
+          colors.push(1,1,1,marshAlpha);
+        }
       }
       for(let i=1;i<polygon.length-1;i++)indices.push(start,start+i,start+i+1);
     }
     const mesh=new B.Mesh(map.id+" water surface",scene),data=new B.VertexData();
     Object.assign(data,{positions,normals,uvs,indices,colors});data.applyToMesh(mesh);
-    const material=regionWater("drowned_marsh").clone(map.id+" marsh water");
-    material.alpha=.72;
+    const material=river?new B.StandardMaterial(map.id+" river water",scene):regionWater("drowned_marsh").clone(map.id+" marsh water");
+    if(river){
+      material.disableLighting=true;
+      material.emissiveColor=new B.Color3(.82,.82,.82);
+      material.transparencyMode=B.Material.MATERIAL_ALPHABLEND;
+    }else{
+      material.alpha=.72;
+    }
     material.emissiveTexture=riverRipple;
     mesh.parent=expansionRoot;mesh.material=material;mesh.hasVertexAlpha=true;
     mesh.isPickable=false;mesh.metadata={noShadow:true};
