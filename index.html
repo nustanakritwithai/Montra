@@ -91,6 +91,7 @@
     <button id="harvestButton" class="warp-button harvest-action" type="button" aria-label="เก็บวัตถุดิบ" hidden>
       <img id="harvestIcon" width="24" height="24" alt="" draggable="false" />
     </button>
+    <button id="ghostPotButton" class="warp-button ghost-pot-action" type="button" aria-label="จับมอนสเตอร์" aria-pressed="false" hidden><img src="./assets/ui/ghost-capture-jar.webp" alt="" width="26" height="26" draggable="false"><span id="ghostPotActionLabel" aria-hidden="true">จับ</span></button>
     <button id="fishButton" class="warp-button field-action-icon" type="button" aria-label="ตกปลา" title="ตกปลา" data-fishing-action="cast" hidden><img src="./assets/ui/fishing-rod.webp" width="28" height="28" alt="" draggable="false"></button>
     <button id="siegeGateButton" class="warp-button" type="button" hidden></button>
     <button id="climb" class="warp-button climb-context" type="button" title="ปีนหรือไต่ลงกำแพง" hidden><span aria-hidden="true">⇧</span> <span>ปีน</span></button>
@@ -102,16 +103,18 @@
       <div id="occultStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="bladeStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
       <div id="sentinelStatus" class="sword-status" role="status" aria-live="polite" hidden></div>
-      <div id="ghostFieldActions" class="ghost-field-actions" role="group" aria-label="หม้ออาคม" hidden>
+      <div id="ghostFieldActions" class="ghost-field-actions" role="group" aria-label="คู่หูมอนสเตอร์" hidden>
+        <div id="ghostTeamMenu" class="ghost-team-menu" role="group" aria-label="ทีมคู่หู" hidden></div>
+        <div id="ghostSkillMenu" class="ghost-field-skills" role="group" aria-label="สกิลคู่หู" hidden></div>
+        <button id="ghostCatchReceipt" class="orb-action ghost-catch-receipt" type="button" hidden>จัดเข้าทีม</button>
         <span id="ghostFieldStatus" class="ghost-field-status" role="status" hidden></span>
         <div class="ghost-field-buttons">
-          <button id="ghostPotButton" class="orb-action ghost-pot-action" type="button" aria-label="จับผีใส่หม้อ" aria-pressed="false" hidden><img src="./assets/ui/ghost-capture-jar.webp" alt="" width="28" height="28" draggable="false"><span id="ghostPotActionLabel" aria-hidden="true">จับ</span></button>
-          <button id="ghostSummonButton" class="orb-action" type="button" hidden>เรียก</button>
-          <button id="ghostAttackButton" class="orb-action" type="button" aria-label="เลือกเป้าให้ผีโจมตี" aria-pressed="false" hidden>สั่งผี</button>
-          <button id="ghostFollowButton" class="orb-action" type="button" aria-label="หยุดโจมตีและให้ผีตาม" hidden>ให้ตาม</button>
-          <button id="ghostSkillButton" class="orb-action" type="button" aria-expanded="false" aria-controls="ghostSkillMenu" hidden>วิชาผี</button>
+          <button id="ghostFollowButton" class="orb-action ghost-icon-action" type="button" aria-label="หยุดโจมตีและให้คู่หูตาม" title="ให้ตาม" hidden><span aria-hidden="true">↩</span><small>ตาม</small></button>
+          <button id="ghostSkillButton" class="orb-action ghost-icon-action" type="button" aria-expanded="false" aria-controls="ghostSkillMenu" aria-label="สกิลคู่หู" title="สกิลคู่หู" hidden><span aria-hidden="true">✦</span><small id="ghostSkillActionLabel">สกิล</small></button>
+          <button id="ghostAttackButton" class="orb-action ghost-icon-action" type="button" aria-label="เลือกเป้าให้คู่หูโจมตี" aria-pressed="false" hidden><span aria-hidden="true">⚔</span><small id="ghostAttackActionLabel">โจมตี</small></button>
+          <button id="ghostTeamButton" class="orb-action ghost-icon-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" aria-label="เลือกคู่หูจากทีม" title="ทีมคู่หู" hidden><span aria-hidden="true">▦</span><small>ทีม</small></button>
+          <button id="ghostSummonButton" class="orb-action ghost-companion-action" type="button" aria-controls="ghostTeamMenu" aria-expanded="false" hidden><span id="ghostCompanionPortrait" aria-hidden="true">👻</span><small id="ghostCompanionAction">เรียก</small><progress id="ghostCompanionHealth" aria-label="พลังชีวิตคู่หู" max="1" value="0" hidden></progress></button>
         </div>
-        <div id="ghostSkillMenu" class="ghost-field-skills" role="group" aria-label="วิชาของผีที่เรียก" hidden></div>
       </div>
       <div class="skill-bar learned-bar" aria-label="วิชาที่เรียนและจัดไว้">
       <div id="swordHotbar" class="sword-hotbar" aria-label="ช่องลัดวิชาดาบ" hidden></div>

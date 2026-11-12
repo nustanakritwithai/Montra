@@ -467,6 +467,7 @@
     updateCompactCharacterHud(me);
     // Target frame: only while there is a target.
     const tg = hudCurrentTarget(now);
+    syncGhostCaptureTarget();
     hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
     if (tg) {
       hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.elite ? " · ระดับสูง" : ""));

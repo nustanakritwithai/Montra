@@ -179,8 +179,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "input/058-field-control-bindings.js",
-    "bytes": 27572,
-    "sha256": "006fb55353fffade29c95f3ad134874a0cded132302c258933ba5ff22cb04634"
+    "bytes": 35763,
+    "sha256": "4a1263cce11dee705ba85d6706bece97022618a5b08f35e2c46d17a4b94fd864"
   },
   {
     "path": "combat/008-weapon-party-boss-feedback.js",
@@ -239,8 +239,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/042-vitals-chat-and-status.js",
-    "bytes": 41481,
-    "sha256": "81d922a607cb892c5dfdda6c9bd53b020698c8c3885714d078707ce98b5d9aef"
+    "bytes": 41511,
+    "sha256": "85d8d06c4062bb3e7332dac099937a520c98498630e74072369211c3fe18b3d6"
   },
   {
     "path": "ui/056-party-guild-and-rebirth.js",
@@ -284,8 +284,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2107533);
-  assert.equal(hash(bytes), 'b79fea33c5d2275036921a3e51f01fe893b445d6e8f549537691f9e7a707cdbb');
+  assert.equal(bytes.length, 2115754);
+  assert.equal(hash(bytes), 'd1d6cefee2698e9b3619aca50cb512081514261c0a29d80d0e62c1c08eea293f');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

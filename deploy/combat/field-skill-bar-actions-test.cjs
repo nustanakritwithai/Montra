@@ -8,7 +8,7 @@ const barStart = html.indexOf('class="skill-bar learned-bar"');
 const bar = html.slice(barStart, html.indexOf('id="fishingPanel"'));
 const ghostRow = html.slice(html.indexOf('id="ghostFieldActions"'), barStart);
 assert.match(bar, /<button id="fly" class="orb-action[^"]*"[^>]* hidden>/);
-for (const id of ['ghostPotButton', 'ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton']) {
+for (const id of ['ghostSummonButton', 'ghostAttackButton', 'ghostFollowButton', 'ghostSkillButton', 'ghostTeamButton']) {
   assert.equal(html.split(`id="${id}"`).length, 2, `${id} has exactly one button`);
   assert.match(ghostRow, new RegExp(`<button id="${id}" class="orb-action[^"]*"[^>]* hidden>`));
   assert.doesNotMatch(bar, new RegExp(`id="${id}"`));
@@ -17,7 +17,9 @@ const characterMenu = html.slice(html.indexOf('id="menu-character"'), html.index
 assert.equal(html.split('id="ghostPoolButton"').length, 2);
 assert.match(characterMenu, /<button id="ghostPoolButton"[^>]* hidden>.*จัดการมอนสเตอร์/);
 assert.doesNotMatch(ghostRow, /id="ghostPoolButton"/);
-assert.match(ghostRow, /<button id="ghostPotButton"[^>]*><img src="\.\/assets\/ui\/ghost-capture-jar\.webp" alt=""/);
+assert.equal(html.split('id="ghostPotButton"').length, 2);
+assert.doesNotMatch(ghostRow, /id="ghostPotButton"/);
+assert.match(html.slice(html.indexOf('class="field-prompts"'),html.indexOf('id="ghostFieldActions"')), /<button id="ghostPotButton"[^>]*><img src="\.\/assets\/ui\/ghost-capture-jar\.webp" alt=""/);
 const jarArtwork = readFileSync('assets/ui/ghost-capture-jar.webp');
 assert.equal(jarArtwork.toString('ascii', 0, 4), 'RIFF');
 assert.equal(jarArtwork.toString('ascii', 8, 12), 'WEBP');
@@ -66,11 +68,14 @@ const joined = {
   onMessage: (type, listener) => { handlers[type] = listener; },
   onStateChange: listener => { handlers.state = listener; },
 };
+const monster={alive:true,hp:1,mapId:"forbidden_forest",tier:"normal",level:5,x:3,y:0,z:0,displayName:"ผีป่า"};
+const owner={alive:true,mapId:"forbidden_forest",x:0,y:0,z:0};
 const context = vm.createContext({
   $: get, document, ui:{drawerBody}, drawerActive:null,
   openDrawer(name){context.drawerActive=name;},closeDrawer(){context.drawerActive=null;},
   setTimeout:()=>1,clearTimeout(){},
   mode: 'live', room: joined, joined, localId:"local", summonAvatars:new Map(), selectedForestTarget: null, targetedSkill:null,
+  activeMapId:"forbidden_forest", monsterForSpell:id=>id==="forest-ghost"?monster:null, ownServerCharacter:()=>owner,
   setTargetedSkill(skill){context.targetedSkill=skill;context.syncGhostPoolUi();},
   hudTarget: { until: 0 }, performance: { now: () => 100 },
   toast: notice => notices.push(notice), syncState() {},
@@ -86,15 +91,28 @@ assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"read"}']);
 assert.equal(sent.length, 0);
 
 handlers.ghost_pot_state({ active: false, ghost: null });
-assert.equal(button.hidden, false);
-assert.equal(attributes['aria-label'], 'จับผีใส่หม้อ');
+assert.equal(button.hidden, true);
 assert.equal(captureLabel.textContent, 'จับ');
 click();
 assert.equal(sent.length, 0);
-assert.equal(notices.length, 1);
 context.selectedForestTarget = 'forest-ghost';
+context.syncGhostCaptureTarget();
+assert.equal(button.hidden, false);
+assert.equal(attributes['aria-label'], 'จับ ผีป่า');
+monster.x=9;
+context.syncGhostCaptureTarget();
+assert.equal(button.hidden,true);
+click();
+assert.equal(sent.length,0);
+monster.x=3;
+monster.tier="elite";
+context.syncGhostCaptureTarget();
+assert.equal(button.hidden,true);
+monster.tier="normal";
+context.syncGhostCaptureTarget();
 click();
 assert.deepEqual(sent.shift(), ['ghost_pot', '{"action":"capture","targetId":"forest-ghost"}']);
+context.selectedForestTarget=null;
 
 handlers.ghost_pot_state({ active: false, ghost: { name: 'ผีป่า' } });
 assert.equal(attributes['aria-label'], 'เรียกผีป่า');
@@ -121,17 +139,18 @@ const ghosts=Array.from({length:8},(_,i)=>({instanceId:"ghost-"+i,name:"ผี "
 const pool={collection:ghosts,slots:[null,"ghost-1","ghost-2"],selectedSlot:1,revision:5};
 handlers.ghost_pot_state({active:true,ghost:ghosts[1],activeInstanceId:"ghost-1",pool});
 assert.equal(get("ghostPoolButton").hidden,false);
-assert.equal(get("ghostSummonButton").textContent,"เก็บ");
-assert.equal(button.disabled,true);
+assert.equal(get("ghostCompanionAction").textContent,"คู่หู");
+assert.equal(button.hidden,true);
 handlers["ghostPoolButton:click"]();
 assert.equal(context.drawerActive, "ghostPool");
 function find(key, root=drawerBody) {
   if (root.dataset.ghostPoolKey===key) return root;
   return root.children.map(child=>find(key,child)).find(Boolean);
 }
-assert.equal(find("tab-carry").textContent,"พูลพก 6/6");
+assert.equal(find("tab-carry").textContent,"ทีม 2/3");
 assert.equal(find("slot-0").disabled,true);
-assert.ok(find("ghost-ghost-0"));
+assert.ok(find("ghost-ghost-1"));
+assert.equal(find("ghost-ghost-0"),undefined);
 assert.equal(find("ghost-ghost-7"),undefined);
 find("tab-all").onclick();
 assert.ok(find("ghost-ghost-7"));
@@ -145,8 +164,7 @@ find("slot-0").onclick();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"select","slot":0,"revision":6}']);
 handlers.ghost_pot_state({active:true,ghost:ghosts[1],activeInstanceId:"ghost-1",
   pool:{...updated,selectedSlot:0,revision:7},status:"selected"});
-assert.equal(get("ghostSummonButton").textContent,"สลับ");
-handlers["ghostSummonButton:click"]();
+find("summon").onclick();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
 assert.equal(get("ghostAttackButton").hidden,true,"legacy server has no combat control");
 handlers.ghost_pot_state({active:true,ghost:ghosts[7],activeInstanceId:"ghost-7",combatId:"current",
@@ -156,6 +174,7 @@ handlers.ghost_damaged({ownerId:"local",combatId:"previous",attackerId:"mob",hp:
 assert.match(get("ghostFieldStatus").textContent,/HP 100\/100/);
 handlers.ghost_damaged({ownerId:"local",combatId:"current",attackerId:"mob",hp:83,maxHp:100});
 assert.match(get("ghostFieldStatus").textContent,/HP 83\/100/);
+assert.equal(get("ghostCompanionHealth").value,.83);
 handlers["ghostAttackButton:click"]();
 assert.equal(context.targetedSkill,"ghostAttack");
 assert.equal(get("ghostAttackButton")["aria-pressed"],"true");
@@ -221,4 +240,44 @@ handlers.ghost_pot_state({active:false,pool:warPool,captureAvailable:false,comba
 assert.equal(get("ghostSummonButton").hidden,true);
 assert.equal(get("ghostPoolButton").hidden,false);
 assert.equal(notices.at(-1),"สงครามจบแล้ว ผีกลับเข้าหม้อ");
-console.log("PASS legacy controls, ghost pool, summon/switch, aim, confirmed hits, follow and legacy skills");
+
+const quickPool={...updated,selectedSlot:0,revision:8};
+handlers.ghost_pot_state({active:false,pool:quickPool,combatId:null,status:"ready"});
+handlers["ghostSummonButton:click"]();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"summon"}']);
+const current={active:true,activeInstanceId:"ghost-7",combatId:"quick",pool:quickPool,combatHealth:{hp:40,maxHp:50}};
+handlers.ghost_pot_state({...current,status:"summoned"});
+handlers["ghostSummonButton:click"]();
+const teamMenu=get("ghostTeamMenu");
+assert.equal(teamMenu.hidden,false);
+assert.equal(teamMenu.children[0].children[0].disabled,true,"cannot switch to the active creature");
+teamMenu.children[0].children[2].onclick();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"select","slot":2,"revision":8}']);
+assert.equal(sent.length,0,"switch waits for acknowledged selection");
+handlers.ghost_pot_state({...current,status:"stale",pool:{...quickPool,revision:9}});
+assert.equal(sent.length,0,"stale receipt never switches");
+handlers["ghostSummonButton:click"]();
+teamMenu.children[0].children[2].onclick();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"select","slot":2,"revision":9}']);
+handlers.ghost_pot_state({...current,status:"selected",pool:{...quickPool,selectedSlot:2,revision:10}});
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
+handlers.ghost_pot_state({...current,activeInstanceId:"ghost-2",combatId:"switched",status:"switched",
+  pool:{...quickPool,selectedSlot:2,revision:10},skills:[{skillId:"SK_NORMAL_01",remainingMs:0,usesLeft:3}]});
+context.selectedForestTarget="forest-ghost";
+handlers["ghostAttackButton:click"]();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"attack","combatId":"switched","targetId":"forest-ghost"}']);
+assert.equal(context.targetedSkill,null);
+handlers.ghost_combat_state({combatId:"switched",targetId:"forest-ghost",targetName:"ผีป่า",status:"ordered"});
+handlers["ghostSkillButton:click"]();
+assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"skill","combatId":"switched","targetId":"forest-ghost","skillId":"SK_NORMAL_01"}']);
+handlers.ghost_combat_state({combatId:"switched",targetId:"forest-ghost",targetName:"ผีป่า",status:"skill",skillId:"SK_NORMAL_01",remainingMs:1800,usesLeft:2});
+assert.equal(get("ghostSkillButton").disabled,true);
+assert.equal(get("ghostSkillActionLabel").textContent,"2 วิ");
+
+handlers.ghost_pot_state({active:false,pool:quickPool,combatId:null,status:"captured",capturedInstanceId:"ghost-5"});
+assert.equal(get("ghostCatchReceipt").hidden,false);
+handlers["ghostCatchReceipt:click"]();
+assert.equal(find("tab-all")["aria-pressed"],"true");
+assert.equal(find("ghost-ghost-5")["aria-pressed"],"true");
+assert.equal(get("ghostCatchReceipt").hidden,true);
+console.log("PASS legacy controls, contextual capture, one-tap summon and attack, confirmed quick switch, skill cooldown, recall and team placement");
