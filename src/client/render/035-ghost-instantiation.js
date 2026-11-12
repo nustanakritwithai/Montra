@@ -349,19 +349,20 @@
     // Ghosts that burn or shine light the ground around them.
     const GHOST_LIGHT = { krasue: ["#ff6a3a", 1.2], phong: ["#9dff7a", 1.1], waterspirit: ["#7ff5e0", .9], moonspirit: ["#c9d2ff", 1], krahang: ["#ff9a4a", .9], bell: ["#ffc070", .7] };
     if (GHOST_LIGHT[design.kind]) addMovingLight(root, ...GHOST_LIGHT[design.kind], .4);
-    // Humanoid ghosts wait for the shared body; primitive rigs are the fallback.
+    // Starter ghosts and bosses are visible while the shared body loads.
     let update = () => {};
     const ghostState = { get update() { return update; } };
     const fallback = GHOST_KINDS[design.kind] || GHOST_KINDS[design.fallback || "corpse"];
-    const visualRoot = design.boss ? new B.TransformNode("boss model", scene) : rig;
-    if (design.boss) visualRoot.parent = rig;
+    const showFallback = design.boss || monster.mapId === "ritual_village";
+    const visualRoot = showFallback ? new B.TransformNode(design.boss ? "boss model" : "village ghost model", scene) : rig;
+    if (showFallback) visualRoot.parent = rig;
     const modelMaterials = new Set();
     const releaseModelMaterials = () => {
       // mergedSegment owns these wrappers, but their submaterials are shared.
       for (const material of modelMaterials) material.dispose(false, false, false);
       modelMaterials.clear();
     };
-    if (design.boss || design.himmapan) root.onDisposeObservable.add(releaseModelMaterials);
+    if (showFallback || design.himmapan) root.onDisposeObservable.add(releaseModelMaterials);
     if (design.himmapan) root.onDisposeObservable.add(() => {
       root.metadata.specialWarning?.dispose();
       root.metadata.specialWarningFill?.dispose(false, true);
@@ -369,7 +370,7 @@
       root.metadata.specialCounter?.material.dispose();
     });
     const build = () => {
-      if (design.boss) {
+      if (showFallback) {
         releaseModelMaterials();
         for (const child of visualRoot.getChildren()) child.dispose();
         rig.metadata?.skeletons?.forEach(s => s.dispose());
@@ -385,15 +386,14 @@
         return;
       }
       const pose = shamanBody && HUMANOID_KINDS.has(design.kind) ? buildHumanoidGhost(visualRoot, design) : fallback(visualRoot, design);
-      if (design.boss) rig.metadata = visualRoot.metadata;
+      if (showFallback) rig.metadata = visualRoot.metadata;
       const seal = design.boss ? bossRoyalSeal(visualRoot, design) : null;
-      if (design.boss || design.himmapan) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) modelMaterials.add(mesh.material);
+      if (showFallback || design.himmapan) for (const mesh of visualRoot.getChildMeshes()) if (mesh.material instanceof B.MultiMaterial) modelMaterials.add(mesh.material);
       update = seal ? k => { pose(k); seal(k); } : pose;
     };
     if (shamanBody === null && HUMANOID_KINDS.has(design.kind)) {
-      // Bosses remain visible and animated during a slow/failed shared GLB load.
-      if (design.boss) build();
-      ghostWaiting.push(() => { if (!root.isDisposed() && (!design.boss || shamanBody)) build(); });
+      if (showFallback) build();
+      ghostWaiting.push(() => { if (!root.isDisposed() && (!showFallback || shamanBody)) build(); });
     } else build();
     root.metadata = { monsterId: id, ghost: { tier: monster.tier, update: k => ghostState.update(k), rig, tall, design, attackAt: -1e9, hurtAt: -1e9, deathAt: 0, spawnAt: performance.now(), walk: 0, speed: 0 } };
     if (design.elite || design.boss) {

@@ -126,7 +126,7 @@
     if (id==="boss_wessuwan_titan") return makeGhostMonster(monster,id,{kind:"titan",boss:true,scale:1,height:4.5,width:2.6});
     const boss = bossDesign(monster, id);
     if (boss) return makeGhostMonster(monster, id, boss);
-    if(monster.tier!=="boss" && (monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]||HIMMAPAN_VISUALS.has(id)))return makeGhostMonster(monster,id);
+    if(monster.tier!=="boss" && (monster.mapId==="ritual_village"||monster.mapId==="forbidden_forest"||monster.mapId==="bound_temple"||ATLAS_GHOSTS[monster.mapId]||HIMMAPAN_VISUALS.has(id)))return makeGhostMonster(monster,id);
     const mesh=enemy.clone("monster-"+id);
     // The legacy tap sphere is hidden in the village; atlas monsters still show it.
     mesh.visibility=1;for(const child of mesh.getChildMeshes())child.setEnabled(true);

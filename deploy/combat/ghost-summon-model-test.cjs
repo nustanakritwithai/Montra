@@ -81,11 +81,20 @@ const village = summonAvatars.get("me").capturedVisual;
 assert.deepEqual(village.metadata.ghost.design,makeVillageGhostVisual().metadata.ghost.design);
 assert.equal(village.isPickable,false);
 
+const graveyardId = "frontier_ritual_village_1_3";
+summons.set("me",{...forest,sourceMonsterId:graveyardId,sourceMapId:"ritual_village",sourceLevel:2,combatTargetId:"graveyard"});
+syncSummons(state);
+const graveyard = summonAvatars.get("me").capturedVisual;
+const wildGraveyard = makeForestMonster({mapId:"ritual_village",tier:"normal",level:2},graveyardId);
+assert.equal(graveyard.metadata.ghost.design.kind,"corpse");
+assert.deepEqual(graveyard.metadata.ghost.design,wildGraveyard.metadata.ghost.design);
+
 summons.set("me",{...forest,sourceMonsterId:"",combatTargetId:"unknown-origin"});
 summons.delete("other");
 syncSummons(state);
 assert.equal(second.disposed,true);
 assert.equal(village.disposed,true);
+assert.equal(graveyard.disposed,true);
 assert.equal(summonAvatars.get("me").goldenSpirit,true);
 summons.set("me",{...forest,kind:"pot_spirit",combatTargetId:""});
 syncSummons(state);

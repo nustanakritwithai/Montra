@@ -4,7 +4,7 @@
  * This is geometry/state verification, not a WebGL screenshot pass.
  */
 const assert=require('node:assert/strict'),{test}=require('node:test');
-const {fixture,read}=require('./authoritative-boss-model-fixture.cjs');
+const {fixture,read,fn}=require('./authoritative-boss-model-fixture.cjs');
 const regional=[...read('deploy/combat/RegionalBosses.ts').matchAll(/^  boss\("([^"]+)","([^"]+)",(\d+),/gm)].map(m=>({id:'boss_'+m[1],mapId:m[1],displayName:m[2],level:+m[3]}));
 const roster=[...regional,{id:'atlas_rift_warden',mapId:'spirit_rift',displayName:'ราชันรอยแยก',level:100}];
 // Reviewed mapping is deliberately independent from the production registry.
@@ -144,6 +144,35 @@ test('pending shared asset retains fallback; failed load and late callbacks cann
   f.ctx.room.state.monsters.clear();f.sync();assert(mesh.isDisposed());const count=f.scene.meshes.length;
   f.ctx.shamanBody=false;f.run('for (const build of ghostWaiting.splice(0)) build();');assert.equal(f.scene.meshes.length,count,'late failure callback must not create orphan geometry');
   const fresh=add(f,m);assert(fresh.getChildMeshes().some(c=>c.getTotalVertices()>0),'asset failure fallback remains visible');f.ctx.animateGhosts(.016,2000);
+ }finally{f.dispose();}
+});
+
+test('all starter village ghosts have a body while the shared model loads or fails',()=>{
+ const f=fixture();try{
+  f.ctx.activeMapId='ritual_village';f.ctx.shamanBody=null;
+  f.run(fn('src/client/combat/038-demo-and-monster-state.js','makeVillageGhostVisual'));
+  f.ctx.villageGhost=f.ctx.makeVillageGhostVisual();
+  f.run('enemy.position.set(1.1,.9,10.4); enemy.setEnabled(true);');
+  const ids=Array.from({length:4},(_,i)=>'frontier_ritual_village_1_'+(i+1));
+  for(const [i,id] of ids.entries()){
+   f.ctx.room.state.monsters.set(id,state({id,mapId:'ritual_village',displayName:'ผีเร่ร่อนป่าช้าเก่า',level:i<2?1:2},
+    {tier:'normal',x:34+i,y:0,z:36}));
+  }
+  f.sync();
+  const ghosts=[f.ctx.villageGhost,...ids.map(id=>f.ctx.forestMonsters.get(id))];
+  const bodies=ghosts.map(mesh=>{
+   assert.equal(mesh.metadata.ghost?.design.kind,'corpse',mesh.name);
+   const body=mesh.metadata.ghost.rig.getChildMeshes().filter(child=>child.name!=='contact shadow' && child.getTotalVertices()>0);
+   assert.ok(body.length>1,mesh.name+' has a visible body during load');
+   return body;
+  });
+  f.ctx.animateGhosts(.016,2000);
+  assert.ok(ghosts.every(mesh=>mesh.isEnabled()));
+  f.ctx.shamanBody=false;f.run('for (const build of ghostWaiting.splice(0)) build();');
+  assert.ok(bodies.flat().every(mesh=>!mesh.isDisposed()),'loading failure keeps the original body');
+  assert.ok(ids.every(id=>f.ctx.forestMonsters.get(id).metadata.monsterId===id));
+  f.ctx.activeMapId='forbidden_forest';f.sync();f.ctx.animateGhosts(.016,2500);
+  assert.ok(!f.ctx.villageGhost.isEnabled() && ghosts.slice(1).every(mesh=>mesh.isDisposed()));
  }finally{f.dispose();}
 });
 
