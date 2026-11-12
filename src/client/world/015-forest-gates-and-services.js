@@ -255,6 +255,8 @@
     wisps.minSize=.25;wisps.maxSize=.7;wisps.minLifeTime=1.6;wisps.maxLifeTime=3.2;wisps.emitRate=12;
     wisps.direction1=new B.Vector3(-.15,1,-.1);wisps.direction2=new B.Vector3(.15,1,.1);wisps.minEmitPower=.5;wisps.maxEmitPower=1.1;
     wisps.blendMode=B.ParticleSystem.BLENDMODE_ADD;wisps.start();
+    // The gate owns its particles. The particle texture belongs to the atmosphere.
+    root.onDisposeObservable.addOnce(()=>wisps.dispose(false));
     const labelTexture=new B.DynamicTexture("portal-label-"+mapId,{width:512,height:128},scene,false);
     labelTexture.hasAlpha=true;
     const ink=labelTexture.getContext();ink.font="bold 46px sans-serif";ink.textAlign="center";ink.lineJoin="round";
@@ -266,7 +268,7 @@
     labelMat.emissiveColor=B.Color3.White();labelMat.disableLighting=true;labelMat.backFaceCulling=false;
     const label=B.MeshBuilder.CreatePlane("portal-label",{width:override?7.2:5.2,height:override?1.8:1.3},scene);
     part(label,0,9.1,0,labelMat);label.billboardMode=B.Mesh.BILLBOARDMODE_ALL;
-    if(override)expansionResources.push(labelTexture,labelMat,wisps);
+    if(override)expansionResources.push(labelTexture,labelMat);
     portalFx.push({root,strips,glyphs,wisps,seed:info.x*.37+info.z*.11});
     return root;
   }
@@ -300,6 +302,7 @@
   }
   const villagePortal=makePortal("ritual_village");
   const forestPortal=makePortal("forbidden_forest",forestRoot);forestRoot.setEnabled(false);
+  const villageLightSpots = new Set(lightSpots);
   // Map geometry is supplied by the authoritative server; legacy servers keep the old scene.
   let worldDefinitionKey = "", worldDefinitions = null, expandedMapKey = "";
   const expansionRoot = new B.TransformNode("world-expansion",scene);

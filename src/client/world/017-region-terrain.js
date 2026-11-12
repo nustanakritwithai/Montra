@@ -31,25 +31,13 @@
     if(!regionStyles[id])return null;
     if(!regionPaints.has(id)){
       const [floor,road,court,stone,light,deep]=regionStyles[id].map((color,i)=>mat(id+"-"+i,color,i===4?color:undefined));
-      const terrain=new B.DynamicTexture(id+" terrain grain",256,scene,true);
-      const ink=terrain.getContext();
-      ink.fillStyle="#f0eee5";ink.fillRect(0,0,256,256);
-      for(let i=0;i<210;i++){
-        const x=(i*71+(i*i)%79)%256,y=(i*43+(i*i)%67)%256;
-        ink.fillStyle=i%4===0?"#c4c9c0":"#dadbd0";
-        ink.fillRect(x,y,2+i%7,1+i%3);
-      }
       const province=worldDefinitions?.[id]?.strategic;
-      if(id==="fallen_city" || province?.kind==="capital"){
-        ink.strokeStyle="#bcc1b8";ink.lineWidth=2;
-        for(let row=0;row<8;row++)for(let col=-1;col<5;col++)ink.strokeRect(col*64+row%2*32,row*32,64,32);
-      }
       const castleBounds=id==="tri_wiang_castle" && worldDefinitions?.[id]?.bounds;
-      terrain.update();terrain.uScale=castleBounds?(castleBounds.maxX-castleBounds.minX)*.095:9;
-      terrain.vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;floor.diffuseTexture=terrain;
+      const uScale=castleBounds?(castleBounds.maxX-castleBounds.minX)*.095:9;
+      const vScale=castleBounds?(castleBounds.maxZ-castleBounds.minZ)*.095:12;
       // Ground surfaces per region (floor, road, court) from the G01–G16 library; the palette still tints them.
       const kinds=REGION_GROUNDS[id] || ["grass","path","temple"];
-      applyGroundSurface(floor,kinds[0],{tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false,bright:.72});applyGroundSurface(court,kinds[2],{uScale:terrain.uScale,vScale:terrain.vScale,tint:.35});
+      applyGroundSurface(floor,kinds[0],{uScale,vScale,tint:.35,tile:6});applyGroundSurface(road,kinds[1],{uScale:1,vScale:1,tint:.3,bump:false,bright:.72});applyGroundSurface(court,kinds[2],{uScale,vScale,tint:.35});
       // Night grade: the atlas palette is kept but pulled down toward moonlight.
       const outerHunt=worldDefinitions?.[id]?.huntTrail;
       const clearTerrain=province || outerHunt;
