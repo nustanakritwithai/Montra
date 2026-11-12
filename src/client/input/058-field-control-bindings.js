@@ -107,8 +107,10 @@
   function ghostMonsterTarget(capture = false, orderedId = null) {
     const id = orderedId || selectedForestTarget || (capture && hudTarget.until > performance.now() ? hudTarget.id : null);
     const monster = id && monsterForSpell(id), me = ownServerCharacter();
+    const combatRange = ghostPotState?.combatRange;
+    const range = !capture && Number.isFinite(combatRange) && combatRange > 0 ? combatRange : 8;
     if (!me?.alive || !monster?.alive || !(monster.hp > 0) || monster.mapId !== me.mapId ||
-        Math.hypot(me.x-monster.x, (me.y||0)-(monster.y||0), me.z-monster.z) > 8) return null;
+        Math.hypot(me.x-monster.x, (me.y||0)-(monster.y||0), me.z-monster.z) > range) return null;
     if (capture && (me.mounted || me.possessionActive || monster.tier !== "normal" || monster.level > 60)) return null;
     return {id, monster};
   }

@@ -117,7 +117,7 @@ now+=5000;
 context.requestGhostPotState();
 assert.equal(sent.length,0,"read retries stop after the pool arrives");
 
-handlers.ghost_pot_state({ active: false, ghost: null });
+handlers.ghost_pot_state({ active: false, ghost: null, combatRange: 24 });
 assert.equal(button.hidden, true);
 assert.equal(captureLabel.textContent, 'จับ');
 click();
@@ -293,12 +293,20 @@ teamMenu.children[0].children[2].onclick();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"select","slot":2,"revision":9}']);
 handlers.ghost_pot_state({...current,status:"selected",pool:{...quickPool,selectedSlot:2,revision:10}});
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"switch"}']);
-handlers.ghost_pot_state({...current,activeInstanceId:"ghost-2",combatId:"switched",status:"switched",
-  pool:{...quickPool,selectedSlot:2,revision:10},skills:[{skillId:"SK_NORMAL_01",remainingMs:0,usesLeft:3}]});
+const switched={...current,activeInstanceId:"ghost-2",combatId:"switched",status:"switched",
+  pool:{...quickPool,selectedSlot:2,revision:10},skills:[{skillId:"SK_NORMAL_01",remainingMs:0,usesLeft:3}]};
+handlers.ghost_pot_state(switched);
 context.selectedForestTarget="forest-ghost";
+monster.x=20;
+handlers["ghostAttackButton:click"]();
+assert.equal(context.targetedSkill,"ghostAttack","older servers keep the 8m quick-target range");
+assert.equal(sent.length,0);
+handlers.keydown({key:"Escape"});
+handlers.ghost_pot_state({...switched,combatRange:24});
 handlers["ghostAttackButton:click"]();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"attack","combatId":"switched","targetId":"forest-ghost"}']);
 assert.equal(context.targetedSkill,null);
+monster.x=3;
 handlers.ghost_combat_state({combatId:"switched",targetId:"forest-ghost",targetName:"ผีป่า",status:"ordered"});
 handlers["ghostSkillButton:click"]();
 assert.deepEqual(sent.shift(),["ghost_pot",'{"action":"skill","combatId":"switched","targetId":"forest-ghost","skillId":"SK_NORMAL_01"}']);

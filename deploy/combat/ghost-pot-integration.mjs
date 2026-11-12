@@ -204,6 +204,7 @@ try {
   const hitsBeforeSwitch=prey.hitSeq;
   const switched=await command(a,"switch",{},"switched");
   assert.equal(switched.activeInstanceId,reserved.instanceId);
+  assert.equal(switched.combatRange,24);
   assert.deepEqual(switched.skills.map(skill=>skill.skillId),["SK_NORMAL_01"]);
   assert.notEqual(switched.combatId,summoned.combatId);
   const switchedActor=await until(()=>{
@@ -222,9 +223,13 @@ try {
   await rejected(a,"attack",{...order,combatId:summoned.combatId},"ghost_combat_inactive");
   await wait(700);
   assert.equal(fixture.state.monster.hp,1,"captured ghost waits for a valid order");
+  const owner=fixture.state.players.get(a.room.sessionId);
+  const guardian=fixture.state.summons.get(a.room.sessionId);
+  prey.z=34;
   assert.equal((await combatCommand(a,"attack",order,"ordered")).targetId,targetId);
   const monsterHit=await until(()=>a.combat.find(event=>event.status==="hit" && event.targetId===targetId &&
-    event.combatId===switched.combatId),"confirmed monster hit");
+    event.combatId===switched.combatId),"confirmed monster hit from 20m away",10000);
+  assert.ok(Math.hypot(guardian.x-owner.x,guardian.z-owner.z)>7,"ghost chased beyond its old leash");
   assert.equal(monsterHit.damage,1);
   assert.equal(monsterHit.hp,0);
   await until(()=>!b.room.state.monster.alive,"PvE defeat replicated");
@@ -235,11 +240,18 @@ try {
   await rejected(a,"attack",pvp,"ghost_combat_target");
   await wait(700);
   victim.mapId="ritual_village";
-  Object.assign(victim,{x:0,z:24});
+  Object.assign(victim,{x:0,z:39});
   await rejected(a,"attack",pvp,"ghost_combat_target");
   await wait(700);
-  const owner=fixture.state.players.get(a.room.sessionId);
-  const guardian=fixture.state.summons.get(a.room.sessionId);
+  Object.assign(guardian,{x:0,z:14});
+  Object.assign(victim,{x:0,z:30});
+  await combatCommand(a,"attack",pvp,"ordered");
+  const beforeLeash=a.combat.length;
+  guardian.z=43;
+  await until(()=>a.combat.slice(beforeLeash).some(event=>event.status==="ended" &&
+    event.targetId===pvp.targetId),"ghost stops chasing past its 28m leash");
+  await until(()=>guardian.action==="follow" && guardian.z<43,"ghost moves back toward owner");
+  await wait(700);
   Object.assign(owner,{x:0,z:7});
   Object.assign(guardian,{x:0,z:7});
   Object.assign(victim,{x:0,z:5.9});

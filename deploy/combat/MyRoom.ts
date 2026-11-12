@@ -4996,6 +4996,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       activeInstanceId,
       captureAvailable: !this.field,
       combatAvailable: this.ghostBattleAllows(id),
+      combatRange: RULES.capturedGhostEngageDistance,
       combatId: active?.combatId ?? null,
       combatTarget: active?.order ? {targetId: active.order.targetId, targetName: active.order.targetName} : null,
       combatHealth: guardian ? {hp: guardian.hp, maxHp: guardian.maxHp} : null,
@@ -5070,13 +5071,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private getGhostTarget(id: string, owner: Player, guardian: SummonedGuardian, targetId: string) {
     if (id === targetId || !this.ghostBattleAllows(id) || !this.sameCombatMap(id, targetId) ||
-        this.isProtectedArea(owner.mapId, guardian) || distance3d(owner, guardian) > RULES.summonLeashDistance) return null;
+        this.isProtectedArea(owner.mapId, guardian) || distance3d(owner, guardian) > RULES.capturedGhostLeashDistance) return null;
     const monster = this.getMonster(targetId);
     const target = monster ?? this.state.players.get(targetId);
     if (!target?.alive || target.hp <= 0 || this.seerBindings.get(targetId)?.ownerId === id ||
         (!monster && !this.ghostBattleAllows(targetId)) ||
         (!monster && (this.pendingItemUses.has(targetId) || this.pendingRewards.has(targetId) || this.pendingCharacterLeaves.has(targetId))) ||
-        distance3d(owner, target) > RULES.summonEngageDistance || !this.bodyPathClear(owner.mapId, guardian, target) ||
+        distance3d(owner, target) > RULES.capturedGhostEngageDistance || !this.bodyPathClear(owner.mapId, guardian, target) ||
         !this.combatSegmentClear(owner.mapId, guardian, target)) return null;
     return target;
   }
@@ -7080,7 +7081,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if (!this.sameCombatMap(ownerId, targetId)) return;
     const target = monster ?? this.state.players.get(targetId);
     if (!target || !target.alive || targetId === ownerId) return;
-    if (distance3d(owner, target) > RULES.summonEngageDistance) return;
+    const engageDistance = active ? RULES.capturedGhostEngageDistance : RULES.summonEngageDistance;
+    if (distance3d(owner, target) > engageDistance) return;
     if (distance3d(guardian, target) > (active?.basicRange ?? RULES.summonAttackRange) + 0.00001 ||
         !this.combatSegmentClear(owner.mapId,guardian,target)) return;
 

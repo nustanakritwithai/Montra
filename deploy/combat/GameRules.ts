@@ -56,6 +56,8 @@ export const RULES = Object.freeze({
   summonFollowDistance: 1.35,
   summonLeashDistance: 7,
   summonEngageDistance: 8,
+  capturedGhostLeashDistance: 28,
+  capturedGhostEngageDistance: 24,
   summonAttackRange: 1.8,
   summonAttackDamage: 8,
   summonAttackCooldownMs: 1500,
