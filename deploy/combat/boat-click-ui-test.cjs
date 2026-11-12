@@ -205,7 +205,10 @@ test("port markers steer to the berth and anchor, and the launch control works a
   assert.equal(f.marker.enabled,false);
   Object.assign(f.player,{boatId:"",x:port.shore.x,z:port.shore.z});
   f.tick(300);
-  assert.equal(f.buttons.get("boatLaunch").hidden,false);
+  const launch=f.buttons.get("boatLaunch");
+  assert.equal(launch.hidden,false);
+  launch.onclick();
+  assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"launch"});
 });
 
 test("a river route aligns the hull before thrusting out of a berth",()=>{
@@ -269,9 +272,10 @@ test("the fishing icon keeps its image across casting, cancelling and collecting
   check("collect","รับปลาที่จับได้");
 });
 
-test("the three water actions reference distinct packaged WebP icons",()=>{
+test("water actions reference distinct packaged WebP icons",()=>{
   const html=readFileSync(resolve(root,"index.html"),"utf8");
-  const icons={boatBoard:"boat-board",boatHelm:"boat-paddle",fishButton:"fishing-rod"};
+  assert.match(html, /<button id="boatLaunch"[^>]*aria-label="เรียกเรือ"[^>]*title="เรียกเรือ"/);
+  const icons={boatLaunch:"boat-launch",boatBoard:"boat-board",boatHelm:"boat-paddle",fishButton:"fishing-rod"};
   for(const [id,name] of Object.entries(icons)){
     const asset="assets/ui/"+name+".webp";
     const markup=html.match(new RegExp('<button id="'+id+'"[^>]*>[^<]*<img src="([^"]+)"[^>]*></button>'));
