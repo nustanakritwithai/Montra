@@ -1,5 +1,6 @@
 /** Production orb and attack helpers, synthetic room only. Shared by browser fixture. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const vm=require('node:vm');
 const root=path.resolve(__dirname,'../..'),source=fs.readFileSync(root+'/main.js','utf8');
 function slice(a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert(start>=0&&end>start);return source.slice(start,end);}
 function fixtureScript(){return `
@@ -26,6 +27,39 @@ if(require.main===module){
  assert.match(source,/document.createElement\("button"\); el.type = "button"; el.className = "vital-orb"/);
  assert(!slice('  const ORB_SEGS =','  const orbWide =').includes('openCharacterProfile()'));
  assert.match(fixtureScript(),/room.send\("attack", \{ targetId: MONSTER_ID \}\)/);
+ const arcCss=fs.readFileSync(root+'/src/styles/hud/021-map-menu-status-and-skill-arc.css','utf8');
+ const bounds=[...arcCss.matchAll(/width: (\d+)px; height: (\d+)px; \}/g)].at(-1).slice(1).map(Number);
+ const [width,height]=bounds;
+ const makeButton=()=>({style:{removeProperty(key){delete this[key];}}});
+ const orb=makeButton();
+ for(let n=1;n<=4;n++){
+   const slots=Array.from({length:n},makeButton);
+   const bar={toggleAttribute(){},querySelector:()=>null,querySelectorAll:selector=>
+     selector==='.sword-hotbar'?[{hidden:false,querySelectorAll:()=>slots}]:slots};
+   vm.runInNewContext(slice('  const ORB =','  const syncOrbLayout =')+'\nlayoutOrbArc();',{
+     document:{querySelector:()=>bar},orbWide:{matches:false},vitalOrb:{el:orb},$:()=>null,
+   });
+   const centers=[orb,...slots].map((b,i)=>{
+     const radius=i?25:42,right=parseFloat(b.style.right),bottom=parseFloat(b.style.bottom);
+     assert(right>=0 && bottom>=0 && right+radius*2<=width && bottom+radius*2+4<=height);
+     return {x:right+radius,y:bottom+radius,radius};
+   });
+   for(const [i,a] of centers.entries())for(const b of centers.slice(i+1)){
+     assert(Math.hypot(a.x-b.x,a.y-b.y)>a.radius+b.radius,'combat buttons have distinct circular touch areas');
+   }
+ }
+ const handlers={};
+ let dashes=0;
+ vm.runInNewContext(slice('  const dashZone =','  let drawerActive ='),{
+   document:{querySelector:()=>({addEventListener:(type,fn)=>{handlers['controls:'+type]=fn;}})},
+   window:{addEventListener:(type,fn)=>{handlers[type]=fn;}},
+   requestSwipeDash:()=>{dashes++;},performance:{now:()=>100},
+ });
+ const down=ghost=>handlers['controls:pointerdown']({pointerId:1,clientX:0,clientY:0,target:{closest:()=>ghost}});
+ down(false);handlers.pointerup({pointerId:1,clientX:0,clientY:60});
+ assert.equal(dashes,1,'combat swipe still dashes');
+ down(true);handlers.pointerup({pointerId:1,clientX:0,clientY:60});
+ assert.equal(dashes,1,'scrolling ghost commands cannot trigger a dash');
  console.log('PASS basic attack UI source: production orb, existing attack protocol and no profile binding');
 }
 module.exports={fixtureScript};

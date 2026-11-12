@@ -252,6 +252,11 @@
   if (dashZone) {
     dashZone.addEventListener("pointerdown", event => {
       if (event.pointerType === "mouse" && event.button !== 0) return;
+      if (event.target?.closest?.(".ghost-field-actions")) {
+        dashSwipe = null;
+        suppressMenuClick = false;
+        return;
+      }
       if (event.isPrimary === false) {
         dashSwipe = null;
         suppressMenuClick = true;

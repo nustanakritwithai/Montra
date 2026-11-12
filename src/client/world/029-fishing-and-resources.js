@@ -171,6 +171,11 @@
     resourceChoice=node.id;const me=ownServerCharacter();updateResourceHud(me);
     if(!nearbyResources(me).some(n=>n.id===node.id))toast("เลือกจุดแล้ว · เดินเข้าใกล้เพื่อเก็บ");
   }
+  const resourceHudActions={
+    wood:{label:"ตัดไม้",art:"tool_axe"},
+    stone:{label:"ขุดหิน",art:"tool_pick"},
+    herb:{label:"เก็บสมุนไพร",art:"mat_herb"},
+  };
   function updateResourceHud(me){
     if(resourceViewMap!==activeMapId)renderResourceNodes();
     const near=nearbyResources(me);syncResourcePickers(near);
@@ -188,7 +193,13 @@
       const waiting=Math.max(0,Math.ceil(((n.readyAt??(resources.received+n.nextIn))-performance.now())/1000));
       const item=n.kind==="herb"?"mat_herb_"+n.tier:"mat_raw_"+n.kind+"_"+n.tier;
       const level=personalItems[item]?.level||1;
-      button.textContent=({wood:"ตัดไม้",stone:"ขุดหิน",herb:"เก็บสมุนไพร"}[n.kind])+" · ชั้น "+n.tier+" · "+n.stock+"/"+n.capacity+(me.level<level?" · ต้องการ Lv."+level:!n.stock?" · ฟื้นใน "+waiting+" วิ":"");
+      const {label,art}=resourceHudActions[n.kind],icon=$("harvestIcon"),src="./assets/items/"+art+".webp";
+      if(icon.getAttribute("src")!==src)icon.setAttribute("src",src);
+      const detail=label+" · ชั้น "+n.tier+" · "+n.stock+"/"+n.capacity+(me.level<level?" · ต้องการ Lv."+level:!n.stock?" · ฟื้นใน "+waiting+" วิ":"");
+      if(button.title!==detail){
+        button.title=detail;
+        button.setAttribute("aria-label",detail);
+      }
       button.disabled=!n.stock || me.level<level || economyPending || performance.now()<resourceReadyAt;
     }
     const legend=$("resourceMapInfo");
