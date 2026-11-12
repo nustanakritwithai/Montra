@@ -234,7 +234,27 @@
       scatter(9,320,(x,z,k)=>tree("sai",x,z,.7+noise(k,319)*.2),12.5);
       scatter(12,318,(x,z,k)=>rock("moss",x,z,.9+noise(k,317)*.6),12.5);
       scatter(70,323,(x,z,k)=>{for(let j=0;j<4;j++){const h=.7+noise(k*4+j,324)*.9;cone(x+(noise(k*4+j,325)-.5)*1.2,h/2,z+(noise(k*4+j,326)-.5)*1.2,h,.1,0,reedMat,3);}},12.5);
-      for(const w of map.water||[])for(let t=1.5;t<w.width;t+=2.6)if(noise(t+w.x,327)>.45)cone(w.x+t,.08,w.z+.6+noise(t,328)*(w.length-1.2),.02,.8,.8,lotusPad,10);
+      const reeds=(x,z,k)=>{
+        for(let j=0;j<3;j++){
+          const h=.55+noise(k+j,324)*.66;
+          const blade=cone(x+(j-1)*.23,h/2,z+noise(k+j,326)*.4,h,.12,0,reedMat,3);
+          blade.rotation.z=(j-1)*.16;
+        }
+      };
+      for(const [i,shelf] of (map.shallowWater||[]).entries())for(let j=0;j<9;j++){
+        const k=i*9+j,x=shelf.x+.7+noise(k,327)*(shelf.width-1.4),z=shelf.z+.7+noise(k,328)*(shelf.length-1.4);
+        const depth=worldWaterDepth(map,x,z);
+        if(depth<.09 || depth>.42 || nearMapPath(map,x,z,2))continue;
+        if(j%3===0){
+          const lift=map.waterLevel+.025-(map.reliefLabels?terrainHeight(map.terrain,x,z):0);
+          cone(x,lift,z,.025,.75,.75,lotusPad,10);
+        }else reeds(x,z,k);
+      }
+      for(const [i,camp] of (map.camps||[]).entries())for(let j=0;j<8;j++){
+        const k=i*8+j,angle=j*Math.PI/4+noise(k,329)*.38,r=7.5+noise(k,330)*3;
+        const x=camp.x+Math.cos(angle)*r,z=camp.z+Math.sin(angle)*r;
+        if(worldWaterDepth(map,x,z)<=.42 && !nearMapPath(map,x,z,2.4))reeds(x,z,k+144);
+      }
       alongTrails(10,2.8,(x,z)=>{cone(x,1.1,z,2.2,.1,.08,decor.deadWood,5);box(x,2.2,z,.6,.06,.06,decor.deadWood);cone(x+.25,1.95,z,.34,.26,.2,decor.willo,6);decal(x+.25,z,3.6,greenPool);});
       rim(16,331,(x,z,k)=>{const sz=4+noise(k,332)*2;for(const dx of [-1,1])for(const dz of [-1,1])cone(x+dx*sz*.4,.8,z+dz*sz*.4,2,.25,.2,decor.deadWood,5);
         box(x,2.6,z,sz,1.8,sz*.8,deep);box(x-sz*.5-.02,2.6,z,.05,.5,.6,decor.willo);

@@ -275,7 +275,9 @@
     const radius = .45, bounds = map.bounds;
     const walls = [...(map.walls || [])];
     if (map.id === "ritual_village" && fort) walls.push({x:fort.x-fort.width/2,z:fort.z-fort.length/2,width:fort.width,length:fort.length});
-    const blockers=[...walls,...(map.water||[])];
+    const deepWater=(map.water||[]).filter(area=>!map.shallowWater?.some(shelf=>
+      shelf.x===area.x && shelf.z===area.z && shelf.width===area.width && shelf.length===area.length));
+    const blockers=[...walls,...deepWater];
     const circles = map.obstacles || [];
     function clear(a,b) {
       if (![a,b].every(p=>questNavigationPoint(p) && p.x>=bounds.minX+radius && p.x<=bounds.maxX-radius && p.z>=bounds.minZ+radius && p.z<=bounds.maxZ-radius)) return false;

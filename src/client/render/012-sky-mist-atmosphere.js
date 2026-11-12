@@ -126,8 +126,8 @@
       key: "#e6c3aa", keyI: .38, mist: "#402c33", mistAlpha: .24, mote: ["#ffa25c", "#ffd18c"], skyLevel: .9 },
     // Atlas regions: each has its own night (marsh-light green, cold moon,
     // dusk ridge, sunless cave, smouldering ruin, volcanic crimson, void violet).
-    drowned_marsh: { clear: "#101d1c", fog: "#253932", fogNear: 19, fogFar: 125, hemi: .84, carry: .55, sky: "#accac0", ground: "#314239",
-      key: "#c4dac9", keyI: .52, mist: "#2e4a38", mistAlpha: .14, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
+    drowned_marsh: { clear: "#101d1c", fog: "#253932", fogNear: 17, fogFar: 119, hemi: .84, carry: .55, sky: "#accac0", ground: "#314239",
+      key: "#c4dac9", keyI: .52, mist: "#2e4a38", mistAlpha: .16, mote: ["#b6ff7a", "#6dffb0"], skyLevel: .7 },
     moon_cemetery: { clear: "#151b29", fog: "#283545", fogNear: 22, fogFar: 128, hemi: .84, carry: .48, sky: "#c9d6ed", ground: "#343946",
       key: "#dee5ff", keyI: .58, mist: "#3a3d55", mistAlpha: .14, mote: ["#e6e8ff", "#b7b2ff"], skyLevel: 1.15 },
     hex_ridge: { clear: "#191e15", fog: "#363b2b", fogNear: 23, fogFar: 132, hemi: .84, carry: .5, sky: "#e0dabe", ground: "#434032",

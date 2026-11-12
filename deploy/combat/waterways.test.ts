@@ -93,7 +93,39 @@ test("every port launches a boardable boat and returns both riders to its bank",
       assert.deepEqual({x:player.x,y:player.y,z:player.z},shore,port.id+" landing");
     }
   }
-  assert.equal(ids.size,Object.keys(WORLD_MAPS).length+14);
+  assert.equal(ids.size,Object.keys(WORLD_MAPS).length+15);
+});
+
+test("the marsh is mostly low wading ground with an open river and an east landing",()=>{
+  const map=WORLD_MAPS.drowned_marsh;
+  const {minX,maxX,minZ,maxZ}=map.bounds;
+  assert.deepEqual(map.bounds,{minX:-156,maxX:90,minZ:-112,maxZ:72});
+  let area=0,low=0,shallow=0;
+  for(let z=minZ+1.5;z<maxZ;z+=3)for(let x=minX+1.5;x<maxX;x+=3){
+    area++;
+    const y=groundAt(map.id,x,z),depth=waterDepthAt(map,x,z);
+    if(y<.5)low++;
+    if(depth>.1 && depth<.45 && isSafeWorldPoint(map,{x,y,z}))shallow++;
+  }
+  assert.ok(low/area>.9 && shallow/area>.5);
+  for(const camp of map.camps!)assert.ok(groundAt(map.id,camp.x,camp.z)<.5,camp.id+" low hunting ground");
+  assert.ok(waterDepthAt(map,30,-20)>.25 && !boatCanSail(map.id,30,-20,2.6),"shallow monster pool is for wading");
+  const canSail=(x:number,z:number)=>boatCanSail(map.id,x,z,2.6);
+  for(let offset=0;offset<=12;offset++){
+    assert.ok(canSail(-112,-83-offset),"space beyond the village gate");
+    assert.ok(canSail(64+offset,-34),"space beyond the Lotus gate");
+  }
+  const port=map.boatPorts!.find(p=>p.id==="marsh_east_bend")!;
+  const path=map.paths!.find(points=>points.at(-1)?.x===port.shore.x && points.at(-1)?.z===port.shore.z);
+  assert.ok(path);
+  for(const [i,a] of path.slice(0,-1).entries()){
+    const b=path[i+1],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
+    for(let j=0;j<=steps;j++){
+      const x=a.x+(b.x-a.x)*j/steps,z=a.z+(b.z-a.z)*j/steps;
+      assert.equal(waterDepthAt(map,x,z),0,`dry east path at ${x},${z}`);
+      assert.ok(isSafeWorldPoint(map,{x,y:groundAt(map.id,x,z),z}));
+    }
+  }
 });
 
 test("market bridge joins dry approaches above a navigable canal",()=>{

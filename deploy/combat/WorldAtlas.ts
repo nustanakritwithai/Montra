@@ -1,4 +1,5 @@
 import type { HuntCamp, RestArea, WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
+import type { MonsterHabitat } from "./MonsterHabitat.js";
 
 import { atlasRelief } from "./AtlasRelief.js";
 import { PROVINCES } from "./StrategicProvinces.js";
@@ -10,12 +11,12 @@ export {BOSS_RESPAWN_MS} from "./RegionalBosses.js";
 
 type XZ = {x:number; z:number};
 type XY = readonly [number,number];
-type Court = readonly [name:string,x:number,z:number,levels:readonly number[],enemy:string,tier?:"strong"];
+type Court = readonly [name:string,x:number,z:number,levels:readonly number[],enemy:string,tier?:"strong",habitat?:MonsterHabitat];
 type Region = {
   id:string; name:string; range:readonly [number,number]; hint:string; courts:readonly Court[];
   routes:readonly (readonly XY[])[]; marker:XY; scatter:readonly XY[];
   bounds?:WorldMapDefinition["bounds"]; rest?:RestArea;
-  walls?:WorldWall[]; pools?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
+  walls?:WorldWall[]; pools?:WorldWall[]; shallowWater?:WorldWall[]; crossings?:number[]; noFlight?:boolean;
   huntTrail?:WorldMapDefinition["huntTrail"]; extraBridges?:readonly XY[];
 };
 const point=([x,z]:XY):XZ=>({x,z});
@@ -45,14 +46,21 @@ const regions:Region[]=[
      [[22,-17],[31,-13],[42,-13],[58,-21],[72,-16]],[[0,-43],[34,-44],[58,-50],[78,-60],[96,-65]]],
    pools:[wall(48,-99,20,14),wall(108,-68,24,14),wall(85,24,32,11)],
    marker:[-9,-50],scatter:[[-34,7],[32,-18],[-32,-39],[15,-45],[58,13],[88,-45],[39,-83],[119,-85]]},
-  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"จากชายป่า เลียบฝั่งตะวันตกข้ามสะพานไปโป๊ะอวนขาด พักที่แพโคมเขียวแล้วตามเสากระโดงไปสุสานเรือพราย",
-   bounds:{minX:-121,maxX:59,minZ:-99,maxZ:51},huntTrail:{name:"สายแพโคมเขียว",path:3},rest:{name:"แพพักโคมเขียว",x:-101,z:-15,radius:5},
-   crossings:[-6,-29],extraBridges:[[-62,-4],[-88,-27]],
-   courts:[["เกาะกกผี",-22,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",22,-17,[15,17],"เงาคนแจว"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ"],
+  {id:"drowned_marsh",name:"บึงพราย",range:[10,22],hint:"ลุยแอ่งโคลนไปเกาะกกผีและโป๊ะอวนขาด หรือล่องร่องน้ำจากสุสานเรือพรายไปท่าคุ้งบึงตะวันออก",
+   bounds:{minX:-156,maxX:90,minZ:-112,maxZ:72},huntTrail:{name:"สายแพโคมเขียว",path:3},rest:{name:"แพพักโคมเขียว",x:-101,z:-15,radius:5},
+   crossings:[-6,-29],extraBridges:[[-62,-4],[-88,-27],[85,-4],[85,-27]],
+   courts:[["เกาะกกผี",-14,8,[10,12,14],"พรายกอกก"],["ท่าน้ำจมน้ำ",34,-14,[15,17],"เงาคนแจว",undefined,"water"],["ศาลพราย",0,-43,[19,22],"ผีเฝ้าศาลน้ำ",undefined,"water"],
      ["โป๊ะอวนขาด",-64,-16,[16,18],"พรายลากอวน"],["สุสานเรือพราย",-80,-63,[22],"นายท้ายเรือพราย","strong"]],
-   routes:[...islandRoutes,[[0,26],[-30,34],[-54,27],[-62,12],[-62,-4],[-64,-16],[-83,-17],[-101,-15],[-88,-20],[-88,-27],[-87,-45],[-80,-63],[-73,-78],[-53,-82],[-36,-70],[-18,-62],[0,-58]],
-     [[-22,-17],[-44,-12],[-64,-16]],[[-80,-63],[-61,-51],[-39,-53],[0,-43]]],
+   routes:[[[0,26],[-14,14],[-14,8],[-22,-4],[-22,-17],[22,-17],[22,-36],[0,-43],[0,-58]],
+     [[0,26],[22,12],[22,-17],[29,-14],[34,-14]],[[-22,-17],[-22,-36],[0,-43]],
+     [[0,26],[-30,34],[-54,27],[-62,12],[-62,-4],[-64,-16],[-83,-17],[-101,-15],[-88,-20],[-88,-27],[-87,-45],[-80,-63],[-73,-78],[-53,-82],[-36,-70],[-18,-62],[0,-58]],
+     [[-22,-17],[-44,-12],[-64,-16]],[[-80,-63],[-61,-51],[-39,-53],[0,-43]],
+     [[0,26],[18,27],[40,26],[64,26],[85,26],[85,-34]]],
    pools:[wall(-121,-90,16,45),wall(-66,-98,22,9),wall(-112,9,25,14)],
+   shallowWater:[wall(-153,-105,23,55),wall(-151,-33,41,96),wall(-111,2,35,59),wall(-75,17,45,45),
+     wall(-29,36,52,29),wall(25,30,57,36),wall(44,-16,37,39),wall(24,-23,33,33),wall(-45,0,24,23),
+     wall(-48,-106,37,37),wall(-93,-109,25,40),wall(8,-104,74,45),wall(14,-58,67,19),
+     wall(-17,-53,29,17),wall(-72,-80,23,33),wall(-92,-19,24,22)],
    marker:[-9,-50],scatter:[[-34,7],[34,-17],[-32,-39],[15,-45],[-97,30],[-71,20],[-106,-55],[-60,-72]]},
   {id:"moon_cemetery",name:"ป่าช้าเงาจันทร์",range:[18,32],hint:"จากประตูบึง เลี้ยวตะวันออกผ่านลานโลงจันทร์ ศาลาคนเฝ้าสุสานอยู่ก่อนแนวกำแพง ไปถึงลานระฆังดับแล้ววกกลับประตูด่านจันทรา",
    bounds:{minX:-56,maxX:130,minZ:-104,maxZ:48},huntTrail:{name:"ทางระฆังเงาจันทร์",path:5},rest:{name:"ศาลาคนเฝ้าสุสาน",x:106,z:-14,radius:5},
@@ -173,16 +181,17 @@ export const ATLAS_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freez
     strategic:province,
     paths:region.routes.map(route=>route.map(point)),walls:region.walls,
     boss:region.id==="spirit_rift"?RIFT_WARDEN:undefined,
-    water:region.pools?[...(water??[]),...region.pools]:water,
+    water:region.pools||region.shallowWater?[...(water??[]),...region.pools??[],...region.shallowWater??[]]:water,
+    ...(region.shallowWater?{shallowWater:region.shallowWater}:{}),
     obstacles:[{id:"landmark",...point(region.marker),radius:2.2},...region.scatter.map((p,i)=>({id:"relic-"+i,...point(p),radius:1.1}))]};
   return [map.id,{...map,...atlasRelief(map)}];
 })));
 export function isAtlasMap(id:string){return Object.prototype.hasOwnProperty.call(ATLAS_MAPS,id);}
-export type AtlasSpawn={id:string;name:string;mapId:string;x:number;z:number;level:number;tier:"normal"|"strong"|"boss"};
+export type AtlasSpawn={id:string;name:string;mapId:string;x:number;z:number;level:number;tier:"normal"|"strong"|"boss";habitat?:MonsterHabitat};
 export const ATLAS_SPAWNS:readonly AtlasSpawn[]=[
-  ...regions.flatMap(region=>region.courts.flatMap(([,x,z,levels,name,tier],camp)=>
+  ...regions.flatMap(region=>region.courts.flatMap(([,x,z,levels,name,tier,habitat],camp)=>
     levels.map((level,i):AtlasSpawn=>({id:`atlas_${region.id}_${camp+1}_${i+1}`,name,mapId:region.id,level,
-      x:x+[-4,4,0][i],z:z+[-3,3,5][i],tier:tier??"normal"})))),
+      x:x+[-4,4,0][i],z:z+[-3,3,5][i],tier:tier??"normal",...(habitat?{habitat}:{})})))),
   {...RIFT_WARDEN,mapId:"spirit_rift",tier:"boss"},
 ];
 // Separate from the hunting courts: these homes sit on the flanks of existing strategic maps.

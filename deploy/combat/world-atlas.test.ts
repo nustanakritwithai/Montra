@@ -88,7 +88,7 @@ test("each outer hunt trail connects its gates, shelter and two new courts",()=>
     assert.ok(isSafeWorldPoint(lake,{...bridge,y:0}));assert.ok(!isSafeWorldPoint(lake,{x:bridge.x+5,z:bridge.z,y:0}));
   }
   assert.ok(!isWorldSegmentClear("bamboo_frontier",{x:-71,z:-18},{x:-71,z:-11}));
-  const marsh=WORLD_MAPS.drowned_marsh;assert.equal(marsh.bridges!.length,6);
+  const marsh=WORLD_MAPS.drowned_marsh;assert.equal(marsh.bridges!.length,8);
   for(const bridge of marsh.bridges!){
     assert.ok(isSafeWorldPoint(marsh,{...bridge,y:0}));assert.ok(!isSafeWorldPoint(marsh,{x:bridge.x+5,z:bridge.z,y:0}));
   }

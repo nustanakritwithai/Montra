@@ -78,8 +78,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/018-region-dressing.js",
-  "bytes": 29020,
-  "sha256": "d7c0ca740501cc335809d9c7a6ed7c39d5f0527ac843207042e7fcc9f89af116"
+  "bytes": 29931,
+  "sha256": "ddc321ab663555be016c85c4022b73ea9b049db26835fb6adfafd6432e617234"
 },
 {
   "path": "world/017-region-terrain.js",
@@ -189,8 +189,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
   "path": "input/039-movement-flight-and-climbing.js",
-  "bytes": 33837,
-  "sha256": "f47f73a740a2175992482a368cf14b74cd06806dc56eafb463e2b3c308c69c85"
+  "bytes": 34016,
+  "sha256": "30710b590242a97e0abf8410eb7be79a4eb0c9bdcc69ff1068f0099adfb72e27"
 },
   {
     "path": "ui/047-maps-and-strategy.js",
@@ -275,7 +275,7 @@ const reviewedReleaseFragments = new Map([
   {
     "path": "render/012-sky-mist-atmosphere.js",
     "bytes": 15882,
-    "sha256": "b636488a90b749a88172374c999ecb7d057932b4f495177c1659e2989181cd7c"
+    "sha256": "49eb7538f24036bd0be78c69277d8387650898892d7f867274319f7d3ee83d58"
   },
   {
     "path": "combat/043-player-targeting.js",
@@ -289,8 +289,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2134904);
-  assert.equal(hash(bytes), 'd755aa95e0b99cf27aefaf9007822f7410a68eac6e0ab08ec5bd72d1f0fa5692');
+  assert.equal(bytes.length, 2135994);
+  assert.equal(hash(bytes), 'e74815a24b845babd254c2583baab8782fb6ab9e44564614c7e4c85a54dabec3');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

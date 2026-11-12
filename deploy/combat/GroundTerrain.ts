@@ -60,6 +60,17 @@ function shoreline(waters:readonly WorldWall[],vertical:boolean) {
   return edges;
 }
 
+function waterCarving(waters:readonly WorldWall[],limit:number){
+  const banksX=shoreline(waters,true),banksZ=shoreline(waters,false);
+  return (x:number,z:number)=>{
+    if(!waters.some(area=>containsWaterArea(area,x,z)))return 0;
+    let distance=limit/.22;
+    for(const {at,start,end} of banksX)distance=Math.min(distance,Math.hypot(x-at,Math.max(start-z,0,z-end)));
+    for(const {at,start,end} of banksZ)distance=Math.min(distance,Math.hypot(z-at,Math.max(start-x,0,x-end)));
+    return .22*distance;
+  };
+}
+
 export function waterTerrain(map:WorldMapDefinition) {
   const waters=map.water;
   if(!waters?.length)return {};
@@ -80,16 +91,17 @@ export function waterTerrain(map:WorldMapDefinition) {
   const islands=base?(map.reliefLabels??[])
     .filter(p=>waters.some(area=>containsWaterArea(area,p.x,p.z)))
     .map(p=>({...p,height:groundSample(base,p.x,p.z).height})).filter(p=>p.height>0):[];
-  const banksX=shoreline(waters,true),banksZ=shoreline(waters,false);
+  const shelves=new Set(map.shallowWater);
+  const carve=waterCarving(waters,shelves.size ? .34 : MAX_WATER_DEPTH);
+  // The marsh floor is a shallow shelf. Only the channels and old pools have deeper beds.
+  const carveChannel=shelves.size?waterCarving(waters.filter(area=>!shelves.has(area)),MAX_WATER_DEPTH):null;
   const heights=zs.map(z=>xs.map(x=>{
     const height=base?groundSample(base,
       Math.max(base.xs[0],Math.min(base.xs.at(-1)!,x)),
       Math.max(base.zs[0],Math.min(base.zs.at(-1)!,z))).height:0;
-    if(!waters.some(area=>containsWaterArea(area,x,z)))return height;
-    let distance=MAX_WATER_DEPTH/.22;
-    for(const {at,start,end} of banksX)distance=Math.min(distance,Math.hypot(x-at,Math.max(start-z,0,z-end)));
-    for(const {at,start,end} of banksZ)distance=Math.min(distance,Math.hypot(z-at,Math.max(start-x,0,x-end)));
-    let bed=height-.22*distance;
+    const depth=Math.max(carve(x,z),carveChannel?.(x,z)??0);
+    if(!depth)return height;
+    let bed=height-depth;
     // Keep authored hilltops above the water with a walkable bank around them.
     for(const island of islands)bed=Math.max(bed,Math.min(height,island.height-.34*Math.hypot(x-island.x,z-island.z)));
     return bed;

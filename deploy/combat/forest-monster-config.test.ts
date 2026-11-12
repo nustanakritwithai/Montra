@@ -10,6 +10,7 @@ import { waterDepthAt } from "./GroundTerrain.js";
 import { advanceForestObjective } from "./ForestObjectives.js";
 
 const waterMonsters=new Set<string>(HIMMAPAN_SPAWNS.filter(spawn=>"habitat" in spawn && spawn.habitat==="water").map(spawn=>spawn.id));
+for(const id of ["atlas_drowned_marsh_2_1","atlas_drowned_marsh_2_2","atlas_drowned_marsh_3_1"])waterMonsters.add(id);
 function isValidMonsterSurface(map:WorldMapDefinition, monster:Monster):boolean {
   if(waterMonsters.has(monster.id))return waterDepthAt(map,monster.x,monster.z)>0 && monster.y===map.waterLevel;
   return isSafeWorldPoint(map,monster);
@@ -404,7 +405,10 @@ test("entry routes are walkable and the Elite prize respects the real bag",()=>{
   const map=getWorldMap("forbidden_forest")!;
   for(const trail of map.paths!) for(let i=1;i<trail.length;i++){
     const a=trail[i-1],b=trail[i],length=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z)*5);
-    for(let j=0;j<=length;j++)assert.ok(isSafeWorldPoint(map,{x:a.x+(b.x-a.x)*j/length,y:0,z:a.z+(b.z-a.z)*j/length}));
+    for(let j=0;j<=length;j++){
+      const x=a.x+(b.x-a.x)*j/length,z=a.z+(b.z-a.z)*j/length;
+      assert.ok(isSafeWorldPoint(map,{x,y:groundAt(map.id,x,z),z}));
+    }
   }
   const bag=makeStarterInventory(),slot=bag.slots[0]!;
   slot.quantity=INVENTORY_STACK_LIMIT;

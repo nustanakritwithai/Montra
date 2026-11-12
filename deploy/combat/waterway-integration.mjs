@@ -180,7 +180,7 @@ try{
   await leave(passenger.room);
   const rejoined=observe(await sdk.joinById(pilot.room.roomId,passengerOptions));
   await until(()=>me(rejoined.room)?.mapId===marsh.id && !me(rejoined.room).boatId,"passenger reconnects at the marsh bank");
-  const nearestBank=marsh.boatPorts.find(port=>port.id==="marsh_reeds").shore;
+  const nearestBank=marsh.boatPorts.find(port=>port.id==="marsh_east_bend").shore;
   assert.ok(Math.hypot(me(rejoined.room).x-nearestBank.x,me(rejoined.room).z-nearestBank.z)<.1);
   assert.equal(boat().helmId,pilot.room.sessionId);
 
