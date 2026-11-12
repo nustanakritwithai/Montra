@@ -9,6 +9,7 @@ const core = readFileSync(resolve(root,"src/client/core/059-frame-loop-and-start
 const village = readFileSync(resolve(root,"src/client/world/014-ritual-village.js"),"utf8");
 const terrain = readFileSync(resolve(root,"src/client/world/017-region-terrain.js"),"utf8");
 const pointer = readFileSync(resolve(root,"src/client/input/045-pointer-touch-and-dash.js"),"utf8");
+const fishing = readFileSync(resolve(root,"src/client/world/029-fishing-and-resources.js"),"utf8");
 const sailing = core.slice(0,core.indexOf("  // Cooldown labels"));
 const picking = pointer.slice(0,pointer.indexOf('  ui.world.addEventListener("pointercancel"'));
 const villageWater = village.slice(village.indexOf("  const villageWaterLevel"),village.indexOf("  const lanternPaper"));
@@ -40,7 +41,7 @@ function fixture(raySlope=0) {
   };
   const sandbox = {
     $: id=>{
-      if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[]});
+      if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[],setAttribute(name,value){this[name]=value;}});
       return buttons.get(id);
     },
     localId:"local",mode:"live",activeMapId:map.id,worldDefinitions:{[map.id]:map},
@@ -196,4 +197,62 @@ test("a river route aligns the hull before thrusting out of a berth",()=>{
   assert.ok(turn.steer<0);
   f.boat.heading=Math.atan2(16,3);
   assert.ok(f.tick(200).throttle>0);
+});
+
+test("the boarding and paddle icons retain their commands and accessible helm states",()=>{
+  const f=fixture();
+  const helm=f.buttons.get("boatHelm");
+  assert.equal(helm.hidden,false);
+  assert.equal(helm.dataset.helmActive,"true");
+  assert.equal(helm["aria-label"],"ปล่อยหางเสือ");
+  helm.onclick();
+  assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"release"});
+  f.boat.helmId="";
+  f.tick(100);
+  assert.equal(helm.dataset.helmActive,"false");
+  assert.equal(helm["aria-label"],"จับหางเสือ");
+  assert.equal(helm.textContent,undefined);
+  helm.onclick();
+  assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"helm"});
+  f.player.boatId="";
+  f.tick(200);
+  const board=f.buttons.get("boatBoard");
+  assert.equal(board.hidden,false);
+  board.onclick();
+  assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"board",boatId:"boat"});
+});
+
+test("the fishing icon keeps its image across casting, cancelling and collecting",()=>{
+  const button={dataset:{},setAttribute(name,value){this[name]=value;}};
+  const sandbox={
+    $:()=>button,ownServerCharacter:()=>({alive:true}),economyReady:()=>true,fishingNearby:()=>true,
+    fishingState:null,fishingSelect:false,fishSavedItem:null,fishingPending:false,
+  };
+  const update=fishing.slice(fishing.indexOf("  function updateFishing(now)"),fishing.indexOf("  function showFishingFloat"));
+  vm.runInNewContext(update,sandbox);
+  const check=(action,label)=>{
+    sandbox.updateFishing(100);
+    assert.equal(button.hidden,false);
+    assert.equal(button.dataset.fishingAction,action);
+    assert.equal(button["aria-label"],label);
+    assert.equal(button.textContent,undefined);
+  };
+  check("cast","ตกปลา");
+  sandbox.fishingSelect=true;
+  check("cancel","ยกเลิกเลือกจุด");
+  sandbox.fishSavedItem={};
+  check("collect","รับปลาที่จับได้");
+});
+
+test("the three water actions reference distinct packaged WebP icons",()=>{
+  const html=readFileSync(resolve(root,"index.html"),"utf8");
+  const icons={boatBoard:"boat-board",boatHelm:"boat-paddle",fishButton:"fishing-rod"};
+  for(const [id,name] of Object.entries(icons)){
+    const asset="assets/ui/"+name+".webp";
+    const markup=html.match(new RegExp('<button id="'+id+'"[^>]*>[^<]*<img src="([^"]+)"[^>]*></button>'));
+    assert.equal(markup?.[1],"./"+asset);
+    const image=readFileSync(resolve(root,asset));
+    assert.equal(image.toString("ascii",0,4),"RIFF");
+    assert.equal(image.toString("ascii",8,12),"WEBP");
+  }
 });

@@ -40,6 +40,17 @@
 .chat-harvest .warp-button { position:static; transform:none; min-height:36px; max-width:100%; padding:5px 9px; border-radius:9px; font-size:11px; line-height:1.3; white-space:normal; box-shadow:0 2px 8px #0009; }
 .chat-harvest .harvest-action:not([hidden]) { display:grid; place-items:center; width:44px; height:44px; padding:0; }
 .chat-harvest .harvest-action img { width:24px; height:24px; object-fit:contain; pointer-events:none; }
+.field-prompts .field-action-icon:not([hidden]), .chat-harvest .field-action-icon:not([hidden]) {
+  position:relative; display:grid; place-items:center; width:44px; height:44px; min-height:44px; padding:0;
+}
+.field-action-icon img { display:block; object-fit:contain; pointer-events:none; }
+.field-action-icon[data-helm-active="true"] { border-color:#ffd98a; box-shadow:0 0 8px #ffd98a66; }
+.field-action-icon[data-fishing-action="cancel"]::after, .field-action-icon[data-fishing-action="collect"]::after {
+  position:absolute; right:2px; bottom:2px; display:grid; place-items:center; width:14px; height:14px;
+  border-radius:50%; color:#fff; font:700 11px/1 system-ui,sans-serif; pointer-events:none;
+}
+.field-action-icon[data-fishing-action="cancel"]::after { content:"×"; background:#80362f; }
+.field-action-icon[data-fishing-action="collect"]::after { content:"✓"; background:#2e6444; }
 .chat-potion-control { position:relative; z-index:1; align-self:center; }
 .chat-potion-control[hidden], .chat-box:not(.wide).composing .chat-potion-control { display:none; }
 .chat-potion-use, .chat-potion-picker button {

@@ -37,7 +37,12 @@
     const nearWater=fishingNearby(me);
     if(fishingSelect && !nearWater){fishingSelect=false;clearFishingPickers();}
     const button=$("fishButton");button.hidden=!(ready && !fishingState && nearWater);
-    button.textContent=fishSavedItem?"🎣 รับปลาที่จับได้":fishingSelect?"✕ ยกเลิกเลือกจุด":"🎣 ตกปลา";
+    const action = fishSavedItem ? "collect" : fishingSelect ? "cancel" : "cast";
+    if (button.dataset.fishingAction !== action) {
+      button.dataset.fishingAction = action;
+      button.title = action === "collect" ? "รับปลาที่จับได้" : action === "cancel" ? "ยกเลิกเลือกจุด" : "ตกปลา";
+      button.setAttribute("aria-label", button.title);
+    }
     if(fishingPending && now>fishingPendingUntil){fishingPending=false;toast("ไม่ได้รับผลตกปลา ลองอีกครั้ง");}
     button.disabled=fishingPending;
     if(!fishingState)return;

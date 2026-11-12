@@ -273,8 +273,13 @@
     $("boatLaunch").hidden = !(onLand && launchPoints.some(shore=>Math.hypot(player.x-shore.x,player.z-shore.z)<=dock.range));
     $("boatBoard").hidden = !(onLand && nearestId);
     $("boatBoard").dataset.boatId = nearestId;
-    $("boatHelm").hidden = !(boat && (!boat.helmId || helm));
-    $("boatHelm").textContent = helm ? "ปล่อยหางเสือ" : "จับหางเสือ";
+    const helmButton = $("boatHelm");
+    helmButton.hidden = !(boat && (!boat.helmId || helm));
+    if (helmButton.dataset.helmActive !== String(helm)) {
+      helmButton.dataset.helmActive = String(helm);
+      helmButton.title = helm ? "ปล่อยหางเสือ" : "จับหางเสือ";
+      helmButton.setAttribute("aria-label", helmButton.title);
+    }
     $("boatExit").hidden = !boat;
     boatPanel.hidden = !Array.from(boatPanel.children).some(button=>!button.hidden);
     if (!helm || now < nextHelmInput) return;
