@@ -737,16 +737,20 @@
   function warLocalDate(ms){
     return new Date(ms).toLocaleString("th-TH",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
   }
-  function warTerritoryLabel(entry,serverNow,compact=false){
+  function warClockText(at,serverNow){
+    if(!Number.isFinite(at) || !Number.isFinite(serverNow))return "";
+    const seconds=Math.ceil((at-serverNow)/1000);
+    if(seconds<=0)return "";
+    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
+    return (hours?String(hours)+":"+String(minutes).padStart(2,"0"):String(minutes))+":"+String(remainder).padStart(2,"0");
+  }
+  function warTerritoryLabel(entry,serverNow){
     if(!entry)return "รอข้อมูล";
     if(entry.phase==="open")return "พร้อมเปิดศึก";
     if(entry.phase!=="battle" && entry.phase!=="protected")return warPhase(entry.phase);
     if(!Number.isFinite(entry.phaseEndsAt) || !Number.isFinite(serverNow))return "รอข้อมูล";
-    const seconds=Math.max(0,Math.ceil((entry.phaseEndsAt-serverNow)/1000));
-    if(!seconds)return "กำลังอัปเดต";
-    const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remainder=seconds%60;
-    const clock=(hours?String(hours)+":"+String(minutes).padStart(2,"0"):String(minutes))+":"+String(remainder).padStart(2,"0");
-    return (entry.phase==="battle"?"รบ ":compact?"พัก ":"คุ้มครอง ")+clock;
+    const clock=warClockText(entry.phaseEndsAt,serverNow);
+    return clock?(entry.phase==="battle"?"รบ ":"คุ้มครอง ")+clock:"กำลังอัปเดต";
   }
   function territoryServerTime(){
     return Number.isFinite(territoryState?.serverNow)?territoryState.serverNow+Math.max(0,performance.now()-territoryReceivedAt):NaN;
@@ -782,28 +786,57 @@
     if(status.textContent!==label)status.textContent=label;
     $("warTerritoryRoute").hidden=site===activeMapId;
   }
+  function atlasWarCountdown(site,now){
+    const entry=territoryState?.warTimes?.[site],phase=entry?.phase;
+    if(phase==="battle" || phase==="protected"){
+      const clock=warClockText(entry.phaseEndsAt,now);
+      if(clock)return {site,phase,at:entry.phaseEndsAt,clock};
+    }
+    const at=territoryState?.schedule?.[site]?.next?.startsAt;
+    const clock=warClockText(at,now);
+    return clock?{site,phase:"scheduled",at,clock}:null;
+  }
   function updateAtlasWarTimes(){
     const board=$("atlasBoard");
     if(!board)return;
-    const now=territoryServerTime(),times=territoryState?.warTimes;
-    for(const clock of board.querySelectorAll("[data-atlas-war-site]")){
-      const entry=times?.[clock.dataset.atlasWarSite],phase=entry?.phase;
-      const counting=(phase==="battle" || phase==="protected") && Number.isFinite(entry.phaseEndsAt) && entry.phaseEndsAt>now;
-      clock.hidden=!counting;
-      if(!counting)continue;
-      const text=warTerritoryLabel(entry,now,true);
-      if(clock.textContent!==text)clock.textContent=text;
-      if(clock.dataset.phase!==phase)clock.dataset.phase=phase;
+    const now=territoryServerTime(),times=territoryState?.warTimes,deadlines=[];
+    for(const badge of board.querySelectorAll("[data-atlas-war-site]")){
+      const countdown=atlasWarCountdown(badge.dataset.atlasWarSite,now);
+      if(countdown)deadlines.push(countdown);
+      const visible=countdown && countdown.phase!=="scheduled";
+      badge.hidden=!visible;
+      if(!visible)continue;
+      const text=(countdown.phase==="battle"?"รบ ":"พัก ")+countdown.clock;
+      if(badge.textContent!==text)badge.textContent=text;
+      if(badge.dataset.phase!==countdown.phase)badge.dataset.phase=countdown.phase;
     }
-    const status=$("atlasWarStatus");
-    if(!status)return;
-    const site=status.dataset.site,entry=times?.[site],next=territoryState?.schedule?.[site]?.next;
-    status.hidden=!entry;
-    if(!entry)return;
-    let text=warTerritoryLabel(entry,now);
-    if(entry.phase==="open" && Number.isFinite(next?.startsAt))
-      text+=" · รอบถัดไป "+warLocalDate(next.startsAt);
-    if(status.textContent!==text)status.textContent=text;
+    const status=$("atlasWarStatus"),site=status?.dataset.site,entry=times?.[site];
+    const selected=deadlines.find(item=>item.site===site);
+    if(status){
+      status.hidden=!entry && !selected;
+      if(!status.hidden){
+        let text=warTerritoryLabel(entry,now);
+        if(selected?.phase==="scheduled")
+          text+=" · ศึกถัดไปอีก "+selected.clock+" · "+warLocalDate(selected.at);
+        if(status.textContent!==text)status.textContent=text;
+      }
+    }
+    // Prioritize a real timer on the selected site. Otherwise surface the next
+    // relevant deadline even when the matching marker is outside the viewport.
+    const priority={battle:0,scheduled:1,protected:2};
+    deadlines.sort((a,b)=>priority[a.phase]-priority[b.phase] || a.at-b.at);
+    const countdown=selected || deadlines[0];
+    const strip=$("atlasWarStrip"),display=$("atlasWarClock"),message=$("atlasWarMessage");
+    const clock=countdown?.clock || "--:--";
+    const reason=countdown?{
+      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",scheduled:"เริ่มศึกถัดไป",
+    }[countdown.phase]+" · "+(worldDefinitions?.[countdown.site]?.name || countdown.site):
+      times && Object.keys(times).length?"รอเปิดศึก":
+      mode==="live" && room?.state?.territoryWarAvailable?"รอข้อมูลจากเซิร์ฟเวอร์":
+      mode==="live"?"สงครามยังไม่เปิดในห้องนี้":"เข้าออนไลน์เพื่อดูเวลา";
+    if(strip.dataset.phase!==(countdown?.phase || ""))strip.dataset.phase=countdown?.phase || "";
+    if(display.textContent!==clock)display.textContent=clock;
+    if(message.textContent!==reason)message.textContent=reason;
   }
   function renderWarSchedule(){
     const panel=$("warSchedulePanel"),schedule=territoryState?.schedule;
@@ -1061,6 +1094,10 @@
         <button type="button" id="backLocalMap">‹ แผนที่พื้นที่</button>
         <button type="button" id="atlasRecenter"><span aria-hidden="true">◎</span> ที่อยู่ของฉัน</button>
         ${boats?'<div class="atlas-modes" role="group" aria-label="เส้นทาง"><button type="button" id="atlasLand" aria-pressed="true">ทางบก</button><button type="button" id="atlasWater" aria-pressed="false">ทางน้ำ</button></div>':""}
+      </div>
+      <div class="atlas-war-strip" id="atlasWarStrip" role="group" aria-label="เวลาสงคราม">
+        <div><strong>เวลาสงคราม</strong><span id="atlasWarMessage"></span></div>
+        <span id="atlasWarClock" class="atlas-war-clock" role="timer" aria-live="off">--:--</span>
       </div>
       <div class="atlas-scroll" id="atlasScroll" tabindex="0" role="region" aria-label="แผนที่อาณาจักร แตะพื้นที่เพื่อดูเส้นทาง"><div class="atlas-board" id="atlasBoard"></div></div>
       <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>

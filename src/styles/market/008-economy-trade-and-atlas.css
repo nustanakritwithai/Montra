@@ -92,6 +92,17 @@
 .atlas-modes {display:flex;gap:4px}
 .atlas-modes [aria-pressed=true] {border-color:var(--atlas-gold);background:#584529;color:#fff0ce}
 .atlas-modes #atlasWater[aria-pressed=true] {border-color:var(--atlas-water);background:#234c5c;color:#e2faff}
+.atlas-war-strip {
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;
+  padding:5px 9px;border:1px solid #886e50;border-radius:8px;background:#16292b;
+  color:var(--atlas-ink);font-size:12px;line-height:1.25;
+}
+.atlas-war-strip strong {display:block;color:#ffe2ab}
+#atlasWarMessage {display:block;margin-top:2px}
+.atlas-war-clock {color:#ebd0a0;font-size:17px;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
+.atlas-war-strip[data-phase="battle"] {border-color:#c8876b;background:#3b2723}
+.atlas-war-strip[data-phase="protected"] {border-color:#629eab;background:#19333b}
+.atlas-war-strip[data-phase="scheduled"] {border-color:#d7ad70}
 .atlas-scroll {
   height:clamp(220px,55dvh,540px);overflow:auto;overscroll-behavior:contain;
   border:1px solid #817051;border-radius:12px;

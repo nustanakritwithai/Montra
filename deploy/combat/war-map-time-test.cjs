@@ -22,7 +22,7 @@ test('the war board formats the selected fort timer from server time', () => {
     territoryState: {serverNow: 10000, owners: {moon_pass: 'กิลด์จันทรา'}, warTimes: {moon_pass: {phase: 'protected', phaseEndsAt: 18000}}},
     warLocalDate: () => '04:00', warPhase: () => 'จบศึกแล้ว',
   });
-  vm.runInContext(slice(atlas, '  function warTerritoryLabel(', '  function renderWarSchedule('), context);
+  vm.runInContext(slice(atlas, '  function warClockText(', '  function renderWarSchedule('), context);
   const label = context.warTerritoryLabel;
   assert.equal(label(null, 1000), 'รอข้อมูล');
   assert.equal(label({phase: 'open'}, 1000), 'พร้อมเปิดศึก');
@@ -77,7 +77,7 @@ function atlasFixture({boats = true, helm = false, war = false} = {}) {
     },
   });
   vm.runInContext(slice(atlas,'  const atlasCells =','  const warErrors=')+
-    slice(atlas,'  function warTerritoryLabel(','  function renderWarSchedule(')+
+    slice(atlas,'  function warClockText(','  function renderWarSchedule(')+
     slice(journey,'  function travelRoute(','  function currentItemHunt(')+
     slice(atlas,'  function openStrategicMap(','  function openMap()'),context);
   return {context,nodes,sent,actions,setNow:value=>{now=value;},get markup(){return markup;}};
@@ -133,6 +133,8 @@ test('atlas clocks follow server time without moving the map or changing the rou
   const clock=marker=>marker.children[2];
   assert.ok([origin,forest,marsh].every(marker=>clock(marker).hidden));
   assert.equal(detail.hidden,true);
+  assert.match(f.markup,/id="atlasWarStrip"[\s\S]*id="atlasBoard"/);
+  assert.equal(f.nodes.atlasWarMessage.textContent,'รอข้อมูลจากเซิร์ฟเวอร์');
   f.context.territoryState={
     serverNow:10000,warTimes:{
       ritual_village:{phase:'open'},
@@ -147,6 +149,8 @@ test('atlas clocks follow server time without moving the map or changing the rou
   assert.equal(clock(forest).textContent,'รบ 0:05');
   assert.equal(clock(forest).dataset.phase,'battle');
   assert.equal(clock(marsh).textContent,'พัก 0:19');
+  assert.equal(f.nodes.atlasWarClock.textContent,'0:19');
+  assert.equal(f.nodes.atlasWarMessage.textContent,'สิ้นสุดคุ้มครอง · บึงพราย');
   assert.equal(detail.textContent,'คุ้มครอง 0:19');
   assert.equal(detail.attributes['aria-live'],'off');
   f.setNow(7000);
@@ -164,7 +168,27 @@ test('atlas clocks follow server time without moving the map or changing the rou
   f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.territoryState.schedule={drowned_marsh:{next:{startsAt:50000}}};
   f.context.updateAtlasWarTimes();
-  assert.equal(detail.textContent,'พร้อมเปิดศึก · รอบถัดไป 04:00');
+  assert.equal(detail.textContent,'พร้อมเปิดศึก · ศึกถัดไปอีก 0:20 · 04:00');
+  assert.equal(f.nodes.atlasWarClock.textContent,'0:20');
+  assert.equal(f.nodes.atlasWarMessage.textContent,'เริ่มศึกถัดไป · บึงพราย');
+  assert.equal(clock(marsh).hidden,true);
+});
+
+test('the war strip stays visible in peace and surfaces a battle elsewhere on the atlas', () => {
+  const f=atlasFixture({war:true});
+  f.context.territoryState={serverNow:5000,warTimes:{
+    ritual_village:{phase:'open'},forbidden_forest:{phase:'open'},drowned_marsh:{phase:'open'},
+  }};
+  f.context.territoryReceivedAt=1000;
+  f.context.openStrategicMap();
+  assert.equal(f.nodes.atlasWarClock.textContent,'--:--');
+  assert.equal(f.nodes.atlasWarMessage.textContent,'รอเปิดศึก');
+  assert.equal(f.nodes.atlasWarStrip.hidden,undefined);
+  f.context.territoryState.warTimes.drowned_marsh={phase:'battle',phaseEndsAt:65000};
+  f.context.updateAtlasWarTimes();
+  assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
+  assert.equal(f.nodes.atlasWarMessage.textContent,'สิ้นสุดศึก · บึงพราย');
+  assert.equal(f.nodes.atlasBoard.children[1].attributes['aria-pressed'],'true');
 });
 
 test('small atlas buttons and their clock badges have room at the narrow board width', () => {
