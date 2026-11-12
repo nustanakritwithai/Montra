@@ -168,30 +168,6 @@
     mist: "#5c121a", mistAlpha: .36, mote: ["#ff2244", "#ff8833"], skyLevel: 1.25
   };
 
-  const rainTexture = paintTexture("rain droplet", 32, (c, s) => {
-    c.clearRect(0, 0, s, s);
-    const g = c.createLinearGradient(s / 2, 0, s / 2, s);
-    g.addColorStop(0, "rgba(200,225,255,0)");
-    g.addColorStop(0.7, "rgba(220,240,255,0.7)");
-    g.addColorStop(1, "rgba(255,255,255,0.95)");
-    c.fillStyle = g;
-    c.fillRect(s * 0.4, 0, s * 0.2, s);
-  });
-  const rainParticles = new B.ParticleSystem("weather rain", 500, scene);
-  rainParticles.particleTexture = rainTexture;
-  rainParticles.emitter = new B.Vector3(0, 0, 0);
-  rainParticles.minEmitBox = new B.Vector3(-28, 14, -28);
-  rainParticles.maxEmitBox = new B.Vector3(28, 18, 28);
-  rainParticles.direction1 = new B.Vector3(-0.4, -22, -0.4);
-  rainParticles.direction2 = new B.Vector3(0.2, -26, 0.2);
-  rainParticles.color1 = new B.Color4(0.75, 0.85, 1.0, 0.55);
-  rainParticles.color2 = new B.Color4(0.55, 0.75, 0.95, 0.35);
-  rainParticles.minSize = 0.08; rainParticles.maxSize = 0.18;
-  rainParticles.minLifeTime = 0.55; rainParticles.maxLifeTime = 0.85;
-  rainParticles.emitRate = 0;
-  rainParticles.blendMode = B.ParticleSystem.BLENDMODE_ADD;
-  rainParticles.start();
-
   let bloodMoonVignetteEl = null;
   function ensureBloodMoonVignette() {
     if (!bloodMoonVignetteEl && typeof document !== "undefined") {
@@ -221,29 +197,22 @@
     const vig = ensureBloodMoonVignette();
     if (vig) vig.classList.toggle("active", isBlood);
 
-    if (type === "rain") {
-      rainParticles.emitRate = 350;
-      floatAtPlayer(localId, "สายฝนมนตราโปรยปราย 🌧️", "status");
-    } else if (type === "storm") {
-      rainParticles.emitRate = 450;
+    if (type === "storm") {
       floatAtPlayer(localId, "พายุอสนีบาตคำราม! ⛈️", "status");
       window.MontraAudio?.play("thunder", { delay: 0.2, intensity: 1.2 });
     } else if (type === "blood_moon") {
-      rainParticles.emitRate = 0;
       triggerCombatCallout("blood_moon_rise");
       floatAtPlayer(localId, "ราตรีจันทร์สีเลือด! 🌕 (EXP x2)", "crit", { big: true });
       SFX("gong", { pitch: 0.65, intensity: 1.4 });
       SFX("whoosh", { pitch: 0.6 });
-    } else {
-      rainParticles.emitRate = 0;
+    } else if (type === "clear") {
       floatAtPlayer(localId, "ท้องฟ้าแจ่มใส ☀️", "status");
     }
     applyAtmosphere(atmosphereMap);
     return true;
   }
 
-  function updateWeather(dt, elapsed) {
-    rainParticles.emitter.copyFrom(camera.target);
+  function updateWeather(dt) {
     weatherState.timer += dt;
     if (weatherState.timer >= weatherState.cycleDuration) {
       weatherState.timer = 0;
@@ -281,7 +250,7 @@
     // Darker maps get a little more exposure so they stay readable on a phone.
     grade.exposure = ({ forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4) + L.exposure * lightDim();
     grade.vignetteWeight = L.vignette; grade.contrast = L.contrast;
-    mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha * L.mist * (weatherState.current === "rain" || weatherState.current === "storm" ? 1.5 : 1);
+    mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha * L.mist * (weatherState.current === "storm" ? 1.5 : 1);
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
   }

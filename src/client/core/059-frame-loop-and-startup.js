@@ -619,7 +619,7 @@
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
     motes.emitter.copyFrom(camera.target);
-    if (typeof updateWeather === "function") updateWeather(dt, elapsed);
+    if (typeof updateWeather === "function") updateWeather(dt);
     if (typeof updateBanners === "function") updateBanners(dt, elapsed);
     if (typeof updatePet === "function") updatePet(dt, elapsed);
     if (typeof updateFlight === "function") updateFlight(dt, elapsed);

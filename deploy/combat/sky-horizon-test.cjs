@@ -48,20 +48,20 @@ function fixture(openGLUVs = false) {
     MeshBuilder:{CreateSphere:() => ({setEnabled(enabled) { this.enabled = enabled; }})},
   };
   const scene = {};
+  const mistMat = {};
+  const messages = [];
   const context = vm.createContext({
-    B, scene, noise: () => .5, document:{createElement:() => ({getContext:paint})},
-    localStorage:{getItem:() => 'bright', setItem() {}}, window:{}, weatherState:{current:'clear'},
-    grade:{}, moon:{}, keyLight:{}, warm:{}, mistMat:{}, motes:{}, rainParticles:{},
-    ensureBloodMoonVignette() {}, floatAtPlayer() {}, triggerCombatCallout() {}, SFX() {}, localId:'test',
+    B, scene, noise: () => .5, document:{createElement:() => ({getContext:paint}), querySelector:() => null},
+    localStorage:{getItem:() => 'bright', setItem() {}}, window:{},
+    grade:{}, moon:{}, keyLight:{}, warm:{}, mistMat, motes:{},
+    floatAtPlayer(_id, message) { messages.push(message); }, triggerCombatCallout() {}, SFX() {}, localId:'test',
   });
   const api = vm.runInContext([
     part('  // Night sky', '  // Only lanterns'),
-    part('  const ATMOSPHERES', '  const rainTexture'),
-    part('  function setWeather(type)', '  function updateWeather'),
-    part('  function applyAtmosphere(mapId)', '  applyAtmosphere("ritual_village");'),
+    part('  const ATMOSPHERES', '  applyAtmosphere("ritual_village");'),
     'applyAtmosphere("ritual_village"); ({sky, skyTexture, applyAtmosphere, setLightLevel, setWeather})',
   ].join('\n'), context);
-  return {...api, scene, uploads};
+  return {...api, scene, uploads, mistMat, messages};
 }
 
 function assertFogHorizon(f) {
@@ -81,7 +81,10 @@ test('the sky equator matches far fog and updates only when its colours change',
   assertFogHorizon(f);
   const village = f.scene.fogColor.toHexString();
   f.applyAtmosphere('ritual_village');
-  f.setWeather('rain');
+  const clearMist = f.mistMat.alpha;
+  assert.equal(f.setWeather('rain'), true);
+  assert.equal(f.mistMat.alpha, clearMist);
+  assert.deepEqual(f.messages, []);
   assert.equal(f.uploads.length, 1);
   f.applyAtmosphere('drowned_marsh');
   assert.notEqual(f.scene.fogColor.toHexString(), village);
