@@ -105,7 +105,7 @@ export class ForestEncounters {
   private activeRegions = new Set<string>();
   private navigation(map:WorldMapDefinition): Navigation {
     const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
-    return {map,obstacles:[...trees,...(map.walls ?? []),...(map.water ?? [])]};
+    return {map,obstacles:[...trees,...(map.walls ?? [])]};
   }
   private readonly traceEnabled:boolean;
   private traceEvents:ForestTraceEvent[]=[];

@@ -157,6 +157,59 @@
     const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
     return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
   }
+  function worldWaterDepth(map,x,z){
+    if(map?.waterLevel===undefined || !map.terrain ||
+        !map.water?.some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length))return 0;
+    const bed=terrainHeight(map.terrain,x,z);
+    return bed<map.waterLevel-.05 ? map.waterLevel-bed : 0;
+  }
+  const waterPolygons=new WeakMap();
+  function waterSurfacePolygons(map){
+    if(waterPolygons.has(map))return waterPolygons.get(map);
+    const t=map.terrain, shore=map.waterLevel-.05, polygons=[];
+    for(let j=0;j<t.zs.length-1;j++)for(let i=0;i<t.xs.length-1;i++){
+      const x=t.xs[i],z=t.zs[j],nx=t.xs[i+1],nz=t.zs[j+1];
+      const cx=(x+nx)/2,cz=(z+nz)/2;
+      if(!map.water.some(w=>cx>=w.x && cx<=w.x+w.width && cz>=w.z && cz<=w.z+w.length))continue;
+      const a=[x,z,t.heights[j][i]],b=[nx,z,t.heights[j][i+1]];
+      const c=[x,nz,t.heights[j+1][i]],d=[nx,nz,t.heights[j+1][i+1]];
+      for(const face of [[a,b,d],[a,d,c]]){
+        const points=[];
+        let prev=face[2];
+        for(const next of face){
+          const aWet=prev[2]<shore,bWet=next[2]<shore;
+          if(aWet!==bWet){
+            const t=(shore-prev[2])/(next[2]-prev[2]);
+            points.push([prev[0]+(next[0]-prev[0])*t,prev[1]+(next[1]-prev[1])*t,shore]);
+          }
+          if(bWet)points.push(next);
+          prev=next;
+        }
+        if(points.length>=3)polygons.push(points);
+      }
+    }
+    waterPolygons.set(map,polygons);
+    return polygons;
+  }
+  function buildWaterSurface(map){
+    const positions=[],normals=[],uvs=[],indices=[],colors=[];
+    for(const polygon of waterSurfacePolygons(map)){
+      const start=positions.length/3;
+      for(const [x,z,bed] of polygon){
+        positions.push(x,map.waterLevel,z);normals.push(0,1,0);uvs.push(x/8,z/8);
+        colors.push(1,1,1,Math.min(1,Math.max(0,(map.waterLevel-.05-bed)*5)));
+      }
+      for(let i=1;i<polygon.length-1;i++)indices.push(start,start+i,start+i+1);
+    }
+    const mesh=new B.Mesh(map.id+" water surface",scene),data=new B.VertexData();
+    Object.assign(data,{positions,normals,uvs,indices,colors});data.applyToMesh(mesh);
+    const material=regionWater("drowned_marsh").clone(map.id+" marsh water");
+    material.alpha=.72;
+    material.emissiveTexture=riverRipple;
+    mesh.parent=expansionRoot;mesh.material=material;mesh.hasVertexAlpha=true;
+    mesh.isPickable=false;mesh.metadata={noShadow:true};
+    expansionResources.push(material);
+  }
   // Clip each footprint against the actual terrain faces. A road crossing a ridge
   // must bend exactly at its edges or the rock can poke through the ribbon.
   function reliefPatches(name,t,patches,lift,material){
@@ -233,7 +286,7 @@
   }
   function buildTerrainGround(map,paint){
     const t=map.terrain,positions=[],normals=[],colors=[],uvs=[],indices=[];
-    const riverStart = map.id === "ritual_village" ? map.water?.[0]?.z ?? Infinity : Infinity;
+    const riverStart = map.id === "ritual_village" && map.waterLevel===undefined ? map.water?.[0]?.z ?? Infinity : Infinity;
     for(let j=0;j<t.zs.length-1 && t.zs[j]<riverStart;j++)for(let i=0;i<t.xs.length-1;i++){
       const point=(a,b)=>new B.Vector3(t.xs[i+a],t.heights[j+b][i+a],t.zs[j+b]);
       const a=point(0,0),b=point(1,0),c=point(0,1),d=point(1,1);
@@ -378,7 +431,7 @@
         else cone(side*(46+i%4),h*.33,-65+i*5.6,h,6+i%4,.25,stone,6);
         cone(-48+i*5.6,h*.32,side>0?36+i%3:-72-i%4,h,6+i%5,.2,floor,6);
       }
-      for(const w of map.water||[]){
+      for(const w of map.waterLevel===undefined ? map.water||[] : []){
         box(w.x+w.width/2,.05,w.z+w.length/2,w.width,.10,w.length,regionWater(map.id));
         const horizontal=w.width>w.length,span=Math.max(w.width,w.length);
         for(const side of [-1,1]){
@@ -782,7 +835,7 @@
       cone(side*(48+i%3),tall*.35,-68+i*6,tall,6+i%5,marsh?1.2:0,stone,5);
       cone(-52+i*6,tall*.32,side===1?39+i%4:-74-i%4,tall,6+i%4,0,floor,6);
     }
-    for(const w of map.water||[]){
+    for(const w of map.waterLevel===undefined ? map.water||[] : []){
       box(w.x+w.width/2,.035,w.z+w.length/2,w.width,.07,w.length,regionWater(map.id));
       for(let i=1;i<=Math.floor(w.width/6);i++)box(w.x+i*5.5,.079,w.z+.8+(i%2),marsh?1.7:1.1,.025,.10,light);
     }

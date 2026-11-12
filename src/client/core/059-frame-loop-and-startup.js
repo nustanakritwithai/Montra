@@ -39,6 +39,7 @@
       const minZ = Math.max(w.z,bounds.minZ)+margin, maxZ = Math.min(w.z+w.length,bounds.maxZ)-margin;
       if (minX > maxX || minZ > maxZ) continue;
       const goal = {x:Math.max(minX,Math.min(maxX,x)),z:Math.max(minZ,Math.min(maxZ,z))};
+      if (map.waterLevel!==undefined && worldWaterDepth(map,goal.x,goal.z)<.45) continue;
       const change = Math.hypot(goal.x-x,goal.z-z);
       if (change < adjustment) {destination=goal;adjustment=change;}
     }
@@ -49,7 +50,7 @@
     const ray = scene.createPickingRay(px,py,B.Matrix.Identity(),camera);
     if (Math.abs(ray.direction.y) < .00001) return;
     const map = worldDefinitions?.[activeMapId];
-    const waterY = map?.id === "ritual_village" ? villageWaterLevel : 0;
+    const waterY = map?.waterLevel ?? (map?.id === "ritual_village" ? villageWaterLevel : 0);
     const t = (waterY-ray.origin.y)/ray.direction.y;
     if (t < 0) return;
     const point = sailingWaterDestination(ray.origin.x+t*ray.direction.x,ray.origin.z+t*ray.direction.z,map);
@@ -135,6 +136,7 @@
       let node = sailingMeshes.get(id);
       if (!node) {
         node = longTailBoat(boat.x,boat.z,boat.heading,true);
+        node.position.y = worldDefinitions[activeMapId]?.waterLevel ?? 0;
         node.scaling.set(dock.deck.width/.95,dock.deck.y/.16,dock.deck.length/5.1);
         const pick = B.MeshBuilder.CreateBox("sailing deck pick",{
           width:.95*.82*1.08,height:.016,depth:5.1*.62*1.08,

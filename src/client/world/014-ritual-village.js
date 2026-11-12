@@ -55,8 +55,12 @@
     return mesh;
   }
   function villageWaterSurface(name, area) {
-    return fixedVillageWater(vbox(name, area.x + area.width / 2, villageWaterLevel - .04,
+    return legacyVillageWater(vbox(name, area.x + area.width / 2, villageWaterLevel - .04,
       area.z + area.length / 2, area.width, .08, area.length, water));
+  }
+  function legacyVillageWater(mesh) {
+    fixedVillageWater(mesh).metadata.legacyWater = true;
+    return mesh;
   }
   function makeLantern(x, z) {
     vbox("lantern pole", x, 1.1, z, .13, 2.2, .13, darkWood);
@@ -145,14 +149,14 @@
     const x = canal.x + canal.width / 2;
     for (let i = 0; i < 24; i++) {
       const z = -24 + i * 3;
-      fixedVillageWater(vbox("moon streak", x + (noise(i, x) - .5) * 6, villageWaterLevel + .01,
+      legacyVillageWater(vbox("moon streak", x + (noise(i, x) - .5) * 6, villageWaterLevel + .01,
         z, 1.2 + noise(i, 3) * 1.6, .01, .12, moonStreak));
     }
   }
   // Extend the river past the playable area so it continues into the backdrop.
   const riverSurface = villageWaterSurface("river", {...villageRiver,x:-120,width:240,length:52});
   for (let i = 0; i < 40; i++) {
-    fixedVillageWater(vbox("moon streak", (noise(i, 41) - .5) * 120, villageWaterLevel + .01,
+    legacyVillageWater(vbox("moon streak", (noise(i, 41) - .5) * 120, villageWaterLevel + .01,
       50 + noise(i, 42) * 30, 1.5 + noise(i, 43) * 3, .01, .14, moonStreak));
   }
   // South pier: stepped landing, mooring posts and moored long-tail boats.
@@ -405,9 +409,13 @@
     const anchorsOf = parts => parts.map(p => {
       p.computeWorldMatrix(true);
       const c = p.getBoundingInfo().boundingBox.centerWorld;
-      return {x:c.x,z:c.z,count:p.getTotalVertices(),fixedHeight:p.metadata?.villageWater || p.parent?.metadata?.villageWater};
+      return {x:c.x,z:c.z,count:p.getTotalVertices(),fixedHeight:p.metadata?.villageWater || p.parent?.metadata?.villageWater,
+        legacyWater:p.metadata?.legacyWater===true};
     });
-    for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf })) villageBatches.push({ mesh, anchors: info });
+    for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf })) {
+      if(info.every(part=>part.legacyWater))(mesh.metadata??={}).legacyWater=true;
+      villageBatches.push({mesh,anchors:info});
+    }
     boatNodes.forEach(node => node.dispose());
   }
   // Village sword mentor; teaching remains server-authoritative at the rest area.

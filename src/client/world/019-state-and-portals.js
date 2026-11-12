@@ -37,7 +37,7 @@
     lanternPick=0;
     const bounds=mapBounds();
     const map=worldDefinitions?.[activeMapId];
-    const river=activeMapId==="ritual_village" ? map?.water?.[0] : null;
+    const river=activeMapId==="ritual_village" && map?.waterLevel===undefined ? map?.water?.[0] : null;
     const landEndZ=river?.z ?? bounds.maxZ;
     ground.scaling.x=(bounds.maxX-bounds.minX)/40;ground.scaling.z=(landEndZ-bounds.minZ)/40;
     ground.position.x=(bounds.minX+bounds.maxX)/2;ground.position.z=(bounds.minZ+landEndZ)/2;
@@ -48,6 +48,8 @@
     if(groundTile)for(const t of [ground.material.diffuseTexture,ground.material.bumpTexture,ground.material.emissiveTexture])if(t){
       t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(landEndZ-bounds.minZ)/groundTile;}
     alignVillage(worldDefinitions?.ritual_village?.terrain);
+    if(activeMapId==="ritual_village")for(const {mesh} of villageBatches)if(mesh.metadata?.legacyWater)
+      mesh.setEnabled(map?.waterLevel===undefined);
     ground.setEnabled(!map?.terrain);if(!map)return;
     if (isPrivateHomeMap(activeMapId)) {
       renderHomeScene();
@@ -67,6 +69,7 @@
     const terrainPaint=paint || {floor:ground.material,road:inTemple?templeReliefRoad:activeMapId==="forbidden_forest"?forestReliefRoad:civicRoad,stone:inTemple?templeStone:forestStone,court:inTemple?templeCourt:forestClearing};
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
+    if(map.waterLevel!==undefined)buildWaterSurface(map);
     // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
     scatterGroundPatches(map,map.terrain?terrainPaint.floor:ground.material,REGION_GROUNDS[activeMapId]?.[0]||MAP_FLOORS[activeMapId]||"grass",
       (x,z,r)=>(!river || z+r*3<river.z)&&!nearMapPath(map,x,z,r+2.5)&&
@@ -265,7 +268,7 @@
     window.MontraAudio?.ambience(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
-    for(const mesh of villageMeshes) mesh.setEnabled(village);
+    for(const mesh of villageMeshes) mesh.setEnabled(village && !(mesh.metadata?.legacyWater && worldDefinitions?.ritual_village?.waterLevel!==undefined));
     for(const light of villageLights) light.setEnabled(village);
     villagePortal.setEnabled(village);forestRoot.setEnabled(mapId==="forbidden_forest");
     setTimeout(warmMaterials,400);

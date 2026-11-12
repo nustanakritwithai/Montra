@@ -7,10 +7,13 @@ const vm = require("node:vm");
 const root = resolve(__dirname,"../..");
 const core = readFileSync(resolve(root,"src/client/core/059-frame-loop-and-startup.js"),"utf8");
 const village = readFileSync(resolve(root,"src/client/world/014-ritual-village.js"),"utf8");
+const terrain = readFileSync(resolve(root,"src/client/world/017-region-terrain.js"),"utf8");
 const pointer = readFileSync(resolve(root,"src/client/input/045-pointer-touch-and-dash.js"),"utf8");
 const sailing = core.slice(0,core.indexOf("  // Cooldown labels"));
 const picking = pointer.slice(0,pointer.indexOf('  ui.world.addEventListener("pointercancel"'));
 const villageWater = village.slice(village.indexOf("  const villageWaterLevel"),village.indexOf("  const lanternPaper"));
+const terrainCell = terrain.slice(terrain.indexOf("  function terrainCell"),terrain.indexOf("  // ---- Ground patches"));
+const waterDepth = terrain.slice(terrain.indexOf("  function terrainHeight"),terrain.indexOf("  const waterPolygons"));
 
 function fixture(raySlope=0) {
   const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
@@ -19,6 +22,8 @@ function fixture(raySlope=0) {
   const player = {boatId:"boat",alive:true,x:0,z:51};
   const boat = {mapId:"ritual_village",x:0,z:51,speed:0,heading:Math.PI/2,helmId:"local",anchored:true};
   const map = {id:"ritual_village",bounds:{minX:-60,maxX:60,minZ:-60,maxZ:60},
+    waterLevel:.025,water:[{x:-80,z:48,width:160,length:40}],
+    terrain:{xs:[-60,60],zs:[-60,48,51,60],heights:[[0,0],[0,0],[-.66,-.66],[-1.45,-1.45]]},
     boatDock:{x:0,z:46,range:3,deck:{width:2.1,length:5.2,y:.88}}};
   const ground = {isEnabled:()=>true,metadata:{walkable:true}};
   const enemy = {isEnabled:()=>true};
@@ -49,7 +54,7 @@ function fixture(raySlope=0) {
     ui:{world:{addEventListener:(event,handler)=>{canvasEvents[event]=handler;},
       getBoundingClientRect:()=>({left:10,top:20,width:300,height:300}),setPointerCapture(){}}},
   };
-  vm.runInNewContext(villageWater+"\n"+sailing+"\n"+picking,sandbox);
+  vm.runInNewContext([villageWater,terrainCell,waterDepth,sailing,picking].join("\n"),sandbox);
   const tick = value=>{now=value;sandbox.updateSailing(now,.02);return packets.at(-1);};
   tick(0);
   const pointerEvent = (kind,type,id=1) => canvasEvents[kind]({button:0,pointerType:type,pointerId:id,clientX:100,clientY:110});

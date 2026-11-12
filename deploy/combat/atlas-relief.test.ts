@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {ATLAS_MAPS,ATLAS_SPAWNS,HIMMAPAN_SPAWNS,HIMMAPAN_REPLACED_TARGETS} from "./WorldAtlas.js";
 import {WORLD_MAPS,isSafeWorldPoint,groundAt,provinceShotClear} from "./WorldMaps.js";
-import {groundSample} from "./GroundTerrain.js";
+import {groundSample,waterDepthAt} from "./GroundTerrain.js";
 import {ForestEncounters} from "./ForestEncounters.js";
 import {MyRoomState,Player} from "./schema/MyRoomState.js";
 
 test("nine existing hunts keep the same walkable routes, wet crossings and flat transfer pads",()=>{
   assert.equal(Object.keys(ATLAS_MAPS).length,9);
-  for(const map of Object.values(ATLAS_MAPS)){
+  for(const id of Object.keys(ATLAS_MAPS)){
+    const map=WORLD_MAPS[id];
     const t=map.terrain!,flat={...map,terrain:undefined};
     assert.ok(map.reliefLabels && t,map.id);
     assert.ok(Math.max(...t.heights.flat())-Math.min(...t.heights.flat())>=2,map.id);
@@ -25,7 +26,7 @@ test("nine existing hunts keep the same walkable routes, wet crossings and flat 
     }
     for(const p of [map.spawn,...map.bridges??[],...map.portals])assert.equal(groundAt(map.id,p.x,p.z),0,map.id+" level pad");
     for(const p of map.portals)assert.ok(isSafeWorldPoint(WORLD_MAPS[p.targetMapId],p.targetSpawn),p.id);
-    for(const w of map.water??[])assert.equal(groundAt(map.id,w.x+w.width/2,w.z+w.length/2),0,map.id+" water");
+    for(const w of map.water??[])assert.ok(waterDepthAt(map,w.x+w.width/2,w.z+w.length/2)>0,map.id+" water");
   }
 });
 for(const includeWorldEncounters of [true,false])test(`${includeWorldEncounters?"world":"siege"} hunting monsters spawn, chase on raised ground and respawn on the same surface`,()=>{

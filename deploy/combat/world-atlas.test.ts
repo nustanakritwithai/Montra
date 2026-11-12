@@ -34,7 +34,7 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
   assert.equal(ATLAS_SPAWNS.length,91);
   assert.equal(new Set(ATLAS_SPAWNS.map(s=>s.id)).size,91);
   for(const map of Object.values(WORLD_MAPS).filter(m=>m.region || m.strategic)){
-    const safe=(x:number,z:number)=>isSafeWorldPoint(map,{x,y:0,z});
+    const safe=(x:number,z:number)=>isSafeWorldPoint(map,{x,y:groundAt(map.id,x,z),z});
     for(const path of map.paths!)for(let i=1;i<path.length;i++){
       const a=path[i-1],b=path[i],steps=Math.ceil(Math.hypot(a.x-b.x,a.z-b.z)*5);
       for(let j=0;j<=steps;j++)assert.ok(safe(a.x+(b.x-a.x)*j/steps,a.z+(b.z-a.z)*j/steps),JSON.stringify({map:map.id,a,b,j,steps}));
@@ -61,7 +61,9 @@ test("every marked trail is walkable and all gates, camps and monsters are reach
   const cave=ATLAS_MAPS.naga_cavern;
   assert.deepEqual(getSafeMapSpawn(cave.id,{...cave.spawn,y:6}),cave.spawn);
   for(const id of ["drowned_marsh","spirit_rift"]){
-    const m=ATLAS_MAPS[id];assert.ok(!isSafeWorldPoint(m,{x:0,y:0,z:-4}));
+    const m=WORLD_MAPS[id], y=groundAt(id,0,-4);
+    assert.ok(y<0 && isSafeWorldPoint(m,{x:0,y,z:-4}));
+    assert.ok(!isSafeWorldPoint(m,{x:0,y:0,z:-4}));
     for(const x of [-22,22])assert.ok(isSafeWorldPoint(m,{x,y:0,z:-4}));
   }
 });

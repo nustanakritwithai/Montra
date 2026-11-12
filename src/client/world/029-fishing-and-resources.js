@@ -1,13 +1,18 @@
   function fishingWaters(){
-    return activeMapId==="ritual_village" ? villageWaters : (worldDefinitions?.[activeMapId]?.water || []);
+    const map=worldDefinitions?.[activeMapId];
+    return map?.waterLevel!==undefined ? map.water : activeMapId==="ritual_village" ? villageWaters : (map?.water || []);
   }
-  function fishingWaterAt(x,z){return fishingWaters().some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length);}
+  function fishingWaterAt(x,z){
+    const map=worldDefinitions?.[activeMapId];
+    return map?.waterLevel!==undefined ? worldWaterDepth(map,x,z)>0 :
+      fishingWaters().some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length);
+  }
   function clearFishingPickers(){for(const picker of fishingPickers)picker.dispose();fishingPickers.length=0;}
   function createFishingPickers(){
     clearFishingPickers();
     for(const w of fishingWaters()){
       const picker=B.MeshBuilder.CreateGround("fishing water picker",{width:w.width,height:w.length},scene);
-      const waterY = activeMapId==="ritual_village" ? villageWaterLevel : .1;
+      const waterY = worldDefinitions?.[activeMapId]?.waterLevel ?? (activeMapId==="ritual_village" ? villageWaterLevel : .1);
       picker.position.set(w.x+w.width/2,waterY+.01,w.z+w.length/2);picker.visibility=.001;
       picker.metadata={fishingWater:true};picker.isPickable=true;fishingPickers.push(picker);
     }
@@ -55,7 +60,7 @@
     if(!me)return;
     const t=Math.min(1,Math.max(0,s.distance/s.initialDistance)),x=me.x+(s.x-me.x)*t,z=me.z+(s.z-me.z)*t;
     if(!fishingFloat){fishingFloat=B.MeshBuilder.CreateTorus("fishing float",{diameter:.8,thickness:.09,tessellation:24},scene);fishingFloat.isPickable=false;fishingFloat.material=gold;}
-    const floatY = s.mapId==="ritual_village" ? villageWaterLevel+.07 : .17;
+    const floatY = (worldDefinitions?.[s.mapId]?.waterLevel ?? (s.mapId==="ritual_village" ? villageWaterLevel : .1))+.07;
     fishingFloat.position.set(x,floatY,z);
     const points=[new B.Vector3(me.x,Number(me.y)+1.2,me.z),new B.Vector3(x,floatY+.02,z)];
     fishingLine=B.MeshBuilder.CreateLines("fishing line",{points,updatable:true,...(fishingLine?{instance:fishingLine}:{})},scene);

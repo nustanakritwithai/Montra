@@ -1,7 +1,7 @@
 import {createHash} from "node:crypto";
 /** MONTRA V0.2.8: declarative world geometry. No client coordinates are trusted. */
 import { isFlightAltitude, isOnGround, isOnPlatform, isOnTop, touchesWallBody, wallBlocksShot, rayHitsBox } from "./HeightRules.js";
-import { groundSample, terrainRayClear, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
+import { groundSample, terrainRayClear, waterTerrain, RIDGE_ENABLED, RIDGE_PASS, makeRidgePass, type GroundTerrain } from "./GroundTerrain.js";
 import { TEMPLE_ID, TEMPLE_GATE, TEMPLE_MAP } from "./TempleMap.js";
 import { ATLAS_MAPS, BOSS_RESPAWN_MS, MARSH_GATE, atlasPortals } from "./WorldAtlas.js";
 import {regionalBossOn} from "./RegionalBosses.js";
@@ -58,6 +58,7 @@ export type WorldMapDefinition = Readonly<{
   obstacles: readonly WorldObstacle[];
   walls?: readonly WorldWall[];
   water?: readonly WorldWall[];
+  waterLevel?: number;
   bridges?: readonly Readonly<{x:number;z:number}>[];
   huntTrail?: Province["huntTrail"];
   region?: Readonly<{range:readonly [number,number];hint:string;noFlight:boolean}>;
@@ -105,6 +106,10 @@ export const VILLAGE_LAYOUT = Object.freeze({
   forestGate:{x:-10,z:-56}, cityGate:{x:10,z:-56},
 });
 export const VILLAGE_RIVER: WorldWall = {x:-80,z:48,width:160,length:40};
+export const VILLAGE_WATERS:readonly WorldWall[] = [
+  VILLAGE_RIVER,{x:-19.7,z:-26,width:11.2,length:74},{x:8.5,z:-26,width:11.2,length:74},
+  {x:-50,z:-50,width:14,length:10},
+];
 // Solid village buildings (boxes). Shared by the server collision and the client models.
 export const VILLAGE_BUILDINGS: readonly WorldWall[] = [
   {x:-6,z:-52,width:12,length:7},                                   // ordination hall (ubosot)
@@ -125,7 +130,7 @@ const maps: Record<string,WorldMapDefinition>={
     id: "ritual_village", name: "หมู่บ้านอาคม",
     bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
     spawn: { x: 0, y: 0, z: 0 },
-    water: WORLD_EXPANSION ? [VILLAGE_RIVER] : undefined,
+    water: WORLD_EXPANSION ? VILLAGE_WATERS : undefined,
     walls: VILLAGE_BUILDINGS,
     obstacles: [
       ...[[-38,30],[-34,30],[-30,30],[-38,38],[-30,38]].map(([x,z],i)=>({id:"training-dummy-"+(i+1),x,z,radius:.45})),
@@ -188,7 +193,9 @@ const maps: Record<string,WorldMapDefinition>={
 };
 export const WORLD_MAPS:Readonly<Record<string,WorldMapDefinition>>=Object.freeze(Object.fromEntries(Object.entries(maps).map(([id,map])=>{
   if(!WORLD_EXPANSION)return [id,map];
-  const world={...map,...originalRelief(map)},boss=regionalBossOn(id);
+  const reliefMap=id===DEFAULT_MAP_ID?{...map,water:[VILLAGE_RIVER]}:map;
+  const raised={...map,...originalRelief(reliefMap)};
+  const world={...raised,...waterTerrain(raised)},boss=regionalBossOn(id);
   if(boss){
     const {id:bossId,name,level,x,z,strikeRadius,respawnMs}=boss;
     world.boss={id:bossId,name,level,x,z,strikeRadius,respawnMs};
@@ -280,7 +287,6 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
     } else if (!isFlightAltitude(point.y)) return false;
   } else if (!isOnGround(point.y) && !isFlightAltitude(point.y)) return false;
   if((map.region?.noFlight || map.strategic?.kind==="territory") && !isOnGround(point.y))return false;
-  if(isOnGround(point.y) && map.water?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   if(map.walls?.some(w=>segmentIntersectsExpandedWall(point,point,w,radius)))return false;
   return map.obstacles.every(o => Math.hypot(point.x - o.x, point.z - o.z) > o.radius + radius);
 }

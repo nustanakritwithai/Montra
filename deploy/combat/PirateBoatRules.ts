@@ -23,12 +23,14 @@ export const BOAT_RESPAWN_MS = 15_000;
 export const BOAT_DOCK_SPAWNS: Record<string, { x: number; z: number; heading: number }> = {
   ritual_village: { x: 0, z: 51, heading: Math.PI / 2 },
   river_watch: { x: -98, z: 24, heading: 0 },
+  drowned_marsh: { x: -109, z: -68, heading: 0 },
 };
 
 /** Unit vectors from each harbor into navigable water, independent of visual heading. */
 export const BOAT_DOCK_OFFSHORE_DIRECTIONS: Record<string, { x: number; z: number }> = {
   ritual_village: { x: 1, z: 0 },
   river_watch: { x: 0, z: 1 },
+  drowned_marsh: { x: 0, z: 1 },
 };
 
 export type BoatWorldState = 'docked' | 'sailing' | 'sunk' | 'respawning';

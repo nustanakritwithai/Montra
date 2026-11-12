@@ -1,4 +1,5 @@
-import {VILLAGE_RIVER,WORLD_MAPS,groundAt,onMapGround,provinceShotClear,type WorldWall} from "./WorldMaps.js";
+import {VILLAGE_WATERS,WORLD_MAPS,groundAt,onMapGround,provinceShotClear,type WorldWall} from "./WorldMaps.js";
+import {waterDepthAt} from "./GroundTerrain.js";
 
 export const FISH_CAST_RANGE=9;
 export const FISH_BITE_DELAY=3000;
@@ -8,18 +9,15 @@ export const FISH_MAX_DISTANCE=18;
 export type FishItem="mat_fish_common"|"mat_fish_silver"|"mat_fish_spirit";
 export type FishingSession={id:string;mapId:string;x:number;z:number;originX:number;originZ:number;combatAt:number;biteAt:number;lastReel:number;lastDriftAt:number;distance:number;initialDistance:number;strength:number;line:number;item:FishItem};
 
-// The canals and pond also support fishing. Only the river blocks land movement.
-const villageWater:readonly WorldWall[]=[
-  {x:-19.7,z:-26,width:11.2,length:74},{x:8.5,z:-26,width:11.2,length:74},
-  VILLAGE_RIVER,
-  {x:-50,z:-50,width:14,length:10},          // the field pond
-];
 export function fishingWater(mapId:string):readonly WorldWall[]{
   const map=WORLD_MAPS[mapId];if(!map)return [];
-  return mapId==="ritual_village"?villageWater:(map.water??[]);
+  return map.water??(mapId==="ritual_village"?VILLAGE_WATERS:[]);
 }
 export function isFishingWater(mapId:string,x:number,z:number):boolean{
-  return Number.isFinite(x) && Number.isFinite(z) && fishingWater(mapId).some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length);
+  if(!Number.isFinite(x) || !Number.isFinite(z))return false;
+  const map=WORLD_MAPS[mapId];
+  if(map?.waterLevel!==undefined)return waterDepthAt(map,x,z)>0;
+  return fishingWater(mapId).some(w=>x>=w.x && x<=w.x+w.width && z>=w.z && z<=w.z+w.length);
 }
 export function validateFishingPosition(p:{mapId:string;x:number;y:number;z:number;alive:boolean;mounted:boolean;flying:boolean},x:number,z:number):void{
   const map=WORLD_MAPS[p.mapId];

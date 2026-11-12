@@ -1252,7 +1252,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       return this.reject(client,"forest_objective_near_ranger");
     const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
     const escort={id:active.id,x:keeper.x,y:keeper.y,z:keeper.z,hp:100,nextAttack:this.simulatedMs+2000,nextPlan:0,nextSend:0,retryAt:0,
-      waypoint:null as Vec2|null,nav:new MonsterRRTNavigator([...trees,...(map.walls ?? []),...(map.water ?? [])],map.bounds,180)};
+      waypoint:null as Vec2|null,nav:new MonsterRRTNavigator([...trees,...(map.walls ?? [])],map.bounds,180)};
     this.forestEscorts.set(id,escort);
     try{client.send("forest_escort_state",{id:active.id,mapId:map.id,x:escort.x,y:escort.y,z:escort.z,hp:escort.hp,maxHp:100});}catch{}
   }
@@ -6923,7 +6923,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     let state=this.spiritNavigators.get(ownerId);
     if(!state || state.mapId!==owner.mapId){
       const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
-      state={mapId:owner.mapId,nav:new MonsterRRTNavigator([...trees,...(map.walls ?? []),...(map.water ?? [])],map.bounds,220),nextPlan:0,waypoint:null,forceDetour:false,intent};
+      state={mapId:owner.mapId,nav:new MonsterRRTNavigator([...trees,...(map.walls ?? [])],map.bounds,220),nextPlan:0,waypoint:null,forceDetour:false,intent};
       this.spiritNavigators.set(ownerId,state);
     }
     if(state.intent!==intent){state.intent=intent;state.forceDetour=false;state.waypoint=null;state.nav.clear();}
@@ -8074,6 +8074,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const civilian=this.warCivilianPositions.get(id);
     if(this.field && !civilian)return null;
     const shore = this.boatWorld.safeSave(id);
+    const map = getWorldMap(player.mapId), relativeHeight = map?.reliefLabels || map?.waterLevel!==undefined;
     const scales=this.masteryScales.get(player)??{hp:1,mana:1};
     const pvpUntil=this.masteryMode(id)==="pvp"?Date.now()+Math.ceil(this.field?PROGRESSION.combatQuietMs:Math.max(0,PROGRESSION.combatQuietMs-(this.simulatedMs-(this.lastPvpMs.get(id)??-Infinity)))):0;
     const vitals=encodeMasteryVitals(hpOverride??player.hp,manaOverride??player.mana,scales.hp,scales.mana,pvpUntil);
@@ -8101,8 +8102,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       ...vitals,
       x:civilian?.x??shore?.x??player.x,
       // Civilian positions already use the stored height coordinates.
-      y:civilian?.y??(shore ? (getWorldMap(player.mapId)?.reliefLabels ? 0 : shore.y) :
-        player.flying ? FLIGHT.altitude : getWorldMap(player.mapId)?.reliefLabels ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
+      y:civilian?.y??(shore ? (relativeHeight ? 0 : shore.y) :
+        player.flying ? FLIGHT.altitude : relativeHeight ? (isOnPlatform(surfaceLayer(player))?FORT.height:0) : player.y),
       z:civilian?.z??shore?.z??player.z,
       ghostPool: this.ghostPools.get(id),
       inventory, updatedAt: new Date().toISOString(),
@@ -8200,7 +8201,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // A saved location is restored only if the current server geometry allows it.
       // Atlas saves keep the pre-relief ground/flight layer on disk; project onto the current surface at admission.
       const restoreFlight = Boolean(saved && (!map.terrain || !map.region?.noFlight) && isFlightAltitude(saved.y));
-      const savedY=saved ? saved.y+(map.reliefLabels?groundAt(mapId,saved.x,saved.z):0) : 0;
+      const relativeHeight=map.reliefLabels || map.waterLevel!==undefined;
+      const savedY=saved ? saved.y+(relativeHeight?groundAt(mapId,saved.x,saved.z):0) : 0;
       let validPosition = saved && mapId === savedMapId && (!map.terrain || isSafeWorldPoint(map,{...saved,y:savedY})) && this.canOccupy(
         saved.x, saved.z, savedY-groundAt(mapId,saved.x,saved.z), restoreFlight, mapId);
       let safeSpawn = mapId === DEFAULT_MAP_ID ? { ...spawn, y: 0 } : getSafeMapSpawn(mapId);

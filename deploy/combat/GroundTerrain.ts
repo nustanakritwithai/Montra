@@ -1,4 +1,4 @@
-import type { WorldMapDefinition, WorldPortal } from "./WorldMaps.js";
+import type { WorldMapDefinition, WorldPortal, WorldWall } from "./WorldMaps.js";
 
 export const RIDGE_PASS = "twin_neck_pass";
 export const RIDGE_ENABLED = process.env.MONTRA_RIDGE_TERRAIN === "1";
@@ -26,6 +26,72 @@ export function groundSample(t:GroundTerrain,x:number,z:number){
   const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
   const du=u>=v?b-a:d-c,dv=u>=v?d-b:c-a;
   return {height:a+du*u+dv*v,grade:Math.hypot(du/dx,dv/dz)};
+}
+
+const WATER_LEVEL = .025;
+const SHORE_HEIGHT = -.025;
+const MAX_WATER_DEPTH = 1.45;
+
+function containsWaterArea(area:WorldWall,x:number,z:number):boolean {
+  return x>=area.x && x<=area.x+area.width && z>=area.z && z<=area.z+area.length;
+}
+
+export function waterDepthAt(map:WorldMapDefinition,x:number,z:number):number {
+  if(map.waterLevel===undefined || !map.terrain || x<map.bounds.minX || x>map.bounds.maxX ||
+      z<map.bounds.minZ || z>map.bounds.maxZ || !map.water?.some(area=>containsWaterArea(area,x,z)))return 0;
+  const bed=groundSample(map.terrain,x,z).height;
+  return bed<SHORE_HEIGHT ? map.waterLevel-bed : 0;
+}
+
+// Split the perimeter of the union so adjoining rectangles share a bed.
+function shoreline(waters:readonly WorldWall[],vertical:boolean) {
+  const spans=waters.map(w=>vertical?[w.x,w.x+w.width,w.z,w.z+w.length]:[w.z,w.z+w.length,w.x,w.x+w.width]);
+  const edges:{at:number;start:number;end:number}[]=[];
+  for(const [lo,hi,start,end] of spans)for(const at of [lo,hi]){
+    const overlaps=spans.filter(([a,b,c,d])=>
+      (at===lo ? a<at && b>=at : a<=at && b>at) && c<end && d>start).sort((a,b)=>a[2]-b[2]);
+    let cursor=start;
+    for(const [, ,a,b] of overlaps){
+      if(a>cursor)edges.push({at,start:cursor,end:a});
+      cursor=Math.max(cursor,b);
+    }
+    if(cursor<end)edges.push({at,start:cursor,end});
+  }
+  return edges;
+}
+
+export function waterTerrain(map:WorldMapDefinition) {
+  const waters=map.water;
+  if(!waters?.length)return {};
+  const {minX,maxX,minZ,maxZ}=map.bounds;
+  const cuts=(axis:"x"|"z",min:number,max:number,existing:number[]|undefined)=>{
+    const points=new Set(existing ?? [min,max]);
+    for(const area of waters){
+      const start=area[axis],size=axis==="x"?area.width:area.length,inset=Math.min(1.25,size/4);
+      for(const p of [start,start+inset,start+size/2,start+size-inset,start+size]){
+        if(p>min && p<max)points.add(p);
+      }
+    }
+    return [...points].sort((a,b)=>a-b).filter((p,i,a)=>i===0 || p-a[i-1]>1e-6);
+  };
+  const base=map.terrain;
+  const xs=cuts("x",minX,maxX,base?.xs),zs=cuts("z",minZ,maxZ,base?.zs);
+  const islands=base?(map.reliefLabels??[])
+    .filter(p=>waters.some(area=>containsWaterArea(area,p.x,p.z)))
+    .map(p=>({...p,height:groundSample(base,p.x,p.z).height})).filter(p=>p.height>0):[];
+  const banksX=shoreline(waters,true),banksZ=shoreline(waters,false);
+  const heights=zs.map(z=>xs.map(x=>{
+    const height=base?groundSample(base,x,z).height:0;
+    if(!waters.some(area=>containsWaterArea(area,x,z)))return height;
+    let distance=MAX_WATER_DEPTH/.22;
+    for(const {at,start,end} of banksX)distance=Math.min(distance,Math.hypot(x-at,Math.max(start-z,0,z-end)));
+    for(const {at,start,end} of banksZ)distance=Math.min(distance,Math.hypot(z-at,Math.max(start-x,0,x-end)));
+    let bed=height-.22*distance;
+    // Keep authored hilltops above the water with a walkable bank around them.
+    for(const island of islands)bed=Math.max(bed,Math.min(height,island.height-.34*Math.hypot(x-island.x,z-island.z)));
+    return bed;
+  }));
+  return {terrain:{xs,zs,heights,maxGrade:base?.maxGrade??.52},waterLevel:WATER_LEVEL};
 }
 // A ray is linear within each triangle. Testing every crossed edge also catches low
 // crests between two visible endpoints, without depending on simulation tick length.

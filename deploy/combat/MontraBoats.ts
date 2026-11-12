@@ -1,4 +1,5 @@
 import { stepTowards, type Vec2 } from "./GameRules.js";
+import { waterDepthAt } from "./GroundTerrain.js";
 import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
@@ -8,11 +9,12 @@ import {
 export const BOAT_SHORES: Readonly<Record<string, Vec2>> = {
   ritual_village: {x: 0, z: 46},
   river_watch: {x: -92.7, z: 24},
+  drowned_marsh: {x: -104, z: -68},
 };
 export const BOAT_LAUNCH_RANGE = 3;
 export const BOAT_DECK = {width: 2.1, length: 5.2, y: .88};
 const starter = AUTHORITATIVE_BOAT_DEFINITIONS["training-dinghy"]!;
-// Pirate Fruit DeckSpace ratios, projected onto Montra's flat authoritative water.
+// Pirate Fruit DeckSpace ratios, measured from Montra's water level.
 const halfWidth = BOAT_DECK.width * .41 * 1.08;
 const halfLength = BOAT_DECK.length * .31 * 1.08;
 
@@ -45,18 +47,18 @@ export function parseBoatIntent(message: unknown): BoatIntent | null {
   }
 }
 
-function inWater(mapId: string, x: number, z: number) {
-  return Boolean(getWorldMap(mapId)?.water?.some(w => x >= w.x && x <= w.x + w.width && z >= w.z && z <= w.z + w.length));
+function deckY(mapId:string) {
+  return (getWorldMap(mapId)?.waterLevel??0)+BOAT_DECK.y;
 }
 
 export function boatCanSail(mapId: string, x: number, z: number, radius: number) {
   const map = getWorldMap(mapId);
   if (!map || !BOAT_SHORES[mapId] || x - radius < map.bounds.minX || x + radius > map.bounds.maxX ||
-      z - radius < map.bounds.minZ || z + radius > map.bounds.maxZ || !inWater(mapId, x, z)) return false;
+      z - radius < map.bounds.minZ || z + radius > map.bounds.maxZ || waterDepthAt(map,x,z)<.45) return false;
   for (let i = 0; i < 16; i++) {
     const a = i * Math.PI / 8;
     const px = x + Math.cos(a) * radius, pz = z + Math.sin(a) * radius;
-    if (!inWater(mapId, px, pz) || map.walls?.some(w => px >= w.x && px <= w.x+w.width && pz >= w.z && pz <= w.z+w.length)) return false;
+    if (!waterDepthAt(map,px,pz) || map.walls?.some(w => px >= w.x && px <= w.x+w.width && pz >= w.z && pz <= w.z+w.length)) return false;
   }
   return !map.obstacles.some(o => Math.hypot(x-o.x, z-o.z) < o.radius+radius);
 }
@@ -69,7 +71,7 @@ function toLocal(boat: BoatWorldSnapshot, point: Vec2): Vec2 {
 
 function toWorld(boat: BoatWorldSnapshot, point: Vec2): WorldPoint {
   const c = Math.cos(boat.heading), s = Math.sin(boat.heading);
-  return {x: boat.x + point.x*c + point.z*s, y: BOAT_DECK.y, z: boat.z - point.x*s + point.z*c};
+  return {x: boat.x + point.x*c + point.z*s, y: deckY(boat.islandId), z: boat.z - point.x*s + point.z*c};
 }
 
 function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null {
@@ -80,7 +82,7 @@ function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null
       const a = i * Math.PI / 8;
       const x = point.x + Math.cos(a)*r, z = point.z + Math.sin(a)*r;
       const y = groundAt(map.id, x, z);
-      if (!inWater(map.id, x, z) && isSafeWorldPoint(map, {x,y,z}) &&
+      if (waterDepthAt(map,x,z)<=.14 && isSafeWorldPoint(map, {x,y,z}) &&
           Math.abs(y-point.y) <= 1.3 && provinceShotClear(map, eye, {x,y:y+1,z})) {
         return {x,y,z};
       }
@@ -105,8 +107,10 @@ export class MontraBoats {
     switch (intent.action) {
       case "launch": {
         const shore = BOAT_SHORES[player.mapId];
+        const map = getWorldMap(player.mapId);
         const owned = this.sim.stateOf("boat-"+id);
-        if (rider || !shore || Math.hypot(player.x-shore.x, player.z-shore.z) > BOAT_LAUNCH_RANGE ||
+        if (rider || !shore || !map || waterDepthAt(map,player.x,player.z)>.14 ||
+            Math.hypot(player.x-shore.x, player.z-shore.z) > BOAT_LAUNCH_RANGE ||
             owned?.passengerIds.length || !BOAT_DOCK_SPAWNS[player.mapId]) return false;
         const launched = this.sim.summon({entityId:"boat-"+id,ownerId:id,definitionId:starter.id,
           maxHp:starter.maxHp}, player.mapId, now);
@@ -114,12 +118,12 @@ export class MontraBoats {
       }
       case "board": {
         const target = this.sim.stateOf(intent.boatId);
-        if (rider || !target || target.islandId !== player.mapId || Math.abs(target.speed) > 1 ||
-            inWater(player.mapId,player.x,player.z) ||
-            !landNear(target, {x:target.x,y:BOAT_DECK.y,z:target.z}) ||
+        const map = getWorldMap(player.mapId), y = deckY(player.mapId);
+        if (rider || !target || !map || target.islandId !== player.mapId || Math.abs(target.speed) > 1 ||
+            waterDepthAt(map,player.x,player.z)>.14 || Math.abs(player.y-y)>1.3 ||
             Math.hypot(player.x-target.x, player.z-target.z) > 6.5 ||
-            !provinceShotClear(getWorldMap(player.mapId)!, {x:player.x,y:player.y+1,z:player.z},
-              {x:target.x,y:BOAT_DECK.y+1,z:target.z}) ||
+            !provinceShotClear(map, {x:player.x,y:player.y+1,z:player.z},
+              {x:target.x,y:y+1,z:target.z}) ||
             !this.sim.board(intent.boatId, id, player.mapId, player.x, player.z)) return false;
         const shore = {x:player.x,y:player.y,z:player.z};
         const local = toLocal(target, player);

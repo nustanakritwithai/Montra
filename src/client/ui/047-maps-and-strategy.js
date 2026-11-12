@@ -93,6 +93,23 @@
     ink.putImageData(pixels,0,0);
     terrainTints.set(t,canvas);return canvas;
   }
+  const mapWaterPaths=new WeakMap();
+  function drawMapWater(ctx,map,x,z,scale) {
+    let path=mapWaterPaths.get(map);
+    if(!path){
+      path=new Path2D();
+      for(const polygon of waterSurfacePolygons(map)){
+        path.moveTo(polygon[0][0],polygon[0][1]);
+        for(let i=1;i<polygon.length;i++)path.lineTo(polygon[i][0],polygon[i][1]);
+        path.closePath();
+      }
+      mapWaterPaths.set(map,path);
+    }
+    ctx.save();
+    ctx.translate(x,z);ctx.scale(scale,scale);
+    ctx.fillStyle="#32645f";ctx.fill(path);
+    ctx.restore();
+  }
   function drawMap(ctx,width,height,large=false) {
     const theme = mapTheme(activeMapId);
     const map = worldDefinitions?.[activeMapId];
@@ -112,7 +129,7 @@
     ctx.fillRect(left, top, w, h); ctx.shadowBlur = 0;
     if(map?.terrain){
       ctx.drawImage(terrainTint(map.terrain),left,top,w,h);
-      if(large && !map.reliefLabels)for(const [x,z,label] of [[157,100,"เชิงเขา 0 ม."],[156,2,"ลานกลาง 3 ม."],[156,-95,"สันสูง 6 ม."]])
+      if(large && map.id==="twin_neck_pass")for(const [x,z,label] of [[157,100,"เชิงเขา 0 ม."],[156,2,"ลานกลาง 3 ม."],[156,-95,"สันสูง 6 ม."]])
         mapText(ctx,label,sx(x),sy(z),11,"#ffedbd");
     }
     const grain = mapGrain(activeMapId);
@@ -132,8 +149,9 @@
       for (let z = Math.ceil(bounds.minZ / step) * step; z <= bounds.maxZ; z += step) { ctx.moveTo(left, sy(z)); ctx.lineTo(left + w, sy(z)); }
       ctx.stroke();
     }
+    if(map?.waterLevel!==undefined)drawMapWater(ctx,map,sx(0),sy(0),scale);
     if (activeMapId === "ritual_village") {
-      for (const area of villageWaters) {
+      for (const area of map?.waterLevel===undefined ? villageWaters : []) {
         const x0 = Math.max(bounds.minX,area.x), x1 = Math.min(bounds.maxX,area.x+area.width);
         const z0 = Math.max(bounds.minZ,area.z), z1 = Math.min(bounds.maxZ,area.z+area.length);
         const water = ctx.createLinearGradient(sx(x0), 0, sx(x1), 0);
@@ -151,7 +169,7 @@
         for (let z = -18; z <= 18; z += 1.15) { ctx.moveTo(sx(-5.55), sy(z)); ctx.lineTo(sx(5.55), sy(z)); }
         ctx.stroke();
       }
-      ctx.strokeStyle = "#2a1c13"; ctx.lineWidth = 1.5 * u; ctx.strokeRect(sx(-5.55), top, sx(5.55) - sx(-5.55), h);
+      ctx.strokeStyle = "#2a1c13"; ctx.lineWidth = 1.5 * u; ctx.strokeRect(sx(-5.55), sy(-18), sx(5.55) - sx(-5.55), sy(18)-sy(-18));
       for (const [x, z, size] of [[-10,-13,4],[10,-13,3.5],[-10,-4,3.5],[10,3.4,4.1],[-10,12,3.5],[10,15,3.5]]) {
         const hx = sx(x - size / 2), hy = sy(z - size / 2), hs = size * scale;
         ctx.shadowColor = "rgba(0,0,0,.7)"; ctx.shadowBlur = 6 * u; ctx.shadowOffsetY = 2 * u;
@@ -180,7 +198,7 @@
         for (const path of map?.paths || []) { ctx.beginPath(); (map.strategic || map.huntTrail ? path : smoothPath(path)).forEach((p, i) => i ? ctx.lineTo(sx(p.x), sy(p.z)) : ctx.moveTo(sx(p.x), sy(p.z))); ctx.stroke(); }
       };
       if (activeMapId === "forbidden_forest") { ctx.fillStyle = "#4a3f2e"; ctx.fillRect(sx(-2.5), sy(-20), 5 * scale, 40 * scale); }
-      for (const pool of map?.water || []) {
+      for (const pool of map?.waterLevel===undefined ? map?.water||[] : []) {
         ctx.fillStyle = theme.water || "#14384b"; ctx.fillRect(sx(pool.x), sy(pool.z), pool.width * scale, pool.length * scale);
         ctx.strokeStyle = "rgba(170,210,230,.2)"; ctx.lineWidth = 1;
         for (let z = pool.z + 1.5; z < pool.z + pool.length; z += 3) { const x = pool.x + pool.width * noise(z, 177); ctx.beginPath(); ctx.moveTo(sx(x), sy(z)); ctx.lineTo(sx(x + 2.5), sy(z)); ctx.stroke(); }
