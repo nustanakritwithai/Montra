@@ -68,7 +68,7 @@ import {questChoices,questAdvice,preferredQuestId,type QuestChoice} from "./Ques
 import { isAtlasMap } from "./WorldAtlas.js";
 import { TEMPLE_ID } from "./TempleMap.js";
 import { DEFAULT_MAP_ID, HOME_MAP, HOME_BUILD_GRID, homeMapId, homeWallBlocks, isHomeMap, getWorldMap, groundAt, surfaceLayer, meleeHeightBlocked, onMapGround, getSafeMapSpawn, isSafeWorldPoint, isRestArea, isWorldSegmentClear, VILLAGE_ARRIVALS, WORLD_ROOM_CAPACITY, WORLD_MAPS, WORLD_EXPANSION, type WorldPortal } from "./WorldMaps.js";
-import { provinceShotClear, segmentIntersectsExpandedWall } from "./WorldMaps.js";
+import { provinceShotClear, segmentIntersectsExpandedWall, walkBridgeTransitionClear } from "./WorldMaps.js";
 import { crestCorners, onRampart, wallRing } from "./StrategicProvinces.js";
 import { checkWarp, checkWarpDestination, type WarpContext, WARP_COMBAT_LOCK_MS, WARP_COOLDOWN_MS } from "./WarpRules.js";
 import { parseChatMessage } from "./ChatRules.js";
@@ -7508,9 +7508,17 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return false; // Never trust arbitrary Y from a client/save.
   }
 
+  private canMoveOnSurface(player:Player,x:number,z:number):boolean {
+    const map=getWorldMap(player.mapId);
+    return (!map || player.flying || walkBridgeTransitionClear(map,player,x,z)) &&
+      this.canOccupy(x,z,surfaceLayer(player),player.flying,player.mapId);
+  }
+
   private moveOnSurface(player:{x:number;y:number;z:number;mapId:string;flying?:boolean;boatId?:string},x:number,z:number){
     if(player.boatId)return;
-    if(getWorldMap(player.mapId)?.terrain){
+    const map=getWorldMap(player.mapId);
+    if(map?.terrain){
+      if(!player.flying && !walkBridgeTransitionClear(map,player,x,z))return;
       const layer=player.flying?FLIGHT.altitude:isOnPlatform(surfaceLayer(player))?FORT.height:0;
       player.y=groundAt(player.mapId,x,z)+layer;
     }
@@ -7535,7 +7543,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const move = advanceDash(
           player, dash,
           Math.min(dash.remaining, RULES.dashSpeed * dt),
-          (x, z) => this.canOccupy(x,z,surfaceLayer(player), player.flying, player.mapId),
+          (x, z) => this.canMoveOnSurface(player,x,z),
           getWorldMap(player.mapId)!.bounds,
         );
         this.moveOnSurface(player,move.x,move.z);
@@ -7595,7 +7603,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         };
         const next = stepTowards(player, approach,
           moveSpeed * dt);
-        if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
+        if (this.canMoveOnSurface(player,next.x,next.z)) {
           this.moveOnSurface(player,next.x,next.z);
           player.combatState = "approaching";
         } else {
@@ -7618,7 +7626,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const distance=Math.hypot(dx,dz);
         if(distance<.035){player.combatState="idle";this.destinations.delete(sessionId);continue;}
         const move=advanceDash(player,{dx:dx/distance,dz:dz/distance},Math.min(distance,moveSpeed*dt),
-          (x,z)=>this.canOccupy(x,z,surfaceLayer(player),false,player.mapId),getWorldMap(player.mapId)!.bounds);
+          (x,z)=>this.canMoveOnSurface(player,x,z),getWorldMap(player.mapId)!.bounds);
         if(move.moved)player.facing=facingTo(dx,dz);
         this.moveOnSurface(player,move.x,move.z);
         if(move.blocked || Math.hypot(target.x-player.x,target.z-player.z)<.035){this.destinations.delete(sessionId);player.combatState="idle";}
@@ -7628,13 +7636,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const next = stepTowards(player, target,
         moveSpeed * dt);
       if (next.moved) player.facing = facingTo(dx, dz);
-      if (this.canOccupy(next.x,next.z,surfaceLayer(player),player.flying,player.mapId)) {
+      if (this.canMoveOnSurface(player,next.x,next.z)) {
         this.moveOnSurface(player,next.x,next.z);
       } else {
         // Slide on the wall face if a legal axis exists; never tunnel through
         // solid geometry via client destinations or elevated edge tapping.
-        if (this.canOccupy(next.x,player.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,next.x,player.z);
-        else if (this.canOccupy(player.x,next.z,surfaceLayer(player),player.flying,player.mapId)) this.moveOnSurface(player,player.x,next.z);
+        if (this.canMoveOnSurface(player,next.x,player.z)) this.moveOnSurface(player,next.x,player.z);
+        else if (this.canMoveOnSurface(player,player.x,next.z)) this.moveOnSurface(player,player.x,next.z);
         else {
           this.destinations.delete(sessionId);
           player.combatState = "idle";

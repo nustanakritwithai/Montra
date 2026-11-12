@@ -97,6 +97,11 @@ function run() {
   const fort={x:0,z:0,width:4,length:8};
   const village=map({id:'ritual_village'}),route=f.plan(village,from,target,fort);
   assertClear({...village,walls:[{x:-2,z:-4,width:4,length:8}]},from,route);
+  const crossing=map({water:[{x:-2,z:-20,width:4,length:40}],
+    walkBridges:[{x:[-9,-3,3,9],z:0,width:4.4,height:3,thickness:.25}]});
+  const bridgeRoute=f.plan(crossing,{x:-12,z:4},{x:12,z:4});
+  assert.ok(bridgeRoute?.some(p=>Math.abs(p.z)<2),"dry navigation uses the bridge approaches");
+  assert.equal(f.geometry(crossing).clear({x:0,z:-3},{x:0,z:0}),false,"the raised side is not an approach");
   console.log('PASS quest planner: obstacle, wall, water, corner, sealed map, bounds, terrain, village fort');
   f.start();assert(f.active());assert.equal(f.wire.length,1);assert.equal(f.wire[0].type,'move');
   assert(Math.hypot(f.wire[0].data.x,f.wire[0].data.z)<=4.01,'bounded move hop');

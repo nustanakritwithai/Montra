@@ -1,6 +1,6 @@
 import { facingTo, stepTowards, type Vec2 } from "./GameRules.js";
 import { waterDepthAt } from "./GroundTerrain.js";
-import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldMapDefinition, type WorldPoint } from "./WorldMaps.js";
+import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, walkBridgeAt, WORLD_MAPS, type WorldMapDefinition, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
   AUTHORITATIVE_BOAT_DEFINITIONS, type BoatBerth, type BoatPort, type BoatWorldSnapshot,
@@ -94,7 +94,8 @@ function nearestPort(ports:readonly BoatPort[]|undefined,point:Vec2,side:"shore"
 
 function groundContact(map: WorldMapDefinition, deck: WorldPoint, ground: WorldPoint, allowSubmerged = true) {
   const submerged = waterDepthAt(map,ground.x,ground.z) > .14;
-  if ((submerged ? !allowSubmerged : Math.abs(ground.y-deck.y)>1.3) || !isSafeWorldPoint(map,ground) ||
+  const tooHigh = Math.abs(ground.y-deck.y)>1.3 && (!submerged || walkBridgeAt(map,ground.x,ground.z));
+  if (tooHigh || (submerged && !allowSubmerged) || !isSafeWorldPoint(map,ground) ||
       !provinceShotClear(map,{x:deck.x,y:deck.y+1,z:deck.z},{x:ground.x,y:ground.y+1,z:ground.z})) return null;
   return submerged ? "water" : "shore";
 }

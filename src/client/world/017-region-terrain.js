@@ -93,8 +93,8 @@
   }
   function playerLayer(p){
     if(!p)return NaN;
-    const t=worldDefinitions?.[activeMapId]?.terrain;
-    return Number(p.y)-(t?terrainHeight(t,p.x,p.z):0);
+    const map=worldDefinitions?.[activeMapId];
+    return Number(p.y)-(map?.walkBridges?.length?walkHeight(map,p.x,p.z):map?.terrain?terrainHeight(map.terrain,p.x,p.z):0);
   }
   function terrainCell(cuts,v){
     const i=cuts.findIndex(n=>n>v);
@@ -156,6 +156,26 @@
     const u=(x-t.xs[i])/(t.xs[i+1]-t.xs[i]),v=(z-t.zs[j])/(t.zs[j+1]-t.zs[j]);
     const a=t.heights[j][i],b=t.heights[j][i+1],c=t.heights[j+1][i],d=t.heights[j+1][i+1];
     return a+(u>=v?(b-a)*u+(d-b)*v:(d-c)*u+(c-a)*v);
+  }
+  function walkBridgeAt(map,x,z,radius=0){
+    return map?.walkBridges?.find(b=>x>=b.x[0]+radius && x<=b.x[3]-radius && Math.abs(z-b.z)<=b.width/2-radius);
+  }
+  function walkHeight(map,x,z){
+    const bridge=walkBridgeAt(map,x,z);
+    if(!bridge)return map?.terrain?terrainHeight(map.terrain,x,z):0;
+    const [start,left,right,end]=bridge.x;
+    return bridge.height*Math.min(1,(x-start)/(left-start),(end-x)/(end-right));
+  }
+  function walkBridgeTransitionClear(map,from,x,z){
+    for(const bridge of map.walkBridges??[])for(const side of [-1,1]){
+      const edge=bridge.z+side*bridge.width/2;
+      if(((from.z-edge)*side>0)===((z-edge)*side>0))continue;
+      const at=from.x+(x-from.x)*(edge-from.z)/(z-from.z);
+      if(at<bridge.x[0] || at>bridge.x[3])continue;
+      const bed=map.terrain?terrainHeight(map.terrain,at,edge):0;
+      if(walkHeight(map,at,edge)-bed>.4)return false;
+    }
+    return true;
   }
   function waterAreaContains(area,x,z){
     return x>=area.x && x<=area.x+area.width && z>=area.z && z<=area.z+area.length;
@@ -313,6 +333,43 @@
     }
     reliefPatches("graded hunt roads",map.terrain,roads,.045,paint.road);
     reliefPatches("protected roads",map.terrain,safe,.055,civicRoad);
+  }
+  function buildWalkBridges(map){
+    const trim=[];
+    const box=(name,x,y,z,width,height,depth,material)=>{
+      const mesh=B.MeshBuilder.CreateBox(name,{width,height,depth},scene);
+      mesh.position.set(x,y,z);mesh.material=material;mesh.isPickable=false;
+      return mesh;
+    };
+    for(const bridge of map.walkBridges){
+      const {x,z,width,height,thickness}=bridge;
+      const profile=[0,height,height,0];
+      for(let i=1;i<x.length;i++){
+        const dx=x[i]-x[i-1],dy=profile[i]-profile[i-1];
+        const cx=(x[i]+x[i-1])/2,cy=(profile[i]+profile[i-1])/2;
+        const angle=Math.atan2(dy,dx),length=Math.hypot(dx,dy);
+        const deck=box("walk bridge deck",cx+Math.sin(angle)*thickness/2,cy-Math.cos(angle)*thickness/2,z,length,thickness,width,provinceFx.plank);
+        deck.rotation.z=angle;deck.parent=expansionRoot;deck.isPickable=true;
+        deck.metadata={walkable:true,walkBridgeId:bridge.id};
+        for(const side of [-1,1]){
+          const edge=z+side*(width/2-.1);
+          const rail=box("bridge handrail",cx,cy+.78,edge,length,.12,.12,woodenAlt);
+          rail.rotation.z=angle;trim.push(rail);
+          for(let j=0,n=Math.ceil(dx/3);j<n;j++){
+            const t=(j+.5)/n;
+            trim.push(box("bridge railing post",x[i-1]+dx*t,profile[i-1]+dy*t+.38,edge,.15,.85,.15,darkWood));
+          }
+        }
+      }
+      for(const foot of [x[1]-.3,x[2]+.3])for(const side of [-1,1]){
+        const edge=z+side*(width/2-.23),bed=terrainHeight(map.terrain,foot,edge);
+        trim.push(box("bridge bank pier",foot,(bed+height-thickness)/2,edge,.46,height-thickness-bed,.52,darkWood));
+        trim.push(box("bridge lantern",foot,height+1.12,edge,.3,.42,.3,glowMat));
+      }
+      addLightSpot(x[1]-.3,height+1.18,z,"#ffc47c",.8);
+      addLightSpot(x[2]+.3,height+1.18,z,"#ffc47c",.8);
+    }
+    for(const {mesh} of mergeByCell(trim)){mesh.parent=expansionRoot;mesh.isPickable=false;}
   }
   function buildReliefContours(map,paint){
     const t=map.terrain,lines=[];

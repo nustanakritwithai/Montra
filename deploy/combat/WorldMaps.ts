@@ -39,6 +39,10 @@ export type WorldPortal = Readonly<{
 }>;
 export type HuntCamp = Readonly<{id:string; name:string; x:number; z:number; levels:readonly number[];tier?:"strong"}>;
 export type RestArea = Readonly<{x:number; z:number; radius:number; name:string}>;
+export type WalkBridge = Readonly<{
+  id:string; z:number; width:number; height:number; thickness:number;
+  x:readonly [approachStart:number, deckStart:number, deckEnd:number, approachEnd:number];
+}>;
 export const WORLD_EXPANSION = process.env.MONTRA_WORLD_EXPANSION === "1";
 export const SHRINE_GUARDIAN = Object.freeze({
   id: "forest_shrine_keeper", name: "ผู้พิทักษ์ศาลร้าง", level: 12,
@@ -65,6 +69,7 @@ export type WorldMapDefinition = Readonly<{
   boatLanes?: readonly BoatLane[];
   waterGates?: readonly WaterGate[];
   bridges?: readonly Readonly<{x:number;z:number}>[];
+  walkBridges?: readonly WalkBridge[];
   huntTrail?: Province["huntTrail"];
   region?: Readonly<{range:readonly [number,number];hint:string;noFlight:boolean}>;
   portals: readonly WorldPortal[];
@@ -136,6 +141,13 @@ const maps: Record<string,WorldMapDefinition>={
     bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
     spawn: { x: 0, y: 0, z: 0 },
     water: WORLD_EXPANSION ? VILLAGE_WATERS : undefined,
+    walkBridges: WORLD_EXPANSION ? [{id:"market_bridge",x:[0,8.2,29.3,39],z:-4,width:4.4,height:3.55,thickness:.25}] : undefined,
+    paths: WORLD_EXPANSION ? [
+      [{x:0,z:0},{x:0,z:-32},{x:0,z:-39}],
+      [{x:39,z:-4},{x:42.5,z:-4},{x:42.5,z:9},{x:50,z:15},{x:54,z:24},{x:54,z:39},{x:52,z:43},{x:49,z:46}],
+      [{x:-34,z:35},{x:-42,z:38},{x:-49,z:43},{x:-49,z:46}],
+      [{x:54,z:29},{x:49,z:33},{x:43,z:36}],
+    ] : undefined,
     walls: VILLAGE_BUILDINGS,
     obstacles: [
       ...[[-38,30],[-34,30],[-30,30],[-38,38],[-30,38]].map(([x,z],i)=>({id:"training-dummy-"+(i+1),x,z,radius:.45})),
@@ -226,9 +238,32 @@ export function isRestArea(mapId: string, point: {x:number; z:number}): boolean 
   }
   return map.restAreas?.some(a=>Math.hypot(point.x-a.x,point.z-a.z)<=a.radius) ?? false;
 }
+export function walkBridgeAt(map:WorldMapDefinition|undefined,x:number,z:number){
+  return map?.walkBridges?.find(bridge=>x>=bridge.x[0] && x<=bridge.x[3] && Math.abs(z-bridge.z)<=bridge.width/2);
+}
+function walkSurface(map:WorldMapDefinition|undefined,x:number,z:number){
+  const bridge=walkBridgeAt(map,x,z);
+  if(bridge){
+    const [start,left,right,end]=bridge.x;
+    if(x<left)return {height:bridge.height*(x-start)/(left-start),grade:bridge.height/(left-start)};
+    if(x>right)return {height:bridge.height*(end-x)/(end-right),grade:bridge.height/(end-right)};
+    return {height:bridge.height,grade:0};
+  }
+  return map?.terrain?groundSample(map.terrain,x,z):{height:0,grade:0};
+}
 export function groundAt(mapId:string,x:number,z:number){
-  const t=getWorldMap(mapId)?.terrain;
-  return t?groundSample(t,x,z).height:0;
+  return walkSurface(getWorldMap(mapId),x,z).height;
+}
+export function walkBridgeTransitionClear(map:WorldMapDefinition,from:{x:number;z:number},x:number,z:number){
+  for(const bridge of map.walkBridges??[])for(const side of [-1,1]){
+    const edge=bridge.z+side*bridge.width/2;
+    if(((from.z-edge)*side>0)===((z-edge)*side>0))continue;
+    const at=from.x+(x-from.x)*(edge-from.z)/(z-from.z);
+    if(at<bridge.x[0] || at>bridge.x[3])continue;
+    const bed=map.terrain?groundSample(map.terrain,at,edge).height:0;
+    if(walkSurface(map,at,edge).height-bed>.4)return false;
+  }
+  return true;
 }
 export function surfaceLayer(p:{mapId:string;x:number;y:number;z:number}){return p.y-groundAt(p.mapId,p.x,p.z);}
 export function onMapGround(p:{mapId:string;x:number;y:number;z:number}){return isOnGround(surfaceLayer(p));}
@@ -254,6 +289,8 @@ function clearOfObstacles(map:WorldMapDefinition,from:Feet,to:Feet){
 export function provinceShotClear(map:WorldMapDefinition,from:WorldPoint,to:WorldPoint,closedGate:ClosedGates=false):boolean{
   const r=map.strategic?.rampart;
   if(map.terrain && !terrainRayClear(map.terrain,from,to))return false;
+  if(map.walkBridges?.some(b=>rayHitsBox(from,to,{x:b.x[1],y:b.height-b.thickness,z:b.z-b.width/2},
+    {x:b.x[2],y:b.height,z:b.z+b.width/2})))return false;
   if(map.id===DEFAULT_MAP_ID)return !wallBlocksShot(from,to);
   if(!WORLD_EXPANSION)return true;
   if(!r)return !map.walls?.some(w=>segmentIntersectsExpandedWall(from,to,w,0)) && clearOfObstacles(map,from,to);
@@ -271,7 +308,7 @@ export function isSafeWorldPoint(map: WorldMapDefinition, point: WorldPoint, rad
   if (point.x - radius < map.bounds.minX || point.x + radius > map.bounds.maxX ||
       point.z - radius < map.bounds.minZ || point.z + radius > map.bounds.maxZ) return false;
   if(map.terrain){
-    const surface=groundSample(map.terrain,point.x,point.z);
+    const surface=walkSurface(map,point.x,point.z);
     const offset=point.y-surface.height;
     if(isOnGround(offset)){
       if(surface.grade>map.terrain.maxGrade)return false;

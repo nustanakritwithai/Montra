@@ -168,6 +168,11 @@
         }
       }
       if(map?.paths?.length)trail(Math.max(1.5,4*scale),"#8f7a5a");
+      for(const bridge of map?.walkBridges||[]){
+        ctx.strokeStyle="#e3c486";ctx.lineWidth=Math.max(2,bridge.width*scale);
+        ctx.beginPath();ctx.moveTo(sx(bridge.x[0]),sy(bridge.z));ctx.lineTo(sx(bridge.x[3]),sy(bridge.z));ctx.stroke();
+        if(large)mapText(ctx,"สะพานตลาด",sx((bridge.x[1]+bridge.x[2])/2),sy(bridge.z)-8,10,"#ffedbd");
+      }
       ctx.fillStyle = "#5a3e2b"; ctx.fillRect(sx(-5.55), sy(-18), sx(5.55) - sx(-5.55), sy(18)-sy(-18));
       if (large) {
         ctx.strokeStyle = "rgba(20,12,8,.45)"; ctx.lineWidth = 1; ctx.beginPath();

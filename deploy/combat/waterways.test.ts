@@ -5,7 +5,7 @@ import {mkdtemp} from "node:fs/promises";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
 import {boatCanSail,BOAT_DECK,MontraBoats} from "./MontraBoats.js";
-import {groundAt,isSafeWorldPoint,WORLD_MAPS} from "./WorldMaps.js";
+import {groundAt,isSafeWorldPoint,provinceShotClear,walkBridgeTransitionClear,WORLD_MAPS} from "./WorldMaps.js";
 import {waterDepthAt} from "./GroundTerrain.js";
 import {CharacterStore} from "./CharacterStore.js";
 
@@ -94,6 +94,35 @@ test("every port launches a boardable boat and returns both riders to its bank",
     }
   }
   assert.equal(ids.size,Object.keys(WORLD_MAPS).length+14);
+});
+
+test("market bridge joins dry approaches above a navigable canal",()=>{
+  const map=WORLD_MAPS.ritual_village,bridge=map.walkBridges![0],z=bridge.z;
+  const feet=(x:number,z:number)=>({x,y:groundAt(map.id,x,z),z});
+  for(let x=bridge.x[0];x<=bridge.x[3];x+=.25){
+    assert.ok(isSafeWorldPoint(map,feet(x,z)),`bridge walking surface at ${x}`);
+    assert.ok(walkBridgeTransitionClear(map,feet(x,z),x+.25,z));
+  }
+  assert.ok(walkBridgeTransitionClear(map,feet(0,0),0,z),"walk into the west approach");
+  assert.ok(!walkBridgeTransitionClear(map,feet(22,z),22,z+bridge.width),"rails stop a sudden drop");
+  assert.ok(!walkBridgeTransitionClear(map,feet(22,z-4),22,z+4),"no snap from the riverbed to the deck");
+  assert.equal(feet(22,z).y,bridge.height);
+  assert.ok(waterDepthAt(map,22,z)>1,"the bed remains below the bridge");
+  for(let offset=-6;offset<=6;offset++)assert.ok(boatCanSail(map.id,22,z+offset,2.6));
+  const riderHead=map.waterLevel!+BOAT_DECK.y+1.8;
+  assert.ok(riderHead<bridge.height-bridge.thickness);
+  assert.ok(provinceShotClear(map,{x:22,y:riderHead,z:z-5},{x:22,y:riderHead,z:z+5}),"clearance stays open below");
+  assert.ok(!provinceShotClear(map,{x:22,y:riderHead,z},{x:22,y:bridge.height+1,z}),"deck blocks shots through its floor");
+  for(const path of map.paths!){
+    for(const [i,a] of path.slice(0,-1).entries()){
+      const b=path[i+1],steps=Math.ceil(Math.hypot(b.x-a.x,b.z-a.z));
+      for(let j=0;j<=steps;j++){
+        const x=a.x+(b.x-a.x)*j/steps,z=a.z+(b.z-a.z)*j/steps;
+        assert.equal(waterDepthAt(map,x,z),0,`dry road at ${x},${z}`);
+        assert.ok(isSafeWorldPoint(map,feet(x,z)),`road clears obstacles at ${x},${z}`);
+      }
+    }
+  }
 });
 
 test("a stopped boat can turn 180 degrees in under three seconds without drifting",()=>{

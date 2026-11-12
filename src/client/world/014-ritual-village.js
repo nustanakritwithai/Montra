@@ -310,7 +310,9 @@
   }
   // Lanes: north to the temple and the two outer gates, bridges east and west, south to the river pier.
   villageLane(0, -20, 0, -31, 4); villageLane(-11, -32, -10, -54); villageLane(11, -32, 10, -54);
+  const oldMarketBridgeStart=villageParts.length;
   plankBridge(14.1, -4, 11.6); villageLane(20, -4, 28, -4, 3.6);
+  for(const part of villageParts.slice(oldMarketBridgeStart))(part.metadata??={}).legacyMarketBridge=true;
   plankBridge(-14.1, -8, 11.6); villageLane(-20, -8, -58, -8, 3.2); villageLane(-40, -46, -40, 26, 2.6);
   villageLane(0, 19, 0, 46, 3.6); villageLane(-2, 30, -26, 34, 2.8); villageLane(2, 30, 30, 36, 2.8);
   plankBridge(-14.1, 32, 11.6, 2.6); plankBridge(14.1, 33, 11.6, 2.6);
@@ -418,10 +420,12 @@
       p.computeWorldMatrix(true);
       const c = p.getBoundingInfo().boundingBox.centerWorld;
       return {x:c.x,z:c.z,count:p.getTotalVertices(),fixedHeight:p.metadata?.villageWater || p.parent?.metadata?.villageWater,
-        legacyWater:p.metadata?.legacyWater===true};
+        legacyWater:p.metadata?.legacyWater===true,legacyMarketBridge:p.metadata?.legacyMarketBridge===true};
     });
-    for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf })) {
+    const key=part=>part.metadata?.legacyMarketBridge?"market-bridge-"+part.material.uniqueId:part.material;
+    for (const { mesh, info } of mergeByCell(villageParts, { before: anchorsOf, key })) {
       if(info.every(part=>part.legacyWater))(mesh.metadata??={}).legacyWater=true;
+      if(info.every(part=>part.legacyMarketBridge))(mesh.metadata??={}).legacyMarketBridge=true;
       villageBatches.push({mesh,anchors:info});
     }
     boatNodes.forEach(node => node.dispose());

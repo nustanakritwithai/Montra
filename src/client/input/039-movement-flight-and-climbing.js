@@ -22,8 +22,8 @@
     const currentAltitude = mode === "live"
       ? Number(ownServerCharacter()?.y || 0)
       : Number(getLocalAvatar()?.targetY || 0);
-    const terrain=worldDefinitions?.[activeMapId]?.terrain;
-    marker.position.y=(terrain?terrainHeight(terrain,target.x,target.z)+(playerLayer(ownServerCharacter())||0):currentAltitude)+.105;
+    const map=worldDefinitions?.[activeMapId];
+    marker.position.y=(map?.terrain?walkHeight(map,target.x,target.z)+(playerLayer(ownServerCharacter())||0):currentAltitude)+.105;
     marker.setEnabled(true);
     pendingClimb = null;
     selectedPkTargetId = null;
@@ -272,19 +272,25 @@
   function questNavigationGeometry(map, fort) {
     if (!map?.bounds || map.strategic?.rampart) return null;
     const radius = .45, bounds = map.bounds;
-    const walls = [...(map.walls || []), ...(map.water || [])];
+    const walls = [...(map.walls || [])];
     if (map.id === "ritual_village" && fort) walls.push({x:fort.x-fort.width/2,z:fort.z-fort.length/2,width:fort.width,length:fort.length});
+    const blockers=[...walls,...(map.water||[])];
     const circles = map.obstacles || [];
     function clear(a,b) {
       if (![a,b].every(p=>questNavigationPoint(p) && p.x>=bounds.minX+radius && p.x<=bounds.maxX-radius && p.z>=bounds.minZ+radius && p.z<=bounds.maxZ-radius)) return false;
+      if(!walkBridgeTransitionClear(map,a,b.x,b.z))return false;
       const dx=b.x-a.x,dz=b.z-a.z,length=dx*dx+dz*dz;
-      for (const w of walls) {
+      for (const [index,w] of blockers.entries()) {
         let lo=0,hi=1;
         for (const [value,delta,min,max] of [[a.x,dx,w.x-radius,w.x+w.width+radius],[a.z,dz,w.z-radius,w.z+w.length+radius]]) {
           if (Math.abs(delta)<1e-9) { if(value<min || value>max){lo=2;break;} }
           else {const p=(min-value)/delta,q=(max-value)/delta;lo=Math.max(lo,Math.min(p,q));hi=Math.min(hi,Math.max(p,q));}
         }
-        if(lo<=hi) return false;
+        if(lo<=hi){
+          if(index<walls.length)return false;
+          const bridge=walkBridgeAt(map,a.x+dx*lo,a.z+dz*lo,radius);
+          if(!bridge || walkBridgeAt(map,a.x+dx*hi,a.z+dz*hi,radius)!==bridge)return false;
+        }
       }
       for (const o of circles) {
         const k=length?Math.max(0,Math.min(1,((o.x-a.x)*dx+(o.z-a.z)*dz)/length)):0;
@@ -306,6 +312,7 @@
         faces.sort((p,q)=>p-q);
         for(let n=0;n<faces.length;n++){
           const k=n?(faces[n-1]+faces[n])/2:faces[n],x=a.x+dx*k,z=a.z+dz*k,i=terrainCell(t.xs,x),j=terrainCell(t.zs,z);
+          if(walkBridgeAt(map,x,z,radius))continue;
           const w=t.xs[i+1]-t.xs[i],h=t.zs[j+1]-t.zs[j],u=(x-t.xs[i])/w,v=(z-t.zs[j])/h;
           const aa=t.heights[j][i],bb=t.heights[j][i+1],cc=t.heights[j+1][i],dd=t.heights[j+1][i+1];
           if(Math.hypot((u>=v?bb-aa:dd-cc)/w,(u>=v?dd-bb:cc-aa)/h)>t.maxGrade)return false;

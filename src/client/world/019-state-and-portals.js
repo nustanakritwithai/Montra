@@ -48,8 +48,8 @@
     if(groundTile)for(const t of [ground.material.diffuseTexture,ground.material.bumpTexture,ground.material.emissiveTexture])if(t){
       t.uScale=reliefFloor?45/groundTile:(bounds.maxX-bounds.minX)/groundTile;t.vScale=reliefFloor?45/groundTile:(landEndZ-bounds.minZ)/groundTile;}
     alignVillage(worldDefinitions?.ritual_village?.terrain);
-    if(activeMapId==="ritual_village")for(const {mesh} of villageBatches)if(mesh.metadata?.legacyWater)
-      mesh.setEnabled(map?.waterLevel===undefined);
+    if(activeMapId==="ritual_village")for(const {mesh} of villageBatches)
+      mesh.setEnabled(villageDetailVisible(mesh,map));
     ground.setEnabled(!map?.terrain);if(!map)return;
     if (isPrivateHomeMap(activeMapId)) {
       renderHomeScene();
@@ -70,6 +70,7 @@
     if(map.terrain)buildTerrainGround(map,terrainPaint);
     else (map.paths||[]).forEach((path,i)=>buildRoad(path,inTemple?4.4:4,map.strategic?.safeRoads?.includes(i)?civicRoad:paint?paint.road:inTemple?templePaving:forestPath,inTemple?templeVerge:forestVerge,expansionRoot,i,Boolean(map.strategic || map.huntTrail)));
     if(map.waterLevel!==undefined)buildWaterSurface(map);
+    if(map.walkBridges?.length)buildWalkBridges(map);
     if(state?.boatsAvailable && map.waterGates?.length)buildWaterwayGates(map);
     if(state?.boatsAvailable && map.boatPorts?.length)buildBoatPorts(map);
     // Soft pools of a second ground surface break up every floor (kept off the roads; the village core stays clean).
@@ -343,6 +344,10 @@
     }
   }
 
+  function villageDetailVisible(mesh,map){
+    return !(mesh.metadata?.legacyWater && map?.waterLevel!==undefined) &&
+      !(mesh.metadata?.legacyMarketBridge && map?.walkBridges?.length);
+  }
   function switchWorld(mapId) {
     if(activeMapId===mapId || !(portals[mapId] || worldDefinitions?.[mapId]))return;
     clearCombatVfx();
@@ -354,7 +359,7 @@
     window.MontraAudio?.ambience(mapId);
     clearChatHistory(false);
     const village=mapId==="ritual_village";
-    for(const mesh of villageMeshes) mesh.setEnabled(village && !(mesh.metadata?.legacyWater && worldDefinitions?.ritual_village?.waterLevel!==undefined));
+    for(const mesh of villageMeshes) mesh.setEnabled(village && villageDetailVisible(mesh,worldDefinitions?.ritual_village));
     for(const light of villageLights) light.setEnabled(village);
     villagePortal.setEnabled(village);forestRoot.setEnabled(mapId==="forbidden_forest");
     setTimeout(warmMaterials,400);
