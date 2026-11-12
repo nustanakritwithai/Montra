@@ -18,6 +18,7 @@ process.env.MONTRA_HUNT_EVENTS = "0";
 
 const {defineServer,defineRoom} = await import("colyseus");
 const {MyRoom} = await import("./src/rooms/MyRoom.ts");
+const {Monster} = await import("./src/rooms/schema/MyRoomState.ts");
 const {characterStore} = await import("./src/rooms/CharacterStore.ts");
 const {guildStore} = await import("./src/rooms/GuildStore.ts");
 const {getWarDefinition} = await import("./src/rooms/TerritoryWar.ts");
@@ -103,6 +104,7 @@ try {
   assert.equal(a.room.roomId,ally.room.roomId);
   const fixture=fixtures.get(a.room.roomId);
   await event(a,"territory_state",state=>state.local?.phase==="battle" && state.local.inField);
+  assert.equal(a.room.state.battlefieldFog,true);
   const state=await pot(a,"read",{},"ready");
   assert.deepEqual(state.pool.collection,[aSeed.ghost]);
   assert.equal(state.captureAvailable,false);
@@ -114,6 +116,44 @@ try {
   const friend=fixture.state.players.get(ally.id), guardian=fixture.state.summons.get(a.id);
   const order=(action,targetId) => ({action,combatId:called.combatId,targetId,
     ...(action==="skill" && {skillId:"SK_NORMAL_01"})});
+
+  // Use real per-client patches and commands on either side of the 30 m boundary.
+  Object.assign(owner,{x:0,y:0,z:14});
+  Object.assign(rival,{x:0,y:0,z:44});
+  Object.assign(friend,{x:0,y:0,z:15});
+  Object.assign(guardian,{x:0,y:0,z:14});
+  const probe = new Monster({id:"fog-probe",mapId:site,x:0,y:0,z:44,alive:false});
+  fixture.state.monsters.set(probe.id,probe);
+  const starter = fixture.state.battlefieldVillageMonsters.get("possessed-1"), starterZ = starter.z;
+  const visibleStarter = client => client.room.state.battlefieldVillageMonsters?.get("possessed-1");
+  await until(()=>Math.abs(visibleStarter(a)?.z-starterZ)<.001,"nearby starter monster is replicated");
+  starter.z=50;
+  await until(()=>visibleStarter(b)?.z===50 && !visibleStarter(a),"starter is filtered per client");
+  assert.equal(a.room.state.monster.alive,false);
+  await until(()=>b.room.state.players.get(b.id)?.z===44 && b.room.state.monsters?.has(probe.id),"rival sees nearby monster");
+  assert.equal(a.room.state.players.has(b.id),false);
+  assert.equal(Boolean(a.room.state.monsters?.has(probe.id)),false);
+  assert.equal(b.room.state.players.has(a.id),false);
+  assert.equal(Boolean(b.room.state.summons?.has(a.id)),false);
+  await reject(a,"attack",{targetId:b.id},"target_unavailable");
+  const fxAt = a.events.length;
+  fixture.broadcastCombat("ranged_hit",{attackerId:b.id,targetId:b.id,from:{x:0,y:1,z:44},to:{x:0,y:1,z:43}});
+  await event(b,"ranged_hit",data=>data.from?.z===44);
+  assert.equal(a.events.slice(fxAt).some(entry=>entry.type==="ranged_hit"),false);
+
+  rival.z=43.9;
+  probe.z=43.9;
+  await until(()=>a.room.state.players.has(b.id) && a.room.state.monsters?.has(probe.id) &&
+    b.room.state.summons?.has(a.id),"rival, monster, and guardian enter sight");
+  a.room.send("attack",{targetId:b.id});
+  await until(()=>owner.targetId===b.id,"nearby target accepted");
+  rival.z=48;
+  probe.z=48;
+  await until(()=>!a.room.state.players.has(b.id) && !a.room.state.monsters?.has(probe.id) &&
+    !b.room.state.summons?.has(a.id) && !owner.targetId,"sight exit removes actors and cancels pursuit");
+  fixture.state.monsters.delete(probe.id);
+  starter.z=starterZ;
+  await until(()=>Math.abs(visibleStarter(a)?.z-starterZ)<.001,"starter returns to view");
 
   const base=fieldRules.isolated.attack;
   Object.assign(owner,{x:base.x+4.5,y:0,z:base.z});
@@ -156,7 +196,7 @@ try {
   const returned=await pot(home,"read",{},"ready");
   assert.deepEqual(returned.pool,state.pool);
   assert.equal(returned.activeInstanceId,null);
-  console.log("PASS real war transfer, bases, same-side guards, opposing skill/basic strikes, ghost damage, battle end and preserved pool");
+  console.log("PASS war transfer, per-client fog patches and effects, hidden target guards, opposing attacks, battle end and preserved pool");
 } catch(error) {
   console.error(error);
   process.exitCode=1;

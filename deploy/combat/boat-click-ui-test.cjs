@@ -29,6 +29,7 @@ function fixture(raySlope=0) {
     boatDock:{x:0,z:46,range:3,deck:{width:2.1,length:5.2,y:.88,helmZ:-1.2}}};
   const ground = {isEnabled:()=>true,metadata:{walkable:true}};
   const enemy = {isEnabled:()=>true};
+  const foggedTargets = new Set();
   let now = 0, point = {x:15,z:54}, selected = ground, rayCalls = 0, attacks = 0, walks = 0;
   const scene = {
     pick(_x,_y,predicate){return selected && predicate(selected) ? {hit:true,pickedMesh:selected,pickedPoint:point} : null;},
@@ -49,6 +50,7 @@ function fixture(raySlope=0) {
     ownServerCharacter:()=>player,performance:{now:()=>now},toast(){},cancelQuestNavigation(){},
     fishingSelect:false,resourcePickers:new Map(),forestMonsters:new Map(),fortRoot:{isEnabled:()=>false},enemy,
     targetedSkill:null,MONSTER_ID:"possessed-1",orderGhostAttack:id=>ghostOrders.push(id),
+    fieldTargetVisible:id=>!foggedTargets.has(id),
     requestMonsterAttack:()=>attacks++,pointMove:()=>walks++,marker:{clone:()=>marker},
     camera:{},scene,B:{Matrix:{Identity:()=>({})},MeshBuilder:{CreateBox:()=>({position:{}})}},
     longTailBoat:(x,z,heading)=>({position:{x,z},rotation:{y:heading},scaling:{set(){}},dispose(){}}),
@@ -65,7 +67,7 @@ function fixture(raySlope=0) {
   const tap = (type,x,z,hit=ground) => {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
   };
-  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,map,player,buttons,
+  return {tick,tap,pointerEvent,marker,boat,enemy,windowEvents,ghostOrders,packets,map,player,buttons,foggedTargets,
     helmPose:()=>sandbox.sailingHelmPose("local"),
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
@@ -153,6 +155,17 @@ test("tapping an opposing captured ghost sends its server-issued attack target",
   f.tap("touch",9,54,ghost);
   assert.deepEqual(f.packets.at(-1),{type:"attack",targetId});
   assert.deepEqual(f.stats(),{rayCalls:0,attacks:0,walks:0});
+});
+
+test("fog hides attack picks without disabling navigation at the helm",()=>{
+  const f = fixture();
+  f.foggedTargets.add("possessed-1");
+  f.tap("touch",9,54,f.enemy);
+  assert.equal(f.stats().attacks,0);
+  assert.equal(f.marker.enabled,true);
+  f.aimGhost();
+  f.tap("touch",9,54,f.enemy);
+  assert.deepEqual(f.ghostOrders,[undefined]);
 });
 
 test("pinching does not set a course and the helm responds only to taps",()=>{

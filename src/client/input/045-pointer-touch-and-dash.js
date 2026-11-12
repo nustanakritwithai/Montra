@@ -77,18 +77,21 @@
     }
     // Depth-sorted pick includes the climbable wall, its crest, players,
     // monster and walkable ground. Fire only where the target is visible.
-    const picked = scene.pick(px, py, mesh => mesh.isEnabled() && (
-      mesh.metadata?.walkable === true || mesh.metadata?.sailingBoatId ||
-      (!targetedSkill && boatAtHelm() && (mesh.metadata?.waterGateId || mesh.metadata?.boatPortId)) ||
-      mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
-      (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
-      (mesh === enemy && enemy.isEnabled()) ||
-      (mode === "live" && mesh.isEnabled() && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
-      (mode === "live" && !targetedSkill && mesh.metadata?.ghostCombatTargetId) ||
-      (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
-      (mode === "live" && mesh.metadata?.pkPlayerId &&
-       mesh.metadata.pkPlayerId !== localId)
-    ));
+    const picked = scene.pick(px, py, mesh => {
+      const actorId = mesh === enemy ? MONSTER_ID :
+        mesh.metadata?.monsterId || mesh.metadata?.pkPlayerId || mesh.metadata?.ghostCombatTargetId;
+      return mesh.isEnabled() && (!actorId || fieldTargetVisible(actorId)) && (
+        mesh.metadata?.walkable === true || mesh.metadata?.sailingBoatId ||
+        (!targetedSkill && boatAtHelm() && (mesh.metadata?.waterGateId || mesh.metadata?.boatPortId)) ||
+        mesh.metadata?.portalId || mesh.metadata?.swordMentor || mesh.metadata?.questRanger || mesh.metadata?.questDefense || mesh.metadata?.warQuartermaster || mesh.metadata?.serviceNpc ||
+        (mode === "live" && resourcePickers.get(mesh.metadata?.resourceId) === mesh) ||
+        mesh === enemy ||
+        (mode === "live" && forestMonsters.get(mesh.metadata?.monsterId) === mesh) ||
+        (mode === "live" && !targetedSkill && mesh.metadata?.ghostCombatTargetId) ||
+        (fortRoot.isEnabled() && mesh.metadata?.climbableWall) ||
+        (mode === "live" && mesh.metadata?.pkPlayerId && mesh.metadata.pkPlayerId !== localId)
+      );
+    });
     if (targetedSkill === "ghostAttack") {
       const mesh = picked?.hit && picked.pickedMesh;
       const targetId = mesh === enemy ? MONSTER_ID : mesh?.metadata?.monsterId || mesh?.metadata?.pkPlayerId;

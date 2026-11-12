@@ -59,6 +59,7 @@
     const ct = camera.target, reach = camera.radius * .75 + 20;
     for (const mesh of forestMonsters.values()) {
       const g = mesh.metadata?.ghost;
+      if (g) g.rig.setEnabled(fieldPointVisible(mesh.position));
       if (g && !g.deathAt && Math.hypot(mesh.position.x - ct.x, mesh.position.z - ct.z) > reach) {
         if (g.tx !== undefined) { mesh.position.x = g.tx; mesh.position.z = g.tz; }
         continue;
@@ -67,7 +68,7 @@
     }
     if (villageGhost) {
       villageGhost.position.set(enemy.position.x, enemy.position.y, enemy.position.z); villageGhost.rotation.y = enemy.rotation.y;
-      villageGhost.setEnabled(enemy.isEnabled() && activeMapId === "ritual_village"); tick(villageGhost);
+      villageGhost.setEnabled(enemy.isEnabled() && activeMapId === "ritual_village" && fieldPointVisible(enemy.position)); tick(villageGhost);
     }
     for (let i = soulMeshes.length - 1; i >= 0; i--) {
       const s = soulMeshes[i], p = (now - s.born) / 1600;

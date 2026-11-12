@@ -30,7 +30,7 @@ import {
   claimCharacter, releaseCharacter, getGuestToken, parseCharacterName,
   parseCharacterSlot, CHARACTER_SLOTS,
 } from "./CharacterStore.js";
-import { MyRoomState, Player, SailingBoat, SummonedGuardian, type Monster } from "./schema/MyRoomState.js";
+import { MyRoomState, Player, SailingBoat, SummonedGuardian, Monster } from "./schema/MyRoomState.js";
 import { BOAT_DECK, BOAT_LAUNCH_RANGE, BOAT_SHORES, MontraBoats, parseBoatIntent } from "./MontraBoats.js";
 import {
   RULES,
@@ -305,7 +305,11 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private readonly ghostCaptureReadyAt = new Map<string, number>();
 
   private forest = new ForestEncounters(this.state.monsters);
-  private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.state.monster : this.state.monsters.get(id); }
+  private readonly battlefieldVillageMonster = new Monster();
+  private get villageMonster(): Monster {
+    return this.field ? this.battlefieldVillageMonster : this.state.monster;
+  }
+  private getMonster(id:string): Monster | undefined { return id === RULES.monsterId ? this.villageMonster : this.state.monsters.get(id); }
   private simulatedMs = 0;
   private field?:Battlefield;
   private warSeats=new Map<string,{guild:string;side:WarSide;camp:number}>();
@@ -455,7 +459,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         continue;
       }
       const event=result.event;
-      const targets=selectTrapTargets(event,[this.state.monster,...this.state.monsters.values()].map(monster=>
+      const targets=selectTrapTargets(event,[this.villageMonster,...this.state.monsters.values()].map(monster=>
         ({id:monster.id,mapId:monster.mapId,alive:monster.alive,position:monster})),candidate=>
         this.sameCombatMap(id,candidate.id) && this.bodyPathClear(trap.mapId,trap.position,candidate.position));
       const lesson=OCCULT_LESSONS.seer_ash_rice;
@@ -791,9 +795,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const victim=target as Player;damage=this.directGuardDamage(targetId,player,damage);
       if(!this.applyPlayerHit(player,targetId,victim,damage,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:sword?"sword":"muay"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:sword?"sword":"muay"},{afterNextPatch:true});
       },()=>{
-        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,source:sword?"sword":"muay",kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,source:sword?"sword":"muay",kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       }))return false;
     }
     return true;
@@ -937,17 +941,84 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private readonly homeClients = new Set<string>();
   private readonly homeWalls = new Map<string, {cell:number;rotation:0|1}[]>();
 
+  private battlefieldPointVisible(viewer: Player | undefined, point: {mapId: string; x: number; z: number}): boolean {
+    return !this.field || Boolean(viewer && viewer.mapId === point.mapId &&
+      planarDistance(viewer, point) < RULES.battlefieldSightRadius);
+  }
+
+  private syncActorView(view: StateView, actor: Player | Monster | SummonedGuardian, visible: boolean): void {
+    if (visible && !view.has(actor)) view.add(actor);
+    else if (!visible && view.has(actor)) view.remove(actor);
+  }
+
+  private syncCombatActorViews(client: Client): void {
+    const view = client.view;
+    if (!view) return;
+    const viewer = this.state.players.get(client.sessionId);
+    const addMonster = (monster: Monster) => this.syncActorView(view, monster, this.battlefieldPointVisible(viewer, monster));
+    this.state.battlefieldVillageMonsters.forEach(addMonster);
+    this.state.monsters.forEach(addMonster);
+    for (const [ownerId, summon] of this.state.summons) {
+      this.syncActorView(view, summon, this.summonVisible(client.sessionId, viewer, ownerId, summon));
+    }
+  }
+
+  private summonVisible(viewerId: string, viewer: Player | undefined, ownerId: string, summon: SummonedGuardian): boolean {
+    return ownerId === viewerId || (this.battlefieldPointVisible(viewer, summon) &&
+      (!this.field || !this.bladeHiddenFrom(viewerId, ownerId)));
+  }
+
+  private registerSummon(ownerId: string, summon: SummonedGuardian): void {
+    this.state.summons.set(ownerId, summon);
+    for (const client of this.clients) {
+      const id = client.sessionId;
+      if (this.summonVisible(id, this.state.players.get(id), ownerId, summon)) client.view?.add(summon);
+    }
+  }
+
+  private broadcastCombat(type: string, payload: Record<string, unknown>, options?: {afterNextPatch: boolean}): void {
+    if (!this.field) {
+      this.broadcast(type, payload, options);
+      return;
+    }
+    const ids = [payload.playerId, payload.attackerId, payload.targetId, payload.winnerId, payload.loserId, payload.ownerId];
+    const points = [payload, payload.from, payload.to, payload.area].filter(
+      (point): point is {x: number; z: number} => Boolean(point && typeof point === "object" &&
+        "x" in point && Number.isFinite(point.x) && "z" in point && Number.isFinite(point.z)),
+    );
+    const actorVisible = (viewer: Player, viewerId: string, id: unknown): boolean => {
+      if (typeof id !== "string" || !id || id === viewerId) return true;
+      const summon = id === payload.ownerId && (type.startsWith("summon_") || type === "ghost_damaged")
+        ? this.state.summons.get(id) : id.startsWith("ghost:") ? this.state.summons.get(id.split(":")[1]) : undefined;
+      const actor = summon ?? this.getMonster(id) ?? this.state.players.get(id);
+      return Boolean(actor && this.battlefieldPointVisible(viewer, actor) &&
+        (!this.bladeHiddenFrom(viewerId, id) || type === "blade_cloak_cast"));
+    };
+    for (const client of this.clients) {
+      const id = client.sessionId, viewer = this.state.players.get(id);
+      if (!viewer || !points.every(point => this.battlefieldPointVisible(viewer, {
+        x: point.x, z: point.z, mapId: typeof payload.mapId === "string" ? payload.mapId : this.field!.site,
+      }))) continue;
+      const participant = ids.includes(id);
+      if (!participant && !ids.every(subject => actorVisible(viewer, id, subject))) continue;
+      const visible = Array.isArray(payload.targetIds)
+        ? {...payload, targetIds: payload.targetIds.filter(target => actorVisible(viewer, id, target))}
+        : payload;
+      client.send(type, visible, options);
+    }
+  }
+
   private syncPlayerViews():void {
     for(const client of this.clients) {
       if(!client.view) continue;
       const allies=this.parties.get(client.sessionId)?.members;
-      const viewerMap=this.state.players.get(client.sessionId)?.mapId;
+      const viewer=this.state.players.get(client.sessionId);
+      const viewerMap=viewer?.mapId;
       for(const [id,player] of this.state.players) {
         const privateMap=isHomeMap(player.mapId) || Boolean(viewerMap && isHomeMap(viewerMap));
-        const canSee=id===client.sessionId || (!privateMap && (!this.bladeCloaks.has(id) || Boolean(allies?.includes(id))));
-        const visible=client.view.has(player);
-        if(canSee && !visible)client.view.add(player);
-        else if(!canSee && visible)client.view.remove(player);
+        const canSee=id===client.sessionId || (!privateMap && this.battlefieldPointVisible(viewer, player) &&
+          (!this.bladeCloaks.has(id) || Boolean(allies?.includes(id))));
+        this.syncActorView(client.view, player, canSee);
       }
     }
   }
@@ -973,18 +1044,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     return false;
   }
 
-  private sameCombatMap(ownerId: string, targetId: string, allowConcealed=false, allowProtected=false): boolean {
+  private sameCombatMap(ownerId: string, targetId: string, allowConcealed=false, allowProtected=false, targetPosition?: SummonedGuardian): boolean {
     const owner = this.state.players.get(ownerId);
     if (!owner || this.pendingWarps.has(ownerId) || this.pendingWarps.has(targetId)) return false;
     if (this.isProtectedArea(owner.mapId, owner)) return false;
     const monster = this.getMonster(targetId);
-    if (monster) return owner.mapId === monster.mapId && !this.isProtectedArea(monster.mapId, monster);
+    if (monster) return owner.mapId === monster.mapId && this.battlefieldPointVisible(owner, monster) && !this.isProtectedArea(monster.mapId, monster);
     if(!allowProtected && this.priestProtected(targetId))return false;
     if(this.field && (!this.battleActive || this.warSeats.get(ownerId)?.side===this.warSeats.get(targetId)?.side))return false;
     if (!this.field && this.parties.get(ownerId)?.members.includes(targetId)) return false;
     const target = this.state.players.get(targetId);
     if(!allowConcealed && target && this.bladeHiddenFrom(ownerId,targetId)) return false;
-    return Boolean(target && target.mapId === owner.mapId && !this.isProtectedArea(target.mapId,target));
+    return Boolean(target && target.mapId === owner.mapId &&
+      this.battlefieldPointVisible(owner, targetPosition ?? target) && !this.isProtectedArea(target.mapId,target));
   }
 
   private blockMounted(client:Client):boolean {
@@ -997,7 +1069,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.mountHitSequence.delete(id);
     if(!player?.mounted)return;
     player.mounted=false;
-    this.broadcast("mount_changed",{playerId:id,mounted:false,reason},{afterNextPatch:true});
+    this.broadcastCombat("mount_changed",{playerId:id,mounted:false,reason},{afterNextPatch:true});
   }
   private buildPlayer(client: Client, gate: "build" | "swordTree" | "occult" = "build"): Player | undefined {
     const id = client.sessionId, player = this.state.players.get(id);
@@ -1027,7 +1099,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       [...this.sentinelWindups.values(),...this.bladeWindups.values(),
         ...this.muayCoreSequences.values(),...this.swordCoreSequences.values()].some(attack=>attack.targetId===id);
     const engaged=pendingAttack || this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) ||
-      this.state.monster.targetId===id || this.forest.engaged(id);
+      this.villageMonster.targetId===id || this.forest.engaged(id);
     if(engaged || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs) {
       this.reject(client,"skill_learning_in_combat");return false;
     }
@@ -1667,7 +1739,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.sentinelStuns.set(targetId,this.simulatedMs+SENTINEL_CONTROL.playerStunMs);
     this.sentinelStunResists.set(targetId,this.simulatedMs+SENTINEL_CONTROL.immunityMs);
     this.sentinelCounters.set(id,this.simulatedMs+3000);
-    this.broadcast("sentinel_stun",{playerId:targetId,durationMs:SENTINEL_CONTROL.playerStunMs},{afterNextPatch:true});
+    this.broadcastCombat("sentinel_stun",{playerId:targetId,durationMs:SENTINEL_CONTROL.playerStunMs},{afterNextPatch:true});
     return "applied";
   }
   private releaseMuayGrapple(holderId:string,reason:string):void {
@@ -1765,9 +1837,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const attack=(this.masteryPower(player,"pvp","atk",weaponBonuses(this.inventories.get(id),"pvp").melee))*MUAY_PVP_DAMAGE_MULTIPLIER;
     const damage=this.directGuardDamage(window.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
     this.applyPlayerHit(player,window.targetId,opponent,damage,()=>{
-      this.broadcast("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
+      this.broadcastCombat("pvp_hit",{attackerId:id,targetId:window.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"grapple_counter"},{afterNextPatch:true});
     },()=>{
-      player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+      player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(window.targetId,"pk",id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:window.targetId,source:"grapple_counter",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
     });
     void this.saveCharacter(id);
   }
@@ -1801,12 +1873,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const opponent=target as Player,damage=this.directGuardDamage(hold.targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level));
       if(!this.applyPlayerHit(player,hold.targetId,opponent,damage,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId:hold.targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
       },()=>{
-        player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+        player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(hold.targetId,"pk",id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:hold.targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
       })){void this.saveCharacter(id);return;}
     }
-    this.broadcast("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
+    this.broadcastCombat("muay_skill_used",{playerId:id,skillId:"grapple",targetId:hold.targetId},{afterNextPatch:true});void this.saveCharacter(id);
   }
 
   private sendBladeBook(client:Client):void {
@@ -1927,9 +1999,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const victim=target as Player,damage=this.directGuardDamage(targetId,actor,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
       if(!this.applyPlayerHit(actor,targetId,victim,damage,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sentinel"},{afterNextPatch:true});
       },()=>{
-        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       }))return false;
     }
     if(stun && target.alive) {
@@ -1966,7 +2038,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     let shockTargets:string[]|undefined;
     if(skillId==="shock"){
-      const candidates:Array<{target:Monster|Player;id:string}>=[...[this.state.monster,...this.state.monsters.values()].map(target=>({target,id:target.id})),...[...this.state.players.entries()].map(([id,target])=>({target,id}))];
+      const candidates:Array<{target:Monster|Player;id:string}>=[...[this.villageMonster,...this.state.monsters.values()].map(target=>({target,id:target.id})),...[...this.state.players.entries()].map(([id,target])=>({target,id}))];
       const targets=candidates
         .filter(entry=>entry.id && entry.id!==id && entry.target.alive && distance3d(actor,entry.target)<=p.shock.range && Math.abs(actor.y-entry.target.y)<=1.1 && this.sameCombatMap(id,entry.id) && !this.pendingItemUses.has(entry.id) && !this.pendingRewards.has(entry.id) && !this.pendingCharacterLeaves.has(entry.id) && this.bodyPathClear(actor.mapId,actor,entry.target))
         .sort((a,b)=>distance3d(actor,a.target)-distance3d(actor,b.target) || a.id.localeCompare(b.id));
@@ -1984,7 +2056,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+p.protect.durationMs,fraction:.3});
       this.markSupportManaCombat(id,[[targetId,ally]]);
       let applied=0;
-      const monsters=[this.state.monster,...this.state.monsters.values()].sort((a,b)=>distance3d(actor,a)-distance3d(actor,b) || a.id.localeCompare(b.id));
+      const monsters=[this.villageMonster,...this.state.monsters.values()].sort((a,b)=>distance3d(actor,a)-distance3d(actor,b) || a.id.localeCompare(b.id));
       for(const monster of monsters){
         if(applied>=3 || !monster.alive || distance3d(actor,monster)>p.protect.tauntRange || !this.sameCombatMap(id,monster.id) || !this.bodyPathClear(actor.mapId,actor,monster))continue;
         if(monster.id===RULES.monsterId){
@@ -2000,7 +2072,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
     this.sendSentinelBook(client);
-    this.broadcast("sentinel_core_used",{playerId:id,skillId,targetId,...(shockTargets?{targetIds:shockTargets}:{}),durationMs:skillId==="riposte"?p.riposte.durationMs:skillId==="protect"?p.protect.durationMs:0},{afterNextPatch:true});
+    this.broadcastCombat("sentinel_core_used",{playerId:id,skillId,targetId,...(shockTargets?{targetIds:shockTargets}:{}),durationMs:skillId==="riposte"?p.riposte.durationMs:skillId==="protect"?p.protect.durationMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2077,19 +2149,19 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     } else if(skill.effect==="slam"){
       this.startSkillAction(id,actor,"attacking");
       this.sentinelWindups.set(id,{targetId,until:this.simulatedMs+800,power:skill.power*(this.getMonster(targetId)?skillRankMultiplier(book.ranks,skillId):1)});
-      this.broadcast("sentinel_windup",{playerId:id,targetId,durationMs:800},{afterNextPatch:true});
+      this.broadcastCombat("sentinel_windup",{playerId:id,targetId,durationMs:800},{afterNextPatch:true});
     } else if(skill.effect==="stun" || skill.effect==="counter"){
       if(skill.effect==="counter")this.sentinelCounters.delete(id);
       this.sentinelDamage(id,targetId,skill.power*(this.getMonster(targetId)?skillRankMultiplier(book.ranks,skillId):1),skill.effect==="stun");
     } else if(skill.effect==="sweep"){
       let hit=0;
-      for(const monster of [this.state.monster,...this.state.monsters.values()]){
+      for(const monster of [this.villageMonster,...this.state.monsters.values()]){
         const dx=monster.x-actor.x,dz=monster.z-actor.z,d=Math.hypot(dx,dz);
         if(hit<3 && monster.alive && d<=skill.range && (d<0.001 || (-Math.sin(actor.facing)*dx-Math.cos(actor.facing)*dz)/d>=0.5) && this.sentinelDamage(id,monster.id,skill.power*skillRankMultiplier(book.ranks,skillId),false,skill.range))hit++;
       }
     } else if(skill.effect==="taunt"){
       let applied=0;
-      for(const monster of [this.state.monster,...this.state.monsters.values()]){
+      for(const monster of [this.villageMonster,...this.state.monsters.values()]){
         if(applied>=3 || !monster.alive || distance3d(actor,monster)>skill.range || !this.sameCombatMap(id,monster.id) || !this.bodyPathClear(actor.mapId,actor,monster))continue;
         if(monster.id===RULES.monsterId){
           if(monster.tier==="normal" && !this.monsterReturning && this.simulatedMs>=this.sentinelLegacyTaunt.resistUntil){
@@ -2103,13 +2175,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       for(const [member,ally] of allies){
         this.effects.grant(member,{id:skillId,sourceId:id,group:"sentinel_support",bonuses:{def:skill.power*supportRankMultiplier(book.ranks,skillId)}},this.simulatedMs+8000);
         this.applyStats(member,ally,this.statAllocations.get(member) ?? emptyAllocations());
-        if(member!==id && (this.forest.engaged(member) || this.state.monster.targetId===member || Boolean(this.getMonster(this.attackTargets.get(member) ?? ""))))assisted=true;
+        if(member!==id && (this.forest.engaged(member) || this.villageMonster.targetId===member || Boolean(this.getMonster(this.attackTargets.get(member) ?? ""))))assisted=true;
       }
       if(assisted)this.recordSentinelPractice(id,"assist");
     } else if(skill.effect==="intercept")this.sentinelInterceptions.set(targetId,{ownerId:id,until:this.simulatedMs+6000,fraction:skill.power});
     this.sendSentinelBook(client);
     if(firmGuard)this.prototypeNotice("braced",id,id,skillId);
-    else this.broadcast("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    else this.broadcastCombat("sentinel_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2131,7 +2203,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     player.mana-=lesson.stamina;book.cooldowns.cloak=Date.now()+lesson.cooldownMs;
     this.startSkillAction(id,player,"attacking");
     this.bladeCasts.set(id,this.simulatedMs+600);
-    this.broadcast("blade_cloak_cast",{playerId:id,durationMs:600},{afterNextPatch:true});
+    this.broadcastCombat("blade_cloak_cast",{playerId:id,durationMs:600},{afterNextPatch:true});
     this.sendBladeBook(client);void this.saveCharacter(id);
   }
 
@@ -2162,9 +2234,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const victim=target as Player,damage=this.directGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(victim,"pvp","def"),victim.level));
       if(!this.applyPlayerHit(player,targetId,victim,damage,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"blade"},{afterNextPatch:true});
       },()=>{
-        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+        player.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,kills:player.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       }))return false;
     }
     return true;
@@ -2200,7 +2272,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(skillId==="blade_vanish"){
       this.endAttack(id,player);this.destinations.delete(id);this.activeDashes.delete(id);
       for(const [attackerId,victimId] of [...this.attackTargets])if(victimId===id){const attacker=this.state.players.get(attackerId);if(attacker)this.endAttack(attackerId,attacker);}
-      if(this.state.monster.targetId===id)this.state.monster.targetId="";
+      if(this.villageMonster.targetId===id)this.villageMonster.targetId="";
       this.forest.clearTarget(id);this.bladeCloaks.set(id,this.simulatedMs+p.blade_vanish.durationMs);this.syncPlayerViews();
       this.sendSwordNotice(client,"blade_cloak_changed",{active:true,skillId,durationMs:p.blade_vanish.durationMs});
     }else if(skillId==="blade_fury"){
@@ -2222,7 +2294,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
     }
     this.sendBladeBook(client);
-    if(skillId!=="blade_vanish")this.broadcast("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    if(skillId!=="blade_vanish")this.broadcastCombat("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2304,7 +2376,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.sendBladeBook(client);
     if(!shadow){
-      if(skill.effect!=="approach" || !cloaked)this.broadcast("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+      if(skill.effect!=="approach" || !cloaked)this.broadcastCombat("blade_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
       else this.sendSwordNotice(client,"blade_skill_used",{playerId:id,skillId});
     }
     void this.saveCharacter(id);
@@ -2321,7 +2393,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       player.combatState="idle";
       for(const [attackerId,targetId] of [...this.attackTargets]) if(targetId===id){const attacker=this.state.players.get(attackerId);if(attacker)this.endAttack(attackerId,attacker);}
-      if(this.state.monster.targetId===id)this.state.monster.targetId="";
+      if(this.villageMonster.targetId===id)this.villageMonster.targetId="";
       this.forest.clearTarget(id);this.bladeCloaks.set(id,this.simulatedMs+5000);this.syncPlayerViews();
       this.sendSwordNotice(client,"blade_cloak_changed",{active:true,durationMs:5000});
     }
@@ -2451,20 +2523,20 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
   private cleanseOccultDebuffs(targetId:string):boolean {
     const curse=this.clearOccultCurse(targetId,"cleansed"),poison=this.seerPoisons.delete(targetId);
-    if(poison)this.broadcast("seer_poison_visual",{targetId,active:false},{afterNextPatch:true});
+    if(poison)this.broadcastCombat("seer_poison_visual",{targetId,active:false},{afterNextPatch:true});
     return curse || poison;
   }
   private priestCleanse(targetId:string):boolean {
     let cleared=this.cleanseOccultDebuffs(targetId);
     if(this.sentinelStuns.delete(targetId)){
       const target=this.state.players.get(targetId);if(target)target.stunned=false;
-      this.broadcast("seer_binding_visual",{targetId,active:false},{afterNextPatch:true});cleared=true;
+      this.broadcastCombat("seer_binding_visual",{targetId,active:false},{afterNextPatch:true});cleared=true;
     }
     if(this.muayHeldBy.has(targetId)){this.releaseMuayFor(targetId,"cleansed");cleared=true;}
     return cleared;
   }
   private endPriestSanctuary(ownerId:string):void {
-    if(this.priestSanctuaries.delete(ownerId))this.broadcast("mender_sanctuary_end",{playerId:ownerId},{afterNextPatch:true});
+    if(this.priestSanctuaries.delete(ownerId))this.broadcastCombat("mender_sanctuary_end",{playerId:ownerId},{afterNextPatch:true});
   }
 
   private changeOccultBook(client:Client,message:unknown):void {
@@ -2556,7 +2628,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const binding=this.seerBindings.get(targetId);if(!binding)return false;
     this.seerBindings.delete(targetId);
     this.sendSwordNotice(this.clients.find(c=>c.sessionId===binding.ownerId),"seer_binding_state",{active:false,targetId,reason});
-    this.broadcast("seer_binding_visual",{targetId,active:false},{afterNextPatch:true});return true;
+    this.broadcastCombat("seer_binding_visual",{targetId,active:false},{afterNextPatch:true});return true;
   }
 
   private castSeerCore(client:Client,message:unknown):void {
@@ -2595,24 +2667,24 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.seerBindings.set(targetId,{ownerId:id,rank});
         if(this.attackTargets.get(id)===targetId)this.endAttack(id,caster);
         this.sendSwordNotice(client,"seer_binding_state",{active:true,targetId});
-        this.broadcast("seer_binding_visual",{targetId,active:true},{afterNextPatch:true});
+        this.broadcastCombat("seer_binding_visual",{targetId,active:true},{afterNextPatch:true});
       }else{
         const result=this.sentinelInterrupt(id,targetId);
         if(result==="applied"){
           const until=this.simulatedMs+p.seer_binding.pvpDurationMs;
           this.sentinelStuns.set(targetId,until);this.sentinelStunResists.set(targetId,this.simulatedMs+p.seer_binding.pvpImmunityMs);
-          this.broadcast("seer_binding_visual",{targetId,active:true,durationMs:p.seer_binding.pvpDurationMs},{afterNextPatch:true});
+          this.broadcastCombat("seer_binding_visual",{targetId,active:true,durationMs:p.seer_binding.pvpDurationMs},{afterNextPatch:true});
         }
       }
     } else if(skillId==="seer_poison"){
-      for(const [other,poison] of this.seerPoisons)if(poison.ownerId===id){this.seerPoisons.delete(other);this.broadcast("seer_poison_visual",{targetId:other,active:false},{afterNextPatch:true});}
+      for(const [other,poison] of this.seerPoisons)if(poison.ownerId===id){this.seerPoisons.delete(other);this.broadcastCombat("seer_poison_visual",{targetId:other,active:false},{afterNextPatch:true});}
       this.seerPoisons.set(targetId,{ownerId:id,nextTick:this.simulatedMs+p.seer_poison.intervalMs,fraction:monster?p.seer_poison.pveFraction:p.seer_poison.pvpFraction});
-      this.broadcast("seer_poison_visual",{targetId,active:true},{afterNextPatch:true});
+      this.broadcastCombat("seer_poison_visual",{targetId,active:true},{afterNextPatch:true});
     } else {
       this.seerBuffaloCasts.set(id,{targetId,until:this.simulatedMs+p.seer_buffalo.castMs,rank:monster?rank:0,x:target.x,z:target.z});
     }
     this.sendOccultBook(client);
-    this.broadcast("seer_core_used",{playerId:id,skillId,targetId,castMs:skillId==="seer_buffalo"?p.seer_buffalo.castMs:0},{afterNextPatch:true});
+    this.broadcastCombat("seer_core_used",{playerId:id,skillId,targetId,castMs:skillId==="seer_buffalo"?p.seer_buffalo.castMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2663,7 +2735,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(healed)this.recordOccultTraining(id,"mender",["healing"]);
     if(cleansed)this.recordOccultTraining(id,"mender",["cleanse"]);
     this.sendOccultBook(client);
-    this.broadcast("mender_core_used",{playerId:id,skillId,targetId:skillId==="mender_core_heal"?targetId:id,targets:targets.length,...(skillId==="mender_core_ward"?{area:{x:caster.x,y:caster.y,z:caster.z,radius:p.mender_core_ward.range,durationMs:p.mender_core_ward.durationMs}}:{})},{afterNextPatch:true});
+    this.broadcastCombat("mender_core_used",{playerId:id,skillId,targetId:skillId==="mender_core_heal"?targetId:id,targets:targets.length,...(skillId==="mender_core_ward"?{area:{x:caster.x,y:caster.y,z:caster.z,radius:p.mender_core_ward.range,durationMs:p.mender_core_ward.durationMs}}:{})},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2782,7 +2854,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.reject(client,"prototype_unavailable");
 
       const targets=[monster];
-      const candidates=[this.state.monster,...this.state.monsters.values()].filter(candidate=>
+      const candidates=[this.villageMonster,...this.state.monsters.values()].filter(candidate=>
         candidate.alive && candidate.hp>0 && candidate.mapId===caster.mapId && this.sameCombatMap(id,candidate.id));
       while(targets.length<SPIRIT_RAIN_HIT_FACTORS.length){
         const from=targets[targets.length-1];
@@ -2852,7 +2924,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         const damage=calculateDamage(attack*power*(opponent?0.65:1),monster?.defense ?? this.masteryPower(opponent!,"pvp","magicDef"),target.level);
         this.occultDamage(id,targetId,damage,false,"direct");
         if (lesson.effect==="rice_area" && monster) {
-          const others=[this.state.monster,...this.state.monsters.values()]
+          const others=[this.villageMonster,...this.state.monsters.values()]
             .filter(other=>other.id!==targetId && other.alive && other.mapId===caster.mapId &&
               distance3d(other,monster!)<=3 && this.sameCombatMap(id,other.id) &&
               this.bodyPathClear(caster.mapId,caster,other) && this.bodyPathClear(caster.mapId,monster!,other))
@@ -2909,7 +2981,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       } else if (trained && path==="seer") this.recordOccultTraining(id,"seer",["spirit"]);
     }
     this.sendOccultBook(client);
-    this.broadcast("occult_skill_used",{playerId:id,skillId,targetId:offensive?targetId:targets[0]?.[0] ?? id},{afterNextPatch:true});
+    this.broadcastCombat("occult_skill_used",{playerId:id,skillId,targetId:offensive?targetId:targets[0]?.[0] ?? id},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -2921,10 +2993,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.endBladeCloak(targetId,"damaged");
     damage=this.swordGuardDamage(targetId,owner,damage,0,undefined,percentDamage,source);
     if(!this.applyPlayerHit(owner,targetId,victim,damage,()=>{
-      this.broadcast("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
+      this.broadcastCombat("pvp_hit",{attackerId:ownerId,targetId,damage,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"occult"},{afterNextPatch:true});
     },()=>{
       owner.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",ownerId);
-      this.broadcast("pvp_kill",{winnerId:ownerId,loserId:targetId,source:"occult",kills:owner.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+      this.broadcastCombat("pvp_kill",{winnerId:ownerId,loserId:targetId,source:"occult",kills:owner.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       void this.saveCharacter(ownerId);
     }))return;
   }
@@ -2950,7 +3022,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for(const [targetId,poison] of this.seerPoisons){
       const owner=this.state.players.get(poison.ownerId),target=this.getMonster(targetId) ?? this.state.players.get(targetId);
       if(!owner?.alive || owner.pathId!=="seer" || !target?.alive || target.hp<=1 || !this.sameCombatMap(poison.ownerId,targetId,true,true)){
-        this.seerPoisons.delete(targetId);this.broadcast("seer_poison_visual",{targetId,active:false},{afterNextPatch:true});continue;
+        this.seerPoisons.delete(targetId);this.broadcastCombat("seer_poison_visual",{targetId,active:false},{afterNextPatch:true});continue;
       }
       if(this.simulatedMs>=poison.nextTick){
         poison.nextTick=this.simulatedMs+2500;
@@ -2973,7 +3045,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const attack=this.masteryPower(caster,monster?"pve":"pvp","magicAtk",weaponBonuses(this.inventories.get(id),monster?"pve":"pvp").ranged);
       const damage=calculateDamage(attack*(monster?p.power:2*.65),monster?.defense ?? this.masteryPower(target as Player,"pvp","magicDef"),target.level);
       this.occultDamage(id,cast.targetId,damage,false,"direct");
-      this.broadcast("seer_buffalo_hit",{playerId:id,targetId:cast.targetId,from:{x:caster.x,y:caster.y+.8,z:caster.z},to:{x:target.x,y:target.y+.8,z:target.z}},{afterNextPatch:true});
+      this.broadcastCombat("seer_buffalo_hit",{playerId:id,targetId:cast.targetId,from:{x:caster.x,y:caster.y+.8,z:caster.z},to:{x:target.x,y:target.y+.8,z:target.z}},{afterNextPatch:true});
     }
     for (const [owner,mark] of this.occultMarks) {
       const target=this.getMonster(mark.targetId);
@@ -3198,32 +3270,32 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const stance=this.muayCoreStances.get(id);
     const swordStance=this.swordCoreStances.get(id);
     if(swordStance && player?.alive && player.pathId==="phutthaisawan" && wearsTwinSwords(equippedWeaponId(this.inventories.get(id))) && this.simulatedMs<swordStance.until) {
-      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const monster=attacker===this.villageMonster ? this.villageMonster : [...this.state.monsters.values()].find(m=>m===attacker);
       const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
       const progress=swordCoreProgress(swordStance.rank).sritra_core;
       if(opponentId && this.simulatedMs>=swordStance.nextCounter) {
         // Reserve before striking to prevent two counter stances recursing.
         swordStance.nextCounter=this.simulatedMs+progress.counterIntervalMs;
         if(this.swordCoreHit(id,opponentId,progress.counterPower,1))
-          this.broadcast("sword_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
+          this.broadcastCombat("sword_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
         else swordStance.nextCounter=this.simulatedMs;
       }
       return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*progress.damageFactor)),summonOwnerId);
     }
     const sentinelStance=this.sentinelCoreStances.get(id);
     if(sentinelStance && player?.alive && player.pathId==="sentinel" && this.simulatedMs<sentinelStance.until){
-      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const monster=attacker===this.villageMonster ? this.villageMonster : [...this.state.monsters.values()].find(m=>m===attacker);
       const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
       const progress=sentinelCoreProgress(sentinelStance.rank).riposte;
       if(opponentId && this.simulatedMs>=sentinelStance.nextCounter){
         sentinelStance.nextCounter=this.simulatedMs+progress.counterIntervalMs;
-        if(this.sentinelDamage(id,opponentId,monster?progress.counterPower:1,false))this.broadcast("sentinel_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
+        if(this.sentinelDamage(id,opponentId,monster?progress.counterPower:1,false))this.broadcastCombat("sentinel_core_counter",{playerId:id,targetId:opponentId},{afterNextPatch:true});
         else sentinelStance.nextCounter=this.simulatedMs;
       }
       return this.sentinelShareDamage(id,attacker,Math.max(1,Math.round(damage*progress.damageFactor)),summonOwnerId);
     }
     if(stance && player?.alive && this.simulatedMs<stance.until) {
-      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const monster=attacker===this.villageMonster ? this.villageMonster : [...this.state.monsters.values()].find(m=>m===attacker);
       const opponentId=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
       if(opponentId && this.simulatedMs>=stance.nextCounter) {
         // Set the limit before the counter so two simultaneous stances cannot recurse.
@@ -3249,18 +3321,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const kind=defense && defense.until===guard.until && this.simulatedMs<defense.until ? defense.kind : undefined;
     guard.counterUntil=this.simulatedMs+3000;
     if(source==="direct" && player.pathId==="muay_boran" && this.prototypeGameplayAllowed(id)) {
-      const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+      const monster=attacker===this.villageMonster ? this.villageMonster : [...this.state.monsters.values()].find(m=>m===attacker);
       const opponent=monster?.id ?? [...this.state.players.entries()].find(([,p])=>p===attacker)?.[0];
       const opportunity=opponent && recordChaiyaBlock(opponent,this.simulatedMs);
       if(opportunity)this.prototypeOpportunities.set(id,opportunity);else this.prototypeOpportunities.delete(id);
     }
     if(player.pathId==="sentinel"){
       this.sentinelCounters.set(id,this.simulatedMs+3000);
-      if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordSentinelPractice(id,"guard");
+      if(attacker===this.villageMonster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordSentinelPractice(id,"guard");
     }
     if(player.pathId==="blade" && this.simulatedMs<(this.bladeEvades.get(id) ?? 0)) {
       this.bladeEvades.delete(id);guard.until=this.simulatedMs;
-      if(attacker===this.state.monster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordBladePractice(id,"evade");
+      if(attacker===this.villageMonster || [...this.state.monsters.values()].some(monster=>monster===attacker))this.recordBladePractice(id,"evade");
       this.sendSwordNotice(this.clients.find(client=>client.sessionId===id),"blade_evade",{success:true});
     }
     this.recordSwordTraining(id,"blocks");
@@ -3280,7 +3352,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
        this.pendingCharacterLeaves.has(link.ownerId)){
       this.sentinelInterceptions.delete(id);return damage;
     }
-    const monster=attacker===this.state.monster ? this.state.monster : [...this.state.monsters.values()].find(m=>m===attacker);
+    const monster=attacker===this.villageMonster ? this.villageMonster : [...this.state.monsters.values()].find(m=>m===attacker);
     const summonOwner=summonOwnerId && this.state.summons.get(summonOwnerId)===attacker ? this.state.players.get(summonOwnerId) : undefined;
     const aggressor=summonOwner ? [summonOwnerId!,summonOwner] as const : [...this.state.players.entries()].find(([,p])=>p===attacker);
     if(monster ? !this.sameCombatMap(link.ownerId,monster.id) : !aggressor || !aggressor[1].alive || aggressor[1].hp<=0 ||
@@ -3297,12 +3369,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!this.applyPlayerHit(aggressor?.[1],link.ownerId,owner,shared,()=>{
       this.lastCombatMs.set(link.ownerId,this.simulatedMs);
       if(monster)this.recordSentinelPractice(link.ownerId,"assist");
-      this.broadcast("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
+      this.broadcastCombat("sentinel_intercept",{playerId:link.ownerId,targetId:id,damage:shared,hp:owner.hp,maxHp:owner.maxHp,hitSeq:owner.hitSeq,attackerId:aggressor?.[0] ?? monster?.id,source:summonOwner?"summon":monster?"monster":"player"},{afterNextPatch:true});
     },()=>{
       this.sentinelInterceptions.delete(id);
       if(aggressor){aggressor[1].pkKills++;owner.pkDeaths++;this.knockoutPlayer(link.ownerId,"pk",aggressor[0]);
         void this.saveCharacter(aggressor[0]);
-        this.broadcast("pvp_kill",{winnerId:aggressor[0],loserId:link.ownerId,kills:aggressor[1].pkKills,deaths:owner.pkDeaths},{afterNextPatch:true});}
+        this.broadcastCombat("pvp_kill",{winnerId:aggressor[0],loserId:link.ownerId,kills:aggressor[1].pkKills,deaths:owner.pkDeaths},{afterNextPatch:true});}
       else this.knockoutPlayer(link.ownerId,"monster",monster!.id);
     }))return damage;
     return damage-shared;
@@ -3323,10 +3395,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const victim=target as Player,actual=this.directGuardDamage(targetId,actor,damage);
       if(!this.applyPlayerHit(actor,targetId,victim,actual,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"muay"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"muay"},{afterNextPatch:true});
       },()=>{
         actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);
-        this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+        this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       }))return false;
     }
     return true;
@@ -3349,14 +3421,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const rank=book.coreRanks?.[skillId] ?? 0,progress=muayCoreProgress(rank),follow=this.muayCoreFollowups.get(id);
     if(skillId==="lopburi" && follow && this.simulatedMs<follow.until) {
       const requested=typeof input.targetId==="string"?input.targetId:"";
-      const candidate=requested || [this.state.monster,...this.state.monsters.values()].filter(m=>m.alive && m.mapId===actor.mapId && distance3d(actor,m)<=3)
+      const candidate=requested || [this.villageMonster,...this.state.monsters.values()].filter(m=>m.alive && m.mapId===actor.mapId && distance3d(actor,m)<=3)
         .sort((a,b)=>distance3d(actor,a)-distance3d(actor,b))[0]?.id || "";
       const followProgress=muayCoreProgress(follow.rank).lopburi;
       if(!candidate || !this.muayCoreHit(id,candidate,followProgress.followPower,1.05))return this.reject(client,"muay_out_of_range");
       const monster=this.getMonster(candidate);
       if(monster?.alive && followProgress.staggerMs)this.interruptMuayTarget(monster,followProgress.staggerMs);
       this.muayCoreFollowups.delete(id);
-      this.broadcast("muay_core_followup",{playerId:id,active:false},{afterNextPatch:true});
+      this.broadcastCombat("muay_core_followup",{playerId:id,active:false},{afterNextPatch:true});
       return;
     }
     if(Date.now()<(cooldowns[skillId] ?? 0))return this.reject(client,"muay_cooldown");
@@ -3391,7 +3463,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.muayCoreStances.set(id,{until:this.simulatedMs+duration,rank,nextCounter:0});
     } else if(skillId==="lopburi") {
       this.muayCoreFollowups.set(id,{until:this.simulatedMs+progress.lopburi.followMs,rank});
-      this.broadcast("muay_core_followup",{playerId:id,active:true,durationMs:progress.lopburi.followMs},{afterNextPatch:true});
+      this.broadcastCombat("muay_core_followup",{playerId:id,active:true,durationMs:progress.lopburi.followMs},{afterNextPatch:true});
     } else if(target) {
       const damageRank=this.getMonster(targetId) ? rank : 0;
       const damageProgress=muayCoreProgress(damageRank);
@@ -3405,7 +3477,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if(result==="applied" && !monster)this.sentinelStuns.set(targetId,this.simulatedMs+Math.min(1000,hits*interval));
       }
     }
-    this.broadcast("muay_core_used",{playerId:id,skillId,...(skill.kind==="target"?{targetId}:{}),durationMs:skillId==="chaiya"?progress.chaiya.durationMs:0},{afterNextPatch:true});
+    this.broadcastCombat("muay_core_used",{playerId:id,skillId,...(skill.kind==="target"?{targetId}:{}),durationMs:skillId==="chaiya"?progress.chaiya.durationMs:0},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -3549,10 +3621,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           const opponent=target as Player;
           const damage=this.directGuardDamage(targetId,player,calculateDamage(attack,this.masteryPower(opponent,"pvp","def"),opponent.level),skillId==="korat_pierce" ? 0.25 : 0);
           if(!this.applyPlayerHit(player,targetId,opponent,damage,()=>{
-            this.broadcast("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
+            this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"muay"},{afterNextPatch:true});
           },()=>{
             player.pkKills++;opponent.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);this.clearMuayCombo(id);
-            this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+            this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,source:"muay",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
           })){void this.saveCharacter(id);return;}
         }
       }
@@ -3568,7 +3640,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.sendSwordNotice(client,"muay_followup",{active:true,skillId:followup.finisher,targetId,durationMs:MUAY_FOLLOWUP_WINDOW_MS});
       }
     }
-    this.broadcast("muay_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    this.broadcastCombat("muay_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -3618,9 +3690,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     else {
       const victim=target as Player,actual=this.directGuardDamage(targetId,actor,damage);
       if(!this.applyPlayerHit(actor,targetId,victim,actual,()=>{
-        this.broadcast("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sword"},{afterNextPatch:true});
+        this.broadcastCombat("pvp_hit",{attackerId:id,targetId,damage:actual,hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"sword"},{afterNextPatch:true});
       },()=>{
-        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);this.broadcast("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
+        actor.pkKills++;victim.pkDeaths++;this.knockoutPlayer(targetId,"pk",id);void this.saveCharacter(id);this.broadcastCombat("pvp_kill",{winnerId:id,loserId:targetId,kills:actor.pkKills,deaths:victim.pkDeaths},{afterNextPatch:true});
       }))return false;
     }
     return true;
@@ -3673,7 +3745,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const candidates:Monster[]=[];
       if(monster) {
         const consider=(m:Monster)=>{const vx=m.x-actor.x,vz=m.z-actor.z,d=Math.hypot(vx,vz);if(m.id!==targetId && m.alive && d<=progress.atamat_core.range && (d<.001 || (dx*vx+dz*vz)/(length*d)>=.5))candidates.push(m);};
-        consider(this.state.monster);this.state.monsters.forEach(consider);
+        consider(this.villageMonster);this.state.monsters.forEach(consider);
       }
       this.swordCoreHit(id,targetId,progress.atamat_core.power,.85,monster?progress.atamat_core.range:3.5);
       candidates.sort((a,b)=>distance3d(actor,a)-distance3d(actor,b) || a.id.localeCompare(b.id));
@@ -3687,7 +3759,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.markSupportManaCombat(id,supportTargets);
     }
     const prototypeFlow=this.prototypeFlowing.get(id);if(prototypeFlow)this.prototypeFlowing.set(id,clearFlowing(prototypeFlow));
-    this.broadcast("sword_skill_used",{playerId:id,skillId,targetId,durationMs:skillId==="sritra_core"?progress.sritra_core.durationMs:0},{afterNextPatch:true});void this.saveCharacter(id);
+    this.broadcastCombat("sword_skill_used",{playerId:id,skillId,targetId,durationMs:skillId==="sritra_core"?progress.sritra_core.durationMs:0},{afterNextPatch:true});void this.saveCharacter(id);
   }
 
   private updateSwordCore():void {
@@ -3811,7 +3883,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
               (d<0.001 || (dx*vx+dz*vz)/(length*d)>=0.5) && this.sameCombatMap(id,candidate.id) &&
               this.bodyPathClear(player.mapId,player,candidate)) victims.push({id:candidate.id,target:candidate,monster:true});
         };
-        consider(this.state.monster);
+        consider(this.villageMonster);
         this.state.monsters.forEach(consider);
       }
       const hits=skill.effect==="flurry" ? (skillId==="twin_finale"?3:2) : 1;
@@ -3831,18 +3903,18 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
             const opponent=victim.target as Player;
             damage=this.directGuardDamage(victim.id,player,damage);
             if(!this.applyPlayerHit(player,victim.id,opponent,damage,()=>{
-              this.broadcast("pvp_hit",{attackerId:id,targetId:victim.id,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"sword"},{afterNextPatch:true});
+              this.broadcastCombat("pvp_hit",{attackerId:id,targetId:victim.id,damage,hp:opponent.hp,maxHp:opponent.maxHp,hitSeq:opponent.hitSeq,source:"sword"},{afterNextPatch:true});
             },()=>{
               player.pkKills++; opponent.pkDeaths++; this.knockoutPlayer(victim.id,"pk",id);
               void this.saveCharacter(id);
-              this.broadcast("pvp_kill",{winnerId:id,loserId:victim.id,source:"sword",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
+              this.broadcastCombat("pvp_kill",{winnerId:id,loserId:victim.id,source:"sword",kills:player.pkKills,deaths:opponent.pkDeaths},{afterNextPatch:true});
             })){void this.saveCharacter(id);return;}
           }
         }
       }
     }
     const prototypeFlow=this.prototypeFlowing.get(id);if(prototypeFlow)this.prototypeFlowing.set(id,clearFlowing(prototypeFlow));
-    this.broadcast("sword_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
+    this.broadcastCombat("sword_skill_used",{playerId:id,skillId,targetId},{afterNextPatch:true});
     void this.saveCharacter(id);
   }
 
@@ -3986,7 +4058,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.effects.remove(id,POSSESSION_MODIFIER.id,POSSESSION_MODIFIER.sourceId);
     const player=this.state.players.get(id);
     if(player){player.possessionActive=false;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());}
-    this.broadcast("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
+    this.broadcastCombat("possession_changed",{playerId:id,active:false,reason},{afterNextPatch:true});
   }
 
   private coreTrainingAtLevel(id:string,path:string,oldLevel:number,level:number){
@@ -4125,7 +4197,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.pendingRewards.set(id, task);
   }
 
-  private awardMonsterExperience(winnerId:string, monster:RewardPrey = this.state.monster, tier:MonsterTier = "normal"): void {
+  private awardMonsterExperience(winnerId:string, monster:RewardPrey = this.villageMonster, tier:MonsterTier = "normal"): void {
     const winner=this.state.players.get(winnerId), party=this.parties.get(winnerId);
     const bossLoot=characterStore.economyEnabled && !!bossTreasure(monster.id) && (tier==="elite" || tier==="boss");
     if (!winner) return;
@@ -5043,7 +5115,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private canPlayerHitGhost(attackerId: string, ghost: GhostCombatActor) {
-    return attackerId !== ghost.ownerId && this.ghostBattleAllows(attackerId) && this.sameCombatMap(attackerId, ghost.ownerId);
+    return attackerId !== ghost.ownerId && this.ghostBattleAllows(attackerId) &&
+      this.sameCombatMap(attackerId, ghost.ownerId, false, false, ghost.guardian);
   }
 
   private hitGhost(ghost: GhostCombatActor, attackerId: string, damage: number, ranged = false) {
@@ -5055,7 +5128,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     health.set(active.instanceId, guardian.hp);
     this.lastCombatMs.set(ownerId, this.simulatedMs);
     try {
-      this.broadcast("ghost_damaged", {
+      this.broadcastCombat("ghost_damaged", {
         ownerId, combatId: active.combatId, targetId: guardian.combatTargetId, attackerId, ranged,
         damage: applied, hp: guardian.hp, maxHp: guardian.maxHp,
       }, {afterNextPatch: true});
@@ -5335,7 +5408,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         return this.sendGhostPot(client, "unavailable");
       }
       const combatId = randomUUID();
-      const villageGhost = this.state.monster;
+      const villageGhost = this.villageMonster;
       const source = ghost.source ?? (ghost.name === villageGhost.displayName && ghost.level === villageGhost.level
         ? {monsterId: RULES.monsterId, mapId: DEFAULT_MAP_ID}
         : legacyCapturedGhostSource(ghost.name, ghost.level));
@@ -5345,12 +5418,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         level: ghost.level, defense: active.defenseScale * PROGRESSION.baseDef, magicDefense: active.magicDefenseScale * PROGRESSION.baseMagicDef,
         attackPower: active.attackScale * RULES.summonAttackDamage, basicRange: active.basicRange,
         basicCooldownMs: active.basicCooldownMs, skills: active.skills});
-      this.state.summons.set(id, new SummonedGuardian({
+      this.registerSummon(id, new SummonedGuardian({
         ownerId: id, kind: "captured_ghost", x: active.x, y: active.y, z: active.z, facing: owner.facing,
         combatTargetId: `ghost:${id}:${combatId}`, hp: Math.min(parkedHp ?? maxHp, maxHp), maxHp, mapId: zone,
         ...(source && {sourceMonsterId: source.monsterId, sourceMapId: source.mapId, sourceLevel: ghost.level}),
       }));
-      this.broadcast("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
+      this.broadcastCombat("summon_spawn", {ownerId: id, kind: "captured_ghost"}, {afterNextPatch: true});
       this.sendGhostPot(client, kind === "switch" ? "switched" : "summoned");
     } catch (error) {
       if (error instanceof GhostWorkerBusy) return this.reject(client, "ghost_pot_busy");
@@ -6238,12 +6311,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.climbs.has(id) || this.flightTransitions.has(id) || player.flying || !onMapGround(player) || this.activeDashes.has(id) ||
         this.sentinelStuns.has(id) || this.sentinelWindups.has(id) || this.sentinelAnchors.has(id) || this.muayControlled(id) ||
         this.bladeCloaks.has(id) || this.bladeWindups.has(id) || this.bladeCasts.has(id))return this.reject(client,"mount_unavailable");
-      const engaged=this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) || this.state.monster.targetId===id || this.forest.engaged(id);
+      const engaged=this.attackTargets.has(id) || [...this.attackTargets.values()].includes(id) || this.villageMonster.targetId===id || this.forest.engaged(id);
       if(engaged || this.simulatedMs-(this.lastCombatMs.get(id) ?? -Infinity)<PROGRESSION.combatQuietMs)return this.reject(client,"mount_in_combat");
       this.despawnSummon(id,"mounted");
       this.destinations.delete(id);this.crestTurns.delete(id);player.targetId="";player.combatState="idle";
       player.mounted=true;this.mountHitSequence.set(id,player.hitSeq);this.lastMountMs.set(id,this.simulatedMs);
-      this.broadcast("mount_changed",{playerId:id,mounted:true},{afterNextPatch:true});
+      this.broadcastCombat("mount_changed",{playerId:id,mounted:true},{afterNextPatch:true});
     },
     meteor_slam: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_meteor");
@@ -6308,7 +6381,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       // a partial/in-between height; only completion returns ground/wall mode.
       player.flying = true;
       this.flightTransitions.set(id, { targetY, landing });
-      this.broadcast("flight_started", {
+      this.broadcastCombat("flight_started", {
         playerId: id, direction: landing ? "down" : "up", targetY:targetY+groundAt(player.mapId,player.x,player.z),
       }, { afterNextPatch: true });
     },
@@ -6347,7 +6420,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.combatState = "dashing";
       this.activeDashes.set(id, { ...direction, remaining: RULES.dashDistance });
       this.lastDashMs.set(id, this.simulatedMs);
-      this.broadcast("dash_started", { playerId: id }, { afterNextPatch: true });
+      this.broadcastCombat("dash_started", { playerId: id }, { afterNextPatch: true });
     },
     get_character_slots: (client: Client, message: unknown) => {
       if (!parseEmptyCommand(message)) return this.reject(client, "invalid_slot_request");
@@ -6512,7 +6585,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.effects.grant(id,POSSESSION_MODIFIER,this.simulatedMs+POSSESSION_BUFF.durationMs);
       this.despawnSummon(id,"possessed");
       player.possessionActive=true;this.applyStats(id,player,this.statAllocations.get(id) ?? emptyAllocations());
-      this.broadcast("possession_changed",{playerId:id,active:true,durationMs:POSSESSION_BUFF.durationMs},{afterNextPatch:true});
+      this.broadcastCombat("possession_changed",{playerId:id,active:true,durationMs:POSSESSION_BUFF.durationMs},{afterNextPatch:true});
     },
 
     unsummon: (client: Client, message: unknown) => {
@@ -6573,7 +6646,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.climbs.set(id, upward
         ? {...top,y:FORT.height}
         : {...foot,y:0});
-      this.broadcast("climb_started", { playerId:id, direction },
+      this.broadcastCombat("climb_started", { playerId:id, direction },
         { afterNextPatch:true });
     },
 
@@ -6618,12 +6691,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private hitMonsterWithSpell(id: string, target: Monster, damage: number, source: "ranged" | "talisman" | "sword" | "muay" | "meteor") {
-    this.applyMonsterHit(id,target,damage,()=>this.broadcast("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
+    this.applyMonsterHit(id,target,damage,()=>this.broadcastCombat("combat_hit", {attackerId:id, targetId:target.id, damage, hp:target.hp,
       maxHp:target.maxHp, hitSeq:target.hitSeq, source}, {afterNextPatch:true}));
   }
 
   private resolveMeteor(id: string, player: Player) {
-    const targets = [this.state.monster, ...this.state.monsters.values()]
+    const targets = [this.villageMonster, ...this.state.monsters.values()]
       .filter(target => target.alive && this.sameCombatMap(id,target.id) && distance3d(player,target) <= METEOR.range &&
         this.bodyPathClear(player.mapId,player,target))
       .sort((a,b) => distance3d(player,a)-distance3d(player,b)).slice(0,METEOR.maxTargets);
@@ -6632,12 +6705,12 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.recordCombat(id,target.id);
       this.hitMonsterWithSpell(id,target,calculateDamage(power,target.defense,target.level),"meteor");
     }
-    this.broadcast("meteor_impact",{ownerId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,
+    this.broadcastCombat("meteor_impact",{ownerId:id,mapId:player.mapId,x:player.x,y:player.y,z:player.z,
       targets:targets.map(target=>target.id)},{afterNextPatch:true});
   }
 
   private warpCombatTime(id:string) {
-    const engaged=this.attackTargets.has(id) || this.state.monster.targetId===id || this.forest.engaged(id) ||
+    const engaged=this.attackTargets.has(id) || this.villageMonster.targetId===id || this.forest.engaged(id) ||
       [...this.attackTargets.values()].includes(id);
     return engaged?this.simulatedMs:(this.lastCombatMs.get(id)??-Infinity);
   }
@@ -6668,7 +6741,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (other) this.endAttack(otherId, other);
       }
     }
-    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    if (this.villageMonster.targetId === id) this.villageMonster.targetId = "";
     this.forest.clearTarget(id);
     this.despawnSummon(id, "warp");
     this.playerSpawn.set(id, getSafeMapSpawn(player.mapId));
@@ -6745,7 +6818,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const destination = entering ? homeMapId(character) : DEFAULT_MAP_ID;
     const portal: WorldPortal = {id:entering?"enter_home":"leave_home", x:player.x, z:player.z,
       targetMapId:destination, targetSpawn:entering?HOME_MAP.spawn:getSafeMapSpawn(DEFAULT_MAP_ID)};
-    const engaged = this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
+    const engaged = this.attackTargets.has(id) || this.villageMonster.targetId === id || this.forest.engaged(id) ||
       [...this.attackTargets.values()].includes(id);
     const context: WarpContext = {
       mapId: player.mapId, position:player, alive:player.alive, flying:player.flying, climbing:this.climbs.has(id),
@@ -6843,7 +6916,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const victim=target as Player;
       rangedDamage=this.directGuardDamage(targetId,shooter,rangedDamage);
       if(!this.applyPlayerHit(shooter,targetId,victim,rangedDamage,()=>{
-        this.broadcast("pvp_hit", {
+        this.broadcastCombat("pvp_hit", {
           attackerId:id,targetId,damage:rangedDamage,
           hp:victim.hp,maxHp:victim.maxHp,hitSeq:victim.hitSeq,source:"ranged",
         }, { afterNextPatch:true });
@@ -6852,14 +6925,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         victim.pkDeaths+=1;
         this.knockoutPlayer(targetId,"pk",id);
         void this.saveCharacter(id);
-        this.broadcast("pvp_kill", {
+        this.broadcastCombat("pvp_kill", {
           winnerId:id,loserId:targetId,source:"ranged",
           kills:shooter.pkKills,deaths:victim.pkDeaths,
         }, { afterNextPatch:true });
       }))return;
     }
 
-    this.broadcast("ranged_hit", {
+    this.broadcastCombat("ranged_hit", {
       attackerId:id,targetId,damage:rangedDamage,from,to,skill:"blessed_rice",
     }, { afterNextPatch:true });
   }
@@ -6911,10 +6984,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       ownerId: id, kind, x:spawn.x, y:spawn.y, z:spawn.z,
       facing: owner.facing, action: "follow", targetId: "",
     });
-    this.state.summons.set(id, guardian);
+    this.registerSummon(id, guardian);
     if(coreBook){coreBook.cooldowns.seer_pot=Date.now()+SEER_CORE.seer_pot.cooldownMs;this.sendOccultBook(client);void this.saveCharacter(id);}
     this.lastSummonAttackAt.delete(id);
-    this.broadcast("summon_spawn", { ownerId: id, kind },
+    this.broadcastCombat("summon_spawn", { ownerId: id, kind },
       { afterNextPatch: true });
   }
 
@@ -6934,7 +7007,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.state.summons.delete(ownerId);
     this.lastSummonAttackAt.delete(ownerId);
-    this.broadcast("summon_despawn", { ownerId, reason },
+    this.broadcastCombat("summon_despawn", { ownerId, reason },
       { afterNextPatch: true });
   }
 
@@ -6950,7 +7023,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     for (const [otherId, targetId] of this.attackTargets) {
       if (otherId !== ownerId && targetId === ownerId) candidates.push(otherId);
     }
-    if (this.state.monster.targetId === ownerId) candidates.push(RULES.monsterId);
+    if (this.villageMonster.targetId === ownerId) candidates.push(RULES.monsterId);
     for (const m of this.state.monsters.values()) if (m.targetId === ownerId) candidates.push(m.id);
 
     const fromPot = guardian.kind === "pot_spirit";
@@ -6981,7 +7054,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       nearest = monster;
       bestDistance = distance;
     };
-    consider(this.state.monster);
+    consider(this.villageMonster);
     this.state.monsters.forEach(consider);
     return nearest ? { targetId: nearest.id, target: nearest } : null;
   }
@@ -7149,7 +7222,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       }
       this.applyMonsterHit(ownerId,monster,damage,()=>{
         if (empowered && order.skillId==="seer_spirit_bind" && monster.hp>0) this.interruptMuayTarget(monster,700);
-        this.broadcast("summon_hit", {
+        this.broadcastCombat("summon_hit", {
           ownerId, summonId: ownerId, targetId,
           damage, hp: monster.hp,
           hitSeq: guardian.hitSeq,
@@ -7175,7 +7248,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const before = target.hp;
     if ("defense" in target) {
       this.applyMonsterHit(ownerId, target, damage, () => {
-        this.broadcast("summon_hit", {ownerId, summonId: ownerId, targetId, damage, hp: target.hp,
+        this.broadcastCombat("summon_hit", {ownerId, summonId: ownerId, targetId, damage, hp: target.hp,
           hitSeq: guardian.hitSeq}, {afterNextPatch: true});
         publish(before - target.hp);
       }, guardian.combatTargetId);
@@ -7189,7 +7262,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const damage = this.directGuardDamage(targetId, guardian, rawDamage, 0, ownerId);
     return this.applyPlayerHit(owner,targetId,victim,damage,()=>{
       publish?.();
-      this.broadcast("pvp_hit", {
+      this.broadcastCombat("pvp_hit", {
         attackerId: ownerId, source: "summon", summonOwnerId: ownerId,
         targetId, damage,
         hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
@@ -7199,7 +7272,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       victim.pkDeaths += 1;
       this.knockoutPlayer(targetId, "pk", ownerId);
       void this.saveCharacter(ownerId);
-      this.broadcast("pvp_kill", {
+      this.broadcastCombat("pvp_kill", {
         winnerId: ownerId, loserId: targetId,
         source: "summon",
         kills: owner.pkKills, deaths: victim.pkDeaths,
@@ -7304,16 +7377,22 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     if(!this.field && WORLD_EXPANSION)this.clock.setInterval(()=>this.sampleHuntEvent(),10_000);
     this.state.worldDefinition=this.field
       ? isolatedBattleWorldDefinitions.get(this.field.site)??battlefieldWorldDefinition : worldDefinition;
+    this.state.battlefieldFog = Boolean(this.field);
+    if (this.field) {
+      this.state.monster.alive = false;
+      this.state.monster.hp = 0;
+      this.state.battlefieldVillageMonsters.set(RULES.monsterId, this.battlefieldVillageMonster);
+    }
     this.state.swordTreeCatalog = swordTreeCatalog;
     this.state.muayBookCatalog = muayBookCatalog;
-    this.state.monster.id = RULES.monsterId;
-    this.state.monster.x = RULES.monsterSpawnX;
-    this.state.monster.z = RULES.monsterSpawnZ;
-    this.state.monster.y=groundAt(DEFAULT_MAP_ID,RULES.monsterSpawnX,RULES.monsterSpawnZ);
-    this.state.monster.hp = RULES.monsterMaxHp;
-    this.state.monster.maxHp = RULES.monsterMaxHp;
-    this.state.monster.alive = true;
-    this.state.monster.aiState = "patrol";
+    this.villageMonster.id = RULES.monsterId;
+    this.villageMonster.x = RULES.monsterSpawnX;
+    this.villageMonster.z = RULES.monsterSpawnZ;
+    this.villageMonster.y=groundAt(DEFAULT_MAP_ID,RULES.monsterSpawnX,RULES.monsterSpawnZ);
+    this.villageMonster.hp = RULES.monsterMaxHp;
+    this.villageMonster.maxHp = RULES.monsterMaxHp;
+    this.villageMonster.alive = true;
+    this.villageMonster.aiState = "patrol";
 
     // Simulation time and collision/combat logic advance in exact 50ms steps,
     // independently of client FPS, render speed and message arrival cadence.
@@ -7388,12 +7467,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const defer=trapStep?(attack:()=>void)=>{trapStep.attacks.push(attack);}:undefined;
     const monsterTargets = this.monsterCombatTargets();
     this.updateMonsterAI(dt,walk,defer,monsterTargets);
+    const rosterRevision = this.forest.rosterRevision;
     this.forest.update(this.simulatedMs, dt, monsterTargets, this.pendingWarps,
       (id,monster,force,attackAt)=>{
         if(defer)defer(()=>this.resolveForestMonsterHit(id,monster,force ?? 1,attackAt));
         else this.resolveForestMonsterHit(id,monster,force ?? 1,attackAt);
       },
-      id => this.broadcast("monster_respawn",{targetId:id}),
+      id => this.broadcastCombat("monster_respawn",{targetId:id}),
     (id,p,m)=>!this.bladeCloaks.has(id) || planarDistance(p,m)<=(m.tier==="normal"?(this.bladeBooks.get(id)?.learned.includes("quiet_step")?0.75:1.5):5),
     id=>this.seerBindings.has(id),walk);
     if(trapStep){
@@ -7402,6 +7482,10 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     }
     this.updatePlayerAttacks();
     this.updateSummons(dt);
+    if (this.field) this.syncPlayerViews();
+    if (this.field || this.forest.rosterRevision !== rosterRevision) {
+      for (const client of this.clients) this.syncCombatActorViews(client);
+    }
     if(this.prototypeRescues.size)this.updateRescues();
     for(const [id,hitSequence] of this.mountHitSequence) {
       const player=this.state.players.get(id);
@@ -7417,7 +7501,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private isFighting(id:string):boolean {
-    return this.attackTargets.has(id) || this.state.monster.targetId === id || this.forest.engaged(id) ||
+    return this.attackTargets.has(id) || this.villageMonster.targetId === id || this.forest.engaged(id) ||
       this.simulatedMs - (this.lastCombatMs.get(id) ?? -Infinity) < PROGRESSION.combatQuietMs;
   }
 
@@ -7468,7 +7552,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (next.arrived) {
         this.climbs.delete(id);
         player.combatState = "idle";
-        this.broadcast("climb_finished", {
+        this.broadcastCombat("climb_finished", {
           playerId:id, height:player.y,
         }, { afterNextPatch:true });
       }
@@ -7492,7 +7576,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.flying = !transition.landing;
       player.combatState = "idle";
       if (transition.meteor && this.isGuildPartyLeader(id)) this.resolveMeteor(id, player);
-      this.broadcast("flight_finished", {
+      this.broadcastCombat("flight_finished", {
         playerId: id, altitude: player.y, flying: player.flying,
       }, { afterNextPatch: true });
       void this.saveCharacter(id);
@@ -7562,7 +7646,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         if (move.blocked || dash.remaining < 0.0001) {
           this.activeDashes.delete(sessionId);
           player.combatState = "idle";
-          this.broadcast("dash_finished", {
+          this.broadcastCombat("dash_finished", {
             playerId: sessionId, blocked: move.blocked,
           }, { afterNextPatch: true });
         } else {
@@ -7717,7 +7801,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       const bonuses = weaponBonuses(this.inventories.get(attackerId), monster ? "pve" : "pvp");
       const meleeBonus = bonuses.melee;
       const swordMastery = ambush ? (monster?1.5:1.2) : 1;
-      if (ranged) this.broadcast("ranged_hit", {
+      if (ranged) this.broadcastCombat("ranged_hit", {
         attackerId,targetId,skill:"basic_magic",
         from:{x:attacker.x,y:attacker.y+FORT.shootOriginHeight,z:attacker.z},
         to:{x:target.x,y:target.y+FORT.targetBodyHeight,z:target.z},
@@ -7725,7 +7809,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (monster) {
         const meleeDamage = ranged ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),monster.defense,monster.level)
           : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, monster.defense, monster.level);
-        this.applyMonsterHit(attackerId,monster,meleeDamage,()=>this.broadcast("combat_hit", {
+        this.applyMonsterHit(attackerId,monster,meleeDamage,()=>this.broadcastCombat("combat_hit", {
           targetId,
           attackerId, damage: meleeDamage,
           hp: monster.hp, maxHp: monster.maxHp, hitSeq: monster.hitSeq,
@@ -7750,7 +7834,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         ? calculateDamage(this.masteryPower(attacker,monster?"pve":"pvp","magicAtk",bonuses.ranged),this.masteryPower(victim,"pvp","magicDef"),victim.level)
         : calculateDamage((this.masteryPower(attacker,monster?"pve":"pvp","atk",meleeBonus)) * (dualSword ? DUAL_SWORD.damageMultiplier : 1) * swordMastery, this.masteryPower(victim,"pvp","def"), victim.level));
       if(!this.applyPlayerHit(attacker,targetId,victim,meleeDamage,()=>{
-        this.broadcast("pvp_hit", {
+        this.broadcastCombat("pvp_hit", {
           attackerId, targetId, damage: meleeDamage,
           hp: victim.hp, maxHp: victim.maxHp, hitSeq: victim.hitSeq,
         }, { afterNextPatch: true });
@@ -7759,7 +7843,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         victim.pkDeaths += 1;
         this.knockoutPlayer(targetId, "pk", attackerId);
         void this.saveCharacter(attackerId);
-        this.broadcast("pvp_kill", {
+        this.broadcastCombat("pvp_kill", {
           winnerId: attackerId, loserId: targetId,
           kills: attacker.pkKills, deaths: victim.pkDeaths,
         }, { afterNextPatch: true });
@@ -7825,9 +7909,9 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (other) this.endAttack(otherId, other);
       else this.attackTargets.delete(otherId);
     }
-    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    if (this.villageMonster.targetId === id) this.villageMonster.targetId = "";
     this.forest.clearTarget(id);
-    this.broadcast("player_down", {
+    this.broadcastCombat("player_down", {
       playerId: id, source: cause, attackerId,
     }, { afterNextPatch: true });
   }
@@ -7897,7 +7981,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
 
   private updateMonsterAI(dt:number,walk?:(monster:Monster,previous:Position)=>void,defer?:(attack:()=>void)=>void,
     targets:ReadonlyMap<string,MonsterCombatTarget> = this.state.players) {
-    const monster = this.state.monster;
+    const monster = this.villageMonster;
     if (!monster.alive) return;
     if(this.seerBindings.has(monster.id)){monster.aiState="stagger";return;}
     if(this.simulatedMs<this.monsterInterruptUntil){monster.aiState="stagger";return;}
@@ -7974,7 +8058,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
    * the server still applies at most one legal movement step per 20Hz tick.
    */
   private moveMonster(target:Vec2,step:number,intent:string,walk?:(monster:Monster,previous:Position)=>void) {
-    const monster = this.state.monster;
+    const monster = this.villageMonster;
     const goal = monsterHabitatGoal(WORLD_MAPS[DEFAULT_MAP_ID],"land",monster,target);
     const waypoint = this.monsterNavigator.nextWaypoint(
       monster, goal, this.simulatedMs, intent
@@ -7996,7 +8080,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   }
 
   private monsterAttack(targetId: string, target: MonsterCombatTarget) {
-    const monster = this.state.monster;
+    const monster = this.villageMonster;
     if (!monster.alive || this.isProtectedArea(DEFAULT_MAP_ID,monster)) return;
     if (this.priestProtected(targetId)) return;
     if (!target.alive || this.pendingWarps.has(targetId) || target.mapId !== DEFAULT_MAP_ID || this.isProtectedArea(target.mapId,target)) return;
@@ -8025,7 +8109,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // The scheduler admits a single delivery. Consume it before any nested
     // counter, transfer, hit notification, or knockout can reenter this path.
     if(!this.pendingDefaultMonsterHits.delete(hit))return;
-    const {targetId,target}=hit,monster=this.state.monster;
+    const {targetId,target}=hit,monster=this.villageMonster;
     const rawDamage=this.prototypeMonsterDamage(monster,calculateDamage(RULES.monsterAttackDamage,
       this.masteryPower(target,"pve","def",equipmentRatings(this.inventories.get(targetId)).guard),target.level));
     const protection=this.protectMonsterHit(hit.sequence,targetId,target,monster);
@@ -8033,7 +8117,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     this.endBladeCloak(targetId,"damaged");
     target.hp = Math.max(0, target.hp - damage);
     target.hitSeq += 1;
-    this.broadcast("monster_hit", {
+    this.broadcastCombat("monster_hit", {
       targetId,
       attackerId: RULES.monsterId,
       damage,
@@ -8077,14 +8161,14 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     const damage=this.directGuardDamage(id,monster,protection?Math.max(1,Math.round(rawDamage*protection.factor)):rawDamage);
     this.endBladeCloak(id,"damaged");
     player.hp=Math.max(0,player.hp-damage);player.hitSeq++;this.lastCombatMs.set(id,this.simulatedMs);
-    this.broadcast("monster_hit",{targetId:id,attackerId:monster.id,damage,hp:player.hp,maxHp:player.maxHp,hitSeq:player.hitSeq},{afterNextPatch:true});
+    this.broadcastCombat("monster_hit",{targetId:id,attackerId:monster.id,damage,hp:player.hp,maxHp:player.maxHp,hitSeq:player.hitSeq},{afterNextPatch:true});
     this.resolveRescueAfterDamage(id,player,damage);
     if(player.hp===0)this.knockoutPlayer(id,"monster",monster.id);
     if(protection)this.finishFirmGuardProtection(protection.id,id);
   }
 
   private updateRespawns() {
-    const monster = this.state.monster;
+    const monster = this.villageMonster;
     if (!monster.alive && this.monsterRespawnAt &&
         this.simulatedMs >= this.monsterRespawnAt) {
       monster.hp = monster.maxHp;
@@ -8098,7 +8182,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       monster.targetId = "";
       this.monsterRespawnAt = 0;
       this.lastMonsterAttackMs = -Infinity;
-      this.broadcast("monster_respawn", { targetId: RULES.monsterId });
+      this.broadcastCombat("monster_respawn", { targetId: RULES.monsterId });
     }
 
     for (const [id, atMs] of this.playerRespawnAt) {
@@ -8123,7 +8207,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       player.combatState = "idle";
       player.targetId = "";
       this.lastAttackMs.delete(id);
-      this.broadcast("player_respawn", { playerId: id });
+      this.broadcastCombat("player_respawn", { playerId: id });
       void this.saveCharacter(id);
     }
   }
@@ -8131,7 +8215,8 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private canPursueBasic(id:string, player:Player, targetId:string, monster:Monster|undefined):boolean {
     // A PvE order can walk out of a rest area. Only the damage check requires both sides outside.
     if (!monster || !this.restApproachClients.has(id))return this.sameCombatMap(id,targetId,false,true);
-    return !this.pendingWarps.has(id) && player.mapId===monster.mapId && !this.isProtectedArea(monster.mapId,monster);
+    return !this.pendingWarps.has(id) && player.mapId===monster.mapId &&
+      this.battlefieldPointVisible(player, monster) && !this.isProtectedArea(monster.mapId,monster);
   }
 
   private startSkillAction(id:string, player:Player, state:"idle"|"attacking") {
@@ -8377,6 +8462,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.state.players.set(client.sessionId, player);this.syncSkillHotbar(client.sessionId);
       client.view=new StateView();
       this.syncPlayerViews();
+      this.syncCombatActorViews(client);
       if((options as Record<string,unknown>)?.warVersion===1)this.warClients.add(client.sessionId);
       if(originalReady)this.originalReliefClients.add(client.sessionId);
       if(reliefReady)this.reliefClients.add(client.sessionId);
@@ -8499,7 +8585,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     // and the final save have completed; otherwise the final snapshot is lost.
     this.lastRenameMs.delete(id);
     this.lastSlotListMs.delete(id);
-    if (this.state.monster.targetId === id) this.state.monster.targetId = "";
+    if (this.villageMonster.targetId === id) this.villageMonster.targetId = "";
     this.forest.clearTarget(id);
     // Remote player targets cannot remain locked to disconnected sessions.
     for (const [otherId, targetId] of [...this.attackTargets]) {
@@ -8512,6 +8598,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       await saving;
     } finally {
       this.state.players.delete(id);
+      client.view?.dispose();
       this.pendingItemUses.delete(id);
       this.pendingRewards.delete(id);
       this.statAllocations.delete(id);

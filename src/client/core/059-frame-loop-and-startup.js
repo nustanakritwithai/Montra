@@ -603,7 +603,7 @@
       target.y += (me.y + .65 - target.y) * follow;
       target.z += (me.z + 1.5 - target.z) * follow;
     }
-    enemy.position.y=.9+(Number(room?.state?.monster?.y)||0)+Math.sin(elapsed*1.8)*.07;
+    enemy.position.y=.9+(Number(villageMonsterState()?.y)||0)+Math.sin(elapsed*1.8)*.07;
     // Monster orientation also comes from the server's AI decision.
     if (mode === "live" && Number.isFinite(serverMonsterFacing)) {
       const turn = Math.atan2(Math.sin(serverMonsterFacing - enemy.rotation.y),
@@ -614,6 +614,7 @@
     enemy.scaling.y = hitFlashRemaining > 0 ? 1.3 : 1.1;
     if(spirit && me) { spirit.position.set(me.x-1.2,1.5+Math.sin(elapsed*3)*.2,me.z+.8); }
     marker.rotation.z+=dt*.2;
+    updateFieldFog();
 
     // Maps are 2D canvases with soft shadows: ~10 redraws per second is plenty.
     if(now-lastMapDraw>(LITE?250:100)){

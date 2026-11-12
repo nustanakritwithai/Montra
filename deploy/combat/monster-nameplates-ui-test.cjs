@@ -7,6 +7,7 @@ const element=()=>({children:[],style:{},_text:'',get textContent(){return this.
 const mesh=(x=0,z=0)=>({position:{x,y:1,z},scaling:{y:1},isEnabled:()=>true,isDisposed:()=>false,metadata:{ghost:{tall:2,design:{scale:1}}}});
 const states=new Map(),meshes=new Map();
 const c={document:{createElement:element,getElementById:()=>game},B:{Vector3,Matrix:{IdentityReadOnly:{}}},getLocalAvatar:()=>({x:0,z:0}),mode:'live',activeMapId:'forest',room:{state:{monsters:states}},forestMonsters:meshes,monsterName:s=>s.displayName,MONSTER_ID:'possessed-1',selectedForestTarget:null,engine:{getRenderingCanvas:()=>({getBoundingClientRect:()=>({width:400,height:600})}),getRenderWidth:()=>400,getRenderHeight:()=>600},camera:{viewport:{toGlobal:()=>({})}},scene:{getTransformMatrix:()=>({})},villageGhost:mesh(),demoMonsterHp:100};
+c.fieldPointVisible=point=>Math.hypot(point.x,point.z)<30;
 vm.createContext(c);vm.runInContext(source.slice(start,end),c);
 const labels=()=>game.children[0].children.filter(e=>!e.hidden);
 const add=(id,x,name='ผีกระสือ',level=12,mapId='forest')=>{states.set(id,{displayName:name,level,mapId,alive:true});meshes.set(id,mesh(x));};
@@ -17,7 +18,7 @@ meshes.get('one').metadata.ghost.deathAt=1;c.updateMonsterLabels();assert.equal(
 add('overlap',1,'ผีปอบ',8);c.selectedForestTarget='overlap';c.updateMonsterLabels();assert.equal(labels().length,1);assert.equal(labels()[0].textContent,'ผีปอบ · Lv 8');
 c.activeMapId='other';c.updateMonsterLabels();assert.equal(labels().length,0);c.activeMapId='forest';
 states.clear();meshes.clear();add('invalid',0);states.get('invalid').level=undefined;c.updateMonsterLabels();assert.equal(labels().length,0);
-states.clear();meshes.clear();add('far',50);c.updateMonsterLabels();assert.equal(labels().length,0);
+states.clear();meshes.clear();add('far',30);c.updateMonsterLabels();assert.equal(labels().length,0);
 states.clear();meshes.clear();add('safe',0,'<img src=x onerror=alert(1)>',4);c.updateMonsterLabels();assert.equal(labels()[0].textContent,'<img src=x onerror=alert(1)> · Lv 4');assert.equal(labels()[0].children[1].textContent,' · Lv 4');
 assert.match(css,/monster-label > span:last-child[^}]*flex-shrink: 0/);assert.match(css,/monster-label-name[^}]*text-overflow: ellipsis/);
 states.clear();meshes.clear();add('left',-13);add('right',13);c.updateMonsterLabels();assert.equal(labels().length,0,'edge labels hidden rather than clipped');

@@ -137,10 +137,12 @@ test('damage text keeps at most eight visible DOM labels', () => {
   };
   const canvas = { getBoundingClientRect: () => ({ width: 100, height: 100 }) };
   const ctx = { document, B: { Vector3: Vector, Matrix: {} }, scene: { getTransformMatrix() {} },
+    fieldPointVisible: point => point.x < 30,
     camera: { viewport: { toGlobal() {} } }, setTimeout() {},
     engine: { getRenderingCanvas: () => canvas, getRenderWidth: () => 100, getRenderHeight: () => 100 } };
   vm.createContext(ctx);
   vm.runInContext(read('src/client/combat/005-floating-feedback.js'), ctx);
   for (let i = 0; i < 20; i++) ctx.floatText(10, 20, .5, String(i));
+  ctx.floatText(30, 20, .5, 'fogged');
   assert.deepEqual(labels.map(label => label.textContent), ['12', '13', '14', '15', '16', '17', '18', '19']);
 });

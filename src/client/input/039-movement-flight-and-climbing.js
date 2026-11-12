@@ -50,10 +50,11 @@
     if (wasGhostAttack || skill === "ghostAttack") syncGhostPoolUi();
   }
   function monsterForSpell(id) {
-    return id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get(id);
+    return id === MONSTER_ID ? villageMonsterState() : room?.state?.monsters?.get(id);
   }
   function castAtTarget(id) {
     const picked = targetedSkill; setTargetedSkill(null);
+    if (id && !fieldTargetVisible(id)) return;
     const selected = {sword:selectedSwordSkill, muay:selectedMuaySkill, occult:selectedOccultSkill,
       blade:selectedBladeSkill, sentinel:selectedSentinelSkill}[picked];
     const source=document.querySelector('.learned-bar .sword-hotbar:not([hidden])');

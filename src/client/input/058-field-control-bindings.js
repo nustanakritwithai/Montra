@@ -391,7 +391,7 @@
     ghostAimSkill = null;
     setTargetedSkill(null);
     const combatId = ghostPotState?.combatId;
-    if (combatId && targetId) {
+    if (combatId && targetId && fieldTargetVisible(targetId)) {
       if (skillId) sendGhostPoolCommand("skill",{combatId,targetId,skillId});
       else sendGhostPoolCommand("attack",{combatId,targetId});
     }

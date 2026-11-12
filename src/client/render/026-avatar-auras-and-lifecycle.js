@@ -97,7 +97,7 @@
       let curHp = 100, curMax = 100;
       if (mode === "live") {
         const id = mesh.metadata?.monsterId;
-        const s = id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id);
+        const s = monsterForSpell(id);
         if (s) { curHp = Number(s.hp) || 0; curMax = Number(s.maxHp) || 1; }
       } else if (mesh === villageGhost) {
         curHp = demoMonsterHp; curMax = 100;

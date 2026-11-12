@@ -61,6 +61,7 @@ function fixture(id, {party = false, bind = true} = {}) {
   };
   const context = vm.createContext({
     room,mode:'live',localId:'caster',activeMapId:caster.mapId,spellTargetId:'monster',drawerActive:'',
+    fieldTargetVisible:()=>true,
     performance:{now:()=>time},
     setTimeout(fn,ms){const key=++timerId;timers.set(key,{fn,at:time+ms});return key;},
     clearTimeout(key){timers.delete(key);},

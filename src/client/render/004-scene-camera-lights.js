@@ -45,6 +45,93 @@
   // as the overhead camera pulls back, even when terrain is nearby.
   scene.fogMode = B.Scene.FOGMODE_LINEAR;
   scene.fogColor = B.Color3.FromHexString("#405a52");
+  const FIELD_FOG_CLEAR_RADIUS = 24, FIELD_FOG_RADIUS = 30;
+  const fieldFogMaps = new Set(["ritual_village", "forbidden_forest"]);
+  function villageMonsterState(state = room?.state) {
+    return state?.battlefieldFog ? state.battlefieldVillageMonsters?.get(MONSTER_ID) : state?.monster;
+  }
+  function fieldFogOrigin() {
+    if (fieldFogMaps.has(activeMapId) || room?.state?.battlefieldFog) return getLocalAvatar();
+    return null;
+  }
+  function fieldPointVisible(point) {
+    const origin = fieldFogOrigin();
+    if (!origin) return true;
+    return Boolean(point && (point.x - origin.x) ** 2 + (point.z - origin.z) ** 2 < FIELD_FOG_RADIUS ** 2);
+  }
+  function fieldTargetVisible(id) {
+    if (!fieldFogOrigin()) return true;
+    if (mode !== "live") return id === MONSTER_ID && fieldPointVisible(enemy.position);
+    const state = room?.state;
+    const target = (id === MONSTER_ID ? villageMonsterState(state) : state?.monsters?.get(id)) || state?.players?.get(id);
+    if (target) return (target.mapId || "ritual_village") === activeMapId && fieldPointVisible(target);
+    for (const summon of summonAvatars.values()) {
+      if (summon.combatTargetId === id) return fieldPointVisible(summon);
+    }
+    return false;
+  }
+  const fieldFog = new B.Vector4(0, 0, FIELD_FOG_CLEAR_RADIUS, 0);
+  const fieldFogColor = new B.Color3(.08, .12, .13);
+  const fieldParticleMasks = new WeakMap();
+  function updateFieldFog() {
+    const origin = fieldFogOrigin();
+    fieldFog.set(origin?.x ?? 0, origin?.z ?? 0, FIELD_FOG_CLEAR_RADIUS, origin ? FIELD_FOG_RADIUS : 0);
+    scene.fogColor.scaleToRef(.42, fieldFogColor);
+    for (const [id, actor] of avatars) {
+      if (id !== localId) actor.node.setEnabled(fieldPointVisible(actor));
+    }
+    for (const actor of summonAvatars.values()) actor.node.setEnabled(fieldPointVisible(actor));
+    for (const system of scene.particleSystems) {
+      if (origin && !fieldParticleMasks.has(system)) fieldParticleMasks.set(system, system.layerMask);
+      if (!fieldParticleMasks.has(system)) continue;
+      const emitter = system.emitter;
+      const point = emitter?.getAbsolutePosition?.() ?? emitter;
+      system.layerMask = origin && (system === motes || !fieldPointVisible(point)) ? 0 : fieldParticleMasks.get(system);
+    }
+    if (selectedForestTarget && !fieldTargetVisible(selectedForestTarget)) {
+      selectedForestTarget = null;
+      demoAutoAttack = false;
+      ui.monsterHint.textContent = "แตะเป้าหมายในระยะมองเห็น";
+    }
+    if (spellTargetId && !fieldTargetVisible(spellTargetId)) spellTargetId = null;
+    if (selectedPkTargetId && !fieldTargetVisible(selectedPkTargetId)) {
+      selectedPkTargetId = null;
+      syncPKHud();
+    }
+    if (hudTarget.id && !fieldTargetVisible(hudTarget.id)) hudTarget = { id: null, until: 0 };
+  }
+  class FieldFogMaterial extends B.MaterialPluginBase {
+    constructor(material) {
+      super(material, "FieldFog", 250, undefined, true, true);
+    }
+    getClassName() { return "FieldFogMaterial"; }
+    getUniforms() {
+      return {
+        ubo: [{ name: "fieldFog", size: 4, type: "vec4" }, { name: "fieldFogColor", size: 3, type: "vec3" }],
+        fragment: "uniform vec4 fieldFog;\nuniform vec3 fieldFogColor;",
+      };
+    }
+    bindForSubMesh(buffer) {
+      buffer.updateFloat4("fieldFog", fieldFog.x, fieldFog.y, fieldFog.z, fieldFog.w);
+      buffer.updateColor3("fieldFogColor", fieldFogColor);
+    }
+    getCustomCode(shaderType) {
+      if (shaderType !== "fragment") return null;
+      const color = this._material instanceof B.StandardMaterial ? "color" : "finalColor";
+      return {
+        CUSTOM_FRAGMENT_BEFORE_FRAGCOLOR: `
+          if (fieldFog.w > 0.0) {
+            float fieldFogAmount = smoothstep(fieldFog.z, fieldFog.w, distance(vPositionW.xz, fieldFog.xy));
+            vec3 fieldMist = fieldFogColor;
+            #ifdef PREMULTIPLYALPHA
+              fieldMist *= ${color}.a;
+            #endif
+            ${color}.rgb = mix(${color}.rgb, fieldMist, fieldFogAmount);
+          }
+        `,
+      };
+    }
+  }
   // Start closer so the hero and nearby action are easier to read. Keep the
   // overhead angle and full manual zoom range for a wider tactical view.
   // Babylon ArcRotateCamera beta is measured downward from the vertical axis:
@@ -218,7 +305,10 @@
   });
   // Hemi + key + carried lantern + the pool + the strike flash.
   const MAX_LIGHTS = 4 + LANTERN_POOL;
-  scene.onNewMaterialAddedObservable.add(m => { if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = MAX_LIGHTS; });
+  scene.onNewMaterialAddedObservable.add(m => {
+    if ("maxSimultaneousLights" in m) m.maxSimultaneousLights = MAX_LIGHTS;
+    if (m instanceof B.StandardMaterial || m instanceof B.PBRBaseMaterial) new FieldFogMaterial(m);
+  });
   let lanternPick = 0;
   function updateLanternLights(target, dt, t) {
     if ((lanternPick -= dt) <= 0) {

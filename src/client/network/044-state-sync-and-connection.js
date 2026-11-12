@@ -39,7 +39,7 @@
     const present = new Set();
     synced.forEach((npc, ownerId) => {
       const owner = state.players?.get?.(ownerId);
-      if (npc.combatTargetId && !owner) return;
+      if (npc.combatTargetId && !owner && !state.battlefieldFog) return;
       const mapId = npc.mapId || owner?.mapId;
       if (mapId && mapId !== activeMapId) return;
       const x = Number(npc.x), z = Number(npc.z);
@@ -854,7 +854,7 @@
       joined.onMessage("combat_hit", hit => {
         if (room !== joined || typeof hit?.attackerId !== "string") return;
         const forestTarget = joined.state?.monsters?.get?.(hit.targetId);
-        const struckState = hit.targetId === MONSTER_ID ? joined.state?.monster : forestTarget;
+        const struckState = hit.targetId === MONSTER_ID ? villageMonsterState(joined.state) : forestTarget;
         if (!struckState || (struckState.mapId || "ritual_village") !== activeMapId) return;
         const mesh = forestMonsters.get(hit.targetId) || (hit.targetId === MONSTER_ID ? villageGhost : null);
         const struck = mesh?.metadata?.ghost;
@@ -1205,7 +1205,7 @@
         if(room===joined)recordPracticeCast(result);        if (room!==joined || typeof result?.playerId!=="string") return;
         const caster=joined.state?.players?.get?.(result.playerId);
         if (caster && (caster.mapId || "ritual_village")===activeMapId) {
-          const target=result.targetId===MONSTER_ID ? joined.state.monster : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
+          const target=result.targetId===MONSTER_ID ? villageMonsterState(joined.state) : joined.state.monsters?.get(result.targetId) || joined.state.players?.get(result.targetId);
           if (target && !["guard","parry","evade","chaiya_cover"].includes(result.skillId)) faceAvatarToward(result.playerId,Number(target.x),Number(target.z));
           playMuaySkill(result.playerId,result.skillId,result.targetId);
         }

@@ -133,6 +133,7 @@ export class ForestEncounters {
   private lives = new Map<string,Life>();
   private regionalMaps = new Set<string>();
   private activeRegions = new Set<string>();
+  rosterRevision = 0;
   private navigation(map:WorldMapDefinition): Navigation {
     const trees=map.obstacles.map(o=>({x:o.x-o.radius,z:o.z-o.radius,width:o.radius*2,length:o.radius*2}));
     return {map,obstacles:[...trees,...(map.walls ?? [])]};
@@ -283,6 +284,7 @@ export class ForestEncounters {
         if(this.traceEnabled)this.traceEvent({kind:"activated",now,monsterId:id,mapId:life.actor.mapId,to:{x:life.actor.x,y:life.actor.y,z:life.actor.z}});
       }
       this.activeRegions=regions;
+      this.rosterRevision++;
     }
     for(const [id,life] of this.lives){
       const {map,obstacles}=life.zone;

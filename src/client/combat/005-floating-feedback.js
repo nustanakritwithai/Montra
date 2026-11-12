@@ -15,7 +15,7 @@
   }
   const METAL_KINDS = new Set(["dealt", "skill", "taken", "heal", "spirit", "onoma", "cry", "levelup", "crit"]);
   function floatText(x, y, z, text, kind = "dealt", opts = {}) {
-    if (!Number.isFinite(x) || !Number.isFinite(z)) return;
+    if (!Number.isFinite(x) || !Number.isFinite(z) || !fieldPointVisible({x,z})) return;
     const rect = canvasRect(), w = engine.getRenderWidth(), h = engine.getRenderHeight();
     B.Vector3.ProjectToRef(floatWorld.set(x, y, z), B.Matrix.IdentityReadOnly, scene.getTransformMatrix(), camera.viewport.toGlobal(w, h), floatProj);
     if (floatProj.z < 0 || floatProj.z > 1) return;
@@ -39,6 +39,8 @@
     const tm = scene.getTransformMatrix(), vp = camera.viewport.toGlobal(w, h);
     for (const el of floatLayer.children) {
       const p = el._world; if (!p) continue;
+      el.hidden = !fieldPointVisible({x:p[0],z:p[2]});
+      if (el.hidden) continue;
       B.Vector3.ProjectToRef(floatWorld.set(p[0], p[1], p[2]), B.Matrix.IdentityReadOnly, tm, vp, floatProj);
       el.style.left = (floatProj.x * rect.width / w + el._side).toFixed(1) + "px"; el.style.top = (floatProj.y * rect.height / h - el._lift).toFixed(1) + "px";
     }

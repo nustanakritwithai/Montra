@@ -10,6 +10,7 @@ import { TEMPLE_TARGETS } from "./TempleMap.js";
 import { SHRINE_GUARDIAN,getWorldMap } from "./WorldMaps.js";
 export const RULES = Object.freeze({
   tickRate: 20,               // Colyseus fixed-step simulation: 50 ms
+  battlefieldSightRadius: 30,
   mapLimit: 60,
   playerSpeed: 3,
   mountedSpeed: 8.1,          // server-owned horse travel speed, provisional

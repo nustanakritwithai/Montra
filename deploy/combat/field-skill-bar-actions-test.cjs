@@ -89,6 +89,7 @@ const context = vm.createContext({
   openDrawer(name){context.drawerActive=name;},closeDrawer(){context.drawerActive=null;},
   setTimeout:()=>1,clearTimeout(){},
   mode: 'live', room: joined, joined, localId:"local", summonAvatars:new Map(), selectedForestTarget: null, targetedSkill:null,
+  fieldTargetVisible:()=>true,
   activeMapId:"forbidden_forest", monsterForSpell:id=>id==="forest-ghost"?monster:null, ownServerCharacter:()=>owner,
   setTargetedSkill(skill){context.targetedSkill=skill;context.syncGhostPoolUi();},
   hudTarget: { until: 0 }, performance: { now: () => now },

@@ -12,6 +12,7 @@ const ui={mode:"live",ownServerCharacter:()=>player,activeMapId:"a",drawerActive
   worldDefinitions:{a:{name:"หมู่บ้าน",portals:[gate("a",0),a]},b:{name:"ทางผ่าน",portals:[gate("a",1),b]},c:{name:"ศาล",portals:[],guardian:home}},
   personalItems:{fragment:{name:"เศษตรา",huntTarget:target},gear:{name:"สร้อย",huntTarget:target,forge:{},sourceBoss:"shrine",level:12},ore:{name:"แร่"}},
   room:{state:{monsters:new Map([["shrine",mob]])}},MONSTER_ID:"possessed-1",gearGuides:null,INVENTORY_SLOTS:12,
+  monsterForSpell:id=>ui.room.state.monsters.get(id),
   inventoryState:{slots:[{itemId:"fragment",quantity:1},null],equipment:{}},toast:s=>notices.push(s),
   renderBag(){},closeDrawer(){},localStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}};
 function load(){
@@ -50,6 +51,7 @@ const me={pathId:"muay_boran",level:3,x:10,z:8},context={renderItemPreview(){},c
   economyReady:()=>true,gearGuides:{path:me.pathId,starterHunt:camp},fieldTrainingTip:null,territoryState:null,activeMapId:camp.mapId,
   personalItems:docs,MONSTER_ID:"possessed-1",openForgePage(...v){context.forgeOpened=v;},itemHuntCount:id=>bag.slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0),
   room:{state:{monsters:new Map([["west1",{x:9,z:8,alive:false}],["west2",{x:12,z:8,alive:true}]])}},
+  monsterForSpell:id=>context.room.state.monsters.get(id),
   getLocalAvatar:()=>({x:10,z:8}),worldDefinitions:{},$:get,ui:{drawerTitle:{}},openBag(){},selectBenchRecipe(...v){context.opened=v;},
   bindItemHuntButton(_,id,qty){context.tracked={id,qty};},itemHuntSource:(id,g)=>docs[id]?.huntTarget};
 // Use the real navigation/equipped-slot helpers: starter goals follow missing

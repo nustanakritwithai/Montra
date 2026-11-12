@@ -257,7 +257,18 @@
         ctx.strokeStyle = "#e3b878"; ctx.lineWidth = 1; ctx.strokeRect(sx(wall.x), sy(wall.z), Math.max(1.3, scale * wall.width), Math.max(1.3, scale * wall.length));
       }
     }
+    const fogOrigin = fieldFogOrigin();
+    if (fogOrigin) {
+      const x = sx(fogOrigin.x), y = sy(fogOrigin.z);
+      const mist = ctx.createRadialGradient(x, y, FIELD_FOG_CLEAR_RADIUS * scale, x, y, FIELD_FOG_RADIUS * scale);
+      mist.addColorStop(0, "rgba(13,24,26,0)");
+      mist.addColorStop(.5, "rgba(13,24,26,.5)");
+      mist.addColorStop(1, "#0d181a");
+      ctx.fillStyle = mist;
+      ctx.fillRect(0, 0, width, height);
+    }
     if(resources?.mapId===activeMapId)for(const n of resources.nodes){
+      if (!fieldPointVisible(n)) continue;
       const x=sx(n.x),y=sy(n.z),r=large?4:2;
       if(n.kind==="herb"){mapDot(ctx,x,y,r,n.stock?"#f0be72":"#777673","#534927");continue;}
       ctx.fillStyle=!n.stock?"#777673":n.kind==="wood"?"#8fe197":"#d6bfdc";ctx.beginPath();
@@ -345,8 +356,8 @@
     if(defense?.kind==="escort" && defense.mapId===activeMapId && defense.escort){mapDot(ctx,sx(defense.escort.x),sy(defense.escort.z),large?6:3.5,"#b4dfff");if(large)mapText(ctx,"จุดหมายผู้เดินทาง",sx(defense.escort.x),sy(defense.escort.z)-10,10,"#d3eaff");}
     for(const npc of map?.serviceNpcs || [])if(Object.hasOwn(serviceNpcUi,npc.role))
       mapDot(ctx,sx(npc.x),sy(npc.z),large?4:2.5,npc.role==="war"?"#ef8277":"#f3c776");
-    room?.state?.monsters?.forEach(m => {
-      if (m.mapId !== activeMapId || !m.alive) return;
+    const drawMonster = m => {
+      if (m?.mapId !== activeMapId || !m.alive || !fieldPointVisible(m)) return;
       const x = sx(m.x), y = sy(m.z);
       if (m.tier === "elite" || m.tier === "boss") {
         const r = (large ? 7 : 4) * (m.tier === "boss" ? 1.4 : 1);
@@ -354,7 +365,9 @@
         ctx.fillStyle = "#ffe084"; ctx.beginPath(); ctx.moveTo(x, y - r); ctx.lineTo(x + r, y); ctx.lineTo(x, y + r); ctx.lineTo(x - r, y); ctx.closePath(); ctx.fill();
         ctx.shadowBlur = 0; ctx.strokeStyle = "#3a2508"; ctx.lineWidth = 1.2; ctx.stroke();
       } else mapDot(ctx, x, y, large ? 3.2 : 1.8, "#f1786c", "rgba(40,6,6,.9)");
-    });
+    };
+    drawMonster(villageMonsterState());
+    room?.state?.monsters?.forEach(drawMonster);
     for (const portal of activePortals()) {
       if(portal.targetMapId===activeMapId && map?.strategic?.relay){
         const x=sx(portal.x),y=sy(portal.z),r=large?6:3;
@@ -395,8 +408,8 @@
       ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(mx, my, radarRadius, 0, Math.PI * 2); ctx.stroke();
     }
-    for (const [ownerId, npc] of summonAvatars) mapDot(ctx, sx(npc.x), sy(npc.z), large ? 4 : 2.2, ownerId === localId ? "#cb97f1" : "#78d5e2");
-    for (const [id, a] of avatars) if (id !== localId) {
+    for (const [ownerId, npc] of summonAvatars) if (fieldPointVisible(npc)) mapDot(ctx, sx(npc.x), sy(npc.z), large ? 4 : 2.2, ownerId === localId ? "#cb97f1" : "#78d5e2");
+    for (const [id, a] of avatars) if (id !== localId && fieldPointVisible(a)) {
       const foe=territoryState?.teams?.[id] && territoryState.teams[id]!==territoryState.local?.side;
       mapDot(ctx,sx(a.x),sy(a.z),large?4.6:2.8,foe?"#ff917d":"#6de5df","rgba(4,24,24,.9)");
     }
@@ -418,7 +431,7 @@
       const coneAngle = Math.PI * 0.28;
       ctx.arc(0, 0, coneRadius, -Math.PI / 2 - coneAngle / 2, -Math.PI / 2 + coneAngle / 2);
       ctx.closePath();
-      ctx.fill();
+      if (!fogOrigin) ctx.fill();
       ctx.restore();
 
       ctx.translate(x, y); ctx.rotate(-h);

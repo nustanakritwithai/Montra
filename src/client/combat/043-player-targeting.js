@@ -27,7 +27,7 @@
 
     const opponent = selectedPkTargetId && selectedPkTargetId !== localId
       ? players.get(selectedPkTargetId) : null;
-    if (!opponent) {
+    if (!opponent || !fieldTargetVisible(selectedPkTargetId)) {
       selectedPkTargetId = null;
       ui.pkPanel.hidden = true;
       ui.pkTitle.textContent = "⚔ FREE PK";
@@ -53,7 +53,7 @@
     if (mode !== "live" || !room || !targetId || targetId === localId) return;
     const me = room.state?.players?.get?.(localId);
     const enemyPlayer = room.state?.players?.get?.(targetId);
-    if (!me || !enemyPlayer) return;
+    if (!me || !enemyPlayer || !fieldTargetVisible(targetId)) return;
     if (!Number.isFinite(me.pkKills)) {
       toast("MONTRA Server ยังไม่มีระบบ Free PK · ต้องติดตั้ง VPS ก่อน");
       return;

@@ -48,7 +48,7 @@
     if(activeMapId !== "ritual_village") {
       monsterReady=false; enemy.setEnabled(false); return;
     }
-    const monster = state?.monster;
+    const monster = villageMonsterState(state);
     if (!monster || !Number.isFinite(Number(monster.hp))) {
       monsterReady = false;
       enemy.setEnabled(false);
@@ -74,12 +74,16 @@
     triggerVoiceGuidance("target");
     setTargetedSkill(null);
     if(mode === "live" && activeMapId !== "ritual_village" && room?.state?.worldDefinition){
-      const me=ownServerCharacter();let target=room.state.monsters.get(selectedForestTarget);
-      if(!target?.alive || target.mapId!==activeMapId){target=null;room.state.monsters.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});}
+      const me=ownServerCharacter();let target=room.state.monsters?.get(selectedForestTarget);
+      if(!target?.alive || target.mapId!==activeMapId || !fieldPointVisible(target)){
+        target=null;
+        room.state.monsters?.forEach(m=>{if(m.alive&&m.mapId===activeMapId&&me&&fieldPointVisible(m)&&(!target||Math.hypot(me.x-m.x,me.z-m.z)<Math.hypot(me.x-target.x,me.z-target.z)))target=m;});
+      }
       if(target)requestForestAttack(target.id);else toast("ยังไม่มีเป้าหมายในพื้นที่");return;
     }
     selectedPkTargetId = null;
     syncPKHud();
+    if (!fieldTargetVisible(MONSTER_ID)) { toast("เป้าหมายไม่อยู่ในระยะมองเห็น"); return; }
     if (mode === "live") {
       if (!room || !monsterReady) {
         toast("เซิร์ฟเวอร์ยังไม่เปิดระบบโจมตี · ติดตั้ง Combat บน VPS ก่อน");

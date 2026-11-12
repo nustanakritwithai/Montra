@@ -48,14 +48,16 @@
     const hero = getLocalAvatar();
     if (mode === "live") {
       const st = room?.state, id = selectedForestTarget || (hudTarget.until > now ? hudTarget.id : null);
-      if (!id) return null;
-      if (id === MONSTER_ID && st?.monster && activeMapId === "ritual_village")
-        return { name: "ผีเข้าสิง", level: Number(st.monster.level) || 1, hp: st.monster.hp, maxHp: st.monster.maxHp, alive: st.monster.alive !== false };
+      if (!id || !fieldTargetVisible(id)) return null;
+      if (id === MONSTER_ID && activeMapId === "ritual_village") {
+        const monster = villageMonsterState(st);
+        return monster && { name: "ผีเข้าสิง", level: Number(monster.level) || 1, hp: monster.hp, maxHp: monster.maxHp, alive: monster.alive !== false };
+      }
       const m = st?.monsters?.get?.(id);
       if (!m || m.mapId !== activeMapId) return null;
       return { name: monsterName(m, id) || "ผี", level: Number(m.level) || 1, hp: m.hp, maxHp: m.maxHp, alive: m.alive !== false, elite: m.tier === "elite" || m.tier === "boss", x: m.x, z: m.z };
     }
-    if (!enemy.isEnabled() && now - demoLastHitAt > 2500) return null;
+    if (!fieldPointVisible(enemy.position) || (!enemy.isEnabled() && now - demoLastHitAt > 2500)) return null;
     const near = hero && Math.hypot(hero.x - enemy.position.x, hero.z - enemy.position.z) < 9;
     if (!near && now - demoLastHitAt > 8000) return null;
     return { name: "ผีเข้าสิง · ตัวทดสอบ", level: 1, hp: demoMonsterHp, maxHp: 100, alive: demoMonsterHp > 0 };
@@ -175,7 +177,7 @@
       const gate=worldDefinitions?.[activeMapId]?.portals.find(p=>p.targetMapId===route[1]);
       return {...guide,step:gate?"ไปประตู "+worldDefinitions[route[1]].name+" · เหลือ "+(route.length-1)+" ประตู":"ไม่มีเส้นทางจากแผนที่นี้",to:gate};
     }
-    const mob=source.id===MONSTER_ID?room?.state?.monster:room?.state?.monsters?.get(source.id);
+    const mob=monsterForSpell(source.id);
     const map=worldDefinitions?.[activeMapId],home=[map?.boss,map?.guardian].find(b=>b?.id===source.id);
     return {...guide,step:(mob?.alive?"ล่า ":mob?"รอเกิด · ":"ค้นหา ")+source.monster,to:mob?.alive?mob:home??mob};
   }
@@ -244,7 +246,7 @@
     if(data?.playerId!==localId || !data.skillId)return;
     const me=ownServerCharacter(),trial=journeyNotesForPlayer().trial;
     if(!trial || trial.id!==data.skillId || trial.used || me?.mapId!==trial.site.mapId)return;
-    const mob=room.state.monsters?.get(trial.site.id)??(trial.site.id===MONSTER_ID?room.state.monster:null);
+    const mob=monsterForSpell(trial.site.id);
     const targets=Array.isArray(data.targetIds)?data.targetIds:(data.targetId?[data.targetId]:[]);
     if(!targets.includes(trial.site.id)){
       const support=["intercept","ward","party_ward","support","heal","heal_area","spirit_heal","ward_area","cleanse","cleanse_area","spirit_ward","trance"].includes(trial.effect) || data.skillId==="protect";
@@ -275,7 +277,7 @@
     }
     const me=ownServerCharacter();let best=null,waiting=null,distance=Infinity;
     for(const id of site.mobs??[site.id]){
-      const mob=id===MONSTER_ID?room?.state?.monster:room?.state?.monsters?.get(id);
+      const mob=monsterForSpell(id);
       if(!mob || mob.level>me.level)continue;
       if(!mob.alive){waiting??=mob;continue;}
       const d=Math.hypot(me.x-mob.x,me.z-mob.z);if(d<distance){distance=d;best=mob;}

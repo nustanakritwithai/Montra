@@ -252,7 +252,7 @@
       }
       targetRingTexture.update(); targetRingPercent=percent;
     }
-    const g = mesh.metadata?.ghost, state = mode === "live" ? (id === MONSTER_ID ? room?.state?.monster : room?.state?.monsters?.get?.(id)) : null;
+    const g = mesh.metadata?.ghost, state = mode === "live" ? monsterForSpell(id) : null;
     const r = Math.max(1.3, Math.min(3.5,(g?.tall || 2) * .68 * (g?.design?.scale || 1)));
     targetRingMesh.setEnabled(true);
     targetRingMesh.position.set(mesh.position.x, (g?.ty ?? (Number(state?.y) || 0)) + .14, mesh.position.z);
@@ -270,12 +270,14 @@
     const add = (mesh, state, id, name) => {
       if (!hero || !mesh?.isEnabled() || mesh.isDisposed() || state?.alive === false || mesh.metadata?.ghost?.deathAt) return;
       const level = Number(state?.level), distance = Math.hypot(mesh.position.x - hero.x, mesh.position.z - hero.z);
-      if (!name || !Number.isInteger(level) || level < 1 || distance > 40) return;
+      if (!name || !Number.isInteger(level) || level < 1 || distance > 40 || !fieldPointVisible(mesh.position)) return;
       candidates.push({ mesh, level, name, distance, selected: id === selectedForestTarget });
     };
     if (mode === "live") {
-      if (activeMapId === "ritual_village" && room?.state?.monster)
-        add(villageGhost, room.state.monster, MONSTER_ID, "ผีเข้าสิง");
+      if (activeMapId === "ritual_village") {
+        const monster = villageMonsterState();
+        if (monster) add(villageGhost, monster, MONSTER_ID, "ผีเข้าสิง");
+      }
       room?.state?.monsters?.forEach((state, id) => {
         if (state.mapId === activeMapId) add(forestMonsters.get(id), state, id, monsterName(state, id));
       });

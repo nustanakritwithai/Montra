@@ -253,7 +253,7 @@
   function requestForestAttack(id) {
     triggerVoiceGuidance("target");
     const target=room?.state?.monsters?.get?.(id);
-    if(!target||!target.alive||target.mapId!==activeMapId){toast("เป้าหมายไม่อยู่ในพื้นที่");return;}
+    if(!target||!target.alive||target.mapId!==activeMapId||!fieldTargetVisible(id)){toast("เป้าหมายไม่อยู่ในระยะมองเห็น");return;}
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
     setTargetedSkill(null);
     try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }

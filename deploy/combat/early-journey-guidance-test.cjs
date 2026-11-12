@@ -16,6 +16,7 @@ const journey={weapon:'next',camp:{...temple,level:10},practice:forest,camps:[fo
 const guides={path:me.pathId,level:me.level,starterHunt:{weapon:'wrap',mapId:'forbidden_forest',maxLevel:10},journey,builds:[]};
 const context={mode:'live',me,ownServerCharacter:()=>me,inventoryState:bag,personalItems:docs,bagMeta:id=>docs[id],
   room:{state:{monsters:mons}},activeMapId:me.mapId,gearGuides:guides,fieldTrainingTip:null,territoryState:null,
+  monsterForSpell:id=>mons.get(id),
   economyReady:()=>true,MONSTER_ID:'possessed-1',INVENTORY_SLOTS:12,drawerActive:null,toast:t=>notices.push(t),
   localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
   worldDefinitions:{forbidden_forest:{id:'forbidden_forest',name:'ป่า',portals:[gate]},bound_temple:{id:'bound_temple',name:'วัดร้าง',portals:[back]}}};

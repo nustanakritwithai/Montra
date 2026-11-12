@@ -155,7 +155,7 @@ export const MyRoomState = schema({
   // A per-client view permits server-side concealment without sending hidden positions.
   players: t.map(Player).view(),
   monster: Monster,
-  summons: t.map(SummonedGuardian),
+  summons: t.map(SummonedGuardian).view(),
   fortification: Fortification,
   dashAvailable: t.boolean().default(true), // append: live server dash capability
   flightAvailable: t.boolean().default(true), // append: server supports fly/land commands
@@ -166,7 +166,7 @@ export const MyRoomState = schema({
   progressionAvailable: t.boolean().default(true),
   economyAvailable: t.boolean().default(false),
   partyAvailable: t.boolean().default(true),
-  monsters: t.map(Monster),
+  monsters: t.map(Monster).view(),
   worldDefinition: t.string().default(""),
   guildAvailable: t.boolean().default(true),
   guildRolesAvailable: t.boolean().default(true),
@@ -194,6 +194,9 @@ export const MyRoomState = schema({
   boatsAvailable: t.boolean().default(false),
   boats: t.map(SailingBoat),
   cityMarketSupported: t.boolean().default(false),
+  battlefieldFog: t.boolean().default(false),
+  // Collection entries can be withdrawn from an individual StateView.
+  battlefieldVillageMonsters: t.map(Monster).view(),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

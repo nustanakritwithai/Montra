@@ -69,7 +69,7 @@
   const glow = new B.GlowLayer("lantern bloom", scene, { mainTextureRatio: .25, blurKernelSize: 24 });
   glow.intensity = .85;
   glow.customEmissiveColorSelector = (mesh, subMesh, material, result) => {
-    const e = glowMats.has(material) && material.emissiveColor;
+    const e = glowMats.has(material) && fieldPointVisible(mesh.getAbsolutePosition()) && material.emissiveColor;
     if (e) result.set(e.r, e.g, e.b, 1); else result.set(0, 0, 0, 0);
   };
 
