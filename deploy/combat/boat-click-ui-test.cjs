@@ -256,3 +256,16 @@ test("the three water actions reference distinct packaged WebP icons",()=>{
     assert.equal(image.toString("ascii",8,12),"WEBP");
   }
 });
+
+test("disembarking is available away from the docks once the boat stops",()=>{
+  const f=fixture();
+  const exit=f.buttons.get("boatExit");
+  assert.equal(exit.hidden,false);
+  f.boat.speed=3;
+  const before=f.packets.length;
+  exit.onclick();
+  assert.equal(f.packets.length,before);
+  f.boat.speed=0;
+  exit.onclick();
+  assert.deepEqual(f.packets.at(-1),{type:"boat_intent",action:"exit"});
+});

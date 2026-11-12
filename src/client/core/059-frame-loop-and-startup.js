@@ -164,7 +164,7 @@
       clearSailingDestination();
       if(goal.port && distance<=1.35 && course?.length===1){
         requestedBoatAnchor=true;
-        toast("ถึง"+goal.port.name+" · แตะขึ้นฝั่งเมื่อเรือหยุด");
+        toast("ถึง"+goal.port.name+" · กดลงจากเรือเมื่อเรือหยุด");
       }else if(goal.port)toast("ทางเข้าท่าติดขัด · ลองเข้าจากอีกมุม");
       else if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
       return {throttle:0,steer:0};
@@ -197,7 +197,12 @@
     if (id) {cancelQuestNavigation();sendBoatIntent("board",{boatId:id});}
   };
   $("boatHelm").onclick = () => sendBoatIntent(boatAtHelm() ? "release" : "helm");
-  $("boatExit").onclick = () => sendBoatIntent("exit");
+  $("boatExit").onclick = () => {
+    const boat=ownBoatState();
+    if(!boat)return;
+    if(Math.abs(boat.speed)>1){toast("หยุดเรือก่อนลง");return;}
+    sendBoatIntent("exit");
+  };
   addEventListener("blur",resetHelmControls);
   document.addEventListener("visibilitychange",()=>{if(document.hidden)resetHelmControls();});
 
@@ -268,10 +273,10 @@
         toast("แตะน้ำเพื่อขับ · แตะดาดฟ้าเพื่อหยุด");
       }
     }
-    const onLand = player?.alive && !player.boatId && !player.flying && !player.mounted;
+    const onFoot = player?.alive && !player.boatId && !player.flying && !player.mounted;
     const launchPoints=map?.boatPorts?.map(port=>port.shore)??[dock];
-    $("boatLaunch").hidden = !(onLand && launchPoints.some(shore=>Math.hypot(player.x-shore.x,player.z-shore.z)<=dock.range));
-    $("boatBoard").hidden = !(onLand && nearestId);
+    $("boatLaunch").hidden = !(onFoot && launchPoints.some(shore=>Math.hypot(player.x-shore.x,player.z-shore.z)<=dock.range));
+    $("boatBoard").hidden = !(onFoot && nearestId);
     $("boatBoard").dataset.boatId = nearestId;
     const helmButton = $("boatHelm");
     helmButton.hidden = !(boat && (!boat.helmId || helm));

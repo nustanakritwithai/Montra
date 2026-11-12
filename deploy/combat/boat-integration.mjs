@@ -167,6 +167,63 @@ try {
   command(marsh,"exit");
   await until(()=>!me(marsh).boatId && me(marsh).x>-105.6,"disembark at the marsh bank");
   console.log("PASS marsh dock launch, sailing and disembarkation");
+
+  const {room:captain,rejected:captainErrors}=observe(await sdk.create("my_room",opts()));
+  const diverOptions=opts();
+  let {room:diver,rejected:diverErrors}=observe(await sdk.joinById(captain.roomId,diverOptions));
+  await until(()=>me(captain)?.persistent && me(diver)?.persistent,"two characters at the village landing");
+  const vessel="boat-"+captain.sessionId, ship=()=>captain.state.boats.get(vessel);
+  command(captain,"launch");
+  await until(ship,"launch for open-water transfer");
+  command(captain,"board",{boatId:vessel});
+  await until(()=>me(captain).boatId===vessel,"captain boards at the landing");
+  command(captain,"helm");
+  await until(()=>ship().helmId===captain.sessionId,"captain takes helm");
+
+  const farWater=river.z+20;
+  diver.send("move",{x:0,z:farWater});
+  const turnDeadline=Date.now()+15000;
+  while(ship().heading>.06 && Date.now()<turnDeadline){
+    command(captain,"input",{throttle:0,steer:1,anchor:false});
+    await wait(105);
+  }
+  assert.ok(ship().heading<=.06,"turn toward the middle of the river");
+  await until(()=>Math.abs(me(diver).z-farWater)<.2 && me(diver).y<-1,"diver walks on the bed away from the boat",12000);
+  command(diver,"board",{boatId:vessel});
+  await until(()=>diverErrors.includes("boat_action_unavailable"),"distant boarding rejected");
+
+  const sailDeadline=Date.now()+10000;
+  while(ship().z<farWater-3 && Date.now()<sailDeadline){
+    command(captain,"input",{throttle:.8,steer:0,anchor:false});
+    await wait(105);
+  }
+  assert.ok(ship().z>=farWater-3 && ship().speed>1,"moving vessel reaches the diver");
+  const priorErrors=diverErrors.length;
+  command(diver,"board",{boatId:vessel});
+  command(captain,"exit");
+  await until(()=>diverErrors.length>priorErrors && captainErrors.includes("boat_action_unavailable"),"both transfers rejected while moving");
+  command(captain,"input",{throttle:0,steer:0,anchor:true});
+  await until(()=>ship().anchored && Math.abs(ship().speed)<.05,"stop in open water");
+  command(diver,"board",{boatId:vessel});
+  await until(()=>me(diver).boatId===vessel,"board from below the water surface");
+  assert.ok(Math.abs(me(diver).y-(village.waterLevel+.88))<.02);
+
+  const beforeExit={x:me(diver).x,z:me(diver).z};
+  command(diver,"exit");
+  await until(()=>!me(diver).boatId && me(diver).y<-1,"disembark onto the riverbed");
+  assert.ok(Math.hypot(me(diver).x-beforeExit.x,me(diver).z-beforeExit.z)<.2);
+  const bed={x:me(diver).x,y:me(diver).y,z:me(diver).z};
+  assert.ok(Math.abs(bed.y-groundAt(village.id,bed.x,bed.z))<.02);
+  await diver.leave();clients.delete(diver);
+  ({room:diver}=observe(await sdk.joinById(captain.roomId,diverOptions)));
+  await until(()=>me(diver)?.persistent && !me(diver).boatId,"diver rejoins on the bed");
+  assert.ok(Math.hypot(me(diver).x-bed.x,me(diver).y-bed.y,me(diver).z-bed.z)<.1);
+  command(diver,"board",{boatId:vessel});
+  await until(()=>me(diver).boatId===vessel,"diver boards the same boat again");
+  command(captain,"exit");
+  await until(()=>!me(captain).boatId && me(captain).y<-1 && !ship().helmId,"captain exits and releases helm in open water");
+  assert.equal(ship().hp,ship().maxHp);
+  console.log("PASS open-water boarding, moving/distant rejection, riverbed exit, reconnect, and same-boat reboarding");
 } catch (error) {
   console.error(error);
   process.exitCode = 1;

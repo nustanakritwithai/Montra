@@ -1578,7 +1578,7 @@
         if(room===joined && showCombatFeatureError(info?.reason))return;
         if (room !== joined) return;
         if (typeof homeCommandError === "function" && homeCommandError(info?.reason)) return;
-        if (info?.reason === "boat_action_unavailable") {toast("เข้าใกล้ท่าเรือ หรือหยุดเรือชิดฝั่งก่อนขึ้นลง");return;}
+        if (info?.reason === "boat_action_unavailable") {toast("ขึ้นลงได้เมื่อเรือหยุดและอยู่ใกล้ · ปล่อยเรือได้ที่ท่า");return;}
         const waterGateMessage={
           boat_gate_helm:"จับหางเสือก่อนผ่านประตูน้ำ",
           boat_gate_range:"ขับเรือเข้าใกล้ประตูน้ำอีกนิด",
@@ -1591,8 +1591,8 @@
           boat_gate_save_failed:"บันทึกการเดินทางไม่สำเร็จ · เรือยังอยู่ฝั่งเดิม",
         }[info?.reason];
         if(waterGateMessage){toast(waterGateMessage);return;}
-        if (info?.reason === "boat_disembark_first") {toast("ขึ้นฝั่งก่อนใช้คำสั่งนี้");return;}
-        if (info?.reason === "boat_deck_only") {toast("แตะบนดาดฟ้าเพื่อเดิน หรือกดขึ้นฝั่ง");return;}
+        if (info?.reason === "boat_disembark_first") {toast("ลงจากเรือก่อนใช้คำสั่งนี้");return;}
+        if (info?.reason === "boat_deck_only") {toast("แตะบนดาดฟ้าเพื่อเดิน หรือกดลงจากเรือ");return;}
         if (info?.reason === "boat_unavailable") return;
         if(info?.reason==="skill_learning_in_combat"){toast("รอให้พ้นการต่อสู้ 5 วินาทีก่อนเรียนหรืออัปขั้น · ทำได้ทุกที่");return;}
         if(typeof info?.reason==="string" && (info.reason.startsWith("skill_hotbar_") || info.reason==="invalid_skill_hotbar")){

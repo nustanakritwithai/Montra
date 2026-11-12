@@ -1,6 +1,6 @@
 import { stepTowards, type Vec2 } from "./GameRules.js";
 import { waterDepthAt } from "./GroundTerrain.js";
-import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldPoint } from "./WorldMaps.js";
+import { groundAt, getWorldMap, isSafeWorldPoint, provinceShotClear, WORLD_MAPS, type WorldMapDefinition, type WorldPoint } from "./WorldMaps.js";
 import { BoatSimulation } from "./PirateBoatSimulation.js";
 import {
   AUTHORITATIVE_BOAT_DEFINITIONS, type BoatBerth, type BoatPort, type BoatWorldSnapshot,
@@ -87,27 +87,32 @@ function nearestPort(ports:readonly BoatPort[]|undefined,point:Vec2,side:"shore"
   return nearest;
 }
 
-function landNear(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null {
+function groundContact(map: WorldMapDefinition, deck: WorldPoint, ground: WorldPoint, allowSubmerged = true) {
+  const submerged = waterDepthAt(map,ground.x,ground.z) > .14;
+  if ((submerged ? !allowSubmerged : Math.abs(ground.y-deck.y)>1.3) || !isSafeWorldPoint(map,ground) ||
+      !provinceShotClear(map,{x:deck.x,y:deck.y+1,z:deck.z},{x:ground.x,y:ground.y+1,z:ground.z})) return null;
+  return submerged ? "water" : "shore";
+}
+
+function exitGround(boat: BoatWorldSnapshot, point: WorldPoint): WorldPoint | null {
   const map = getWorldMap(boat.islandId)!;
-  const eye = {x:point.x,y:point.y+1,z:point.z};
   const port=nearestPort(map.boatPorts,boat,"berth",PORT_BERTH_RANGE);
   if(port){
-    const {x,z}=port.shore,y=groundAt(map.id,x,z);
-    if(waterDepthAt(map,x,z)<=.14 && isSafeWorldPoint(map,{x,y,z}) &&
-        Math.abs(y-point.y)<=1.3 && provinceShotClear(map,eye,{x,y:y+1,z}))return {x,y,z};
+    const ground={...port.shore,y:groundAt(map.id,port.shore.x,port.shore.z)};
+    if(groundContact(map,point,ground,false))return ground;
   }
-  for (let r = .5; r <= 4.5; r += .5) {
-    for (let i = 0; i < 16; i++) {
+  let riverbed:WorldPoint|null=null;
+  for (let r = 0; r <= 4.5; r += .5) {
+    for (let i = 0; i < (r===0?1:16); i++) {
       const a = i * Math.PI / 8;
       const x = point.x + Math.cos(a)*r, z = point.z + Math.sin(a)*r;
-      const y = groundAt(map.id, x, z);
-      if (waterDepthAt(map,x,z)<=.14 && isSafeWorldPoint(map, {x,y,z}) &&
-          Math.abs(y-point.y) <= 1.3 && provinceShotClear(map, eye, {x,y:y+1,z})) {
-        return {x,y,z};
-      }
+      const ground={x,y:groundAt(map.id,x,z),z};
+      const contact=groundContact(map,point,ground,riverbed===null);
+      if(contact==="shore")return ground;
+      if(contact==="water")riverbed??=ground;
     }
   }
-  return null;
+  return riverbed;
 }
 
 type Rider = {boatId: string; position: Vec2; shore: WorldPoint; target?: Vec2};
@@ -173,10 +178,8 @@ export class MontraBoats {
         const port=nearestPort(map.boatPorts,target,"berth",PORT_BERTH_RANGE);
         const atLanding=port && Math.hypot(player.x-port.shore.x,player.z-port.shore.z)<=1.6;
         if (Math.abs(target.speed) > 1 ||
-            waterDepthAt(map,player.x,player.z)>.14 || Math.abs(player.y-y)>1.3 ||
             (!atLanding && Math.hypot(player.x-target.x, player.z-target.z) > 6.5) ||
-            !provinceShotClear(map, {x:player.x,y:player.y+1,z:player.z},
-              {x:target.x,y:y+1,z:target.z}) ||
+            !groundContact(map,{x:target.x,y,z:target.z},player) ||
             !this.sim.board(intent.boatId, id, player.mapId, player.x, player.z)) return false;
         const shore = {x:player.x,y:player.y,z:player.z};
         const local = toLocal(target, player);
@@ -195,9 +198,9 @@ export class MontraBoats {
       case "release":
         return Boolean(boat && this.sim.leaveHelm(id));
       case "exit": {
-        const land = boat && Math.abs(boat.speed) <= 1 ? landNear(boat,player) : null;
-        if (!land) return false;
-        this.detach(id,player,land);
+        const ground = boat && Math.abs(boat.speed) <= 1 ? exitGround(boat,player) : null;
+        if (!ground) return false;
+        this.detach(id,player,ground);
         return true;
       }
       case "walk":
