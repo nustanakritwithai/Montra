@@ -2,6 +2,7 @@
   const heldBladeByHand = new WeakMap();
   const shrineGlaiveFile = "crescent-blade-lod2.glb";
   const twinSwordProfiles = [1, 2, 3, 4, 5, 6, 7, 8, 7, 8];
+  const twinSwordRollDegrees = { thai_left: 165, thai_right: -140 };
   function heldBladeFile(weaponId, modelId) {
     if (weaponId === "shrine_glaive") return shrineGlaiveFile;
     if (modelId !== "thai_dual" && modelId !== "arcane_sword") return "";
@@ -47,8 +48,9 @@
         model.scaling.setAll(.27);
         model.position.set(.02, .16, 0);
       } else {
-        // Roll the blade around its length, keeping the mirrored twin grips.
-        model.rotate(B.Axis.Y, kind === "thai_right" ? -Math.PI / 2 : Math.PI / 2, B.Space.LOCAL);
+        // The guard pose needs a separate roll in each hand to aim both cutting edges forward.
+        const degrees = twinSwordRollDegrees[kind] ?? 90;
+        model.rotate(B.Axis.Y, degrees * Math.PI / 180, B.Space.LOCAL);
       }
       for (const mesh of model.getChildMeshes()) mesh.isPickable = false;
       request.model = model;

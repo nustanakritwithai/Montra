@@ -84,13 +84,13 @@ test('each Thai sword profile has separable gameplay and scabbard geometry', () 
   assert.equal(heldBladeFile('shrine_glaive', 'arcane_sword'), 'crescent-blade-lod2.glb');
 });
 
-test('Thai swords roll by a quarter-turn about the blade, mirrored for twin grips', async () => {
+test('Thai swords roll around the blade with separate forward angles for the twin grips', async () => {
   const { avatar, fetches, instances, equip, finish, settle } = fixture();
   equip('wp_twins_1');
   await finish(fetches[0]);
-  for (const [kind, angle] of [['thai_left', Math.PI / 2], ['thai_right', -Math.PI / 2]]) {
+  for (const [kind, degrees] of [['thai_left', 165], ['thai_right', -140]]) {
     assert.deepEqual(instances.find(model => model.parent === avatar.weaponModels[kind]).roll,
-      ['blade axis', angle, 'local']);
+      ['blade axis', degrees * Math.PI / 180, 'local']);
   }
   equip('arcane_sword', '');
   await settle();
