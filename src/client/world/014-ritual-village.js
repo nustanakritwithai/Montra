@@ -233,7 +233,7 @@
     villageTreeNodes.push(placeThaiTree(side < 0 ? ["yangna", "phai", "takhian", "maprao"][i % 4] : ["tan", "yangna", "makham", "phai"][i % 4], x, 0, z, { scale: .7 + noise(i, 64) * .3 }));
   }
   // Living water: scrolling ripples, lotus, reeds and floating krathong.
-  const rippleTexture = paintTexture("canal ripples", 256, (c, s) => {
+  function paintCanalRipples(c, s) {
     c.fillStyle = "#000"; c.fillRect(0, 0, s, s);
     for (let i = 0; i < 80; i++) {
       const x = noise(i, 81) * s, y = noise(i, 82) * s, w = 10 + noise(i, 83) * 34;
@@ -241,13 +241,16 @@
       c.strokeStyle = i % 9 === 0 ? `rgba(255,190,110,${.35 + noise(i, 84) * .3})` : `rgba(120,175,215,${.28 + noise(i, 84) * .38})`; c.lineWidth = 1 + noise(i, 85) * 1.6;
       for (const dx of [-s, 0, s]) { c.beginPath(); c.moveTo(x + dx - w / 2, y); c.quadraticCurveTo(x + dx, y - 3, x + dx + w / 2, y); c.stroke(); }
     }
-  });
+  }
+  const rippleTexture = paintTexture("canal ripples", 256, paintCanalRipples);
   rippleTexture.uScale = 1.2; rippleTexture.vScale = 10;
   water.emissiveTexture = rippleTexture;
   const riverWater = water.clone("river water");
   riverWater.diffuseColor = B.Color3.FromHexString("#235b70");
   riverWater.emissiveColor = B.Color3.FromHexString("#12485a");
-  const riverRipple = rippleTexture.clone(); riverRipple.uScale = 16; riverRipple.vScale = 5;
+  // A Babylon DynamicTexture clone has a new canvas and no uploaded pixels.
+  const riverRipple = paintTexture("river ripples", 256, paintCanalRipples);
+  riverRipple.uScale = 16; riverRipple.vScale = 5;
   riverWater.emissiveTexture = riverRipple;
   riverSurface.material = riverWater;
   const lotusPad = mat("lotus pad", "#3a6b44", "#0b1f10"), lotusBloom = mat("lotus bloom", "#e7a2b3", "#5a2a34"), reedMat = mat("reeds", "#4a5631");

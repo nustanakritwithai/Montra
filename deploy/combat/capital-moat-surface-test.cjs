@@ -3,6 +3,14 @@ const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
 const vm = require('node:vm');
 
+const village = readFileSync(join(__dirname, '../../src/client/world/014-ritual-village.js'), 'utf8');
+const materials = readFileSync(join(__dirname, '../../src/client/render/006-materials-atmosphere.js'), 'utf8');
+const rippleStart = village.indexOf('  // Living water:');
+const rippleEnd = village.indexOf('  const lotusPad', rippleStart);
+const paintStart = materials.indexOf('  function paintTexture(');
+const paintEnd = materials.indexOf('  // Deterministic noise', paintStart);
+assert.ok(rippleStart >= 0 && rippleEnd > rippleStart && paintStart >= 0 && paintEnd > paintStart, 'ripple fixture boundaries');
+
 const source = readFileSync(join(__dirname, '../../src/client/world/017-region-terrain.js'), 'utf8');
 const start = source.indexOf('  function waterAreaContains(');
 const end = source.indexOf('  // Clip each footprint', start);
@@ -20,6 +28,14 @@ const B = {
   Material: { MATERIAL_OPAQUE: 0, MATERIAL_ALPHABLEND: 2 },
   Mesh: class { constructor() { meshes.push(this); } },
   StandardMaterial: class {},
+  DynamicTexture: class {
+    ready = false;
+    getContext() {
+      return { fillRect() {}, beginPath() {}, moveTo() {}, quadraticCurveTo() {}, stroke() {} };
+    }
+    update() { this.ready = true; }
+    clone() { return new B.DynamicTexture(); }
+  },
   VertexData: class { applyToMesh(mesh) { mesh.data = this; } },
 };
 const cuts = [-8, -6, -4, -2, 0, 2, 4, 6, 8];
@@ -40,12 +56,18 @@ const map = {
   ],
   waterLevel: .025,
 };
+const { riverRipple } = vm.runInNewContext(
+  materials.slice(paintStart, paintEnd) + village.slice(rippleStart, rippleEnd) + '\n({riverRipple})',
+  { B, scene: {}, noise: () => .5, water: { clone: () => ({}) }, riverSurface: {} },
+);
+assert.equal(riverRipple.ready, true, 'the ripple canvas must be uploaded before it can render');
 vm.runInNewContext(source.slice(start, end) + '\nbuildWaterSurface(map);', {
-  B, map, scene: {}, riverRipple: {}, expansionRoot: {}, expansionResources: [],
+  B, map, scene: {}, riverRipple, expansionRoot: {}, expansionResources: [],
 });
 
 assert.equal(meshes.length, 1, 'one moat mesh for the whole ring');
 const mesh = meshes[0];
+assert.equal(mesh.material.emissiveTexture, riverRipple);
 assert.equal(mesh.material.transparencyMode, B.Material.MATERIAL_OPAQUE);
 assert.equal(mesh.material.backFaceCulling, false);
 assert.equal(mesh.hasVertexAlpha, false);

@@ -22,6 +22,8 @@ test("the capital moat has four walkable bridges and a connected dry outer road"
     assert.ok(isSafeWorldPoint(map,feet(x,z)),"walkable bank at "+x+","+z);
   }
   for(const [from,to] of map.boatLanes!){
+    const centerDepth=waterDepthAt(map,(from.x+to.x)/2,(from.z+to.z)/2);
+    assert.ok(centerDepth>=2.9 && centerDepth<=3.05,"the middle of the moat is three metres deep");
     const steps=Math.ceil(Math.hypot(to.x-from.x,to.z-from.z));
     for(let i=0;i<=steps;i++){
       const x=from.x+(to.x-from.x)*i/steps,z=from.z+(to.z-from.z)*i/steps;

@@ -31,6 +31,7 @@ export function groundSample(t:GroundTerrain,x:number,z:number){
 const WATER_LEVEL = .025;
 const SHORE_HEIGHT = -.025;
 const MAX_WATER_DEPTH = 1.45;
+const CAPITAL_MOAT_DEPTH = 3;
 const DEEP_POOL_DEPTH = 2.65;
 
 export const WATER_EXPOSURE = Object.freeze({
@@ -78,14 +79,14 @@ function shoreline(waters:readonly WorldWall[],vertical:boolean) {
   return edges;
 }
 
-function waterCarving(waters:readonly WorldWall[],limit:number){
+function waterCarving(waters:readonly WorldWall[],limit:number,bankGrade=.22){
   const banksX=shoreline(waters,true),banksZ=shoreline(waters,false);
   return (x:number,z:number)=>{
     if(!waters.some(area=>containsWaterArea(area,x,z)))return 0;
-    let distance=limit/.22;
+    let distance=limit/bankGrade;
     for(const {at,start,end} of banksX)distance=Math.min(distance,Math.hypot(x-at,Math.max(start-z,0,z-end)));
     for(const {at,start,end} of banksZ)distance=Math.min(distance,Math.hypot(z-at,Math.max(start-x,0,x-end)));
-    return .22*distance;
+    return bankGrade*distance;
   };
 }
 
@@ -110,7 +111,8 @@ export function waterTerrain(map:WorldMapDefinition) {
     .filter(p=>waters.some(area=>containsWaterArea(area,p.x,p.z)))
     .map(p=>({...p,height:groundSample(base,p.x,p.z).height})).filter(p=>p.height>0):[];
   const shelves=new Set(map.shallowWater);
-  const carve=waterCarving(waters,shelves.size ? .34 : MAX_WATER_DEPTH);
+  const carve=map.id==="mantra_capital"?waterCarving(waters,CAPITAL_MOAT_DEPTH,.44):
+    waterCarving(waters,shelves.size ? .34 : MAX_WATER_DEPTH);
   // The marsh floor is a shallow shelf. Only the channels and old pools have deeper beds.
   const carveChannel=shelves.size?waterCarving(waters.filter(area=>!shelves.has(area)),MAX_WATER_DEPTH):null;
   const carveDeepPool=map.deepPools?.length?waterCarving(map.deepPools,DEEP_POOL_DEPTH):null;
