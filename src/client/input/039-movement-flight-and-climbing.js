@@ -210,10 +210,11 @@
     button.dataset.unavailable=reason; button.classList.toggle("mount-off",Boolean(reason));
     button.disabled=mode==="live" ? !me?.alive : getLocalAvatar()?.serverAlive === false;
     button.setAttribute("aria-pressed",String(isMounted));
-    button.querySelector("i").textContent=isMounted ? "ลงม้า" : "เรียกม้า";
+    button.querySelector("i").textContent=isMounted ? "ลงจากควาย" : "เรียกควาย";
     $("menuMountLabel").textContent=button.querySelector("i").textContent;
     $("menuMount").disabled=button.disabled;
-    button.title=isMounted ? "ลงจากม้าเพื่อใช้วิชาต่อสู้" : "เรียกม้าสำหรับเดินทาง";
+    button.title=isMounted ? "ลงจากควายเพื่อใช้วิชาต่อสู้" : "เรียกควายสำหรับเดินทาง";
+    button.setAttribute("aria-label", button.querySelector("i").textContent);
   }
   function requestClimb(stairId) {
     if (!hasLiveElevation()) {

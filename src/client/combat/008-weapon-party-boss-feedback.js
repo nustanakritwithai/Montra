@@ -391,8 +391,8 @@
     if (mode === "live") {
       const btn = $("mountButton");
       const why = btn?.dataset.unavailable;
-      if (why === "server") { toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS"); return false; }
-      if (why === "guest") { toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี"); return false; }
+      if (why === "server") { toast("เซิร์ฟเวอร์ยังไม่เปิดระบบควาย · ต้องอัปเดต VPS"); return false; }
+      if (why === "guest") { toast("เรียกควายได้เฉพาะตัวละครที่บันทึกในบัญชี"); return false; }
       if (send && room?.state?.mountAvailable === true && !btn?.disabled) {
         room.send("toggle_mount", {});
         return true;
@@ -402,24 +402,10 @@
     const me = getLocalAvatar();
     if (!me) return false;
     if (demoFlying || (Math.abs((me.targetY ?? me.y ?? 0) - activeFort.height) > 0.2 && (me.targetY ?? me.y ?? 0) > 1)) {
-      toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
+      toast("เรียกควายได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
       return false;
     }
-    const next = !me.mounted;
-    me.mounted = next;
-    if (next) {
-      if (!me.horse && typeof createHorse === "function") me.horse = createHorse(me);
-      me.horse?.root?.setEnabled(true);
-      playMountSummonVfx(me);
-      triggerCombatCallout("mount_summon");
-      floatAtPlayer(localId, "ควบม้าทรงมนตรา! 🐎", "status", { big: true });
-      SFX("whoosh", { pitch: 1.2 });
-      SFX("bell", { intensity: 1.1 });
-    } else {
-      me.horse?.root?.setEnabled(false);
-      floatAtPlayer(localId, "ลงจากหลังม้า", "status");
-      SFX("whoosh", { pitch: 0.8 });
-    }
+    setAvatarMounted(me, !me.mounted, me.serverAlive !== false);
     if (typeof syncMountButton === "function") syncMountButton();
     return true;
   }

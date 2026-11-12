@@ -1,64 +1,69 @@
 const fs = require('node:fs');
+const vm = require('node:vm');
 const assert = require('node:assert/strict');
 
-console.log('[TEST] Verifying Phase 12: Mount System & Shamanic Steed Riding 3D...');
-
-const mainSrc = fs.readFileSync('main.js', 'utf8');
-const indexSrc = fs.readFileSync('index.html', 'utf8');
-
-// 1. Verify Shamanic Steed 3D Model Styling
-assert(mainSrc.includes('mat("horse shamanic gold"'), 'main.js defines horse shamanic gold material');
-assert(mainSrc.includes('mat("horse mystic eye"'), 'main.js defines horse mystic eye material');
-assert(mainSrc.includes('part("horse saddle gold"'), 'main.js defines horse saddle gold trim');
-assert(mainSrc.includes('part("horse bridle gold"'), 'main.js defines horse bridle gold trim');
-
-// 2. Verify Hoof Dust Sparks & Galloping Trail
-assert(mainSrc.includes('if(a.horse && a.mounted)'), 'main.js checks mounted horse state');
-assert(mainSrc.includes('sparks("gold", a.x, (a.y || 0) + 0.08, a.z, 2'), 'main.js spawns golden hoof sparks during gallop');
-
-// 3. Verify Summoning Portal VFX & Mount Feedback
-assert(mainSrc.includes('function playMountSummonVfx(a)'), 'main.js defines playMountSummonVfx');
-assert(mainSrc.includes('spawnFx("yantra", "gold"'), 'playMountSummonVfx spawns gold yantra circle');
-assert(mainSrc.includes('floatAtPlayer(localId, "ควบม้าทรงมนตรา! 🐎"'), 'displays mount float text');
-assert(mainSrc.includes('floatAtPlayer(localId, "ลงจากหลังม้า"'), 'displays dismount float text');
-
-// 4. Verify Typhoon Voice Guidance Callout
-assert(mainSrc.includes('mount_summon: {'), 'TYPHOON_COMBAT_CALLOUTS includes mount_summon');
-assert(mainSrc.includes('title: "ม้าทรงอาคม"'), 'mount_summon title matches');
-assert(mainSrc.includes('subtitle: "ควบขี่ม้าทรงมนตรา ท่องแดนไสยเวทได้รวดเร็วขึ้น"'), 'mount_summon subtitle matches');
-assert(mainSrc.includes('ม้าทรงอาคมพร้อมออกศึกแล้ว! ควบทะยานข้ามแดนได้อย่างรวดเร็ว'), 'mount_summon text matches');
-
-// 5. Verify Speed Boost & Frame Loop Integration
-assert(mainSrc.includes('const mountMult=me.mounted?1.6:1'), 'frame loop applies +60% speed boost when mounted');
-assert(mainSrc.includes('step=baseStep*mountMult*dt'), 'step incorporates mountMult');
-
-// 6. Verify Control Bindings & Keyboard Shortcut
-assert(mainSrc.includes('e.key?.toLowerCase() === "h"'), 'keydown listener binds H key for mount toggle');
-assert(mainSrc.includes('window.MontraMount = {'), 'exposes window.MontraMount API');
-assert(mainSrc.includes('toggleMount: togglePlayerMount'), 'MontraMount exports toggleMount');
-assert(mainSrc.includes('isMounted: isPlayerMounted'), 'MontraMount exports isMounted');
-assert(mainSrc.includes('getMountSpeedMultiplier'), 'MontraMount exports getMountSpeedMultiplier');
-assert(mainSrc.includes('playMountVfx: playMountSummonVfx'), 'MontraMount exports playMountVfx');
-
-// 7. Verify index.html version bump
-assert(/main\.js\?v=0\.(1[4-9]|[2-9]\d)\./.test(indexSrc), 'index.html points to v0.14.x or newer');
-
-// 8. Functional Unit Test for MontraMount logic
-const mockAvatars = new Map();
-mockAvatars.set("player1", { id: "player1", x: 10, y: 0, z: 20, mounted: false });
-
-function simulateToggle(avatar) {
-  avatar.mounted = !avatar.mounted;
-  const mult = avatar.mounted ? 1.6 : 1.0;
-  return { mounted: avatar.mounted, speedMult: mult };
+const main = fs.readFileSync('main.js', 'utf8');
+const html = fs.readFileSync('index.html', 'utf8');
+for (const level of [1, 2]) {
+  const file = `buffalo-lod${level}-animated.glb`;
+  const bytes = fs.readFileSync('assets/mounts/' + file);
+  assert.equal(bytes.toString('ascii', 0, 4), 'glTF');
+  assert.equal(bytes.readUInt32LE(8), bytes.length);
+  const asset = JSON.parse(bytes.toString('utf8', 20, 20 + bytes.readUInt32LE(12)));
+  assert.ok(asset.skins[0].joints.length > 0);
+  for (const name of ['rider_seat', 'rein_grip_left', 'rein_grip_right'])
+    assert.ok(asset.nodes.some(node => node.name === name), name);
+  for (const name of ['horn_left', 'horn_right', 'saddle_seat'])
+    assert.ok(asset.meshes.some(mesh => mesh.name === name), name);
+  for (const name of ['Idle', 'Walk', 'Run', 'TurnLeft', 'TurnRight', 'Mount'])
+    assert.ok(asset.animations.some(animation => animation.name === name), name);
+  assert.ok(main.includes(file));
 }
+assert.match(html, /id="mountButton"[^>]*>.*เรียกควาย/);
+assert.match(html, /id="menuMountLabel">เรียกควาย/);
+assert.match(fs.readFileSync('styles.css', 'utf8'), /assets\/ui\/buffalo-mount\.webp/);
+assert.ok(fs.statSync('assets/ui/buffalo-mount.webp').size > 0);
+assert.match(main, /mount_summon: \{\s*title: "ควายอาคม"/);
+assert.match(main, /e\.key\?\.toLowerCase\(\) === "h"/);
+assert.match(main, /const mountMult=me\.mounted\?1\.6:1/);
+assert.match(main, /seatBuffaloRider\(a\)/);
 
-const res1 = simulateToggle(mockAvatars.get("player1"));
-assert.equal(res1.mounted, true, 'Mount toggle activates mount');
-assert.equal(res1.speedMult, 1.6, 'Mounted player speed multiplier is 1.6 (+60%)');
+const avatar = { id: 'local', mounted: false };
+const player = { mounted: false, alive: true };
+const sent = [], effects = [];
+const source = main.slice(main.indexOf('  function isPlayerMounted('), main.indexOf('  window.MontraWar ='));
+const mountState = main.slice(main.indexOf('  function setAvatarMounted('), main.indexOf('  function updateBuffalo('));
+const syncState = main.slice(main.indexOf('  function noteAvatarState('), main.indexOf('  const ease = x => x <= 0'));
+const context = vm.createContext({
+  mode: 'live', localId: avatar.id,
+  room: { state: { mountAvailable: true, players: new Map([[avatar.id, player]]) }, send: (...args) => sent.push(args) },
+  $: () => ({ dataset: {}, disabled: false }),
+  getLocalAvatar: () => avatar, syncMountButton() {},
+  createBuffalo: a => { a.buffalo = {}; }, disposeBuffalo: a => { a.buffalo = null; },
+  playMountSummonVfx: a => effects.push(a.id), triggerCombatCallout() {}, floatAtPlayer() {}, SFX() {},
+});
+vm.runInContext(source + mountState + syncState, context);
+assert.equal(context.togglePlayerMount(), true);
+assert.deepEqual(JSON.parse(JSON.stringify(sent)), [['toggle_mount', {}]]);
+assert.equal(avatar.mounted, false, 'a request alone never renders a mount');
+player.mounted = true;
+context.noteAvatarState(avatar, player);
+const mount = avatar.buffalo;
+assert.ok(mount);
+assert.equal(context.getMountSpeedMultiplier(), 1.6);
+context.noteAvatarState(avatar, player);
+assert.equal(avatar.buffalo, mount, 'ordinary state updates reuse the mount');
+assert.deepEqual(effects, ['local']);
+assert.equal(context.togglePlayerMount(), true);
+assert.equal(avatar.buffalo, mount, 'dismount waits for the server');
+player.mounted = false;
+context.noteAvatarState(avatar, player);
+assert.equal(avatar.buffalo, null);
+assert.equal(context.getMountSpeedMultiplier(), 1);
+player.mounted = true;
+context.noteAvatarState(avatar, player);
+context.noteAvatarState(avatar, { ...player, alive: false });
+assert.equal(avatar.mounted, false);
+assert.equal(avatar.buffalo, null);
 
-const res2 = simulateToggle(mockAvatars.get("player1"));
-assert.equal(res2.mounted, false, 'Mount toggle deactivates mount');
-assert.equal(res2.speedMult, 1.0, 'Dismounted player speed multiplier is 1.0');
-
-console.log('PASS All Phase 12 Mount System & Shamanic Steed Riding 3D features verified successfully!');
+console.log('PASS buffalo GLB assets, field and menu controls, confirmed mount/dismount, death cleanup');

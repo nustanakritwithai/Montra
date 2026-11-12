@@ -55,8 +55,8 @@
       return;
     }
     const why=$("mountButton").dataset.unavailable;
-    if(mode==="live" && why==="server"){toast("เซิร์ฟเวอร์ยังไม่เปิดระบบม้า · ต้องอัปเดต VPS");return;}
-    if(mode==="live" && why==="guest"){toast("เรียกม้าได้เฉพาะตัวละครที่บันทึกในบัญชี");return;}
+    if(mode==="live" && why==="server"){toast("เซิร์ฟเวอร์ยังไม่เปิดระบบควาย · ต้องอัปเดต VPS");return;}
+    if(mode==="live" && why==="guest"){toast("เรียกควายได้เฉพาะตัวละครที่บันทึกในบัญชี");return;}
     if(mode==="live" && room?.state?.mountAvailable===true && !$("mountButton").disabled)room.send("toggle_mount",{});
   }
   $("mountButton").onclick=toggleFieldMount;

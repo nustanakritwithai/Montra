@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art-buffalo-mount" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -152,7 +152,7 @@
       <button id="bannerButton" type="button" disabled aria-pressed="false" title="ธงชัยอาคม: เร็ว ๆ นี้ · ยังไม่มีผลป้องกัน"><span class="hud-btn-icon" data-hud-icon="banner" aria-hidden="true">🚩</span><i>ธงชัย · เร็ว ๆ นี้</i></button>
       <button id="meteorButton" type="button" hidden title="ทุบธรณี"><span class="hud-btn-icon" aria-hidden="true">☄</span><i>ทุบธรณี</i></button>
       <button id="bossEncounterButton" type="button" disabled aria-pressed="false" title="ท้าวเวสสุวรรณ: เร็ว ๆ นี้ · ยังไม่เปิดการต่อสู้"><span class="hud-btn-icon" data-hud-icon="boss" aria-hidden="true">👹</span><i>จอมอสูร · เร็ว ๆ นี้</i></button>
-      <button id="mountButton" type="button" aria-pressed="false" hidden><span>♞</span><i>เรียกม้า</i></button>
+      <button id="mountButton" type="button" aria-pressed="false" hidden><span aria-hidden="true"></span><i>เรียกควาย</i></button>
     </nav>
     <div id="shade" class="shade" hidden></div>
     <section id="drawer" class="drawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" hidden>
@@ -187,7 +187,7 @@
         </div></section>
         <section id="menu-travel" data-journal-panel="travel" aria-label="เดินทาง" hidden><div class="menu-tiles">
           <button id="mapButton" type="button"><span class="drawer-nav-icon" data-menu-icon="map" aria-hidden="true">⌖</span><strong>แผนที่<small>ตำแหน่งและจุดเดินทาง</small></strong></button>
-          <button id="menuMount" type="button"><span class="drawer-nav-icon" data-menu-icon="mount" aria-hidden="true">♞</span><strong id="menuMountLabel">เรียกม้า</strong></button>
+          <button id="menuMount" type="button"><span class="drawer-nav-icon" data-menu-icon="mount" aria-hidden="true"></span><strong id="menuMountLabel">เรียกควาย</strong></button>
         </div></section>
         <section id="menu-social" data-journal-panel="social" aria-label="ชุมชนและการค้า" hidden><div class="menu-tiles">
           <button id="menuChat" type="button"><span class="drawer-nav-icon" data-menu-icon="chat" aria-hidden="true">✉</span><strong>แชท<small>แผนที่ รวม ปาร์ตี้ และส่วนตัว</small></strong><b id="menuChatUnread" hidden></b></button>
@@ -200,7 +200,7 @@
             <span>รูปแบบหน้าจอ</span><button type="button" data-field-layout="adventure" aria-pressed="true">ผจญภัย</button><button type="button" data-field-layout="combat" aria-pressed="false">เน้นต่อสู้</button>
           </div>
           <label class="field-utility-label" for="fieldUtility">ทางลัดประจำสนาม
-            <select id="fieldUtility"><option value="chat">แชท</option><option value="mount">ขี่ม้า (เมื่อเรียกได้)</option></select>
+            <select id="fieldUtility"><option value="chat">แชท</option><option value="mount">ขี่ควาย (เมื่อเรียกได้)</option></select>
           </label>
           <div class="menu-tiles">
             <button id="helpButton" type="button"><span class="drawer-nav-icon" data-menu-icon="settings" aria-hidden="true">?</span><strong>คู่มือ ภาพ และเสียง</strong></button>

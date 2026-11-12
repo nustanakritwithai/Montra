@@ -14,7 +14,7 @@ const fieldCommand = fieldSource.slice(fieldSource.indexOf('  function toggleFli
 const avatarSource = read('src/client/render/020-avatar-materials-and-meshes.js');
 const avatarLiteral = avatarSource.slice(avatarSource.indexOf('    const avatar = {'), avatarSource.indexOf('    attachShamanModel(avatar);'));
 const stateSource = read('src/client/render/025-horse-and-avatar-animation.js');
-const noteState = stateSource.slice(stateSource.indexOf('  function noteAvatarState('), stateSource.indexOf('  const ease ='));
+const noteState = stateSource.slice(0, stateSource.indexOf('  const ease ='));
 const terrainSource = read('src/client/world/017-region-terrain.js');
 const layer = terrainSource.slice(terrainSource.indexOf('  function playerLayer('), terrainSource.indexOf('  function terrainHeight('));
 const lifecycleSource = read('src/client/render/026-avatar-auras-and-lifecycle.js');
@@ -36,7 +36,7 @@ class Node {
   getChildMeshes() { return [...this.children].flatMap(child => [child, ...child.getChildMeshes()]); }
 }
 const realBabylon = process.env.MONTRA_TEST_BABYLON_PATH ? require(path.resolve(process.env.MONTRA_TEST_BABYLON_PATH)) : null;
-const B = realBabylon || { TransformNode: Node, MeshBuilder: Object.fromEntries(['CreateSphere', 'CreateCylinder', 'CreatePlane'].map(name => [name, id => new Node(id)])) };
+const B = realBabylon || { TransformNode: Node, Vector3: Vector, Matrix: class {}, MeshBuilder: Object.fromEntries(['CreateSphere', 'CreateCylinder', 'CreatePlane'].map(name => [name, id => new Node(id)])) };
 const engine = realBabylon ? new B.NullEngine() : null;
 const scene = realBabylon ? new B.Scene(engine) : {};
 if (realBabylon) scene.activeCamera = new B.FreeCamera('flight-test-camera', new B.Vector3(0, 3, -10), scene);
@@ -52,7 +52,7 @@ function setup() {
   const player = { alive: true, flying: false, pathId: 'seer', combatState: 'idle', x: 0, y: 0, z: 0, mapId: 'ritual_village' };
   const sends = [], notices = [], effects = [], buttons = new Map([['fly', button()], ['meteorButton', button()]]);
   const context = {
-    B, scene, window: {}, console, performance: { now: () => 20000 }, mode: 'live', localId: 'local',
+    B, scene, mat: () => ({}), window: {}, console, performance: { now: () => 20000 }, mode: 'live', localId: 'local',
     avatars: new Map([['local', hero]]), room: { state: { flightAvailable: true, players: new Map([['local', player]]) }, send: (...args) => sends.push(args) },
     worldCombatFeatures: {}, partyState: null, guildState: null, worldDefinitions: { ritual_village: {} }, activeMapId: 'ritual_village', activeFort: { x: 10, z: 10, width: 4, length: 4, height: 4 },
     demoFlying: false, demoFlightTarget: null, demoMonsterHp: 100, DEMO_FLIGHT_HEIGHT: 6,

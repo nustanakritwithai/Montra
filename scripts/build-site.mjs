@@ -30,8 +30,11 @@ export function buildSite(output, revision, source = root) {
   writeFileSync(join(output, 'index.html'), html.replace(script, `$1&amp;rev=${revision}$2`));
   cpSync(join(source, 'assets'), join(output, 'assets'), { recursive: true });
   const swords = Array.from({ length: 8 }, (_, i) => `assets/weapons/thai-sword-0${i + 1}.glb`);
-  for (const file of ['assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb', ...swords]) {
-    assert(statSync(join(output, file)).size > 0, `Missing model: ${file}`);
+  for (const file of [
+    'assets/characters/thai-male.glb', 'assets/characters/thai-golden-spirit.glb', 'assets/weapons/crescent-blade-lod2.glb',
+    ...swords, 'assets/mounts/buffalo-lod1-animated.glb', 'assets/mounts/buffalo-lod2-animated.glb', 'assets/ui/buffalo-mount.webp',
+  ]) {
+    assert(statSync(join(output, file)).size > 0, `Missing asset: ${file}`);
   }
   const preview = 'weapon-preview/lod2';
   mkdirSync(join(output, preview), { recursive: true });

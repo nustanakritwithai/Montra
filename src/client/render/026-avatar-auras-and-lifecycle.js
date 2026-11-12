@@ -145,12 +145,10 @@
     const m = a.moveBlend, flying = a.serverFlying || (a.y > 4.4 && !worldDefinitions?.[activeMapId]?.terrain);
     a.phase = (a.phase + dt * 9.5 * m) % (Math.PI * 2);
     const s = Math.sin(a.phase), c = Math.cos(a.phase), t = now / 1000;
-    if(a.skin?.holder)a.skin.holder.position.y=a.mounted ? .56 + Math.abs(c)*.03*m : 0; // seat on the saddle (top ~1.6)
-    if(a.horse && a.mounted){
-      a.horse.legs.forEach((leg,i)=>{leg.rotation.x=Math.sin(a.phase+(i===0||i===3?0:Math.PI))*.48*m;});
-      a.horse.tail.rotation.x=.35+Math.sin(t*2)*.12;
+    if (a.mounted) {
+      updateBuffalo(a, speed, dt, now);
       if (m > .35 && a.stepSign && Math.sign(s) && Math.sign(s) !== a.stepSign) {
-        sparks("gold", a.x, (a.y || 0) + 0.08, a.z, 2, { speed: 0.8, up: 0.5, size: 0.28, life: 300 });
+        sparks("gold", a.x, (a.y || 0) + .08, a.z, 2, { speed: .8, up: .5, size: .28, life: 300 });
       }
     }
     // Footstep on each foot plant (the stride sine crossing zero), by surface.
@@ -168,7 +166,13 @@
       r.arms[i].rotation.z = (i ? 1 : -1) * (flying ? .55 : .1 + Math.sin(t * 1.6) * .015 * (1 - m));
       r.elbows[i].rotation.x = .22 + m * .25;
     }
-    r.body.position.y = (a.mounted ? .35 : 0) + Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    r.body.position.y = a.mounted ? 1.76 - 1.2 : Math.abs(c) * .05 * m + Math.sin(t * 2.1) * .012 * (1 - m);
+    if (a.mounted && !a.skin) for (let i = 0; i < 2; i++) {
+      r.legs[i].rotation.set(-.85, 0, i ? -.55 : .55);
+      r.knees[i].rotation.x = -.9;
+      r.arms[i].rotation.x = -.5;
+      r.elbows[i].rotation.x = .72;
+    }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
     if ((a.swingUntil || 0) > now) {
       const p = 1 - (a.swingUntil - now) / 380;
@@ -304,6 +308,7 @@
   function deleteAvatar(id) {
     const a = avatars.get(id);
     if (!a) return;
+    disposeBuffalo(a);
     a.node.getChildMeshes().forEach(m => m.dispose());
     a.skin?.copy.skeletons.forEach(skeleton => skeleton.dispose());
     a.node.dispose();

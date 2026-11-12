@@ -834,8 +834,8 @@
         const reasons={craft_queue_full:"คิวคราฟต์เต็ม",craft_job_unavailable:"งานนี้รับไปแล้วหรือไม่มีในคิว",craft_job_not_ready:"งานยังไม่เสร็จ",market_favorite_limit:"รายการโปรดเต็ม",forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
         reasons.salvage_changed="อุปกรณ์เปลี่ยนไปแล้ว โปรดเลือกชิ้นที่จะแยกอีกครั้ง";
-        const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากม้าหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
-          fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากม้าและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว",fish_pending:"รับปลาที่จับไว้ก่อนเริ่มตกใหม่",fish_no_pending:"ไม่มีปลารอรับ"};
+        const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากควายหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
+          fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากควายและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว",fish_pending:"รับปลาที่จับไว้ก่อนเริ่มตกใหม่",fish_no_pending:"ไม่มีปลารอรับ"};
         if(fishingPending){fishingPending=false;if(message?.reason!=="inventory_full")clearFishing(false);}
         toast(gatherErrors[message?.reason] || socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();renderBag();
       });
@@ -894,7 +894,7 @@
       });
       joined.onMessage("mount_changed", info => {
         if(room!==joined || info?.playerId!==localId)return;
-        toast(info.mounted ? "ขึ้นม้าแล้ว · ลงจากม้าก่อนต่อสู้" : info.reason==="hit" ? "ถูกโจมตี · ลงจากม้าแล้ว" : info.reason==="warp" ? "ลงจากม้าก่อนเดินทาง" : "ลงจากม้าแล้ว");
+        toast(info.mounted ? "ขึ้นควายแล้ว · ลงจากควายก่อนต่อสู้" : info.reason==="hit" ? "ถูกโจมตี · ลงจากควายแล้ว" : info.reason==="warp" ? "ลงจากควายก่อนเดินทาง" : "ลงจากควายแล้ว");
         syncMountButton();
       });
       joined.onMessage("climb_finished", notice => {
@@ -1709,9 +1709,9 @@
         else if (info?.reason === "dash_in_progress" || info?.reason === "dashing") toast("กำลังพุ่งอยู่");
         else if (info?.reason === "dash_rate_limited") toast("สั่งพุ่งถี่เกินไป");
         else if (info?.reason === "invalid_dash") toast("ทิศทางการพุ่งไม่ถูกต้อง");
-        else if (info?.reason === "dismount_required") toast("ลงจากม้าก่อนใช้วิชาหรือต่อสู้");
-        else if (info?.reason === "mount_deep_water") toast("ขึ้นจากน้ำลึกก่อนขี่ม้า");
-        else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกม้า");
+        else if (info?.reason === "dismount_required") toast("ลงจากควายก่อนใช้วิชาหรือต่อสู้");
+        else if (info?.reason === "mount_deep_water") toast("ขึ้นจากน้ำลึกก่อนขี่ควาย");
+        else if (info?.reason === "mount_in_combat") toast("รอให้พ้นการต่อสู้ก่อนเรียกควาย");
         else if (typeof info?.reason === "string" && /^(ghost_|invalid_ghost_pot$)/.test(info.reason)) {
           clearGhostPoolPending();
           syncGhostPoolUi();
@@ -1724,8 +1724,8 @@
             ghost_capture_unavailable:"จับผีได้ในแผนที่โลก",ghost_combat_war:"ใช้ผีต่อสู้ได้ระหว่างสงคราม"};
           toast(ghostErrors[info.reason] || "ใช้หม้ออาคมไม่สำเร็จ");
         }
-        else if (info?.reason === "mount_unavailable") toast("เรียกม้าได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
-        else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกม้าอีกครั้ง");
+        else if (info?.reason === "mount_unavailable") toast("เรียกควายได้เมื่ออยู่บนพื้นและพร้อมเดินทาง");
+        else if (info?.reason === "mount_cooldown") toast("รอสักครู่ก่อนเรียกควายอีกครั้ง");
         else if (info?.reason === "invalid_flight") toast("คำสั่งบินไม่ถูกต้อง");
         else if (info?.reason === "flight_class_required") toast("วิชาเหินเวหาเป็นของจอมอาคม");
         else if (info?.reason === "flight_in_progress") toast("กำลังขึ้นหรือลง · รอให้ถึงระดับก่อน");

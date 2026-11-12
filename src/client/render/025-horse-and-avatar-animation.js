@@ -1,55 +1,164 @@
-  // Lightweight in-engine horse: no additional model download or dependency.
-  const horseCoat = mat("horse coat", "#795039", "#130b08");
-  const horseDark = mat("horse mane and hooves", "#30211d", "#080505");
-  const horseLeather = mat("horse saddle leather", "#5b2f24", "#160b06");
-  const horseGold = mat("horse shamanic gold", "#ffe082", "#ffd700");
-  const horseEye = mat("horse mystic eye", "#fff59d", "#ffd54f");
-  function createHorse(a) {
-    const root=new B.TransformNode("horse-"+a.id,scene);root.parent=a.node;
-    const part=(name,shape,position,scale,material,parent=root)=>{
-      const mesh=shape==="box"?B.MeshBuilder.CreateBox(name,{size:1},scene):B.MeshBuilder.CreateSphere(name,{diameter:1,segments:8},scene);
-      mesh.parent=parent;mesh.position.set(...position);mesh.scaling.set(...scale);mesh.material=material;mesh.isPickable=false;return mesh;
+  // The server still owns the rider's mounted state and movement.
+  const buffaloModels = new Map();
+  const buffaloHide = mat("buffalo hide", "#333233", "#141213");
+  const buffaloHorn = mat("buffalo horn", "#91806a", "#322518");
+  const buffaloTack = mat("buffalo saddle", "#823c27", "#33140b");
+
+  function buffaloFallback(root) {
+    const part = (name, position, scale, material, parent = root) => {
+      const mesh = B.MeshBuilder.CreateSphere(name, { diameter: 1, segments: 6 }, scene);
+      mesh.parent = parent;
+      mesh.position.set(...position);
+      mesh.scaling.set(...scale);
+      mesh.material = material;
+      mesh.isPickable = false;
+      return mesh;
     };
-    part("horse body","sphere",[0,1.12,0],[.76,.78,1.8],horseCoat);
-    const neck=part("horse neck","box",[0,1.42,-.78],[.38,.83,.45],horseCoat);neck.rotation.x=-.4;
-    const head=part("horse head","sphere",[0,1.72,-1.08],[.43,.46,.68],horseCoat);head.rotation.x=-.18;
-    for(const side of [-1,1])part("horse eye","sphere",[side*.213,1.78,-1.18],[.068,.068,.068],horseEye);
-    part("horse muzzle","sphere",[0,1.56,-1.43],[.34,.3,.38],horseDark);
-    for(const side of [-1,1])part("horse ear","box",[side*.14,2.02,-1.08],[.09,.26,.1],horseDark);
-    part("horse mane","box",[0,1.76,-.62],[.16,.33,.56],horseDark).rotation.x=-.4;
-    part("horse saddle","box",[0,1.53,.05],[.64,.13,.67],horseLeather);
-    part("horse saddle gold","box",[0,1.55,.05],[.68,.06,.71],horseGold);
-    part("horse saddle front","box",[0,1.64,-.24],[.58,.12,.15],horseDark);
-    const bridle=part("horse bridle gold","box",[0,1.68,-1.02],[.46,.06,.22],horseGold);
-    // Reins: two thin straps from the bit to the rider's hands, re-laid each pose (updateReins).
-    const reins=[-1,1].map(()=>{const r=B.MeshBuilder.CreateBox("horse rein",{size:1},scene);r.material=horseDark;r.isPickable=false;r.setEnabled(false);return r;});
-    const tail=part("horse tail","box",[0,1.13,1.02],[.18,.65,.18],horseDark);tail.rotation.x=.35;
-    const legs=[];
-    for(const x of [-.3,.3])for(const z of [-.58,.58]){
-      const pivot=new B.TransformNode("horse leg pivot",scene);pivot.parent=root;pivot.position.set(x,.95,z);
-      part("horse leg","box",[0,-.39,0],[.18,.78,.2],horseCoat,pivot);
-      part("horse hoof","box",[0,-.82,-.04],[.22,.14,.27],horseDark,pivot);
-      legs.push(pivot);
+    part("buffalo body", [0, 1.12, .12], [1.1, 1.06, 2.3], buffaloHide);
+    part("buffalo head", [0, 1.29, -1.12], [.58, .64, .8], buffaloHide);
+    part("buffalo muzzle", [0, 1.13, -1.49], [.45, .28, .35], buffaloHide);
+    part("buffalo saddle", [0, 1.62, .03], [.78, .24, .73], buffaloTack);
+    for (const side of [-1, 1]) {
+      const path = [[.24, 1.55, -1.06], [.63, 1.42, -.99], [1.05, 1.42, -.94], [1.37, 1.67, -.97], [1.48, 1.88, -1.06]];
+      const horn = B.MeshBuilder.CreateTube("buffalo long horn", {
+        path: path.map(([x, y, z]) => new B.Vector3(x * side, y, z)),
+        radiusFunction: i => .12 - .029 * i, tessellation: 7,
+      }, scene);
+      horn.parent = root;
+      horn.material = buffaloHorn;
+      horn.isPickable = false;
     }
-    root.setEnabled(false);
-    return {root,legs,tail,bridle,reins};
+    const legs = [];
+    for (const x of [-.35, .35]) for (const z of [-.65, .76]) {
+      const leg = new B.TransformNode("buffalo leg", scene);
+      leg.parent = root;
+      leg.position.set(x, .86, z);
+      part("buffalo shin", [0, -.42, 0], [.22, .9, .25], buffaloHide, leg);
+      legs.push(leg);
+    }
+    return legs;
   }
-  // Lay each rein from the bit (either side of the bridle) to the matching hand; hidden when not riding.
-  const _reinA = new B.Vector3(), _reinB = new B.Vector3();
-  function updateReins(a) {
-    const h = a.horse; if (!h?.reins) return;
-    const on = !!a.mounted && h.root.isEnabled() && a.skin?.nodes;
-    h.reins.forEach((r, i) => {
-      r.setEnabled(!!on); if (!on) return;
-      const hand = a.skin.nodes[i ? "RightHand" : "LeftHand"]; if (!hand) { r.setEnabled(false); return; }
-      hand.computeWorldMatrix(true); _reinB.copyFrom(hand.getAbsolutePosition());
-      h.bridle.computeWorldMatrix(true);
-      B.Vector3.TransformCoordinatesToRef(new B.Vector3((i ? -1 : 1) * .5, -.2, -.1), h.bridle.getWorldMatrix(), _reinA);
-      const len = B.Vector3.Distance(_reinA, _reinB); if (!(len > .01)) { r.setEnabled(false); return; }
-      r.position.copyFrom(_reinA).addInPlace(_reinB).scaleInPlace(.5);
-      r.scaling.set(.025, .012, len); r.lookAt(_reinB);
-    });
+
+  function buffaloContainer(file) {
+    if (!buffaloModels.has(file)) {
+      const pending = B.SceneLoader.LoadAssetContainerAsync("./assets/mounts/", file, scene, undefined, ".glb").catch(error => {
+        buffaloModels.delete(file);
+        throw error;
+      });
+      buffaloModels.set(file, pending);
+    }
+    return buffaloModels.get(file);
   }
+
+  function createBuffalo(a) {
+    const root = new B.TransformNode("buffalo-" + a.id, scene);
+    root.parent = a.node;
+    const fallback = new B.TransformNode("buffalo fallback", scene);
+    fallback.parent = root;
+    const seat = new B.TransformNode("buffalo fallback seat", scene);
+    seat.parent = root;
+    seat.position.set(0, 1.76, .01);
+    const mount = a.buffalo = { root, seat, legs: buffaloFallback(fallback), heading: a.heading, since: performance.now() };
+    const file = a.local && !LITE ? "buffalo-lod1-animated.glb" : "buffalo-lod2-animated.glb";
+    buffaloContainer(file).then(container => {
+      if (a.buffalo !== mount || root.isDisposed()) return;
+      const prefix = root.name + "/";
+      const model = container.instantiateModelsToScene(name => prefix + name, false, { doNotInstantiate: true });
+      const nodes = model.rootNodes.flatMap(node => [node, ...node.getDescendants()]);
+      const modelSeat = nodes.find(node => node.name === prefix + "rider_seat");
+      if (!modelSeat) { model.dispose(); throw new Error("Missing buffalo rider_seat"); }
+      const clips = new Map(model.animationGroups.map(group => [group.name.slice(prefix.length), group]));
+      if (!clips.has("Idle")) { model.dispose(); throw new Error("Missing buffalo Idle animation"); }
+      const rest = new Map();
+      for (const group of clips.values()) for (const { animation, target } of group.targetedAnimations) {
+        if (!rest.has(target)) rest.set(target, new Map());
+        const properties = rest.get(target), key = animation.targetProperty;
+        if (!properties.has(key)) properties.set(key, target[key].clone());
+      }
+      for (const node of model.rootNodes) node.parent = root;
+      for (const mesh of root.getChildMeshes()) mesh.isPickable = false;
+      Object.assign(mount, { model, seat: modelSeat, clips, rest });
+      fallback.dispose();
+      seat.dispose();
+      updateBuffalo(a, 0, 0, performance.now());
+    }).catch(error => console.warn("MONTRA buffalo model could not load", error));
+  }
+
+  function disposeBuffalo(a) {
+    const mount = a.buffalo;
+    if (!mount) return;
+    a.buffalo = null;
+    mount.model?.dispose();
+    mount.root.dispose();
+  }
+
+  function setAvatarMounted(a, mounted, alive) {
+    if (Boolean(a.mounted) === mounted) return;
+    a.mounted = mounted;
+    if (mounted) {
+      createBuffalo(a);
+      playMountSummonVfx(a);
+    } else {
+      disposeBuffalo(a);
+      a.skin?.holder.position.setAll(0);
+    }
+    if (!alive || a.id !== localId) return;
+    if (mounted) {
+      triggerCombatCallout("mount_summon");
+      floatAtPlayer(a.id, "ขึ้นควายอาคมแล้ว", "status", { big: true });
+      SFX("bell", { intensity: 1.1 });
+    } else floatAtPlayer(a.id, "ลงจากหลังควาย", "status");
+    SFX("whoosh", { pitch: mounted ? 1.2 : .8 });
+  }
+
+  function updateBuffalo(a, speed, dt, now) {
+    const mount = a.buffalo;
+    if (!mount) return;
+    if (!mount.model) {
+      mount.heading = a.heading;
+      const stride = a.phase * 1.25;
+      mount.legs.forEach((leg, i) => { leg.rotation.x = Math.sin(stride + (i === 0 || i === 3 ? 0 : Math.PI)) * .36 * a.moveBlend; });
+      mount.seat.position.y = 1.76 + Math.abs(Math.sin(stride)) * .035 * a.moveBlend;
+      return;
+    }
+    const angle = a.heading - mount.heading;
+    const turn = Math.atan2(Math.sin(angle), Math.cos(angle)) / Math.max(.016, dt);
+    mount.heading = a.heading;
+    const entering = !mount.mountInterrupted && (mount.current ? mount.current.isPlaying : now - mount.since < 400);
+    let name = entering ? "Mount" : "Idle";
+    let rate = entering ? 1.65 : 1;
+    if (speed > 2.5) {
+      name = "Run";
+      rate = Math.min(2.1, speed / 2.34);
+    } else if (speed > .3) {
+      name = "Walk";
+      rate = Math.min(2.1, Math.max(.65, speed / .76));
+    } else if (Math.abs(turn) > .6) {
+      name = turn > 0 ? "TurnRight" : "TurnLeft";
+      rate = 1;
+    }
+    if (name !== "Mount") mount.mountInterrupted = true;
+    const group = mount.clips.get(name) || mount.clips.get("Idle");
+    if (mount.current === group) { group.speedRatio = rate; return; }
+    mount.current?.stop();
+    // Clips do not all key the same joints. Restore the bind transform before
+    // changing clips so a knee or tail never keeps the previous clip's pose.
+    for (const [node, properties] of mount.rest) for (const [key, value] of properties) node[key].copyFrom(value);
+    mount.current = group;
+    group.start(name !== "Mount", rate);
+  }
+
+  const buffaloSeatInverse = new B.Matrix(), buffaloSeatDelta = new B.Vector3();
+  function seatBuffaloRider(a) {
+    const seat = a.buffalo?.seat, skin = a.skin, hips = skin?.nodes.Hips;
+    if (!seat || !hips) return;
+    a.node.computeWorldMatrix(true).invertToRef(buffaloSeatInverse);
+    seat.computeWorldMatrix(true).getTranslationToRef(buffaloSeatDelta);
+    buffaloSeatDelta.subtractInPlace(hips.computeWorldMatrix(true).getTranslation());
+    B.Vector3.TransformNormalToRef(buffaloSeatDelta, buffaloSeatInverse, buffaloSeatDelta);
+    skin.holder.position.addInPlace(buffaloSeatDelta);
+  }
+
   // Server state per avatar; a revival plays the get-up action.
   function noteAvatarState(a, p) {
     const alive = p?.alive !== false;
@@ -57,25 +166,9 @@
     a.serverAlive = alive;
     a.serverCombat = typeof p?.combatState === "string" ? p.combatState : "idle";
     a.serverFlying = p?.flying === true;
-    const wasMounted = Boolean(a.mounted);
-    a.mounted = p?.mounted === true && alive;
-    if(a.mounted && !a.horse)a.horse=createHorse(a);
-    a.horse?.root.setEnabled(a.mounted);
-    if (!wasMounted && a.mounted) {
-      if (typeof playMountSummonVfx === "function") playMountSummonVfx(a);
-      if (a.id === localId) {
-        triggerCombatCallout("mount_summon");
-        floatAtPlayer(a.id, "ควบม้าทรงมนตรา! 🐎", "status", { big: true });
-        SFX("whoosh", { pitch: 1.2 });
-        SFX("bell", { intensity: 1.1 });
-      }
-    } else if (wasMounted && !a.mounted && alive) {
-      if (a.id === localId) {
-        floatAtPlayer(a.id, "ลงจากหลังม้า", "status");
-        SFX("whoosh", { pitch: 0.8 });
-      }
-    }
+    setAvatarMounted(a, p?.mounted === true && alive, alive);
   }
+
   const ease = x => x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x);
   // Additive effect materials shared by every avatar.
   const fxGradient = paintTexture("slash gradient", 64, (c, s) => {
@@ -675,11 +768,13 @@
       // flanks), upper arms down at the sides and forearms forward to the reins over the withers.
       set("Hips",.08,0,0);off[0]=0;off[1]=-.03;off[2]=0;
       set("Spine",.04,0,0);set("Spine1",.04,0,0);set("Chest",.02,0,0);
-      set("LeftUpLeg",-.78,0,.52);set("RightUpLeg",-.78,0,-.52);
-      set("LeftLeg",.95,0,-.16);set("RightLeg",.95,0,.16);
+      set("LeftUpLeg",-1.03,0,.81);set("RightUpLeg",-1.03,0,-.81);
+      set("LeftLeg",.96,0,-.08);set("RightLeg",.96,0,.08);
       set("LeftFoot",-.25,0,0);set("RightFoot",-.25,0,0);
-      set("LeftArm",-.62,.12,-1.05);set("RightArm",-.62,-.12,1.05);
-      set("LeftForeArm",0,-1.25,0);set("RightForeArm",0,1.25,0);
+      set("LeftShoulder",0,0,0);set("RightShoulder",0,0,0);
+      set("LeftArm",-.49,0,-1.52);set("RightArm",-.49,0,1.52);
+      set("LeftForeArm",0,-.32,0);set("RightForeArm",0,.32,0);
+      set("LeftHand",0,0,0);set("RightHand",0,0,0);
     }
     if (!dead) {
       // Gaze stays on the opponent: neck and head undo most of the torso twist and bend.
@@ -705,8 +800,8 @@
     const o = cur.off || (cur.off = off.slice());
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
-    updateReins(a);
     if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
+    if (a.mounted) seatBuffaloRider(a);
     // Hands: grip what is held, clench for Muay Thai and shields, open for casting, wai and rallies, relax otherwise.
     {
       const relaxed = [.3, 0], grip = [1, 0], fist = [0, 1], open = [0, 0];
@@ -717,6 +812,7 @@
       let left = weapon === "muay_wraps" ? fist : weapon === "thai_dual" ? grip : off === "jar" || off === "bell" ? grip : off === "shield" || off === "guard" || off === "brace" ? [.2, .8] : relaxed;
       if (acting === "drink") right = grip;
       if (openHands) { left = open; if (!weapon || weapon === "muay_wraps") right = open; }
+      if (a.mounted) left = right = grip;
       if (dead) { left = right = [.15, 0]; }
       setHandPose(a, left, right, dt);
     }
