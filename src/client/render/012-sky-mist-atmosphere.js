@@ -1,15 +1,23 @@
-  // Sky: gradient night, stars and a cloud-veiled crescent moon. It is only
-  // seen at shallow camera angles but keeps the horizon from reading as void.
+  // Night sky with a fog-coloured horizon and a cloud-veiled moon.
   const skyTexture = new B.DynamicTexture("night sky", { width: 1024, height: 512 }, scene, false);
-  function drawSkyTexture(isBloodMoon = false) {
+  // The default sphere has V=0 at the north pole; a DynamicTexture uploads the canvas top at V=1.
+  if (!B.CompatibilityOptions?.UseOpenGLOrientationForUV) {
+    skyTexture.vScale = -1;
+    skyTexture.vOffset = 1;
+  }
+  let skyDrawKey = "";
+  function drawSkyTexture(isBloodMoon, fogColor, skyLevel) {
+    const horizon = fogColor.toHexString();
+    const key = isBloodMoon + ":" + horizon + ":" + skyLevel;
+    if (key === skyDrawKey) return;
     const c = skyTexture.getContext();
     c.clearRect(0, 0, 1024, 512);
     const g = c.createLinearGradient(0, 0, 0, 512);
-    if (isBloodMoon) {
-      g.addColorStop(0, "#150205"); g.addColorStop(.38, "#2d050b"); g.addColorStop(.5, "#420710"); g.addColorStop(.6, "#220406"); g.addColorStop(1, "#150204");
-    } else {
-      g.addColorStop(0, "#03050a"); g.addColorStop(.38, "#0b1220"); g.addColorStop(.5, "#1f2a36"); g.addColorStop(.6, "#10140f"); g.addColorStop(1, "#0c100c");
-    }
+    const tint = hex => B.Color3.FromHexString(hex).scale(skyLevel).toHexString();
+    g.addColorStop(0, tint(isBloodMoon ? "#150205" : "#03050a"));
+    g.addColorStop(.38, tint(isBloodMoon ? "#2d050b" : "#0b1220"));
+    g.addColorStop(.5, tint(isBloodMoon ? "#420710" : "#1f2a36"));
+    g.addColorStop(1, horizon);
     c.fillStyle = g; c.fillRect(0, 0, 1024, 512);
     for (let i = 0; i < 320; i++) {
       const y = noise(i, 7) * 230, a = .25 + noise(i, 8) * .7;
@@ -41,12 +49,18 @@
       cloud.addColorStop(1, "rgba(0,0,0,0)");
       c.fillStyle = cloud; c.beginPath(); c.ellipse(x, y, w, w * .32, 0, 0, Math.PI * 2); c.fill();
     }
+    // Fade the cloud and star artwork into the same colour as fully fogged terrain.
+    const haze = c.createLinearGradient(0, 512 * .4, 0, 512 * .49);
+    haze.addColorStop(0, horizon + "00");
+    haze.addColorStop(1, horizon);
+    c.fillStyle = haze;
+    c.fillRect(0, 512 * .4, 1024, 512 * .6);
     skyTexture.update();
+    skyDrawKey = key;
   }
-  drawSkyTexture(false);
   const skyMat = new B.StandardMaterial("night sky", scene);
   skyMat.emissiveTexture = skyTexture; skyMat.diffuseColor = B.Color3.Black(); skyMat.specularColor = B.Color3.Black();
-  skyMat.disableLighting = true; skyMat.backFaceCulling = false; skyMat.fogEnabled = false;
+  skyMat.disableLighting = true; skyMat.backFaceCulling = false; skyMat.fogEnabled = false; skyMat.disableDepthWrite = true;
   const sky = B.MeshBuilder.CreateSphere("night sky", { diameter: 560, segments: 12, sideOrientation: B.Mesh.BACKSIDE }, scene);
   sky.material = skyMat; sky.infiniteDistance = true; sky.isPickable = false; sky.applyFog = false;
 
@@ -204,7 +218,6 @@
     weatherState.timer = 0;
     const isBlood = type === "blood_moon";
     weatherState.bloodMoonActive = isBlood;
-    drawSkyTexture(isBlood);
     const vig = ensureBloodMoonVignette();
     if (vig) vig.classList.toggle("active", isBlood);
 
@@ -252,12 +265,16 @@
   function applyAtmosphere(mapId) {
     atmosphereMap = mapId;
     const isBlood = weatherState.current === "blood_moon";
-    atmosphere = isBlood ? BLOOD_MOON_ATMOSPHERE : (ATMOSPHERES[mapId] || ATMOSPHERES.ritual_village);
+    const mapAtmosphere = ATMOSPHERES[mapId] || ATMOSPHERES.ritual_village;
+    atmosphere = isBlood ? BLOOD_MOON_ATMOSPHERE : mapAtmosphere;
     const a = atmosphere, c3 = hex => B.Color3.FromHexString(hex);
     const L = lightLevel();
-    const clear = liftHex(a.clear, a.sky, L.lift);
-    scene.clearColor = new B.Color4(clear.r, clear.g, clear.b, 1);
+    const outdoors = mapAtmosphere.skyLevel > 0;
     scene.fogColor = liftHex(a.fog, a.sky, L.lift);
+    const clear = outdoors ? scene.fogColor : liftHex(a.clear, a.sky, L.lift);
+    scene.clearColor = new B.Color4(clear.r, clear.g, clear.b, 1);
+    sky.setEnabled(outdoors);
+    if (outdoors) drawSkyTexture(isBlood, scene.fogColor, a.skyLevel);
     // A stronger moon over a softer sky fill gives the shadows something to take away.
     moon.intensity = moonBase(); moon.diffuse = c3(a.sky); moon.groundColor = liftHex(a.ground, a.sky, L.lift * .8);
     keyLight.diffuse = c3(a.key); keyLight.intensity = a.keyI * 1.65 * lightK(L.key); warm.intensity = a.carry * L.carry;
@@ -265,7 +282,6 @@
     grade.exposure = ({ forbidden_forest: 1.55, bound_temple: 1.6, naga_cavern: 1.55, drowned_marsh: 1.5 }[mapId] || 1.4) + L.exposure * lightDim();
     grade.vignetteWeight = L.vignette; grade.contrast = L.contrast;
     mistMat.emissiveColor = c3(a.mist); mistMat.alpha = a.mistAlpha * L.mist * (weatherState.current === "rain" || weatherState.current === "storm" ? 1.5 : 1);
-    skyTexture.level = a.skyLevel;
     const [c1, c2] = a.mote.map(h => B.Color4.FromHexString(h + "ff"));
     motes.color1 = c1; motes.color2 = c2; motes.colorDead = new B.Color4(c2.r, c2.g, c2.b, 0);
   }

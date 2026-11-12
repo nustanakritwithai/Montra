@@ -525,8 +525,6 @@
     if ((shadowSyncIn -= dt) <= 0) { shadowSyncIn = .5; syncShadowLists(); }
     rippleTexture.vOffset = (rippleTexture.vOffset + dt * .025) % 1;
     riverRipple.uOffset = (riverRipple.uOffset + dt * .012) % 1;
-    // The horizon only enters the portrait frustum at shallow camera tilts.
-    sky.setEnabled(camera.beta > 1.05);
     motes.emitter.copyFrom(camera.target);
     if (typeof updateWeather === "function") updateWeather(dt, elapsed);
     if (typeof updateBanners === "function") updateBanners(dt, elapsed);

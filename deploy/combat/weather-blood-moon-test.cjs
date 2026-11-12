@@ -15,7 +15,7 @@ assert(cssSrc.includes('@keyframes pulseBloodMoon'), 'styles.css defines @keyfra
 // 2. Verify Blood Moon Atmosphere & Full Moon Texture Redraw
 assert(mainSrc.includes('const BLOOD_MOON_ATMOSPHERE = {'), 'main.js defines BLOOD_MOON_ATMOSPHERE');
 assert(mainSrc.includes('sky: "#ff3344"'), 'BLOOD_MOON_ATMOSPHERE has crimson sky');
-assert(mainSrc.includes('function drawSkyTexture(isBloodMoon = false)'), 'main.js defines drawSkyTexture');
+assert(mainSrc.includes('function drawSkyTexture(isBloodMoon, fogColor, skyLevel)'), 'main.js defines drawSkyTexture');
 assert(mainSrc.includes('rgba(255,40,60,.65)'), 'drawSkyTexture creates crimson halo for blood moon');
 
 // 3. Verify Rain Particle System & Weather State
