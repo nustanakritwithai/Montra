@@ -86,8 +86,9 @@ sealed class Roster : IOwnedMonsterCanonicalReader
         new CombatActionDefinition("basic_attack", "owned-basic-ai/v1", 1.35, 0, CombatAttackChannel.Physical,
             CombatActionTargetKind.NearestEnemy, CombatElementType.Normal, 15, 100, 1, true, true, 0,
             false, 1_000_000, .9, CentralCombatVersions.Rules, []).Validate();
-    private static readonly (int Level, CombatActionDefinition Action)[] Skills = LoadSkills();
-    public static CombatStats BaseStats { get; } = CalculateProfile("montra-ghost-baseline", 1).Stats;
+    private static readonly Dictionary<string, (MonsterStatVector Stats, string Type)> Species = LoadSpecies();
+    private static readonly Dictionary<string, (int Level, CombatActionDefinition Action)[]> Skills = LoadSkills();
+    public static CombatStats BaseStats { get; } = CalculateProfile("montra-ghost-baseline", 1, "MON_001").Stats;
     private readonly Dictionary<string, OwnedMonsterDefinition[]> definitions = new(StringComparer.Ordinal);
 
     public IReadOnlyList<OwnedMonsterDefinition> ReadParty(string ownerId) =>
@@ -104,31 +105,60 @@ sealed class Roster : IOwnedMonsterCanonicalReader
     }
 
     private static OwnedMonsterDefinition Create(string ownerId, Ghost ghost) =>
-        new(ghost.InstanceId, ownerId, ghost.SpeciesId, CalculateProfile(ghost.InstanceId, ghost.Level),
-            Skills.Where(skill => skill.Level <= ghost.Level).Select(skill => skill.Action).ToImmutableArray(),
+        new(ghost.InstanceId, ownerId, ghost.SpeciesId, CalculateProfile(ghost.InstanceId, ghost.Level, ghost.SpeciesId),
+            Skills[ghost.SpeciesId].Where(skill => skill.Level <= ghost.Level).Select(skill => skill.Action).ToImmutableArray(),
             ghost.Slot, BasicAttack: BasicAttack);
 
-    private static (int Level, CombatActionDefinition Action)[] LoadSkills()
+    private static JsonDocument ReadCatalog(string file)
     {
-        var catalog = CombatActionCatalogProviderV91.LoadEmbedded();
         var assembly = typeof(Roster).Assembly;
-        var resource = assembly.GetManifestResourceNames().Single(name => name.EndsWith("catalog-seed-v8.4.0.json", StringComparison.Ordinal));
+        var resource = assembly.GetManifestResourceNames().Single(name => name.EndsWith(file, StringComparison.Ordinal));
         using var stream = assembly.GetManifestResourceStream(resource)!;
-        using var document = JsonDocument.Parse(stream);
-        var learnset = document.RootElement.GetProperty("resources").GetProperty("learnsets").EnumerateArray()
-            .Select(row => row.GetProperty("definition"))
-            .Where(row => row.GetProperty("monsterId").GetString() == "MON_001")
-            .ToArray();
-        // These starter actions have a single target and no Pocket-only status effect.
-        return new[] { "SK_NORMAL_01", "SK_NORMAL_02" }.Select(id => (
-            learnset.Single(row => row.GetProperty("skillId").GetString() == id).GetProperty("learnLevel").GetInt32(),
-            catalog.GetRequired(id).Definition)).ToArray();
+        return JsonDocument.Parse(stream);
     }
 
-    private static BaseCombatProfile CalculateProfile(string instanceId, int level) =>
-        PocketMonsterCombatCalculator.Calculate(new PocketMonsterCombatInput(
-            instanceId, "pocket-monster", ImmutableArray.Create("normal"),
-            new MonsterStatVector(46, 38, 34, 54, 38, 46), new MonsterStatVector(0, 0, 0, 0, 0, 0),
+    private static Dictionary<string, (MonsterStatVector Stats, string Type)> LoadSpecies()
+    {
+        using var document = ReadCatalog("monster-stat-canonical-v1.json");
+        var entries = document.RootElement.GetProperty("entries").EnumerateArray();
+        var profiles = entries.Where(entry => entry.GetProperty("formId").GetString() is "MON_004" or "MON_007")
+            .ToDictionary(entry => entry.GetProperty("formId").GetString()!, entry =>
+            {
+                var stats = entry.GetProperty("baseStats");
+                return (new MonsterStatVector(stats.GetProperty("hp").GetInt32(), stats.GetProperty("atk").GetInt32(),
+                    stats.GetProperty("def").GetInt32(), stats.GetProperty("spAtk").GetInt32(),
+                    stats.GetProperty("spDef").GetInt32(), stats.GetProperty("spd").GetInt32()),
+                    entry.GetProperty("sourceType").GetString()!.ToLowerInvariant());
+            });
+        profiles["MON_001"] = (new MonsterStatVector(46, 38, 34, 54, 38, 46), "normal");
+        return profiles;
+    }
+
+    private static Dictionary<string, (int Level, CombatActionDefinition Action)[]> LoadSkills()
+    {
+        var catalog = CombatActionCatalogProviderV91.LoadEmbedded();
+        using var document = ReadCatalog("catalog-seed-v8.4.0.json");
+        var learnset = document.RootElement.GetProperty("resources").GetProperty("learnsets").EnumerateArray()
+            .Select(row => row.GetProperty("definition"))
+            .ToArray();
+        var supported = new Dictionary<string, string[]> {
+            ["MON_001"] = ["SK_NORMAL_01", "SK_NORMAL_02"],
+            ["MON_004"] = ["SK_GRASS_01", "SK_GRASS_02"],
+            ["MON_007"] = ["SK_ROCK_01"],
+        };
+        return supported.ToDictionary(entry => entry.Key, entry => entry.Value.Select(id => (
+            learnset.Single(row => row.GetProperty("monsterId").GetString() == entry.Key &&
+                row.GetProperty("skillId").GetString() == id).GetProperty("learnLevel").GetInt32(),
+            catalog.GetRequired(id).Definition)).ToArray());
+    }
+
+    private static BaseCombatProfile CalculateProfile(string instanceId, int level, string speciesId)
+    {
+        if (!Species.TryGetValue(speciesId, out var species)) throw new ArgumentException("Unsupported ghost species.");
+        return PocketMonsterCombatCalculator.Calculate(new PocketMonsterCombatInput(
+            instanceId, "pocket-monster", ImmutableArray.Create(species.Type),
+            species.Stats, new MonsterStatVector(0, 0, 0, 0, 0, 0),
             new MonsterStatVector(0, 0, 0, 0, 0, 0), level,
             new CombatRatings(1, .05, .02, .1, .05), 1, 1, "montra-ghost-pot-v1", 1));
+    }
 }

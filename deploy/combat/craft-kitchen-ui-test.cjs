@@ -90,7 +90,7 @@ test('material checks and card stock refresh from inventory; duplicate clicks st
   const f=fixture();f.choose('all','blade_25');
   assert.equal(recipeIngredient(f,'mat_ingot_1').getAttribute('aria-label'),'ดูสูตรและที่มาของ แท่งเหล็ก · มี 2 / 2 · ครบ');
   const payload=f.payload();payload.slots[0].quantity=1;f.callbacks.inventory_state(payload);
-  assert.equal(recipeIngredient(f,'mat_ingot_1').children[3].textContent,'ขาด 1');assert.equal(f.$('benchCraft').disabled,true);
+  assert.equal(recipeIngredient(f,'mat_ingot_1').children[3].textContent,'ขาด 1 · แร่เหล็ก 4/2 · ถ่าน 3/1');assert.equal(f.$('benchCraft').disabled,true);
   payload.slots[0].quantity=2;payload.slots[5]={itemId:'blade_25',quantity:1};f.callbacks.inventory_state(payload);
   assert.equal(recipeIngredient(f,'mat_ingot_1').children[3].textContent,'ครบ');
   const card=f.$('craftRecipeGrid').children.find(c=>c.children[1].textContent==='ดาบคู่');assert.equal(card.children[2].textContent,'มีอยู่ 1');

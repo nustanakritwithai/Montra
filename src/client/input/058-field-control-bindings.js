@@ -77,7 +77,8 @@
   const ghostPendingLabels = {capture:"กำลังจับ…",summon:"กำลังเรียก…",recall:"กำลังเก็บ…",switch:"กำลังสลับ…",
     select:"กำลังเลือกช่อง…",assign:"กำลังจัดช่อง…",reserve:"กำลังย้ายเข้าคลัง…",
     attack:"กำลังส่งคำสั่งโจมตี…",follow:"กำลังเรียกให้ตาม…",skill:"กำลังใช้วิชาผี…",heal:"กำลังรักษาคู่หู…"};
-  const ghostSkillLabels = {SK_NORMAL_01:"พุ่งชน", SK_NORMAL_02:"จู่โจมเร็ว"};
+  const ghostSkillLabels = {SK_NORMAL_01:"พุ่งชน", SK_NORMAL_02:"จู่โจมเร็ว",
+    SK_GRASS_01:"แส้เถาวัลย์", SK_GRASS_02:"เมล็ดพุ่ง", SK_ROCK_01:"ขว้างหิน"};
 
   function ghostPoolView(state) {
     const pool = state?.pool;

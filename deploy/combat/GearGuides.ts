@@ -70,7 +70,7 @@ function midgameBosses(school:School,level:number){
 function upperCamps(level:number){
   const maps=level<55?["lotus_basin","naga_cavern","river_watch"]:level<60?["naga_cavern","fallen_city"]:
     level<68?["fallen_city"]:level<75?["fallen_city","asura_peak"]:level<80?["asura_peak"]:
-    level<85?["asura_peak","spirit_rift"]:["spirit_rift"];
+    level<85?["asura_peak","spirit_rift","fallen_city"]:["spirit_rift","fallen_city"];
   const candidates=hunts.filter(m=>maps.includes(m.mapId) && m.tier==="normal" && m.level<=level && level-m.level<=4)
     .sort((a,b)=>b.level-a.level || maps.indexOf(a.mapId)-maps.indexOf(b.mapId));
   const seen=new Set<string>();

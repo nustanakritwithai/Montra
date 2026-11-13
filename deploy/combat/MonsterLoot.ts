@@ -1,7 +1,7 @@
 import {randomInt} from "node:crypto";
 import {dynamicDropChance,dynamicCardChance} from "./DynamicBalance.js";
 import {REGIONAL_BOSSES} from "./RegionalBosses.js";
-import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
+import {PERSONAL_ITEMS,MAX_FORGE_COPIES,BOSS_GEAR_CHANCE,WEAPON_LEVELS,gearSchools,startingWeapon,monsterCardFor,type CardId,type BodyItemId,type PracticeWeapon,type MaterialId,type PersonalId} from "./PersonalItems.js";
 import {FOREST_CAMPS,SHRINE_GUARDIAN,WORLD_EXPANSION,getWorldMap} from "./WorldMaps.js";
 import {TEMPLE_ID,TEMPLE_MAP,TEMPLE_SPAWNS} from "./TempleMap.js";
 import {ATLAS_MAPS,ATLAS_SPAWNS,FRONTIER_SPAWNS,HIMMAPAN_SPAWNS,HIMMAPAN_REPLACED_TARGETS,RIFT_WARDEN} from "./WorldAtlas.js";
@@ -18,7 +18,7 @@ const courtThemes:Readonly<Record<string,readonly Theme[]>>={
   bamboo_frontier:["grove","hunter","grove","grove","hunter"], lotus_basin:["grove","hunter","hunter","grove","guard"],
   drowned_marsh:["grove","hunter","spirit","hunter","guard"], moon_cemetery:["spirit","guard","spirit","hunter","guard"],
   hex_ridge:["guard","grove","guard","spirit","guard"], naga_cavern:["guard","hunter","hunter","spirit","guard"],
-  fallen_city:["hunter","guard","guard","spirit","guard"], asura_peak:["hunter","guard","guard","guard","guard"],
+  fallen_city:["hunter","guard","guard","spirit","guard","guard","spirit"], asura_peak:["hunter","guard","guard","guard","guard"],
   spirit_rift:["spirit","hunter","spirit","grove","guard"], ritual_village:["spirit"], moon_pass:["guard","guard"], river_watch:["grove","hunter"],
   twin_neck_pass:["hunter","guard"], sam_lan_estuary:["hunter","grove"], tri_wiang_castle:["hunter","guard"],
 };
@@ -49,15 +49,21 @@ type DropTable={gear:GearId[];materials:MaterialId[]};
 const tables=new Map(hunts.map((m):[string,DropTable]=>[m.id,{gear:[],materials:[]}]));
 const sources=new Map<PersonalId,Hunt[]>();
 const huntsById=new Map(hunts.map(m=>[m.id,m]));
+export function capturedGhostSpecies(source?:{monsterId:string;mapId:string}):string|undefined {
+  const hunt=source && huntsById.get(source.monsterId);
+  if(!hunt || hunt.mapId!==source?.mapId)return;
+  if(hunt.theme==="guard")return "MON_007";
+  if(hunt.theme==="grove")return "MON_004";
+}
 const journeyWeapons=new Map<string,PracticeWeapon>();
 function campKey(m:Hunt){return m.id.slice(0,m.id.lastIndexOf("_"));}
 export function journeyWeapon(path:string,level:number){
-  if(level<10 || level>25)return;
-  return journeyWeapons.get(path+"/"+(level<20?10:20));
+  const tier=WEAPON_LEVELS.filter(tier=>tier<=level).at(-1);
+  return tier && tier>=10 ? journeyWeapons.get(path+"/"+tier) : undefined;
 }
 for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const item=PERSONAL_ITEMS[id];
-  const journey=item.kind==="mainHand" && (item.level===10 || item.level===20) && Object.hasOwn(gearSchools,item.path) &&
+  const journey=item.kind==="mainHand" && WEAPON_LEVELS.some(tier=>tier===item.level && tier>=10) && Object.hasOwn(gearSchools,item.path) &&
     item.family===PERSONAL_ITEMS[startingWeapon(item.path)].family;
   if(journey)journeyWeapons.set(item.path+"/"+item.level,id as PracticeWeapon);
   if(item.sourceBoss){
@@ -79,7 +85,7 @@ for(const id of Object.keys(PERSONAL_ITEMS) as PersonalId[]){
   const early=eligible.filter(m=>m.level<=item.level!+2 && m.tier!=="elite" && m.tier!=="boss" && !HIMMAPAN_REPLACED_TARGETS.has(m.id));
   const alternate=early.some(m=>primary.includes(m))?undefined:early.find(m=>m.theme===nearbyTheme[material])??early[0];
   const sites=eligible.filter(m=>primary.includes(m)||m===alternate||m.tier==="elite"||m.tier==="boss"||
-    (journey && alternate && m.mapId===alternate.mapId && m.name===alternate.name && campKey(m)===campKey(alternate))||
+    (journey && item.level!<=20 && alternate && m.mapId===alternate.mapId && m.name===alternate.name && campKey(m)===campKey(alternate))||
     (starterWeapons.has(id) && isStarterHuntMob(m.id)));
   sources.set(id,sites.filter(m=>!HIMMAPAN_REPLACED_TARGETS.has(m.id)));
   for(const m of sites){
@@ -164,7 +170,7 @@ export function rollMonsterLoot(monsterId:string,path:string,owned:ReadonlySet<s
   });
   const chance=dynamicDropChance(tier==="boss"?"boss":tier==="elite"?"elite":tier==="strong"?"strong":"normal",tier==="boss"?100:tier==="elite"?60:tier==="strong"?40:25);
   const guaranteed=useful.length>0 && misses===MAX_LOOT_MISSES;
-  const next=journeyWeapon(path,playerLevel);
+  const next=playerLevel<=25?journeyWeapon(path,playerLevel):undefined;
   const firstWeapon=next && useful.includes(next);
   const repeats=forgeCopies?table.gear.filter(id=>owned.has(id) && !candidates.includes(id) && (forgeCopies[id]??0)<MAX_FORGE_COPIES &&
     (PERSONAL_ITEMS[id].path==="all" || PERSONAL_ITEMS[id].path===path)):[];

@@ -795,9 +795,9 @@ test("market shows both city war clocks and other cities independently of the tr
   },schedule:{[river]:{next:{startsAt:1030000}},mantra_capital:{next:{startsAt:1060000}}}};
   f.setNow(1100);
   f.ctx.updateCityMarketWarTimes();
-  assert.equal(riverRow.children[1].textContent,"ท้าชิงได้เลย");
+  assert.match(riverRow.children[1].textContent,/^ท้าชิงได้เลย · รอบลงทะเบียน /);
   assert.match(moonRow.children[1].textContent,/^รบ 0:09/);
-  assert.equal(capitalRow.children[1].textContent,"ท้าชิงได้เลย");
+  assert.match(capitalRow.children[1].textContent,/^ท้าชิงได้เลย · รอบลงทะเบียน /);
   f.button("จันทรา").onclick();
   assert.equal(f.nodes.cityProductionContent.dataset.marketFilter,moon);
   assert.equal(f.$("cityMarketWarTimes"),list);

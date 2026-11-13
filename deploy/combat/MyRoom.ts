@@ -85,7 +85,7 @@ import { calculateModifiedStats, STACKING_RULES } from "./StatModifiers.js";
 import { POSSESSION_MODIFIER, TALISMAN, MENDER_PVE_RICE_MULTIPLIER, SWORD_CORE, swordCoreProgress, SWORD_SCHOOLS, SWORD_NODES, SWORD_RANKABLE_SKILLS, SWORD_PVP_DAMAGE_MULTIPLIER, newSwordTree, emptySwordLoadouts, swordPoints, type SwordCoreId, type SwordTree, type SwordSchool } from "./SkillCatalog.js";
 import { isMuayFoundation, MUAY_CORE, MUAY_CORE_LEVELS, MUAY_CORE_POINT_LEVELS, MUAY_CORE_MANA_PER_RANK, muayCorePoints, muayCoreManaCost, muayCoreProgress, MUAY_BASE_SKILLS, MUAY_COMBOS, MUAY_COMBO_MOVES, MUAY_COMBO_MULTIPLIER, MUAY_COMBO_WINDOW_MS, MUAY_FOLLOWUPS, MUAY_FOLLOWUP_WINDOW_MS, MUAY_MASTERY_GUIDES, MUAY_MASTERY_LABELS, MUAY_MASTERY_REQUIREMENTS, MUAY_RANKABLE_SKILLS, MUAY_INTERRUPT_MS, MUAY_INTERRUPT_IMMUNITY_MS, MUAY_GRAPPLE_HOLD_MS, MUAY_GRAPPLE_ESCAPE_STAMINA, MUAY_GRAPPLE_COUNTER_STAMINA, MUAY_GRAPPLE_COUNTER_WINDOW_MS, MUAY_GRAPPLE_COUNTER_RANGE, MUAY_PVP_COMBO_MULTIPLIER, MUAY_PVP_DAMAGE_MULTIPLIER, MUAY_LESSONS, MUAY_SCHOOLS, MUAY_SKILLS, MUAY_WRAP_ID, advanceMuayCombo, countsMuayTechnique, muayPoints, newMuayBook, newMuayLoadouts, type MuayCoreId, type MuayBook, type MuaySchool, type MuayComboState, type MuayLessonId, type MuaySkillId, type MuayCooldowns } from "./MuayRules.js";
 import { WORKBENCH_GOLD, personalItem, materialTier, wearsWraps, wearsTwinSwords, monsterCardDrop, bossTreasure, type MaterialId } from "./PersonalItems.js";
-import { CATALOG_PAGES, practiceSite, catalogPageWithRates, cardCatalogWithRates } from "./MonsterLoot.js";
+import { CATALOG_PAGES, practiceSite, catalogPageWithRates, cardCatalogWithRates, capturedGhostSpecies } from "./MonsterLoot.js";
 import {dynamicBalanceRevision} from "./DynamicBalance.js";
 import { parseSocketOrder, DRILL_COST } from "./CardSockets.js";
 import {personalGearGuides} from "./GearGuides.js";
@@ -5211,7 +5211,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
   private ghostParty(pool: GhostPool) {
     return pool.slots.flatMap((instanceId, slot) => {
       const entry = findPoolGhost(pool, instanceId);
-      return entry ? [{instanceId: entry.instanceId, level: entry.level, slot, speciesId: POT_CAPTURE_PROFILE}] : [];
+      return entry ? [{instanceId: entry.instanceId, level: entry.level, slot, speciesId: capturedGhostSpecies(entry.source)??POT_CAPTURE_PROFILE}] : [];
     });
   }
 

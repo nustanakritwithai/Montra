@@ -573,7 +573,7 @@
         '<select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p>'+
         '<select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><div id="guideItems" class="item-slots"><div id="guideTargetItem" class="item-preview"></div><div id="guideCurrentItem" class="item-preview"></div><div id="guideCardItem" class="item-preview"></div><div id="guideNextItem" class="item-preview"></div></div>'+
         '<p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p>'+
-        '<button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button>'+
+        '<button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="guideForgeCurrent" type="button" hidden></button><button class="secondary" id="guideCraftNext" type="button" hidden></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button>'+
       '</details>'+
       '<button class="secondary" id="bagOpenCraft" type="button">สร้างของ · โต๊ะช่าง</button>');
     $("bagOpenCraft").onclick=()=>openCraftingPage();

@@ -67,7 +67,7 @@ try{
   const maps=[world.ritual_village,...Object.values(world).filter(m=>m.region && m.camps.length)];
   assert.equal(maps.length,10);
   const travelers=await fillRoom(await Promise.all(maps.map(m=>seed(m.id,m.spawn.x,m.spawn.z))));
-  await until(()=>travelers.every(r=>r.state.monsters.size===145),"all ten regions and their enemies");
+  await until(()=>travelers.every(r=>r.state.monsters.size===151),"all ten regions and their enemies");
   assert.equal(new Set([...travelers[0].state.players.values()].map(p=>p.mapId)).size,10);
   const himmapanIds = [
     "himmapan_matcha_naga", "himmapan_stone_yaksha", "himmapan_kochasri", "himmapan_hemaraj",
@@ -89,10 +89,11 @@ try{
   for(const room of travelers)room.send("summon",{});
   await until(()=>travelers.every(r=>r.state.summons.size===10),"ten summons across the occupied world");
   await closeAll();
-  console.log("PASS ten occupied maps, ten summons and 145 monsters including Titan and fourteen Himmapan spawns");
+  console.log("PASS ten occupied maps, ten summons and 151 monsters including Titan and fourteen Himmapan spawns");
 
   const tigerId="himmapan_phayak_nathi";
-  const marsh=await join(await seed("drowned_marsh",-73,-56.4));
+  // Stand on the current shallow shelf within the pounce trigger range.
+  const marsh=await join(await seed("drowned_marsh",-67,-52.5));
   const tiger=()=>marsh.state.monsters.get(tigerId);
   const strikes=[];
   marsh.onMessage("monster_hit",event=>{if(event.attackerId===tigerId)strikes.push(event);});

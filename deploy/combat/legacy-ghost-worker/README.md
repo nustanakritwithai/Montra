@@ -1,6 +1,8 @@
 # Montra ghost pot pilot
 
-The room uses PocketMonster's existing CAP_v1.0 calculator and the original MonsterLifeServer C# owned-monster runtime for summon and recall. The worker runs as a child process over stdin/stdout and links the C# files from a separate checkout. Player identity and the one-slot pot are stored in the existing Montra character save. The pilot uses the original common capture profile for ordinary ghosts through level 60. The pot is reusable after a failed attempt. Captured ghosts follow the player.
+The room uses PocketMonster's existing CAP_v1.0 calculator and the original MonsterLifeServer C# owned-monster runtime. The worker runs as a child process over stdin/stdout and links the C# files and catalogs from a separate checkout. The character save stores the collection, its three assigned slots and each ghost's capture source. Ordinary ghosts through level 60 use the existing common capture formula.
+
+On summon or switch, Montra resolves the saved monster ID and map against its encounter catalog. Grove encounters use Pocket Monster's `MON_004` profile and guard encounters use `MON_007`. The remaining encounters and saves with missing or unmatched sources use the existing `MON_001` profile. The C# worker reads the supported moves from the original learnsets. Deploy the room and worker together. These changes use the existing save format.
 
 ## Test locally
 

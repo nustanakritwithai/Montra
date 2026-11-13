@@ -199,7 +199,7 @@ test('live gold and inventory events refresh counts, costs and insufficient-reso
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);f.callbacks.economy_state({gold:60});assert.equal(f.$('benchCraft').disabled,false);
   const changed=f.payload();changed.slots[0].quantity=1;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,true);
   const ingredient=recipeIngredient(f,'mat_ingot_1');assert.equal(ingredient.children[2].textContent,'มี 1 / 2');
-  assert.equal(ingredient.children[3].textContent,'ขาด 1');assert.equal(ingredient.dataset.stock,'missing');
+  assert.equal(ingredient.children[3].textContent,'ขาด 1 · แร่เหล็ก 4/2 · ถ่าน 3/1');assert.equal(ingredient.dataset.stock,'missing');
   f.ctx.inventoryState.forgeCopies.mat_ingot_1=99;f.ctx.inventoryState.equipment.leftRing='mat_ingot_1';f.run('renderBag()');
   assert.equal(f.$('benchCraft').disabled,true,'only carried material stacks satisfy crafting ingredients');
   changed.slots[0].quantity=2;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,false);

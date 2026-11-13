@@ -430,6 +430,33 @@ try {
   assert.equal(durable.activeInstanceId,null);
   await rejected(restored,"attack",{combatId:forestCall.combatId,targetId},"ghost_combat_inactive");
 
+  const roleOptions=options();
+  const roleCharacter=(await characterStore.loadOrCreate(roleOptions.guestToken,spawn)).character;
+  const roles=[
+    {...legacy,instanceId:randomUUID()},
+    {instanceId:randomUUID(),name:"เงารากไม้",level:6,source:{monsterId:"forest_east_3",mapId:"forbidden_forest"}},
+    {instanceId:randomUUID(),name:"ภูตหน้าวัด",level:8,source:{monsterId:"temple_forecourt_1",mapId:"bound_temple"}},
+  ];
+  await characterStore.save({...roleCharacter,ghostPool:{collection:roles,slots:roles.map(ghost=>ghost.instanceId),selectedSlot:0,revision:0}});
+  const rolePlayer=observe(await client().joinById(b.room.roomId,roleOptions));
+  await until(()=>rolePlayer.room.state?.players?.has(rolePlayer.room.sessionId),"companion roles joined");
+  const roleRead=await command(rolePlayer,"read",{},"ready");
+  const balanced=await command(rolePlayer,"summon",{},"summoned");
+  assert.deepEqual(balanced.skills.map(skill=>skill.skillId),["SK_NORMAL_01","SK_NORMAL_02"]);
+  await wait(700);
+  const plantSlot=await command(rolePlayer,"select",{slot:1,revision:roleRead.pool.revision},"selected");
+  await wait(700);
+  const plant=await command(rolePlayer,"switch",{},"switched");
+  assert.deepEqual(plant.skills.map(skill=>skill.skillId),["SK_GRASS_01","SK_GRASS_02"]);
+  await wait(700);
+  await command(rolePlayer,"select",{slot:2,revision:plantSlot.pool.revision},"selected");
+  await wait(700);
+  const rock=await command(rolePlayer,"switch",{},"switched");
+  assert.deepEqual(rock.skills.map(skill=>skill.skillId),["SK_ROCK_01"]);
+  assert.ok(rock.combatHealth.maxHp>balanced.combatHealth.maxHp);
+  assert.equal(rock.activeInstanceId,roles[2].instanceId);
+  await rolePlayer.room.leave();rooms.delete(rolePlayer.room);
+
   const fullOptions=options();
   const fullCharacter=(await characterStore.loadOrCreate(fullOptions.guestToken,spawn)).character;
   const fullCollection=Array.from({length:GHOST_POOL_CAPACITY},()=>({instanceId:randomUUID(),name:"ผีสำรอง",level:1}));

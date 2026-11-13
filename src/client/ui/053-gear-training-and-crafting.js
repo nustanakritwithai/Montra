@@ -120,6 +120,17 @@
     const h=entry.hunt;
     $("guideSource").textContent=(h?(h.open?"ล่า":"เมื่อเปิดแผนที่ขยาย ล่า")+h.monster+" Lv."+h.level+" ที่"+h.map+" หรือคราฟต์":"คราฟต์ที่โต๊ะช่าง")+(next?" · เป้าถัดไป Lv."+next.level+" "+next.name:" · ขั้นสุดท้าย Lv.100");
     const button=$("guideOpen");button.textContent=copy?.pos?"ดูชิ้นที่สวม":copy?"ดูชิ้นในกระเป๋า":"เปิดสูตรชิ้นนี้";
+    const forgeCurrent=$("guideForgeCurrent"),craftNext=$("guideCraftNext");
+    if(forgeCurrent){
+      forgeCurrent.hidden=!economyReady() || !worn || !bagMeta(worn.itemId)?.forge || !rankCap || (worn.forge?.rank??0)>=rankCap;
+      forgeCurrent.textContent="ตีบวกชิ้นที่สวม";
+      forgeCurrent.onclick=()=>openForgePage("enhance",dest==="mainHand"?currentEquippedWeaponSlot():dest);
+    }
+    if(craftNext){
+      craftNext.hidden=!economyReady() || !next?.recipe?.length;
+      craftNext.textContent=next?"ดูสูตร Lv."+next.level+" · "+next.name:"";
+      craftNext.onclick=()=>selectBenchRecipe("all",String(next.level),entry.next,entry.position);
+    }
     button.onclick=()=>{
       if(copy?.pos){ $("wear-"+copy.pos).click();$("bagItemName").scrollIntoView({block:"center"});return; }
       if(copy){ inspectingGear=dest;$("bagSlot"+copy.slot).click();$("bagItemName").scrollIntoView({block:"center"});return; }
@@ -250,9 +261,11 @@
           const count=stock?"มี "+have+" / "+required:"ใช้ "+required;
           const availability=stock?(short?"ขาด "+short:"ครบ"):"รอข้อมูล";
           if(amount.textContent!==count)amount.textContent=count;
-          if(status.textContent!==availability)status.textContent=availability;
+          const nested=stock && short ? benchIngredientSupply(node.dataset.item,short,stock,nodes,multiplier) : "";
+          const detail=nested?availability+" · "+nested:availability;
+          if(status.textContent!==detail)status.textContent=detail;
           node.dataset.stock=stock?(short?"missing":"ready"):"loading";
-          const label="ดูสูตรและที่มาของ "+node.children[1].textContent+" · "+count+" · "+availability;
+          const label="ดูสูตรและที่มาของ "+node.children[1].textContent+" · "+count+" · "+detail;
           if(node.getAttribute("aria-label")!==label)node.setAttribute("aria-label",label);
         }
         const output=nodes[nodes.length-1],quantity=Number(row.dataset.outputQty)*multiplier;
@@ -263,6 +276,30 @@
         }
       }
     }
+  }
+  function benchIngredientSupply(id,short,stock,nodes,multiplier){
+    const reserved=new Map();
+    for(const node of nodes){
+      if(node.dataset.ingredientQty===undefined || node.dataset.item===id)continue;
+      const item=node.dataset.item;
+      reserved.set(item,(reserved.get(item)??0)+Number(node.dataset.ingredientQty)*multiplier);
+    }
+    const required=new Map();
+    function expand(item,quantity,ancestors){
+      if(ancestors.has(item))return;
+      const previous=required.get(item)??0;
+      required.set(item,previous+quantity);
+      const available=Math.max(0,(stock.get(item)??0)-(reserved.get(item)??0));
+      const missing=Math.max(0,previous+quantity-available)-Math.max(0,previous-available);
+      if(!missing)return;
+      const next=new Set(ancestors).add(item);
+      for(const part of personalItems[item]?.recipe??[])expand(part.item,part.qty*missing,next);
+    }
+    for(const part of personalItems[id]?.recipe??[])expand(part.item,part.qty*short,new Set([id]));
+    return [...required].map(([item,need])=>{
+      const available=Math.max(0,(stock.get(item)??0)-(reserved.get(item)??0));
+      return (personalItems[item]?.name??item)+" "+available+"/"+need;
+    }).join(" · ");
   }
   function renderBenchRecipeExplorer(rootId){
     const panel=$("benchRecipeExplorer");if(!panel)return;
@@ -620,7 +657,7 @@
     $("forgeProgress").max=config.chances.length;
     $("forgeProgress").value=rank;
     $("forgeSupply").textContent=max?"ตีบวกครบ +"+config.chances.length:!terms?"รอเซิร์ฟเวอร์อัปเดตสูตร":
-      "ใช้ "+meta.name+" รุ่นเดียวกัน "+need+" ชิ้น · คลังช่างมี "+bank+" ชิ้น"+(selector.value?" · รวมชิ้นจากกระเป๋า 1 ชิ้น":"")+
+      "ใช้ "+meta.name+" รุ่นเดียวกัน "+need+" ชิ้น · คลังช่างมี "+bank+" ชิ้น"+(candidates.length?" · กระเป๋ามีชิ้นที่เลือกได้ "+candidates.length+" ชิ้น":"")+(selector.value?" · เลือกใช้จากกระเป๋า 1 ชิ้น":"")+
       " · "+forgeRiskText(terms,rank)+(risk && item.socket?" · ถอดการ์ดก่อน":"");
     if((risk || terms?.downgradeChance) && ready)$("forgeSupply").textContent+=" · หลังตีเหลือในคลัง "+(have-need)+" ชิ้น";
     const missing=Math.max(0,need-have);

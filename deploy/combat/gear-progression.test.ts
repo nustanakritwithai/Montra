@@ -140,6 +140,7 @@ test("actual Lv10 guardian recipes switch supplies across areas after leveling",
       gearGuides:personalGearGuides(path,1),activeMapId:"forbidden_forest",worldDefinitions:WORLD_MAPS,
       fieldTrainingTip:null,territoryState:null,economyReady:()=>true,MONSTER_ID:"possessed-1",drawerActive:null,
       room:{state:{monsters:new Map(hunts.map(m=>[m.id,{...m,alive:true}]))}},resources:{mapId:"forbidden_forest",nodes:[]},
+      monsterForSpell:(id:string)=>context.room.state.monsters.get(id),
       currentEquippedWeaponSlot:()=>bag.equippedWeaponSlot,wornGearAt:()=>bag.slots[bag.equippedWeaponSlot!],bagMeta:(id:string)=>catalog[id],
       localStorage:{getItem:():string|null=>null,setItem(){}},toast(){}};
     const api=runInNewContext("let travelRoutes=null,journeyOwner='',journeyNotes={};\n"+source.slice(start,end)+
@@ -237,6 +238,7 @@ test("level 26–50 training routes use normal camps, distinct class lessons and
     const names=new Set<string>();
     for(const lv of [26,32,34,35,39,40,45,50]){
       const journey=personalGearGuides(path,lv)!.journey!;
+      assert.equal(personalItem(journey.weapon)?.level,lv<30?20:lv<40?30:lv<50?40:50);
       assert(journey.lesson?.name);names.add(journey.lesson.name);
       assert.equal(journey.lesson.level,lv<45?35:45);
       assert.deepEqual(journey.bosses.map(b=>b.level).sort((a,b)=>a-b),[32,34,35,45].filter(n=>n<=lv));
@@ -277,6 +279,7 @@ test("upper hunting courses cover six professions and every level through 100 wi
       assert.deepEqual(course.ranks.slice(2).map(r=>[r.level,r.practice]),[[65,16],[85,28],[95,45]]);
       if(WORLD_EXPANSION){
         assert(guide.camps.length>0);
+        if(level>=80 && level<=100)assert(guide.camps.some(c=>c.mapId==="fallen_city"));
         assert(guide.camps.every(c=>c.open && level-c.level>=0 && level-c.level<=4 && hunts.find(m=>m.id===c.id)?.tier==="normal"));
         assert(guide.bosses.every(b=>b.camp?.open && b.level<=level && b.respawnMinutes===20));
         const start=level<=75?51:76;
@@ -461,8 +464,8 @@ test("a dropped pair of wraps can be equipped and its Muay strike damages a mons
   bag.slots[2]={itemId:roll.id,quantity:1};
   const equipped=equipInventoryWeapon(bag,2,"muay_boran",15);assert(equipped.ok);
   const actorId="looter",m=room.state.monster;
-  Object.assign(m,{x:-10,z:9,y:0,hp:500,maxHp:500});
-  room.state.players.set(actorId,new Player({pathId:"muay_boran",level:15,x:-10,z:8,y:0,alive:true,atk:40}));
+  Object.assign(m,{x:0,z:15,y:0,hp:500,maxHp:500});
+  room.state.players.set(actorId,new Player({pathId:"muay_boran",level:15,x:0,z:14,y:0,alive:true,atk:40}));
   const combat=room as unknown as {inventories:Map<string,typeof bag>;muayCoreHit(id:string,target:string,power:number):boolean;broadcast:()=>void};
   combat.broadcast=()=>{};combat.inventories.set(actorId,equipped.inventory);
   assert(combat.muayCoreHit(actorId,m.id,1));assert(m.hp<500);
@@ -574,9 +577,9 @@ test("endgame weapons improve a blow or healing tick from each playable class in
       priestRegens:Map<string,{ownerId:string;mapId:string;until:number;nextTick:number;fraction:number}>;
       updateOccultEffects():void;broadcast:()=>void;
     };
-    const id="wearer",actor=new Player({pathId:path,level:100,x:-10,y:0,z:8,alive:true});
+    const id="wearer",actor=new Player({pathId:path,level:100,x:0,y:0,z:14,alive:true});
     room.state.players.set(id,actor);server.broadcast=()=>{};
-    Object.assign(target,{x:-10,y:0,z:9,hp:5000,maxHp:5000});
+    Object.assign(target,{x:0,y:0,z:15,hp:5000,maxHp:5000});
     function effect(){
       server.inventories.set(id,bag);server.applyStats(id,actor,emptyAllocations());
       const before=target.hp;

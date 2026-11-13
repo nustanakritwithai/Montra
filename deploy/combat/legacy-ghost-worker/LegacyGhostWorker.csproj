@@ -11,6 +11,7 @@
   </Target>
   <ItemGroup>
     <EmbeddedResource Include="$(MonsterLifeSource)/scr/catalog/catalog-seed-v8.4.0.json" Link="catalog/catalog-seed-v8.4.0.json" />
+    <EmbeddedResource Include="$(MonsterLifeSource)/scr/catalog/monster-stat-canonical-v1.json" Link="catalog/monster-stat-canonical-v1.json" />
     <EmbeddedResource Include="$(MonsterLifeSource)/scr/catalog/pirate-monster-control-v1.json" Link="catalog/pirate-monster-control-v1.json" />
     <Compile Include="$(MonsterLifeSource)/scr/Combat/*.cs" LinkBase="MonsterLife/Combat" />
     <Compile Include="$(MonsterLifeSource)/scr/Combat/Protocol/*.cs" LinkBase="MonsterLife/Protocol" />

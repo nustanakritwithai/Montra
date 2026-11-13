@@ -448,6 +448,10 @@
         milestone:"อุปกรณ์ Lv."+boss.level+" · "+personalItems[boss.gear].name+" · บอสเกิดทุก "+(boss.respawnMinutes??20)+" นาที"};
     }
     if(journey && player.level>=26){
+      if(notes.equipment){
+        const equipment=journey.weapon && journeyEquipmentGoal(player,journey,notes);
+        if(equipment)return equipment;
+      }
       const site=fieldCamp(journey,notes),nav=journeyDirection(site);
       if(journey.course){
         const technique=fieldTechnique(journey.course);

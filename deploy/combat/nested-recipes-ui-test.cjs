@@ -31,7 +31,7 @@ test('live bag polling preserves ingredient button identity while refreshing ava
  const f=fixture();f.choose('all','blade_25');const button=recipeIngredient(f,'mat_ingot_1');
  f.run('renderBag();renderBag()');assert.equal(recipeIngredient(f,'mat_ingot_1'),button);
  const payload=f.payload();payload.slots[0].quantity=1;f.callbacks.inventory_state(payload);
- assert.equal(recipeIngredient(f,'mat_ingot_1'),button);assert.equal(button.children[2].textContent,'มี 1 / 2');assert.equal(button.children[3].textContent,'ขาด 1');
+ assert.equal(recipeIngredient(f,'mat_ingot_1'),button);assert.equal(button.children[2].textContent,'มี 1 / 2');assert.equal(button.children[3].textContent,'ขาด 1 · แร่เหล็ก 4/2 · ถ่าน 3/1');
  button.click();assert.equal(f.$('benchOutput').textContent,'แท่งเหล็ก');assert.equal(f.mutations().length,0);
 });
 test('used-for recipes paginate and the active craft target follows the tapped recipe',()=>{

@@ -170,7 +170,7 @@ test('atlas clocks follow server time without moving the map or changing the rou
   f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.territoryState.schedule={drowned_marsh:{next:{startsAt:50000}}};
   f.context.updateAtlasWarTimes();
-  assert.equal(detail.textContent,'ท้าชิงได้เลย');
+  assert.equal(detail.textContent,'ท้าชิงได้เลย · รอบลงทะเบียน 04:00');
   assert.equal(f.nodes.atlasWarClock.hidden,true);
   assert.equal(f.nodes.atlasWarMessage.textContent,'ท้าชิงได้เลย · บึงพราย');
   assert.equal(clock(marsh).hidden,false);
@@ -232,7 +232,7 @@ test('every city has a live challenge status and real battle and protection time
   assert.equal(forestPin.children[2].textContent,'ท้าชิงได้');
   assert.equal(marshPin.children[2].textContent,'พัก 1:00');
   assert.match(village.children[1].textContent,/^รบ 5:00/);
-  assert.equal(forest.children[1].textContent,'ท้าชิงได้เลย');
+  assert.match(forest.children[1].textContent,/^ท้าชิงได้เลย · รอบลงทะเบียน /);
   assert.match(marsh.children[1].textContent,/^คุ้มครอง 1:00/);
   marsh.children[0].onclick();
   assert.equal(marshPin.attributes['aria-pressed'],'true');
@@ -243,11 +243,11 @@ test('every city has a live challenge status and real battle and protection time
   assert.equal(f.nodes.atlasWarTimes.children[2],marsh);
   f.setNow(61000);
   f.context.updateAtlasWarTimes();
-  assert.equal(marsh.children[1].textContent,'กำลังอัปเดต');
+  assert.match(marsh.children[1].textContent,/^กำลังอัปเดต · รอบลงทะเบียน /);
   assert.equal(marshPin.children[2].hidden,true);
   f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.updateAtlasWarTimes();
-  assert.equal(marsh.children[1].textContent,'ท้าชิงได้เลย');
+  assert.match(marsh.children[1].textContent,/^ท้าชิงได้เลย · รอบลงทะเบียน /);
   assert.equal(marshPin.children[2].textContent,'ท้าชิงได้');
 });
 

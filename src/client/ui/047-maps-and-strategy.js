@@ -805,9 +805,11 @@
     const entry=territoryState?.warTimes?.[site];
     if(!entry && territoryState?.warTimes)return "พื้นที่นี้ยังไม่เปิดศึก";
     const label=warTerritoryLabel(entry,now);
-    if(!countdown)return label;
+    const next=territoryState?.schedule?.[site]?.next?.startsAt;
+    const scheduled=Number.isFinite(next) && next>now?" · รอบลงทะเบียน "+warLocalDate(next):"";
+    if(!countdown)return label+scheduled;
     const end=countdown.phase==="battle"?"จบไม่เกิน ":"เปิดตีได้ ";
-    return label+" · "+end+warLocalDate(countdown.at);
+    return label+" · "+end+warLocalDate(countdown.at)+scheduled;
   }
   function createWarTimeRow(site,name,select){
     const row=document.createElement("li"),title=document.createElement(select?"button":"strong");

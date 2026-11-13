@@ -111,7 +111,8 @@ export function waterTerrain(map:WorldMapDefinition) {
     .filter(p=>waters.some(area=>containsWaterArea(area,p.x,p.z)))
     .map(p=>({...p,height:groundSample(base,p.x,p.z).height})).filter(p=>p.height>0):[];
   const shelves=new Set(map.shallowWater);
-  const carve=map.id==="mantra_capital"?waterCarving(waters,CAPITAL_MOAT_DEPTH,.44):
+  const capitalMoat=map.id==="mantra_capital";
+  const carve=capitalMoat?waterCarving(waters,CAPITAL_MOAT_DEPTH,.44):
     waterCarving(waters,shelves.size ? .34 : MAX_WATER_DEPTH);
   // The marsh floor is a shallow shelf. Only the channels and old pools have deeper beds.
   const carveChannel=shelves.size?waterCarving(waters.filter(area=>!shelves.has(area)),MAX_WATER_DEPTH):null;
@@ -127,6 +128,33 @@ export function waterTerrain(map:WorldMapDefinition) {
     for(const island of islands)bed=Math.max(bed,Math.min(height,island.height-.34*Math.hypot(x-island.x,z-island.z)));
     return bed;
   }));
+  // At inner corners a grid triangle combines two bank slopes. Raise its
+  // submerged vertices toward the highest one, preserving the bank and channel.
+  if(capitalMoat){
+    const maxGrade=base?.maxGrade??.52;
+    const terrain={xs,zs,heights,maxGrade};
+    for(let pass=0;pass<32;pass++){
+      let changed=false;
+      for(let j=0;j<zs.length-1;j++)for(let i=0;i<xs.length-1;i++){
+        const dx=xs[i+1]-xs[i],dz=zs[j+1]-zs[j];
+        for(const [u,v] of [[.25,.75],[.75,.25]]){
+          const x=xs[i]+u*dx,z=zs[j]+v*dz;
+          if(!waters.some(area=>containsWaterArea(area,x,z)))continue;
+          const sample=groundSample(terrain,x,z);
+          if(sample.height>=SHORE_HEIGHT || sample.grade<=maxGrade+1e-8)continue;
+          const points=u>=v?[[i,j],[i+1,j],[i+1,j+1]]:[[i,j],[i,j+1],[i+1,j+1]];
+          const [[a,b],[c,d],[e,f]]=points;
+          const start=heights[b][a],middle=heights[d][c],end=heights[f][e];
+          const highest=Math.max(start,middle,end),scale=(maxGrade-.001)/sample.grade;
+          heights[b][a]=highest+(start-highest)*scale;
+          heights[d][c]=highest+(middle-highest)*scale;
+          heights[f][e]=highest+(end-highest)*scale;
+          changed ||= heights[b][a]!==start || heights[d][c]!==middle || heights[f][e]!==end;
+        }
+      }
+      if(!changed)break;
+    }
+  }
   return {terrain:{xs,zs,heights,maxGrade:base?.maxGrade??.52},waterLevel:WATER_LEVEL};
 }
 // A ray is linear within each triangle. Testing every crossed edge also catches low
