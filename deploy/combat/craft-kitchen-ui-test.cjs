@@ -38,23 +38,23 @@ test('food and furniture change recipes in place and check the craft location at
   f.items.wood_wall={...base,name:'ผนังไม้',kind:'material',furniture:true};
   f.player.mapId='ritual_village';
   f.choose('all','blade_25');
-  const picker=f.$('benchRecipe'), grid=f.$('craftRecipeGrid'), popup=f.$('craftRecipePopup');
+  const picker=f.$('benchRecipe'), grid=f.$('craftRecipeGrid'), panel=f.$('craftRecipePanel');
   assert.equal(f.$('benchLevel').value,'25');
   const pending=f.wire.length;
   for(const [category,recipes] of [['food',['fish_soup','grilled_fish']],['furniture',['wood_wall']],['medicine',['potion_1']]]){
     f.$('ckCategory-'+category).click();
     assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.$('benchRecipe'),picker);
-    assert.equal(f.$('craftRecipeGrid'),grid);assert.equal(f.$('craftRecipePopup'),popup);
-    assert.equal(popup.open,false);assert.deepEqual(f.ids(),recipes);assert.equal(f.$('benchLevel').value,'auto');
+    assert.equal(f.$('craftRecipeGrid'),grid);assert.equal(f.$('craftRecipePanel'),panel);
+    assert.equal(panel.hidden,true);assert.deepEqual(f.ids(),recipes);assert.equal(f.$('benchLevel').value,'auto');
     assert.equal(f.$('ckCategory-'+category).getAttribute('aria-pressed'),'true');
   }
   assert.equal(f.wire.length,pending,'changing tabs does not request another page or send a mutation');
   f.$('ckCategory-food').click();
   grid.children.find(card=>card.dataset.recipe==='grilled_fish').click();
-  assert.equal(popup.open,true);assert.equal(f.$('benchCraft').disabled,true);
+  assert.equal(panel.hidden,false);assert.equal(f.$('benchCraft').disabled,true);
   assert.match(f.$('craftRequirements').children.at(-1).textContent,/เตาครัว.*ระดับ 2/);
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
-  f.$('craftRecipePopupClose').click();
+  f.$('craftRecipePanelClose').click();
   f.$('ckCategory-furniture').click();grid.children[0].click();
   assert.equal(f.$('benchCraft').disabled,true);
   assert.match(f.$('craftRequirements').children.at(-1).textContent,/ผลิตที่เรือนส่วนตัว/);
@@ -64,7 +64,7 @@ test('food and furniture change recipes in place and check the craft location at
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0,'rechecks map before sending');
   f.callbacks.economy_error({reason:'home_build_location'});
   assert.match(f.$('craftActionStatus').textContent,/ผลิตในเรือนส่วนตัว/);
-  f.$('craftRecipePopupClose').click();
+  f.$('craftRecipePanelClose').click();
   f.$('ckCategory-food').click();grid.children.find(card=>card.dataset.recipe==='fish_soup').click();
   assert.equal(f.$('benchCraft').disabled,false);
   f.$('benchCraft').click();assert.equal(f.mutations().length,1);
@@ -74,7 +74,7 @@ test('an empty home recipe category stays in the workbench and cannot submit the
   const f=fixture();f.choose('all','blade_25');f.$('ckCategory-furniture').click();
   assert.equal(f.ctx.drawerActive,'crafting');assert.deepEqual(f.ids(),[]);
   assert.equal(f.$('craftRecipeEmpty').hidden,false);
-  assert.equal(f.$('craftRecipePopup').open,false);
+  assert.equal(f.$('craftRecipePanel').hidden,true);
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
   f.choose('kiln','mat_ingot_1');assert.equal(f.$('craftRecipeEmpty').hidden,true);
   f.$('benchCraft').click();assert.equal(f.mutations().length,1);

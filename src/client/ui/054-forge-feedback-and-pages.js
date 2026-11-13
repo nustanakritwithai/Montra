@@ -327,29 +327,23 @@
       '<p id="craftMaterialStatus" class="note" role="status" hidden></p><button id="craftClearMaterial" class="secondary" type="button" hidden>ดูทุกสูตร</button>'+
       '<section id="personalBench" class="ck-workspace" hidden><div class="ck-recipes" id="craftRecipePane"><h3>ตำราสร้างของ</h3><div class="ck-filters"><div><label class="field" for="benchGroup">ประเภทสูตร</label><select id="benchGroup"><option value="role">เหมาะกับอาชีพฉัน</option><option value="materials">วัสดุและของใช้</option><option value="food">อาหาร</option><option value="medicine">ยา</option><option value="furniture">เฟอร์นิเจอร์</option><option value="weapons">อาวุธ</option><option value="armor">เกราะและเครื่องประดับ</option><option value="kiln">เตาเผา · ถ่านและแท่งเหล็ก</option><option value="boss">ของจากบอส</option><option value="all">ทุกสาย</option></select></div><div><label class="field" for="benchLevel">เลเวลสูตร</label><select id="benchLevel"><option value="auto">ระดับที่ใช้ได้ล่าสุด</option></select></div></div><label class="field" for="benchRecipe">สูตรที่จะสร้าง</label><select id="benchRecipe"></select><div id="craftRecipeGrid" class="ck-grid" role="group" aria-label="เลือกสูตร"></div><p id="craftRecipeEmpty" class="note" role="status" hidden>ไม่มีสูตรในหมวดหรือเลเวลที่เลือก</p><div class="ck-pagination"><button id="craftRecipePrev" type="button" aria-label="สูตรหน้าก่อน">‹</button><span id="craftRecipePage" role="status"></span><button id="craftRecipeNext" type="button" aria-label="สูตรหน้าถัดไป">›</button></div></div>'+
       '<section id="craftQueuePanel" hidden><h3>คิวคราฟต์</h3><div id="craftQueueJobs" aria-live="polite"></div><button id="craftQueueRefresh" type="button" class="secondary">รีเฟรชคิว</button></section>'+
-      '<dialog id="craftRecipePopup" class="ck-popup" aria-labelledby="craftRecipePopupTitle"><header class="ck-popup-header"><h3 id="craftRecipePopupTitle" tabindex="-1">สูตรการผลิต</h3><button id="craftRecipePopupClose" type="button" class="secondary" aria-label="ปิดสูตรการผลิต">✕</button></header><div id="craftRecipePopupBody" class="ck-popup-body"><div id="craftDetailPane" class="ck-detail"><div id="benchSelectedSummary" class="item-preview ck-output"><div id="benchOutputItem" class="item-slot-host"></div><div><span class="ck-eyebrow">สูตรที่เลือก</span><h3 id="benchOutput"></h3><p class="note" id="benchOwned"></p></div></div><section id="benchRecipeExplorer" class="ck-recipe-explorer" aria-label="เส้นทางสูตร"><div class="ck-inspect-nav"><button id="benchBack" type="button" class="secondary" hidden></button><button id="benchInspectBack" type="button" class="secondary" hidden></button><button id="benchInspectRoot" type="button" class="secondary" hidden>กลับสูตรที่เลือก</button></div><div id="benchInspectHeading" class="item-preview" hidden><div id="benchInspectItem" class="item-slot-host"></div><h3 id="benchInspectTitle" tabindex="-1"></h3></div><p class="note ck-recipe-hint">แตะรูปวัตถุดิบหรือผลผลิตเพื่อดูสูตรของชิ้นนั้น</p><h4>สร้างจาก</h4><div id="benchCreatedFrom"></div><details id="benchUsesDetails" class="ck-uses-details"><summary id="benchUsesLabel">กลายเป็น</summary><div id="benchUsedFor"></div><div id="benchUsesPagination" class="ck-pagination" hidden><button id="benchUsesPrev" type="button" aria-label="สูตรที่ใช้วัตถุดิบหน้าก่อน">‹</button><span id="benchUsesCount"></span><button id="benchUsesNext" type="button" aria-label="สูตรที่ใช้วัตถุดิบหน้าถัดไป">›</button></div></details></section><div id="benchCraftDetails"><p class="note" id="benchInfo"></p><ul id="craftRequirements" class="ck-requirements" aria-label="เงื่อนไขสร้างของ"></ul><p class="note ck-future">โอกาสคุณภาพและค่า ST · เร็วๆ นี้</p><div class="ck-tracking"><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button></div></div></div></div><footer id="benchCraftFooter" class="ck-popup-footer"><p id="craftActionStatus" class="note craft-result" role="status" aria-live="polite"></p><div class="status-line"><span>ค่าใช้จ่ายรวม</span><strong id="benchCost"></strong></div><div class="ck-craft-actions"><label id="benchQuantityControl" hidden>จำนวน <input id="benchQuantity" type="number" min="1" max="10" value="1" inputmode="numeric"></label><button id="benchCraft" type="button" class="primary">คราฟต์</button><button id="benchQueue" type="button" class="secondary" hidden>เข้าคิวคราฟต์</button></div></footer></dialog></section>'+
+      '<section id="craftRecipePanel" class="ck-recipe-panel" hidden aria-labelledby="craftRecipePanelTitle"><header class="ck-recipe-panel-header"><h3 id="craftRecipePanelTitle" tabindex="-1">สูตรการผลิต</h3><button id="craftRecipePanelClose" type="button" class="secondary">‹ รายการสูตร</button></header><div id="craftRecipePanelBody" class="ck-recipe-panel-body"><div id="craftDetailPane" class="ck-detail"><div id="benchSelectedSummary" class="item-preview ck-output"><div id="benchOutputItem" class="item-slot-host"></div><div><span class="ck-eyebrow">สูตรที่เลือก</span><h3 id="benchOutput"></h3><p class="note" id="benchOwned"></p></div></div><section id="benchRecipeExplorer" class="ck-recipe-explorer" aria-label="เส้นทางสูตร"><div class="ck-inspect-nav"><button id="benchBack" type="button" class="secondary" hidden></button><button id="benchInspectBack" type="button" class="secondary" hidden></button><button id="benchInspectRoot" type="button" class="secondary" hidden>กลับสูตรที่เลือก</button></div><div id="benchInspectHeading" class="item-preview" hidden><div id="benchInspectItem" class="item-slot-host"></div><h3 id="benchInspectTitle" tabindex="-1"></h3></div><p class="note ck-recipe-hint">แตะรูปวัตถุดิบหรือผลผลิตเพื่อดูสูตรของชิ้นนั้น</p><h4>สร้างจาก</h4><div id="benchCreatedFrom"></div><details id="benchUsesDetails" class="ck-uses-details"><summary id="benchUsesLabel">กลายเป็น</summary><div id="benchUsedFor"></div><div id="benchUsesPagination" class="ck-pagination" hidden><button id="benchUsesPrev" type="button" aria-label="สูตรที่ใช้วัตถุดิบหน้าก่อน">‹</button><span id="benchUsesCount"></span><button id="benchUsesNext" type="button" aria-label="สูตรที่ใช้วัตถุดิบหน้าถัดไป">›</button></div></details></section><div id="benchCraftDetails"><p class="note" id="benchInfo"></p><ul id="craftRequirements" class="ck-requirements" aria-label="เงื่อนไขสร้างของ"></ul><p class="note ck-future">โอกาสคุณภาพและค่า ST · เร็วๆ นี้</p><div class="ck-tracking"><button class="secondary" id="benchTrack" type="button" hidden></button><select id="benchHuntChoice" aria-label="เลือกวัตถุดิบที่ต้องการตามหา" hidden></select><button class="secondary" id="benchTrackSupply" type="button" hidden></button></div></div></div></div><footer id="benchCraftFooter" class="ck-recipe-panel-footer"><p id="craftActionStatus" class="note craft-result" role="status" aria-live="polite"></p><div class="status-line"><span>ค่าใช้จ่ายรวม</span><strong id="benchCost"></strong></div><div class="ck-craft-actions"><label id="benchQuantityControl" hidden>จำนวน <input id="benchQuantity" type="number" min="1" max="10" value="1" inputmode="numeric"></label><button id="benchCraft" type="button" class="primary">คราฟต์</button><button id="benchQueue" type="button" class="secondary" hidden>เข้าคิวคราฟต์</button></div></footer></section></section>'+
       '<details id="craftPanel" class="forge-card" hidden><summary>สูตรของศาลร้าง</summary><div class="item-slots"><div id="craftShrineOutput" class="item-preview"></div><div id="craftShrineInput" class="item-preview"></div></div><p class="note" id="craftInfo"></p><p class="note craft-result" id="craftPageResult" role="status"></p><button type="button" class="primary" id="craftGlaive"></button></details></div>');
     const quantityInput=$("benchQuantity"),queueButton=$("benchQueue"),queueRefresh=$("craftQueueRefresh");
     if(quantityInput)quantityInput.oninput=renderCraftingPage;
     if(queueButton)queueButton.onclick=()=>submitCraft(false,true);
     if(queueRefresh)queueRefresh.onclick=requestCraftQueue;
-    $("craftRecipePopupClose").onclick=()=>closeCraftRecipePopup();
-    $("craftRecipePopup").oncancel=event=>{event.preventDefault();closeCraftRecipePopup();};
-    $("craftRecipePopup").onkeydown=event=>{if(handleCraftRecipePopupKey(event))event.stopPropagation();};
-    $("craftRecipePopup").onclick=event=>{
-      if(event.target!==$("craftRecipePopup"))return;
-      const rect=event.target.getBoundingClientRect();
-      if(event.clientX<rect.left || event.clientX>rect.right || event.clientY<rect.top || event.clientY>rect.bottom)closeCraftRecipePopup();
-    };
+    $("craftRecipePanelClose").onclick=()=>closeCraftRecipePanel();
     $("craftHome").onclick=openSmith;$("craftBag").onclick=openBag;
     if(craftMaterialId)$("benchGroup").value="all";
     $("craftClearMaterial").onclick=()=>{
+      closeCraftRecipePanel(false);
       craftMaterialId=null;$("benchLevel").value="auto";craftRecipePage=0;benchTrail.length=0;craftRecipeTarget=null;
       renderCraftingPage();$("benchGroup").focus({preventScroll:true});
     };
-    for(const id of ["benchGroup","benchLevel","benchRecipe"])$(id).onchange=()=>{benchTrail.length=0;craftRecipeTarget=null;craftRecipePage=id==="benchRecipe"?Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===$("benchRecipe").value)/6)):0;renderCraftingPage();if(id==="benchRecipe")openCraftRecipePopup();else closeCraftRecipePopup();};
+    for(const id of ["benchGroup","benchLevel","benchRecipe"])$(id).onchange=()=>{benchTrail.length=0;craftRecipeTarget=null;craftRecipePage=id==="benchRecipe"?Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===$("benchRecipe").value)/6)):0;renderCraftingPage();if(id==="benchRecipe")openCraftRecipePanel();else closeCraftRecipePanel();};
     for(const category of Object.keys(craftCategories))$("ckCategory-"+category).onclick=()=>{
-      closeCraftRecipePopup(false);
+      closeCraftRecipePanel(false);
       craftMaterialId=null;craftPagePosition=null;craftRecipeTarget=null;craftRecipePage=0;benchTrail.length=0;
       $("benchGroup").value=category;
       $("benchLevel").value="auto";
@@ -366,7 +360,7 @@
   }
   function renderCraftingPage(){
     if(drawerActive!=="crafting" || !$("personalBench"))return;
-    if(craftPageRoom!==room){closeCraftRecipePopup(false);craftPageRoom=room;craftPagePosition=null;craftMaterialId=null;craftRecipeTarget=null;craftRecipePage=0;benchTrail.length=0;}
+    if(craftPageRoom!==room){closeCraftRecipePanel(false);craftPageRoom=room;craftPagePosition=null;craftMaterialId=null;craftRecipeTarget=null;craftRecipePage=0;benchTrail.length=0;}
     refreshArtisanWallet();
     const ready=economyReady(),slots=currentBagSlots();
     const status=$("craftPageStatus");
@@ -378,15 +372,15 @@
     renderWorkbench(slots);renderCraft(slots);renderCraftQueue();
     if(target){
       if($("benchRecipe").value===target.id){
-        if($("craftRecipePopup").open){$("benchUsesDetails").open=false;focusBenchRecipe();}
-        else openCraftRecipePopup();
-      }else closeCraftRecipePopup(false);
+        if(!$("craftRecipePanel").hidden){$("benchUsesDetails").open=false;focusBenchRecipe();}
+        else openCraftRecipePanel();
+      }else closeCraftRecipePanel(false);
     }
     const group=$("benchGroup").value;
     for(const category of Object.keys(craftCategories)){
       $("ckCategory-"+category).setAttribute("aria-pressed",String(category===(group==="role"?"all":group)));
     }
-    if(!ready || !cardDrill || !personalItems[$("benchRecipe").value]?.recipe)closeCraftRecipePopup(false);
+    if(!ready || !cardDrill || !personalItems[$("benchRecipe").value]?.recipe)closeCraftRecipePanel(false);
     $("craftActionStatus").textContent=economyPending?"กำลังรอผลบันทึกจากเซิร์ฟเวอร์…":!ready?"":!ownServerCharacter()?.alive?"รอเกิดใหม่ก่อนทำรายการ":craftResultRoom===room?craftResultMessage:"";
     $("craftPageResult").textContent=$("craftActionStatus").textContent;
   }
@@ -394,7 +388,7 @@
     if(drawerActive!=="crafting" || !economyReady() || economyPending)return;
     renderCraftingPage();
     const button=$(shrine?"craftGlaive":"benchCraft"),panel=$(shrine?"craftPanel":"personalBench");
-    if(panel.hidden || button.disabled || (!shrine && (!$("craftRecipePopup").open || $("benchCraftDetails").hidden)))return;
+    if(panel.hidden || button.disabled || (!shrine && ($("craftRecipePanel").hidden || $("benchCraftDetails").hidden)))return;
     const recipeId=shrine?JSON.parse(room.state.craftRecipe).id:$("benchRecipe").value;
     craftResultMessage="";craftResultRoom=room;
     const quantity=shrine?1:selectedCraftQuantity();

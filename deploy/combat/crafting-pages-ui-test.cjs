@@ -100,10 +100,10 @@ test('material entry lists all recipes that consume it, including locked ones',(
   const f=fixture();f.player.level=1;f.run('openCraftingPage(null,"mat_raw_wood_1")');
   assert.deepEqual(f.ids(),['potion_1','mat_charcoal_1']);
   assert.equal(f.$('craftMaterialStatus').hidden,false);assert.match(f.$('craftMaterialStatus').textContent,/ไม้ดิบ/);
-  assert.equal(f.$('craftRecipePopup').open,false);assert.equal(f.$('craftPanel').hidden,true);
+  assert.equal(f.$('craftRecipePanel').hidden,true);assert.equal(f.$('craftPanel').hidden,true);
   f.$('craftRecipeGrid').children.find(card=>card.dataset.recipe==='mat_charcoal_1').click();
-  assert.equal(f.$('craftRecipePopup').open,true);assert.equal(f.$('benchRecipe').value,'mat_charcoal_1');
-  f.$('craftRecipePopupClose').click();f.$('craftClearMaterial').click();
+  assert.equal(f.$('craftRecipePanel').hidden,false);assert.equal(f.$('benchRecipe').value,'mat_charcoal_1');
+  f.$('craftRecipePanelClose').click();f.$('craftClearMaterial').click();
   assert.equal(f.$('craftMaterialStatus').hidden,true);assert(f.ids().includes('mat_ingot_1'));assert.equal(f.mutations().length,0);
   f.run('openCraftingPage(null,"mat_ingot_1")');
   assert(f.ids().includes('blade_50'));assert(f.ids().every(id=>f.items[id].recipe.some(part=>part.item==='mat_ingot_1')));
@@ -112,7 +112,7 @@ test('material entry lists all recipes that consume it, including locked ones',(
 test('material entry preserves legacy shrine production and identifies materials refined in the bag',()=>{
   const f=fixture();f.run('openCraftingPage(null,"shrine_shard")');
   assert.equal(f.$('craftPanel').hidden,false);assert.equal(f.$('craftPanel').open,true);
-  assert.equal(f.$('craftRecipePopup').open,false);assert.equal(f.mutations().length,0);
+  assert.equal(f.$('craftRecipePanel').hidden,true);assert.equal(f.mutations().length,0);
   f.items.mat_raw_stone_1={name:'หินดิบ',kind:'material',refinesTo:'mat_metal_1'};
   f.run('openCraftingPage(null,"mat_raw_stone_1")');
   assert.deepEqual(f.ids(),[]);assert.equal(f.$('benchCraft').disabled,true);
@@ -258,7 +258,7 @@ test('catalog and connection guards hide stale mutation panels and defer request
   }
   const f=fixture();f.ctx.cardDrill=null;f.choose('all','ring_25','leftRing');assert.equal(f.$('personalBench').hidden,true);assert.match(f.$('craftPageStatus').textContent,/โหลดสูตร/);
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
-  f.callbacks.inventory_state(f.payload({catalogReady:true,cardDrill:{gold:10},workbenchGold:41}));assert.equal(f.$('personalBench').hidden,false);assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.$('benchCost').textContent,'41 ทอง');assert.equal(f.$('craftRecipePopup').open,true,'deferred explicit choice opens its popup after catalog arrives');
+  f.callbacks.inventory_state(f.payload({catalogReady:true,cardDrill:{gold:10},workbenchGold:41}));assert.equal(f.$('personalBench').hidden,false);assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.$('benchCost').textContent,'41 ทอง');assert.equal(f.$('craftRecipePanel').hidden,false,'deferred explicit choice shows its recipe after catalog arrives');
   f.ctx.room.state.craftRecipe='';f.run('renderBag()');assert.equal(f.$('craftPanel').hidden,true);f.$('craftGlaive').onclick();assert.equal(f.mutations().length,0);
 });
 

@@ -27,7 +27,7 @@ function fixture(drawer='crafting'){
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',
     warpPending:false,fishingPending:false,ownServerCharacter:()=>player,currentBagSlots:()=>slots,
     renderWorkbench(){},renderCraft(){},renderForge(){},renderForgeStock(){},renderForgePicker(){},renderItemTile(){},
-    personalItems:{},closeCraftRecipePopup(){},openCraftRecipePopup(){},closeForgePicker(){},selectForgeTarget(){ctx.forgePageTarget=null;ctx.forgePageIdentity=null;},forgeTargetItem:()=>null,forgeTargetChoices:()=>[],bagMeta:()=>null,
+    personalItems:{},closeCraftRecipePanel(){},openCraftRecipePanel(){},closeForgePicker(){},selectForgeTarget(){ctx.forgePageTarget=null;ctx.forgePageIdentity=null;},forgeTargetItem:()=>null,forgeTargetChoices:()=>[],bagMeta:()=>null,
     renderEconomy(){},toast:message=>toasts.push(message),
     setTimeout(fn,ms){timers.set(++timerId,{fn,ms});return timerId;},clearTimeout:id=>timers.delete(id),
     renderBag(){

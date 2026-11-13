@@ -76,7 +76,7 @@ function fixture(){
     itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?5:inventory.slots.filter(p=>p?.itemId===id).length+(stock?(inventory.forgeCopies[id]||0):0),bindItemHuntButton:button=>{button.hidden=true;},
     journeyNotesForPlayer:()=>({}),salvageSelectedGear(){},handleUseBagItem:()=>routes.push('use'),setBagPage:p=>{ctx.bagCurrentPage=p;},updateBagPagerUi(){},isItemInCategory:()=>true,
     bagMultiPageSliderHtml:()=>'<div id="bagGrid">'+Array.from({length:8},(_,i)=>`<button type="button" class="bag-slot" id="bagSlot${i}"><span class="bag-symbol"></span><span class="bag-quantity"></span></button>`).join('')+'</div>',
-    renderGearGuide:()=>{d.$('gearGuide').hidden=true;},toast:message=>toasts.push(message),closeCraftRecipePopup(){},openCraftRecipePopup(){},refreshArtisanWallet(){},renderWorkbench(){},renderCraft(){},selectBenchRecipe:(...args)=>{routes.push(args);ctx.openCraftingPage();},
+    renderGearGuide:()=>{d.$('gearGuide').hidden=true;},toast:message=>toasts.push(message),closeCraftRecipePanel(){},openCraftRecipePanel(){},refreshArtisanWallet(){},renderWorkbench(){},renderCraft(){},selectBenchRecipe:(...args)=>{routes.push(args);ctx.openCraftingPage();},
   };
   ctx.room={state:{economyAvailable:true,inventoryAvailable:true,weaponsAvailable:true,forgeCatalog:JSON.stringify(config)},send:(command,payload)=>wire.push({command,payload:plain(payload),durable:true})};
   vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
