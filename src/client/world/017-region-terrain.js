@@ -97,8 +97,12 @@
     return Number(p.y)-(map?.walkBridges?.length?walkHeight(map,p.x,p.z):map?.terrain?terrainHeight(map.terrain,p.x,p.z):0);
   }
   function terrainCell(cuts,v){
-    const i=cuts.findIndex(n=>n>v);
-    return i<0?cuts.length-2:Math.max(0,i-1);
+    let low=0, high=cuts.length-1;
+    while(high-low>1){
+      const mid=(low+high)>>1;
+      if(cuts[mid]>v)high=mid;else low=mid;
+    }
+    return low;
   }
   // ---- Ground patches: soft-edged pools of a second surface (grass, moss, leaves, gravel …) so no floor
   // reads as one flat colour. Visual only, laid a few millimetres over the floor and under roads and courts.
