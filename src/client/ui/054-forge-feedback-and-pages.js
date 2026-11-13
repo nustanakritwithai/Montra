@@ -528,11 +528,6 @@
       bagMultiPageSliderHtml() +
       '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
       '<p class="note" style="text-align:center;font-size:12px;margin:10px 0 0;color:#c7b28a;">แตะไอเท็มเพื่อดูรายละเอียด</p>' +
-      '<section class="bag-detail-card" id="bagQuickDetail" aria-label="รายละเอียดไอเท็มที่เลือก">'+
-        '<div class="item-preview"><div id="bagQuickItem" class="item-slot-host"></div><div><strong id="bagQuickName"></strong><p class="note" id="bagQuickSub"></p></div></div>'+
-        '<div class="item-stats-grid" id="bagQuickStats"></div><p class="note" id="bagQuickDescription"></p>'+
-        '<div class="item-meta-row"><span class="item-meta-tag" id="bagQuickLevel" hidden></span><span class="item-meta-tag" id="bagQuickBound" hidden></span><span class="item-meta-tag item-price-tag" id="bagQuickPrice" hidden></span></div>'+
-      '</section>'+
       '<section aria-labelledby="bagManageTitle"><h3 id="bagManageTitle">จัดการไอเท็มที่เลือก</h3>'+
         '<div class="item-diff-card" id="bagQuickDiff" hidden></div>'+
         '<div class="bag-quick-actions">'+

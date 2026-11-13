@@ -560,7 +560,6 @@
       if(drawerActive==="bag" && !$("itemDetailModal").hidden && !produce.disabled)openCraftingPage(null,chosen.itemId);
     }:null;
     renderBagRecipeLink(chosen?.itemId,target);
-    renderBagQuickDetail(chosen,worn);
   }
   function renderBagRecipeLink(itemId,kilnRecipeId){
     const recipeId=personalItems[itemId]?.recipe?.length?itemId:kilnRecipeId;
@@ -584,15 +583,6 @@
         panel.querySelector("summary")?.focus({preventScroll:true});
       };
     } else link.removeAttribute("aria-label");
-  }
-  function renderBagQuickDetail(chosen,worn){
-    if(drawerActive!=="bag" || !$("bagQuickDetail"))return;
-    renderItemTile("bagQuickItem",chosen||{}, {equipped:worn});
-    for(const [target,source] of [["Name","bagItemName"],["Sub","bagPanelSub"],["Description","bagItemDescription"],["Level","itemMetaLevel"],["Bound","itemMetaBound"],["Price","itemMetaPrice"]]){
-      const to=$("bagQuick"+target),from=$(source);if(!to || !from)continue;
-      to.textContent=from.textContent;to.hidden=from.hidden;
-    }
-    $("bagQuickStats").innerHTML=$("bagPanelStats").innerHTML;
   }
   const gearCoreSkills={
     muay_boran:{pressure:["korat","thasao"],endurance:["chaiya","lopburi"]},

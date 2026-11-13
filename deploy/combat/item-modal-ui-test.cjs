@@ -262,12 +262,14 @@ test('static popups close on completed activation without pointer-down click-thr
   }
 });
 
-test('inline detail mirrors item rendering and the drawer manages the selected item',()=>{
+test('details render only in the modal and the drawer still manages the selected item',()=>{
   const f=fixture();f.open();f.select(1);
-  assert.equal(f.$('bagQuickName').textContent,f.$('bagItemName').textContent);
-  assert.equal(f.$('bagQuickStats').innerHTML,f.$('bagPanelStats').innerHTML);
-  assert.equal(f.$('bagQuickItem').children[0].getAttribute('aria-label'),f.$('bagDetailItem').children[0].getAttribute('aria-label'));
-  assert.deepEqual(f.$('bagQuickDetail').querySelectorAll('button, select, summary'),[]);
+  assert.equal(f.$('bagQuickDetail'),null);
+  for(const id of ['bagDetailItem','bagItemName','bagPanelStats','bagItemDescription']){
+    assert(f.modal().contains(f.$(id)),id);
+    assert.equal(f.ui.drawer.contains(f.$(id)),false,id);
+  }
+  assert.equal(f.$('bagItemName').textContent,'แหวนทดสอบ');
   f.ctx.closeItemDetailModal();const sides=f.$('wearSidePicker').children;sides[1].click();assert.equal(sides[1].getAttribute('aria-pressed'),'true');
   f.$('useBagItem').click();assert.equal(f.routes.at(-1),'use');
   f.$('useBagItem').disabled=true;f.$('useBagItem').click();assert.equal(f.routes.filter(x=>x==='use').length,1);
