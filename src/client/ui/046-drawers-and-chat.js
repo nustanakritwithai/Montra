@@ -12,6 +12,7 @@
     if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
+    if(typeof closeCityMissionDetail==="function")closeCityMissionDetail(false);
     cancelForgeAnimation(true);closeForgePicker(false);
     if(ui.drawer.hidden)return;
     SFX("close");
@@ -28,6 +29,7 @@
     if (typeof clearCoreGraphLines === "function") clearCoreGraphLines();
     try { window.MontraAudio?.stopSpeech?.(); } catch (_) {}
     if(typeof closeCraftRecipePopup==="function")closeCraftRecipePopup(false);
+    if(typeof closeCityMissionDetail==="function")closeCityMissionDetail(false);
     cancelForgeAnimation(true);closeForgePicker(false);closeItemDetailModal(false);
     if(fieldTrainingTip && !(ownServerCharacter()?.level>=13) && ["muayBook","swordTree","bladeBook","sentinelBook","occultBook"].includes(name))fieldTrainingTip=null;
     if(ui.drawer.hidden) {

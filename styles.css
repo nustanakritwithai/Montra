@@ -1962,8 +1962,55 @@ button:disabled { opacity:.5; cursor:not-allowed; }
 .field-command details.field-card[open] { padding-bottom: 8px; }
 .field-command #estatePanel details { margin-top: 7px; border-top: 1px solid #9a886350; }
 .field-command :is(button, summary, select, input):focus-visible { outline: 2px solid var(--field-gold); outline-offset: 2px; }
-.city-mission-group { display: grid; gap: 8px; }
-.field-command .city-mission-group h3 { margin: 0; }
+.city-mission-board {
+  --notice-paper:#f4dfad; --notice-ink:#392719; --notice-pin:#a34a37;
+  padding: 9px; border: 3px ridge #86613d; border-radius: 10px;
+  background: repeating-linear-gradient(0deg,#21150f3b 0 1px,transparent 1px 28px),
+    repeating-linear-gradient(89deg,#2f201516 0 2px,transparent 2px 11px),
+    linear-gradient(104deg,#644325,#50321e 50%,#3c2619);
+  box-shadow: inset 0 2px 12px #180d0a85;
+}
+.city-mission-group {
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap:9px;
+}
+.city-mission-board .city-mission-group { background:#1b110c6b; border-color:#cfa57277; }
+.field-command .city-mission-group h3 { margin:0; color:#ffe7b7; }
+.city-mission-group > :is(h3,.note,.city-mission-card) { grid-column:1/-1; }
+.city-mission-board .city-mission-notice {
+  position:relative; display:grid; align-content:start; gap:5px; min-width:0; margin:0;
+  min-height:100px; padding:16px 9px 9px; text-align:start;
+  border:1px solid #b58d57; border-radius:3px 7px 5px 3px;
+  background:linear-gradient(145deg,#fff0c8,var(--notice-paper) 65%,#e2c08a);
+  color:var(--notice-ink); box-shadow:0 3px 4px #120a06a0;
+  font-weight:700; font-size:.88rem; line-height:1.35; overflow-wrap:anywhere;
+  --gx-icon-size:23px;
+}
+.city-mission-notice::after {
+  content:""; position:absolute; left:calc(50% - 4px); top:4px; width:8px; height:8px;
+  border-radius:50%; background:radial-gradient(circle at 34% 28%,#e6a273,var(--notice-pin) 60%,#703326);
+  box-shadow:1px 2px 2px #43271a88; pointer-events:none;
+}
+#cityMissionActive .city-mission-notice { --notice-pin:#466d50; }
+.city-mission-notice > span:first-child { align-items:flex-start; }
+.city-mission-notice .city-mission-notice-status { color:#53412d; font-size:.78rem; font-weight:600; }
+.city-mission-notice [data-guild-icon="gold"] { color:#624416; --gx-icon-size:17px; }
+@media(hover:hover) { .city-mission-board .city-mission-notice:hover { border-color:#ffe5ad; background:#fff0c8; } }
+.city-mission-popup {
+  position:fixed; inset:0; width:min(32rem,calc(100% - 24px)); max-width:none;
+  max-height:min(82dvh,calc(100% - 24px)); margin:auto; padding:12px;
+  border:1px solid #c79d61; border-radius:12px; background:#20261e;
+  box-shadow:0 14px 46px #080604bd; overflow:hidden;
+}
+.city-mission-popup:not([open]) { display:none; }
+.city-mission-popup[open] { display:flex; flex-direction:column; gap:8px; }
+.city-mission-popup::backdrop { background:#080603b8; }
+.city-mission-popup > header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.city-mission-popup > header h3 { margin:0; overflow-wrap:anywhere; }
+.city-mission-popup > header .close { flex:none; width:44px; padding:0; margin:0; }
+.city-mission-popup > .note { margin:0; }
+#cityMissionDetailContent { min-height:0; overflow:auto; overscroll-behavior:contain; }
+#cityMissionDetailContent .city-mission-card { margin:0; }
+
 .city-mission-card { padding: 9px; border: 1px solid #7d684753; border-radius: 6px; background: #101d19; }
 .city-mission-card h4 { margin: 0; color: var(--field-paper); font-size: .95rem; }
 .city-mission-card p { margin: 5px 0; }

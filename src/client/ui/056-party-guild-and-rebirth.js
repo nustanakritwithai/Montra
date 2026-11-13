@@ -1224,7 +1224,20 @@
     openDrawer(drawer,title,
       '<div class="guild-actions"><button id="cityBack" class="secondary" type="button"></button>'+
       '<button id="cityRefresh" class="secondary" type="button">รีเฟรช</button></div>'+
-      '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>');
+      '<p id="cityStatus" class="note" role="status"></p><div id="cityProductionContent"></div>'+
+      (drawer==="cityMission"?
+        '<dialog id="cityMissionDetail" class="field-command city-mission-popup" aria-labelledby="cityMissionDetailTitle">'+
+        '<header><h3 id="cityMissionDetailTitle" class="gx-with-emblem" tabindex="-1"></h3><button id="cityMissionDetailClose" class="close" type="button" aria-label="ปิดรายละเอียด">✕</button></header>'+
+        '<p id="cityMissionDetailStatus" class="note" role="status" hidden></p>'+
+        '<button id="cityMissionDetailRetry" class="secondary" type="button" hidden>ส่งคำขอเดิมซ้ำ</button>'+
+        '<div id="cityMissionDetailContent"></div></dialog>':""));
+    if(drawer==="cityMission"){
+      const popup=$("cityMissionDetail");
+      $("cityMissionDetailClose").onclick=()=>closeCityMissionDetail();
+      $("cityMissionDetailRetry").onclick=transmitCityProduction;
+      popup.oncancel=event=>{event.preventDefault();closeCityMissionDetail();};
+      popup.onkeydown=event=>event.stopPropagation();
+    }
     if(site)$("cityProductionContent").dataset.site=site;
     $("cityBack").textContent="← "+backLabel;
     $("cityBack").onclick=back;
@@ -1354,6 +1367,32 @@
     const card=marketText("article","city-mission-card");
     card.append(cityEmblemText("h4",title,icon));section.append(card);return card;
   }
+  function closeCityMissionDetail(restore=true){
+    const popup=$("cityMissionDetail");
+    if(!popup?.open)return;
+    const key=popup.dataset.noticeKey;
+    popup.close();delete popup.dataset.noticeKey;
+    $("cityMissionDetailContent").replaceChildren();
+    if(restore)($("cityMissionNotice-"+key) || $("cityRefresh")).focus({preventScroll:true});
+  }
+  function showCityMissionDetail(key,card){
+    const popup=$("cityMissionDetail"),title=$("cityMissionDetailTitle"),content=$("cityMissionDetailContent");
+    const focused=document.activeElement,hadFocus=popup.open && focused && content.contains(focused);
+    const scroll=popup.open?content.scrollTop:0;
+    popup.dataset.noticeKey=key;
+    title.textContent=card.dataset.noticeTitle;title.dataset.guildIcon=card.dataset.noticeIcon;
+    content.replaceChildren(card);content.scrollTop=scroll;
+    const status=$("cityMissionDetailStatus");
+    const message=cityStatus || (cityPending?.waiting?"กำลังรอผลจากเซิร์ฟเวอร์…":"");
+    if(status.textContent!==message)status.textContent=message;
+    status.hidden=!message;
+    $("cityMissionDetailRetry").hidden=!cityPending || cityPending.waiting;
+    if(!popup.open){popup.showModal();title.focus({preventScroll:true});}
+    else if(hadFocus){
+      const replacement=[...card.querySelectorAll("button")].find(button=>button.textContent===focused.textContent && !button.disabled);
+      (replacement || title).focus({preventScroll:true});
+    }
+  }
   function cityMissionTerms(card,item,amount,reward){
     const terms=marketText("div","city-mission-terms"),gold=cityEmblemText("span","","gold");
     gold.className+=" city-mission-gold";gold.title="รางวัล";
@@ -1368,14 +1407,15 @@
     line.className+=" note city-mission-deadline";line.title="หมดอายุ";
     line.append(marketText("span","gx-sr-only","หมดอายุ "),time);card.append(line);
   }
-  function renderCityHauls(sections,hauls,{note,button,route},locked){
+  function renderCityHauls(sections,hauls,{note,button,route,notice},locked){
     const {jobs,manage,enabled,paused,atCity}=hauls;
     const pause=paused?"พักงานขนเสบียงระหว่างศึก":!enabled?"พักรับและส่งงานขนเสบียง":"";
     if(pause && !jobs.length)note(sections.open,pause);
     for(const job of jobs){
-      const card=cityMissionCard(job.carrying?sections.active:sections.open,"ขนเสบียง · "+citySiteNames[job.source]+" → "+citySiteNames[job.destination],"haul");
-      cityMissionTerms(card,job.item,job.amount,job.reward);
       const status={pending:"รอปลายทางอนุมัติ",open:"เปิดรับผู้ขนส่ง",carrying:"กำลังขนส่ง"}[job.state];
+      const card=notice(job.carrying?sections.active:sections.open,"haul-"+job.id,
+        "ขนเสบียง · "+citySiteNames[job.source]+" → "+citySiteNames[job.destination],"haul",pause || status,job.reward);
+      cityMissionTerms(card,job.item,job.amount,job.reward);
       note(card,[job.name,status,job.audience==="guild"?"เฉพาะกิลด์ต้นทาง":"ผู้เล่นทุกคน"].filter(Boolean).join(" · "));
       cityMissionDeadline(card,job.expires);
       if(pause)note(card,pause);
@@ -1419,12 +1459,13 @@
           amount,reward,audience:audience.value});
     },locked);
   }
-  function renderCityTradeContracts(sections,contracts,{note,button},locked){
+  function renderCityTradeContracts(sections,contracts,{note,button,notice},locked){
     const {job,manage,source,destination,atMarket,atCity,enabled}=contracts;
     const paused=cityTradeRoutePaused(contracts);
     if(job){
-      const section=cityMissionCard(job.yours?sections.active:sections.open,
-        "สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination],"contract");
+      const status=paused?"พักระหว่างศึก":job.yours?"รับสัญญาแล้ว":job.carrying?"มีผู้รับแล้ว":enabled?"เปิดรับผู้จัดซื้อ":"พักรับสัญญาใหม่";
+      const section=notice(job.yours?sections.active:sections.open,"contract-"+job.id,
+        "สัญญาจัดซื้อ · "+citySiteNames[source]+" → "+citySiteNames[destination],"contract",status,job.gold);
       cityMissionTerms(section,cityProduct,job.amount,job.gold);
       note(section,job.name+" · รับรางวัลเมื่อส่งครบ");
       if(job.neutral)note(section,"ซื้อแร่จากตลาดฝากขายสามลาน");
@@ -1468,6 +1509,8 @@
     },locked);
   }
   function updateCityContractDeadline(){
+    const pin=$("cityContractPin");
+    if(pin && !currentCityTradePin())pin.hidden=true;
     const node=$("cityContractCountdown");
     if(!node)return;
     const seconds=Math.max(0,Math.ceil((Number(node.dataset.expires)-cityTradeNow())/1000));
@@ -1475,11 +1518,8 @@
     const text=seconds?"หมดอายุใน "+Math.floor(seconds/3600)+" ชม. "+Math.floor(seconds%3600/60)+" นาที "+seconds%60+" วิ":"สัญญาถึงกำหนดแล้ว";
     if(node.textContent===text)return;
     node.textContent=text;
-    if(!seconds){
+    if(!seconds)
       for(const control of node.parentElement.querySelectorAll("[data-contract-deadline]"))control.disabled=true;
-      const pin=$("cityContractPin");
-      if(pin && !currentCityTradePin())pin.hidden=true;
-    }
   }
   function renderCityMission(){
     const body=$("cityProductionContent"),ready=cityRecoveryReady() && room.state.cityMissionSupported===true;
@@ -1490,6 +1530,7 @@
     const previousPost=$("cityMissionPost");
     const focused=document.activeElement;
     const focusId=focused?.id && previousPost?.contains(focused)?focused.id:null;
+    const focusedNotice=focused?.id?.startsWith("cityMissionNotice-")?focused.id:null;
     const draft=previousPost?{
       epoch:previousPost.dataset.epoch,purpose:$("cityMissionPurpose")?.value,
       audience:$("cityMissionAudience")?.value,hours:$("cityMissionHours")?.value,
@@ -1506,8 +1547,11 @@
       const retry=marketText("button","secondary","ส่งคำขอเดิมซ้ำ");
       retry.type="button";retry.onclick=transmitCityProduction;retry.disabled=!ready;body.append(retry);
     }
-    if(!ready)return;
-    if(!cityMission){note(body,"กำลังโหลดภารกิจ…");return;}
+    if(!ready || !cityMission){
+      closeCityMissionDetail();
+      if(ready)note(body,"กำลังโหลดภารกิจ…");
+      return;
+    }
     const navigation=cityBoardNavigation(body);
     const route=site=>openStrategicMap(site,()=>openCityMission(navigation));
     const panel=marketText("div","field-command city-mission-board");
@@ -1520,7 +1564,22 @@
       open:group("cityMissionOpen","งานที่เปิดรับ","contract"),
       manage:group("cityMissionManage","จัดการประกาศ","seal"),
     };
-    const intercityOnly=navigation?.site==="sam_lan_estuary",tools={note,button,route};
+    const notices=new Map();
+    const notice=(section,key,title,icon,summary,reward)=>{
+      const card=marketText("article","city-mission-card");
+      card.dataset.noticeTitle=title;card.dataset.noticeIcon=icon;
+      notices.set(key,card);
+      const pin=marketText("button","city-mission-notice","");
+      pin.id="cityMissionNotice-"+key;pin.type="button";
+      pin.setAttribute("aria-haspopup","dialog");pin.setAttribute("aria-controls","cityMissionDetail");
+      pin.append(cityEmblemText("span",title,icon));
+      if(summary)pin.append(marketText("span","city-mission-notice-status",summary));
+      if(Number.isFinite(reward))pin.append(cityEmblemText("span",reward.toLocaleString("th-TH")+" ทอง","gold"));
+      pin.onclick=()=>{showCityMissionDetail(key,card);updateCityContractDeadline();};
+      section.append(pin);
+      return card;
+    };
+    const intercityOnly=navigation?.site==="sam_lan_estuary",tools={note,button,route,notice};
     if(!intercityOnly){
       renderCityOreMissions(sections,cityMission,tools);
       renderCityMissionPosting(sections.manage,cityMission,note,locked,draft);
@@ -1528,17 +1587,26 @@
     if(cityMission.tradeContracts)renderCityTradeContracts(sections,cityMission.tradeContracts,tools,locked);
     if(cityMission.hauls)renderCityHauls(sections,cityMission.hauls,tools,locked);
     if(sections.active.children.length===1)note(sections.active,"ยังไม่มีงานที่รับอยู่");
-    if(!sections.open.querySelector("article"))
+    if(!Array.from(sections.open.children).some(child=>child.tagName==="BUTTON"))
       note(sections.open,intercityOnly?"ยังไม่มีงานระหว่างเมืองที่เปิดให้ตัวละครนี้":"ยังไม่มีประกาศงานสำหรับตัวละครนี้");
-    panel.append(sections.active,sections.open);
+    panel.append(sections.open,sections.active);
     if(sections.manage.children.length>1)panel.append(sections.manage);
     body.append(panel);
-    appendCityTradePin(body,"contract");updateCityContractDeadline();
+    appendCityTradePin(body,"contract");
+    const popup=$("cityMissionDetail");
+    if(popup?.open){
+      const key=popup.dataset.noticeKey,card=notices.get(key);
+      if(card)showCityMissionDetail(key,card);
+      else closeCityMissionDetail();
+    }else if(focusedNotice){
+      ($(focusedNotice) || $("cityRefresh")).focus({preventScroll:true});
+    }
+    updateCityContractDeadline();
     const restored=focusId && $(focusId);
     if(restored && !restored.disabled && $("cityMissionPost").dataset.epoch===draft.epoch)
       restored.focus({preventScroll:true});
   }
-  function renderCityOreMissions(sections,{missions,enabled,siege,item,required},{note,button,route}){
+  function renderCityOreMissions(sections,{missions,enabled,siege,item,required},{note,button,route,notice}){
     const oreName=cityItemName(item);
     const ore=(inventoryState?.slots || []).reduce((sum,stack)=>sum+(stack?.itemId===item && !stack.bound?stack.quantity:0),0);
     const hasWork=missions.some(mission=>Number.isFinite(mission.progress));
@@ -1546,8 +1614,9 @@
     if(pause)note(sections.open,pause);
     for(const mission of missions){
       const active=Number.isFinite(mission.progress),warehouse=mission.purpose==="warehouse";
-      const card=cityMissionCard(active?sections.active:sections.open,(warehouse?"งานขยายคลัง":"งานเก็บแร่")+" · "+mission.name,
-        warehouse?"warehouse":"ore");
+      const summary=pause || (active?"เก็บแร่ "+mission.progress+" / "+required+" ชิ้น":mission.remaining>0?"ว่าง "+mission.remaining+" / "+mission.slots+" คน":"งานเต็ม");
+      const card=notice(active?sections.active:sections.open,"ore-"+mission.id,(warehouse?"งานขยายคลัง":"งานเก็บแร่")+" · "+mission.name,
+        warehouse?"warehouse":"ore",summary,mission.reward);
       cityMissionTerms(card,item,required,mission.reward);
       note(card,"ด่านผนึกจันทรา · ส่งเข้า"+(warehouse?"โครงการขยายคลัง":"คลังเมือง"));
       note(card,(mission.audience==="guild"?"เฉพาะสมาชิกกิลด์":"เปิดให้ทุกคน")+" · ว่าง "+mission.remaining+" / "+mission.slots+" คน");

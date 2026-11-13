@@ -18,7 +18,9 @@ const plain = value => JSON.parse(JSON.stringify(value));
 
 function node(tag = "div") {
   return {
-    tag, children: [], disabled: false, textContent: "", dataset:{},
+    tag, tagName:tag.toUpperCase(), children: [], disabled: false, textContent: "", dataset:{},
+    showModal() { this.open=true; },
+    close() { this.open=false; },
     get lastElementChild() { return this.children.at(-1); },
     get valueAsNumber() { return Number(this.value); },
     append(...children) {
@@ -26,7 +28,7 @@ function node(tag = "div") {
       this.children.push(...children);
       if (this.tag === "select" && this.value === undefined) this.value = this.children[0].value;
     },
-    replaceChildren(...children) { this.children = children; },
+    replaceChildren(...children) { this.children = []; this.append(...children); },
     insertBefore(child,before) { this.children.splice(this.children.indexOf(before),0,child); },
     contains(child) { return this === child || this.children.some(node=>node.contains(child)); },
     focus() { this.focused = true; },
@@ -34,7 +36,7 @@ function node(tag = "div") {
     querySelectorAll(selector) {
       const key={"[data-contract-deadline]":"contractDeadline","[data-market-quantity]":"marketQuantity",
         "[data-city-market-filter]":"cityMarketFilter","[data-city-market-site]":"cityMarketSite"}[selector];
-      const matches=child=>selector==="details[id]"?child.tag==="details" && child.id:key && child.dataset[key];
+      const matches=child=>selector==="details[id]"?child.tag==="details" && child.id:key?child.dataset[key]:child.tag===selector;
       return this.children.flatMap(child=>[...(matches(child)?[child]:[]),...child.querySelectorAll(selector)]);
     },
     querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
@@ -47,7 +49,8 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
-  const $ = id => nodes[id] || (nodes.cityProductionContent && walk(nodes.cityProductionContent).find(el => el.id === id));
+  const $ = id => nodes[id] || [nodes.cityProductionContent,nodes.cityMissionDetail].filter(Boolean)
+    .flatMap(walk).find(el => el.id === id);
   const ctx = {
     $, mode:"live", territoryState:null, territoryReceivedAt:100, worldDefinitions:null,
     document: {createElement: node}, performance: {now: () => now}, activeMapId: "sam_lan_estuary",
@@ -65,18 +68,27 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
     marketText: (tag, className, text) => Object.assign(node(tag), {className,textContent: text || ""}),
     openGuild() {},
     openEconomy() {},
-    openDrawer(name,title) {
+    openDrawer(name,title,html) {
+      ctx.closeCityMissionDetail?.(false);
       ctx.drawerActive = name;
       ctx.drawerTitle = title;
-      for (const id of ["cityBack","cityRefresh","cityStatus","cityProductionContent"]) nodes[id] = node();
+      for(const key of Object.keys(nodes))delete nodes[key];
+      for(const [,tag,id] of html.matchAll(/<([a-z][a-z0-9]*) id="([^"]+)"/g))nodes[id]=node(tag);
+      if(name==="cityMission")nodes.cityMissionDetail.append(nodes.cityMissionDetailTitle,nodes.cityMissionDetailClose,
+        nodes.cityMissionDetailStatus,nodes.cityMissionDetailRetry,nodes.cityMissionDetailContent);
     },
     setTimeout(fn, delay) { timers.set(++serial,{fn,delay}); return serial; },
     clearTimeout(id) { timers.delete(id); },
     window: {confirm: () => true},
   };
   vm.runInNewContext(warUI+source.slice(start,end),ctx);
-  const elements = () => walk(nodes.cityProductionContent);
-  const button = text => elements().find(el => el.tag === "button" && el.textContent === text);
+  const elements = () => [...walk(nodes.cityProductionContent),...(nodes.cityMissionDetail?.open?walk(nodes.cityMissionDetail):[])];
+  const button = text => elements().find(el => el.tag === "button" && !el.hidden && el.textContent === text);
+  const notice = key => $("cityMissionNotice-"+key);
+  const detail = key => {
+    if(key){const pin=notice(key);assert(pin,key);pin.onclick();}
+    return $("cityMissionDetailContent").querySelector("article");
+  };
   const submit = (text, ...values) => {
     const form = elements().find(el => el.tag === "form" && el.children.some(child => child.textContent === text));
     assert(form);
@@ -91,7 +103,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
       rush: {gold: 15, durationMs: 60_000}}, ...changes,
   });
   ctx.openCityProduction();
-  return {ctx, nodes, wire, timers, button, submit, state, $, setNow: value => {now=value;}};
+  return {ctx, nodes, wire, timers, button, notice, detail, submit, state, $, setNow: value => {now=value;}};
 }
 
 test("old server sends no city commands; a paused server retains cancellation and reclaim", () => {
@@ -286,8 +298,21 @@ test("the mission board distinguishes accepting, gathering and handing in a publ
     canAccept:true,progress:null};
   const board={enabled:true,required:3,item,serverNow:1_000_000};
   f.ctx.cityReceiveMission({...board,missions:[mission]});
-  const card=f.$("cityMissionOpen").querySelector("article");
-  assert.equal(card.querySelector("h4").dataset.guildIcon,"ore");
+  const pin=f.notice("ore-work");
+  assert.equal(pin.attributes["aria-haspopup"],"dialog");
+  assert.match(pin.children[0].textContent,/งานเก็บแร่ · กิลด์จันทรา/);
+  assert.match(pin.children[2].textContent,/15 ทอง/);
+  assert.equal(f.button("รับงาน"),undefined);
+  const sent=f.wire.length;
+  const card=f.detail("ore-work");
+  assert.equal(f.wire.length,sent);
+  assert.equal(f.$("cityMissionDetail").open,true);
+  assert.equal(f.$("cityMissionDetailTitle").dataset.guildIcon,"ore");
+  assert.equal(f.$("cityMissionDetailTitle").focused,true);
+  f.$("cityMissionDetail").oncancel({preventDefault(){}});
+  assert.equal(f.$("cityMissionDetail").open,false);
+  assert.equal(pin.focused,true);
+  f.detail("ore-work");
   const terms=card.children.find(el=>el.className==="city-mission-terms");
   assert.equal(terms.children[0].children[0].itemId,item);
   assert.equal(terms.children[0].children[0].attributes["aria-hidden"],"true");
@@ -307,13 +332,15 @@ test("the mission board distinguishes accepting, gathering and handing in a publ
   f.ctx.cityReceiveResult(accepted);
   assert.match(f.nodes.cityStatus.textContent,/รับงานแล้ว/);
   f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:0}]});
-  assert.equal(f.$("cityMissionActive").querySelector("progress").value,0);
+  assert(f.notice("ore-work"));
+  assert.equal(f.$("cityMissionDetail").open,true);
+  assert.equal(f.detail().querySelector("progress").value,0);
   f.ctx.inventoryState.slots.push({itemId:item,quantity:2});
   f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:2}]});
   assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
   f.ctx.cityReceiveMission({...board,missions:[{...mission,progress:3}]});
   assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
-  assert.match(f.$("cityMissionActive").querySelector("article").children.map(el=>el.textContent).join(" "),/ในกระเป๋าอีก 1 ชิ้น/);
+  assert.match(f.detail().children.map(el=>el.textContent).join(" "),/ในกระเป๋าอีก 1 ชิ้น/);
   f.ctx.inventoryState.slots.at(-1).quantity=3;
   f.ctx.cityReceiveMission({...board,siege:true,missions:[{...mission,progress:3}]});
   assert.equal(f.button("ส่งงานและรับทอง").disabled,true);
@@ -325,7 +352,9 @@ test("the mission board distinguishes accepting, gathering and handing in a publ
   f.ctx.cityReceiveResult({...submitted,gold:15});
   f.ctx.cityReceiveMission({...board,missions:[]});
   assert.match(f.nodes.cityStatus.textContent,/ได้รับ 15 ทอง/);
-  assert.equal(f.$("cityMissionActive").querySelector("article"),undefined);
+  assert.equal(f.notice("ore-work"),undefined);
+  assert.equal(f.$("cityMissionDetail").open,false);
+  assert.equal(f.nodes.cityRefresh.focused,true);
 });
 
 test("a full or newly claimed mission shows its state and reloads the board on a race", () => {
@@ -335,12 +364,13 @@ test("a full or newly claimed mission shows its state and reloads the board on a
     canAccept:true,progress:null};
   const board={enabled:true,required:3,item:"mat_raw_stone_2",serverNow:1_000_000};
   f.ctx.cityReceiveMission({...board,missions:[mission]});
+  f.detail("ore-work");
   f.button("รับงาน").onclick();
   f.ctx.cityReceiveError({requestId:f.wire.at(-1).payload.requestId,reason:"city_mission_full"});
   assert.equal(f.wire.at(-1).command,"get_city_missions");
   f.ctx.cityReceiveMission({...board,missions:[{...mission,remaining:0,canAccept:false}]});
   assert.equal(f.button("รับงาน").disabled,true);
-  assert(f.$("cityMissionOpen").querySelector("article").children.some(el=>el.textContent==="งานเต็ม"));
+  assert(f.detail().children.some(el=>el.textContent==="งานเต็ม"));
   assert.match(f.nodes.cityStatus.textContent,/มีคนรับครบแล้ว/);
 });
 
@@ -393,8 +423,9 @@ test("the freight board sends the selected scope, destination tenure and deliver
     audience:"public",state:"carrying",carrying:true,expires:2_000_000};
   const carrying={...hauls,jobs:[job],manage:null};
   f.ctx.cityReceiveMission({...board,hauls:carrying});
-  assert.match(f.$("cityMissionActive").querySelector("h4").textContent,/^ขนเสบียง/);
-  assert.equal(f.$("cityMissionOpen").querySelector("article"),undefined);
+  f.detail("haul-freight");
+  assert.match(f.$("cityMissionDetailTitle").textContent,/^ขนเสบียง/);
+  assert.equal(f.$("cityMissionOpen").querySelector("button"),undefined);
   assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
   f.ctx.cityReceiveMission({...board,hauls:{...carrying,atCity:river,paused:true}});
   assert.equal(f.button("ส่งเสบียงและรับทอง").disabled,true);
@@ -418,6 +449,7 @@ test("the contract board refreshes a stale purchase quote and allows a committed
   f.ctx.cityReceiveResult(opened);
   const job={id:"contract",name:"กิลด์จันทรา",amount:6,gold:96,total:90,expires:2_000_000};
   f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job}});
+  f.detail("contract-contract");
   assert.equal(f.button("ซื้อแร่และรับสัญญา").disabled,true);
   f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,manage:null,job,atCity:river,atMarket:river}});
   f.button("ซื้อแร่และรับสัญญา").onclick();
@@ -426,7 +458,7 @@ test("the contract board refreshes a stale purchase quote and allows a committed
   f.ctx.cityReceiveError({requestId:accepted.requestId,reason:"city_market_price_changed"});
   assert.equal(f.wire.at(-1).command,"get_city_missions");
   f.ctx.cityReceiveMission({...board,tradeContracts:{...contracts,enabled:false,job:{...job,yours:true,carrying:true}}});
-  assert.match(f.$("cityMissionActive").querySelector("h4").textContent,/^สัญญาจัดซื้อ/);
+  assert.match(f.$("cityMissionDetailTitle").textContent,/^สัญญาจัดซื้อ/);
   assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,false);
   f.button("ส่งสินค้าตามสัญญา").onclick();
   const delivered=f.wire.at(-1).payload;
@@ -550,7 +582,8 @@ test("market owns both price comparisons and mission owns the confirmed delivery
   f.ctx.openCityMission();
   f.ctx.cityReceiveMission({serverNow:1_001_000,missions:[],tradeContracts:contracts});
   assert.equal(f.$("cityTradeComparison"),undefined);
-  assert.match(text(f.nodes.cityProductionContent),/ซื้อที่ต้นทาง 38 ทอง · ส่วนต่าง \+12 ทอง/);
+  f.detail("contract-"+job.id);
+  assert.match(text(f.detail()),/ซื้อที่ต้นทาง 38 ทอง · ส่วนต่าง \+12 ทอง/);
   f.button("ปักหมุดไปซื้อแร่").onclick();
   assert.equal(visited.at(-1).site,river);
   assert.equal(f.ctx.cityTradeHudGuide().to,gate);
@@ -559,6 +592,7 @@ test("market owns both price comparisons and mission owns the confirmed delivery
   f.ctx.activeMapId=river;
   const carrying={...contracts,job:{...job,yours:true,carrying:true,total:null}};
   f.ctx.cityReceiveMission({serverNow:1_002_000,missions:[],tradeContracts:carrying});
+  f.detail("contract-"+job.id);
   assert.equal(f.ctx.currentCityTradePin().site,moon);
   assert.equal(f.ctx.cityTradeHudGuide().to,nextGate);
   f.ctx.activeMapId=moon;
@@ -568,8 +602,11 @@ test("market owns both price comparisons and mission owns the confirmed delivery
   f.ctx.territoryState=null;
   f.ctx.cityReceiveMission({serverNow:1_003_000,missions:[],tradeContracts:{...carrying,atMarket:moon}});
   assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,false);
+  f.ctx.closeCityMissionDetail();
   f.setNow(125_000);
   f.ctx.updateCityContractDeadline();
+  assert.equal(f.$("cityContractPin").hidden,true);
+  f.detail("contract-"+job.id);
   assert.match(f.$("cityContractCountdown").textContent,/สัญญาถึงกำหนดแล้ว/);
   assert.equal(f.button("ส่งสินค้าตามสัญญา").disabled,true);
   assert.equal(f.ctx.cityTradeHudGuide(),null);
@@ -805,7 +842,7 @@ test("the Sam Lan guild shortcut presents intercity work while the main board re
   assert.equal(f.$("cityMissionOpen").children[1].textContent,"ยังไม่มีงานระหว่างเมืองที่เปิดให้ตัวละครนี้");
   f.ctx.openCityMission();
   f.ctx.cityReceiveMission(snapshot);
-  assert.match(f.$("cityMissionOpen").querySelector("h4").textContent,/งานเก็บแร่ · กิลด์จันทรา/);
+  assert.match(f.$("cityMissionOpen").querySelector("button").children[0].textContent,/งานเก็บแร่ · กิลด์จันทรา/);
   assert.equal(f.nodes.cityBack.textContent,"← ตลาดโลก");
 });
 
@@ -817,6 +854,7 @@ test("a delivery route returns through the selected city's mission board", () =>
   f.ctx.cityReceiveMission({serverNow:1_000_000,missions:[],hauls:{enabled:true,atCity:river,
     jobs:[{id:"haul",source:river,destination:moon,name:"สามลาน",item:metal,amount:4,reward:15,
       state:"carrying",carrying:true,audience:"guild",expires:2_000_000}]}});
+  f.detail("haul-haul");
   f.button("ดูเส้นทางส่งเสบียง").onclick();
   assert.equal(route.site,moon);
   route.back();
