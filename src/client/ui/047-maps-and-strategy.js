@@ -1201,7 +1201,10 @@
     select(selected,typeof destination==="string" && cells.has(destination));center(selected);
     if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
   }
+  let refreshMapNpcActions=null;
   function openMap() {
+    refreshMapNpcActions=null;
+    const mapId=activeMapId;
     const activeMap=worldDefinitions?.[activeMapId],boss=activeMap?.guardian ?? activeMap?.boss;
     const services=[...(activeMap?.serviceNpcs || [])],keeper=forestObjectiveState?.keeper;
     const inField=territoryState?.local?.site===activeMapId && territoryState.local.inField;
@@ -1228,12 +1231,36 @@
     if(keeper?.mapId===activeMapId)services.unshift(keeper);
     services.sort((a,b)=>Number(b.role==="war")-Number(a.role==="war"));
     if(services.length){
-      const list=document.createElement("details"),summary=document.createElement("summary");list.className="help-topic";summary.textContent="NPC ในพื้นที่ · เดินไปหา";list.append(summary);
-      for(const npc of services){
-        const button=document.createElement("button");button.type="button";button.className="secondary";button.textContent="เดินไปหา "+npc.name;
-        button.onclick=()=>{const me=ownServerCharacter();if(!me || me.flying){toast("ลงจอดและเข้า LIVE ก่อนเดินไปหา NPC");return;}
-          closeDrawer();pointMove(npc.x,npc.z);toast("เดินไปหา"+npc.name+" แล้วแตะตัว NPC เพื่อพูดคุย");};list.append(button);
-      }
+      const list=document.createElement("details"),summary=document.createElement("summary");
+      list.className="help-topic";summary.textContent="NPC ในพื้นที่";list.append(summary);
+      const near=(me,npc)=>me && !me.flying && Math.hypot(me.x-npc.x,me.z-npc.z)<=npc.radius;
+      const rows=services.map(npc=>{
+        const button=document.createElement("button");button.type="button";button.className="secondary";
+        button.onclick=()=>{
+          const me=ownServerCharacter();
+          if(activeMapId!==mapId){openMap();return;}
+          if(!me || me.flying){toast("ลงจอดและเข้า LIVE ก่อนคุยกับ NPC");return;}
+          if(near(me,npc)){
+            if(npc===keeper)openForestRanger();
+            else openServiceNpc(npc);
+            return;
+          }
+          closeDrawer();
+          if(pointMove(npc.x,npc.z)!==false)toast("กำลังเดินไปหา "+npc.name+" · ถึงแล้วเปิดแผนที่เพื่อคุยได้");
+        };
+        list.append(button);
+        return {npc,button};
+      });
+      const updateLabels=()=>{
+        const me=activeMapId===mapId?ownServerCharacter():null;
+        for(const {npc,button} of rows){
+          const label=(near(me,npc)?"คุยกับ ":"เดินไปหา ")+npc.name;
+          if(button.textContent!==label)button.textContent=label;
+        }
+      };
+      updateLabels();
+      refreshMapNpcActions=()=>{if(list.open)updateLabels();};
+      list.ontoggle=refreshMapNpcActions;
       $("bigMap").parentElement.append(list);
     }
     if(boss){

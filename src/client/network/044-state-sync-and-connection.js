@@ -1436,14 +1436,15 @@
         if(!output)return;
         const errors={near_npc:"เดินกลับไปหาผู้แนะนำก่อนถามอีกครั้ง",unavailable:"ผู้แนะนำยังไม่พร้อม ลองใหม่อีกครั้ง",cooldown:"รอสักครู่ก่อนถามคำถามถัดไป",busy:"ผู้แนะนำกำลังตอบคำถาม ลองใหม่อีกครั้ง"};
         if(payload.error){output.textContent=errors[payload.error] || "ยังตอบไม่ได้ ลองใหม่อีกครั้ง";return;}
-        if(typeof payload.answer!=="string")return;
+        if(typeof payload.answer!=="string" || !payload.answer.trim()){output.textContent="ยังตอบไม่ได้ ลองใหม่อีกครั้ง";return;}
         const stamp=Number.isFinite(payload.asOf)?new Date(payload.asOf).toLocaleTimeString("th-TH",{timeZone:"Asia/Bangkok",hour:"2-digit",minute:"2-digit"}):"";
         output.textContent=payload.answer+(stamp?"\nข้อมูลเวลาไทย "+stamp+" น.":"");
         const speakBtn=$("npcGuideSpeakBtn");
-        if(speakBtn && payload.answer){
-          const clean=stripMarkdownForSpeech(payload.answer);
+        const clean=stripMarkdownForSpeech(payload.answer);
+        if(speakBtn && clean){
           speakBtn.hidden=false;
           bindSpeechButton(speakBtn, clean, "guide", "🔊 ฟังเสียงตอบภาษาไทย");
+          if(speakBtn.montraSpeechStatus)speakBtn.montraSpeechStatus.hidden=false;
         }
       });
       joined.onMessage("forest_defense_state",payload=>{

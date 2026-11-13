@@ -2,7 +2,7 @@
     if (!text || typeof text !== "string") return "";
     return text
       .replace(/\*{1,3}([^*]+)\*{1,3}/g, "$1")
-      .replace(/^[\s*-•]+/gm, "")
+      .replace(/^[ \t]*[-*•]+[ \t]+/gm, "")
       .replace(/[`#_~]/g, "")
       .replace(/\s+/g, " ")
       .trim();
@@ -10,12 +10,16 @@
   function openNpcGuide(npc){
     if(npcGuidePending){clearTimeout(npcGuidePending.timer);npcGuidePending=null;}
     openDrawer("npcGuide",npc.name+" · สอบถาม",'<p class="note">ถามเรื่องสงคราม เหตุการณ์ เก็บเลเวล ภารกิจ กิลด์ หรือเสบียงได้ คำถามและตัวเลือกภารกิจที่เหมาะสมอาจส่งให้ Typhoon เพื่อช่วยทำความเข้าใจ</p><div class="party-actions"><button type="button" class="secondary" id="guideAskWar">ด่านไหนเปิดตี</button><button type="button" class="secondary" id="guideAskEvent">มีเหตุการณ์อะไร</button><button type="button" class="secondary" id="guideAskLevel">เก็บเลเวลที่ไหน</button><button type="button" class="secondary" id="guideAskQuest">แนะนำภารกิจ</button></div><label class="field" for="npcGuideQuestion">คำถาม</label><input id="npcGuideQuestion" maxlength="180" autocomplete="off" placeholder="เช่น แนะนำภารกิจคุ้มกัน"><button id="npcGuideSend" class="primary" type="button">ถามผู้แนะนำ</button><button id="npcGuideSpeakBtn" class="secondary" type="button" style="margin-top:6px" hidden>🔊 ฟังเสียงตอบภาษาไทย</button><p id="npcGuideAnswer" role="status" style="white-space:pre-line"></p>');
-    const input=$("npcGuideQuestion"),output=$("npcGuideAnswer"),send=$("npcGuideSend");
+    const input=$("npcGuideQuestion"),output=$("npcGuideAnswer"),send=$("npcGuideSend"),speak=$("npcGuideSpeakBtn");
     const ask=()=>{
       const question=input.value.trim();if(!room || mode!=="live")return toast("เข้า LIVE เพื่อคุยกับผู้แนะนำ");
       if(Array.from(question).length<2 || Array.from(question).length>180)return toast("พิมพ์คำถาม 2–180 ตัวอักษร");
       if(npcGuidePending)return;
       npcGuideSeq=npcGuideSeq>=2_147_483_647?1:npcGuideSeq+1;const id=npcGuideSeq;
+      if(!speak.hidden)window.MontraAudio?.stopSpeech?.();
+      speak.hidden=true;
+      speak.onclick=null;
+      if(speak.montraSpeechStatus)speak.montraSpeechStatus.hidden=true;
       send.disabled=true;output.textContent="กำลังตรวจข้อมูลในเกม…";
       const timer=setTimeout(()=>{if(npcGuidePending?.id!==id)return;npcGuidePending=null;if(drawerActive==="npcGuide"){send.disabled=false;output.textContent="ผู้แนะนำตอบไม่ทัน ลองใหม่อีกครั้ง";}},9000);
       npcGuidePending={id,timer};try{room.send("ask_npc_guide",{npcId:npc.id,question,requestId:id});}catch{clearTimeout(timer);npcGuidePending=null;send.disabled=false;output.textContent="ส่งคำถามไม่สำเร็จ ลองใหม่อีกครั้ง";}

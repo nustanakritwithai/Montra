@@ -4,6 +4,13 @@
     // Keep notices above drawers/detail modals without intercepting their controls.
     if (ui.toast.parentElement !== document.body) document.body.appendChild(ui.toast);
     ui.toast.inert = false;
+    const status = !ui.drawer.hidden && $("drawerStatus");
+    if (status) {
+      ui.toast.setAttribute("aria-hidden","true");
+      status.textContent = message;
+    } else {
+      ui.toast.removeAttribute("aria-hidden");
+    }
     ui.toast.textContent = message;
     positionSwordToast();
     ui.toast.classList.add("show");

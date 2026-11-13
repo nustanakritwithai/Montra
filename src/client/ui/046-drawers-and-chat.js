@@ -1,4 +1,5 @@
   function gateFieldInput(open) {
+    if(!open)ui.toast?.removeAttribute("aria-hidden");
     for (const child of $("game").children) {
       if (child !== ui.drawer && child !== ui.shade &&
           child.id !== "itemModalBackdrop" && child.id !== "itemDetailModal" &&
@@ -40,6 +41,7 @@
     $("drawerMenuBack").hidden=menu;
     ui.drawerBody.hidden=menu;
     ui.drawerTitle.textContent=title;
+    const status=$("drawerStatus");if(status)status.textContent="";
     ui.drawerBody.innerHTML=html;
     ui.drawer.hidden=false; ui.shade.hidden=false;
     drawerActive=name;

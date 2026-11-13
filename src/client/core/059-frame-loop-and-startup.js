@@ -671,6 +671,7 @@
       drawMap(ui.minimap.getContext("2d"),ui.minimap.width,ui.minimap.height);
       if(drawerActive==="map") {
         const large=$("bigMap");if(large)drawMap(large.getContext("2d"),large.width,large.height,true);
+        refreshMapNpcActions?.();
       }
     }
     // Keep the same clear area around the hero at every pinch/wheel zoom.
