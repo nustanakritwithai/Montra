@@ -99,7 +99,7 @@
   }
   function boatAtHelm() {
     const boat = ownBoatState();
-    return Boolean(boat && boat.mapId===activeMapId && boat.helmId===localId);
+    return Boolean(boat && !boat.sunk && boat.mapId===activeMapId && boat.helmId===localId);
   }
 
   function clearSailingDestination() {
@@ -147,10 +147,11 @@
     const map=worldDefinitions[activeMapId],port=map?.boatPorts?.find(entry=>entry.id===id);
     return Boolean(port && setSailingDestination(port.berth,map.waterLevel,undefined,port));
   }
-  function* sailingCourse(map,start,end) {
+  function* sailingCourse(map,start,end,traffic=[],retry=0) {
     if(![start.x,start.z,end.x,end.z].every(Number.isFinite))return [];
     // Older world definitions did not ship water depth or a river network.
-    if(map.waterLevel===undefined || !map.terrain)return [end];
+    const hasDepth=map.waterLevel!==undefined && map.terrain;
+    if(!hasDepth)return sailingTrafficBlocks(start,end,traffic,map.boatDock.deck.length) ? [] : [end];
     const radius=map.boatDock.deck.length/2, bounds=map.bounds;
     const rim=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8),Math.sin(i*Math.PI/8)]);
     const gap=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
@@ -165,6 +166,7 @@
     };
     let checks=0;
     function* clear(a,b){
+      if(sailingTrafficBlocks(a,b,traffic,radius*2+.25))return false;
       const length=gap(a,b),steps=Math.max(1,Math.ceil(length/.45));
       for(let i=0;i<=steps;i++){
         const x=a.x+(b.x-a.x)*i/steps,z=a.z+(b.z-a.z)*i/steps;
@@ -181,7 +183,7 @@
     // and smooth only across traversable edges. River lanes bias the samples.
     const lanes=map.boatLanes??[], waters=map.water??[];
     let seed=(Math.round(start.x*16)^Math.imul(Math.round(start.z*16),71)^
-      Math.imul(Math.round(end.x*16),16777619)^Math.round(end.z*16))||71;
+      Math.imul(Math.round(end.x*16),16777619)^Math.round(end.z*16)^Math.imul(retry,2654435761))||71;
     const rand=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296;};
     const sample=(target)=>{
       const bias=rand();
@@ -267,8 +269,39 @@
     }
     return [];
   }
+  function sailingTrafficBlocks(from,to,traffic,clearance){
+    const dx=to.x-from.x,dz=to.z-from.z,length=dx*dx+dz*dz;
+    return traffic.some(other=>{
+      const x=other.x-from.x,z=other.z-from.z;
+      const t=length ? Math.max(0,Math.min(1,(x*dx+z*dz)/length)) : 0;
+      return (x-t*dx)**2+(z-t*dz)**2<clearance**2;
+    });
+  }
+  function sailingTraffic(boat){
+    const traffic=[], ownId=ownServerCharacter()?.boatId;
+    room?.state?.boats?.forEach((other,id)=>{
+      if(id!==ownId && other!==boat && other.mapId===boat.mapId && !other.sunk &&
+          Number.isFinite(other.x) && Number.isFinite(other.z))traffic.push(other);
+    });
+    return traffic;
+  }
+  function sailingTrafficClosing(boat,traffic,clearance){
+    const vx=Math.sin(boat.heading)*boat.speed,vz=Math.cos(boat.heading)*boat.speed;
+    const horizon=.35+Math.abs(boat.speed)/4;
+    return traffic.some(other=>{
+      const x=other.x-boat.x,z=other.z-boat.z;
+      const dx=Math.sin(other.heading)*other.speed-vx,dz=Math.cos(other.heading)*other.speed-vz;
+      const closing=-(x*dx+z*dz);
+      if(!(closing>0))return false;
+      const t=Math.min(horizon,closing/(dx*dx+dz*dz));
+      return (x+t*dx)**2+(z+t*dz)**2<clearance**2;
+    });
+  }
   function setSailingDestination(point,waterY,gate,port) {
     const boat = ownBoatState(),map=worldDefinitions[activeMapId];
+    if(!boat || boat.sunk || !map?.boatDock)return false;
+    if(sailingDestination?.gateRequest?.sent)return false;
+    if(sailingDestination?.gateRequest && sailingDestination.gate===gate)return true;
     cancelQuestNavigation("",false);
     const now=performance.now();
     sailingDestination = {x:point.x,z:point.z,gate,port,map,
@@ -283,9 +316,12 @@
     requestedBoatAnchor = false;
     return true;
   }
-  function planSailingCourse(goal,boat){
+  function planSailingCourse(goal,boat,traffic=sailingTraffic(boat)){
+    goal.planStart={x:boat.x,z:boat.z};
+    goal.planHadTraffic=traffic.length>0;
     goal.course=null;
-    goal.planner=sailingCourse(goal.map,{x:boat.x,z:boat.z},{x:goal.x,z:goal.z});
+    const obstacles=traffic.map(({x,z})=>({x,z}));
+    goal.planner=sailingCourse(goal.map,goal.planStart,{x:goal.x,z:goal.z},obstacles,goal.retries??0);
   }
   function advanceSailingCourse(boat,now){
     const goal=sailingDestination;
@@ -293,30 +329,51 @@
     const result=goal.planner.next();
     if(!result.done)return;
     goal.planner=null;
+    if(Math.hypot(boat.x-goal.planStart.x,boat.z-goal.planStart.z)>.2){
+      planSailingCourse(goal,boat);
+      return;
+    }
     if(!result.value.length){
+      if(goal.planHadTraffic)goal.trafficWait??={since:now,retryAt:now+1200};
+      if(goal.trafficWait)return;
       clearSailingDestination();
       requestedBoatAnchor=true;
       toast("ไม่พบร่องน้ำไปยังจุดนี้");
       return;
     }
-    if(Math.hypot(boat.x-goal.progress.x,boat.z-goal.progress.z)>.2){
-      goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
-      planSailingCourse(goal,boat);
-      return;
-    }
     goal.course=result.value;
     requestedBoatAnchor=false;
-    goal.aligning=Boolean(goal.replanned || goal.map.boatLanes?.length || goal.course.length>1);
+    goal.aligning=Boolean(goal.retries || goal.trafficWait || goal.map.boatLanes?.length || goal.course.length>1);
+    goal.trafficWait=null;
     goal.reverse=undefined;
     goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
     goal.lastAdvance=now;
+    goal.bestDistance=Infinity;
   }
   function wrapSailingAngle(angle) {
     return Math.atan2(Math.sin(angle),Math.cos(angle));
   }
+  function rejectSailingGate(reason){
+    const goal=sailingDestination;
+    if(!goal?.gateRequest?.sent)return false;
+    if((reason==="boat_gate_busy" || reason==="boat_gate_cooldown") && goal.gateRequest.attempts<3){
+      goal.gateRequest.sent=false;
+      goal.gateRequest.at=performance.now()+1500;
+      return true;
+    }
+    clearSailingDestination();
+    requestedBoatAnchor=true;
+    return false;
+  }
   function sailingInputForDestination(boat, now) {
     const goal = sailingDestination;
     if (!goal) return {throttle:0,steer:0};
+    if(goal.trafficWait && now-goal.trafficWait.since>=8000){
+      clearSailingDestination();
+      requestedBoatAnchor=true;
+      toast("มีเรือขวางทาง · เลือกจุดหมายใหม่เมื่อทางว่าง");
+      return {throttle:0,steer:0};
+    }
     if(goal.planner){requestedBoatAnchor=true;return {throttle:0,steer:0};}
     const course=goal.course;
     while(course?.length>1 && Math.hypot(course[0].x-boat.x,course[0].z-boat.z)<=.2){
@@ -324,39 +381,82 @@
       goal.aligning=true;
       goal.reverse=undefined;
       goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
+      goal.lastAdvance=now;
+      goal.bestDistance=Infinity;
     }
     const next=course?.[0]??goal;
     const dx = next.x-boat.x, dz = next.z-boat.z;
     const distance = Math.hypot(dx,dz);
     if(goal.gate && (!course || course.length===1) && distance<=goal.gate.range-.35){
-      clearSailingDestination();
+      requestedBoatAnchor=true;
+      const request=goal.gateRequest??={attempts:0,at:now,sent:false};
+      if(request.sent && now>=request.at){
+        clearSailingDestination();
+        toast("ยังไม่ได้รับผลจากประตูน้ำ · แตะประตูอีกครั้ง");
+        return {throttle:0,steer:0};
+      }
+      if(request.sent)return null;
+      if(now<request.at || !boat.anchored || Math.abs(boat.speed)>1)return {throttle:0,steer:0};
+      request.sent=true;
+      request.at=now+3500;
+      request.attempts++;
+      // Keep the route until the server changes map/passage or rejects the request.
       sendBoatIntent("warp",{gateId:goal.gate.id});
       return null;
     }
+    if(goal.gateRequest){
+      goal.gateRequest=null;
+      requestedBoatAnchor=false;
+    }
+    const arrived=Boolean(course?.length===1 && distance<=1.35 && !goal.gate);
+    if(goal.map && !arrived){
+      const traffic=sailingTraffic(boat), clearance=goal.map.boatDock.deck.length;
+      const speed=Math.abs(boat.speed), ahead=Math.min(1,(1.1+speed*.35+speed*speed/8)/Math.max(.01,distance));
+      const lookahead={x:boat.x+dx*ahead,z:boat.z+dz*ahead};
+      if(!course || sailingTrafficBlocks(boat,lookahead,traffic,clearance) || sailingTrafficClosing(boat,traffic,clearance)){
+        const wait=goal.trafficWait??={since:now,retryAt:now};
+        if(now>=wait.retryAt){
+          wait.retryAt=now+1200;
+          planSailingCourse(goal,boat,traffic);
+        }
+        requestedBoatAnchor=true;
+        return {throttle:0,steer:0};
+      }
+      if(goal.trafficWait){
+        goal.trafficWait=null;
+        goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
+        goal.lastAdvance=now;
+        goal.bestDistance=Infinity;
+        goal.aligning=true;
+        goal.reverse=undefined;
+        requestedBoatAnchor=false;
+      }
+    }
     const progress = goal.progress;
     const advanced=Math.hypot(boat.x-progress.x,boat.z-progress.z) >= .25;
-    if (advanced) goal.lastAdvance=now;
+    if(distance<=(goal.bestDistance??Infinity)-.15){
+      goal.bestDistance=distance;
+      goal.lastAdvance=now;
+    }
     if (advanced ||
         Math.abs(wrapSailingAngle(boat.heading-progress.heading)) >= .16) {
       goal.progress = {x:advanced?boat.x:progress.x,z:advanced?boat.z:progress.z,heading:boat.heading,at:now};
     }
-    const arrived=(!course || course.length===1) && distance<=1.35;
     const stuck=now-goal.progress.at>=2800 || now-goal.lastAdvance>=6500;
-    if(!arrived && stuck && goal.map && !goal.replanned){
-      goal.replanned=true;
+    if(!arrived && stuck && goal.map && !goal.retries){
+      goal.retries=1;
       planSailingCourse(goal,boat);
       requestedBoatAnchor=true;
       return {throttle:0,steer:0};
     }
     if (arrived || stuck) {
       clearSailingDestination();
+      requestedBoatAnchor=true;
       if(goal.port && distance<=1.35 && course?.length===1){
-        requestedBoatAnchor=true;
         toast("ถึง"+goal.port.name+" · กดลงจากเรือเมื่อเรือหยุด");
       }else if(goal.port)toast("ทางเข้าท่าติดขัด · ลองเข้าจากอีกมุม");
       else if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
       else if(stuck)toast("เส้นทางเรือติดขัด · เลือกจุดหมายใหม่");
-      if(stuck && !arrived)requestedBoatAnchor=true;
       return {throttle:0,steer:0};
     }
     const bearing = Math.atan2(dx,dz);
@@ -366,6 +466,7 @@
     const headingError = wrapSailingAngle(bearing-boat.heading-(reverse ? Math.PI : 0));
     // Align before leaving a berth or turning into a narrower reach. At idle the
     // rudder can still rotate, without thrust pushing the hull into the bank.
+    if(Math.abs(headingError)>.55 && goal.map?.boatLanes?.length)goal.aligning=true;
     if(goal.aligning && (Math.abs(headingError)>.035 || Math.abs(boat.speed)>.25)){
       const movingBackward=boat.speed<0?-1:1;
       return {throttle:0,steer:-movingBackward*Math.max(-1,Math.min(1,headingError*5))};
@@ -525,7 +626,7 @@
     for (const [id,node] of sailingMeshes) if (!seen.has(id)) {node.dispose();sailingMeshes.delete(id);}
 
     const boat = player?.alive ? ownBoatState() : null;
-    const helm = Boolean(boat && boat.mapId===activeMapId && boat.helmId===localId);
+    const helm = Boolean(boat && !boat.sunk && boat.mapId===activeMapId && boat.helmId===localId);
     const helmKey=helm?player.boatId+":"+boat.mapId+":"+(boat.passage??0):"";
     if (currentHelmBoat !== helmKey) {
       resetHelmControls();
