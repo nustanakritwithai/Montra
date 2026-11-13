@@ -44,11 +44,12 @@ function fixtureScript(browser = false) {
     let room={state:{worldMapsAvailable:true,players:new Map([['me',me]])},send:(type,data)=>wire.push({type,data})};
     const $=id=>document.getElementById(id),ui={quest:$('quest')},marker={position:{},setEnabled(){}},avatars=new Map();
     let pendingClimb=null,selectedPkTargetId=null,spellTargetId=null,demoAutoAttack=false,demoDash=null;
-    const triggerVoiceGuidance=()=>{},setTargetedSkill=()=>{},syncPKHud=()=>{},toast=t=>notices.push(t),playerLayer=p=>p.y;
+    const triggerVoiceGuidance=()=>{},setTargetedSkill=()=>{},syncPKHud=()=>{},toast=t=>notices.push(t);
     const currentItemHunt=()=>null,journeyNotesForPlayer=()=>({}),hudGuide=()=>guide;
     const mapBounds=()=>worldDefinitions[activeMapId].bounds,closeDrawer=()=>{},openCurrentQuest=()=>details++;
     const requestPortalWarp=id=>{warpPending=true;wire.push({type:'warp',data:{id}});};
     const isNearPortal=(p,t)=>Math.hypot(p.x-t.x,p.z-t.z)<=3;
+    ${slice(terrain, '  function playerLayer(', '  function terrainCell(')}
     ${slice(terrain, '  function terrainCell(', '  // ---- Ground patches:')}
     ${slice(terrain, '  function terrainHeight(', '  // Clip each footprint')}
     ${slice(movement, '  function getLocalAvatar()', '  function hasLiveElevation(')}
@@ -58,6 +59,7 @@ function fixtureScript(browser = false) {
     ${browser ? slice(uiSource, '  ui.quest.addEventListener("click",startQuestNavigation);', '  $("characterProfile").onclick=') : ''}
     globalThis.fixture={wire,notices,resolve:forestObjectiveNavigationTarget,plan:planQuestNavigation,geometry:questNavigationGeometry,start:startQuestNavigation,
       active:()=>!!questNavigation,state:()=>questNavigation,details:()=>details,cancel:cancelQuestNavigation,manual:pointMove,
+      height:(x,z)=>walkHeight(worldDefinitions[activeMapId],x,z),
       tick:n=>{clock=n;updateQuestNavigation(n);},now:()=>performance.now(),me,guide:g=>{guide=g;},
       world:w=>{worldDefinitions=w;},change:values=>{Object.assign(me,values);},
       mode:m=>{mode=m;},map:m=>{activeMapId=m;},disconnect:()=>{room=null;},warpAck:()=>{warpPending=false;},
@@ -135,6 +137,39 @@ function run() {
   assert(f.geometry(marsh,null,false).clear(from,target),'walking can cross the marked shallow shelf');
   assert(!f.geometry(marsh,null,true).clear(from,target),'mounted route rejects a shelf deep enough to cause a dismount');
   console.log('PASS ground tap routing: exact endpoint, walking, buffalo, takeovers and deep-water clearance');
+  for(const id of ['drowned_marsh','mantra_capital']){
+    const bank=map({id,waterLevel:.025,water:[{x:-9,z:-20,width:12,length:40}],
+      ...(id==='mantra_capital'?{strategic:{rampart:{}}}:{}),
+      terrain:{xs:[-20,-10,-6,-4,0,20],zs:[-20,20],
+        heights:[[0,0,-1.2,-1.2,0,0],[0,0,-1.2,-1.2,0,0]],maxGrade:.52}});
+    assert.equal(f.plan(bank,{x:-13,z:0},{x:6,z:0}),null,'dry routes still avoid an exposed canal');
+    const submerged={x:-5,y:-1.2,z:0,mapId:id},ashore={x:1,z:0};
+    for(const walls of [[],[{x:-3,z:-2,width:1,length:4}]]){
+      f=fixture();f.world({[id]:{...bank,walls}});f.map(id);f.change(submerged);
+      f.manual(ashore.x,ashore.z);
+      assert(f.state()?.manual,'a bank inside the water rectangle starts an exit route');
+      let now=1000;
+      for(let n=0;n<300 && f.state()?.planner;n++){now+=16;f.tick(now);}
+      assert.equal(f.state()?.waterMode,'exit','submerged player has a usable route ashore');
+      assertClear({...bank,water:[],walls},submerged,f.state().path);
+      assert.deepEqual(plain(f.state().path.at(-1)),ashore,'reach the selected dry bank');
+      let sent=0;
+      for(let n=1;n<=40 && f.active();n++){
+        now+=500;f.tick(now);
+        if(f.wire.length>sent){
+          const {x,z}=f.wire.at(-1).data;
+          f.change({x,z,y:f.height(x,z)});sent=f.wire.length;
+        }
+      }
+      assert(!f.active() && sent>1,'bounded movement exits the water and completes');
+      assert.deepEqual({x:f.me.x,y:f.me.y,z:f.me.z},{...ashore,y:0});
+    }
+    f=fixture();f.world({[id]:bank});f.map(id);f.change(submerged);
+    f.manual(-6,0);
+    assert(!f.active(),'deliberate water taps keep direct movement');
+    assert.deepEqual(plain(f.wire.at(-1)),{type:'move',data:{x:-6,z:0}});
+  }
+  console.log('PASS deep-water exit: exact dry bank, obstacle detour and water-tap compatibility');
   f=fixture();
   f.start();assert(f.active());assert.equal(f.wire.length,1);assert.equal(f.wire[0].type,'move');
   assert(Math.hypot(f.wire[0].data.x,f.wire[0].data.z)<=4.01,'bounded move hop');
