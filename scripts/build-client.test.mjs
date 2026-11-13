@@ -138,8 +138,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "network/044-state-sync-and-connection.js",
-  "bytes": 167002,
-  "sha256": "882c9853d6b7bf0b155d385b52f33ae8d810d2696bb67efb20d651dffdbaf539"
+  "bytes": 167151,
+  "sha256": "feeca5e2469c427181292218fd76c196d295af8ebfd0cd97ee1559808d6f02f5"
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
@@ -148,11 +148,11 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
-    "bytes": 47715,
-    "sha256": "12dc4be582eaa881db89763953af1ccd312ae9b6ed4acb3ac271a226432c46ee"
+    "bytes": 49321,
+    "sha256": "fac096a0886190d8875fb9d0f0d2d03ebd4fe5b79de8da9cb048dfaa4dd54bb1"
   },
   {
-    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 71218, "sha256": "b4cd370d3533036f9075116e9a0c430996e29825b66a5e338dcfb0bec23cea11"
+    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 72759, "sha256": "108c7bd9800cb200abad92ad26499b17d27658b0c77d5fe9650f1a6165f7d271"
   },
   {
     "path": "ui/030-item-art-and-comparison.js",
@@ -196,8 +196,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/055-market-and-trade.js",
-    "bytes": 68666,
-    "sha256": "2ea92e2783dcef03fefa97c52aa385a580de3a7b5bc970b0934f4cd6a151a210"
+    "bytes": 68690,
+    "sha256": "89239d1106995aca63eebc79a6994d28d7e6dd6fd68895a2e0cad19f77ee9833"
   },
   {
     "path": "audio/051-sound-settings-and-speech.js",
@@ -286,8 +286,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/052-help-and-inventory.js",
-    "bytes": 41619,
-    "sha256": "8cbdb4e5faeba6e6c6fb8bda87ba4e3de07b50f9365bd2881c82cb9dbbffc6be"
+    "bytes": 42289,
+    "sha256": "e4c89e56b3712376f164483723d4fd35c76842b6d584eec7c1f8212561260fc0"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -296,8 +296,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2181252);
-  assert.equal(hash(bytes), '8cf696e1729bbe95d3682e368a7f34f87ceb45260ff81298d3a220fa90116bce');
+  assert.equal(bytes.length, 2185242);
+  assert.equal(hash(bytes), '94a3d300aa3bef095bbe1bad1bfb5f1e1a2b2327202a97bb10f5e0411cd2bdf0');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

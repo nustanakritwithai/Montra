@@ -493,9 +493,9 @@
     if(window.confirm(prompt))economySend("salvage_gear",{requestId:economyRequestId(),slot,gear:item.itemId,stamp,bound,socket},true);
     renderBag();
   }
-  function renderCardSocket(gear,slots) {
+  function renderCardSocket(gear,slots,target=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear??selectedBagSlot),tab=null) {
     const panel=$("cardSocketPanel");
-    panel.hidden=!gear || !economyReady() || !cardDrill;
+    panel.hidden=!gear || !slots || !economyReady() || !cardDrill;
     if(panel.hidden)return;
     const button=$("cardSocketAction"), select=$("socketCardChoice"), info=$("cardSocketInfo");
     const count=id=>slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0);
@@ -503,11 +503,24 @@
     const action=expected==="sealed"?"drill":expected==="empty"?"insert":"remove";
     let allowed=true, card=null;
     select.hidden=action!=="insert";
+    $("cardSocketTitle").textContent=tab==="drill"?"เจาะช่องการ์ด":tab==="card"?"การ์ดมอนสเตอร์":"รูใส่การ์ดมอนสเตอร์";
+    if((tab==="drill" && action!=="drill") || (tab==="card" && action==="drill")){
+      select.hidden=true;
+      renderItemPreview("socketItemPreview",null);
+      const next=tab==="drill"?"card":"drill";
+      info.textContent=next==="card"?"เจาะช่องแล้ว · พร้อมจัดการการ์ด":"เจาะช่องก่อนฝังการ์ด";
+      button.textContent=next==="card"?"ไปฝังการ์ด":"ไปเจาะช่อง";
+      button.disabled=economyPending || itemUsePending;
+      button.onclick=()=>switchForgeTab(next);
+      return;
+    }
     if(action==="drill"){
       const metal=personalItems[cardDrill.itemId];
-      info.textContent="ยังไม่ได้เจาะ · เจาะได้ 1 รู ใช้ "+cardDrill.gold+" ทอง และ"+(metal?.name||"แร่เหล็ก")+" "+count(cardDrill.itemId)+"/"+cardDrill.quantity;
+      const have=count(cardDrill.itemId),missing=Math.max(0,cardDrill.quantity-have);
+      info.textContent="เจาะได้ 1 ช่อง · "+(metal?.name||"แร่เหล็ก")+" "+have+"/"+cardDrill.quantity+
+        (missing?" · ขาด "+missing:"")+(economyGold!==null && economyGold<cardDrill.gold?" · ทองขาด "+(cardDrill.gold-economyGold):"");
       button.textContent="เจาะรู · "+cardDrill.gold+" ทอง";
-      allowed=economyGold!==null && economyGold>=cardDrill.gold && count(cardDrill.itemId)>=cardDrill.quantity;
+      allowed=economyGold!==null && economyGold>=cardDrill.gold && !missing;
     }else if(action==="insert"){
       const cards=Object.entries(personalItems).filter(([,def])=>def.kind==="card");
       const gearLevel=personalItems[gear.itemId]?.level||(gear.itemId==="shrine_glaive"?12:1);
@@ -536,10 +549,16 @@
     }
     renderItemPreview("socketItemPreview",action==="drill"?{itemId:cardDrill.itemId,quantity:cardDrill.quantity}:action==="insert"?card:gear.socket,action==="drill"?"วัตถุดิบเจาะรู":"การ์ด");
     button.disabled=!allowed || economyPending || itemUsePending || ownServerCharacter()?.alive!==true;
-    const target=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
+    const stamp=gearStamp(gear),targetRoom=room,drawer=drawerActive;
     button.onclick=()=>{
-      economySend("card_socket",{requestId:economyRequestId(),target,gear:gear.itemId,expected,action,card,...accessoryStamp(gear)},true);
-      renderBag();
+      if(button.disabled || room!==targetRoom || drawerActive!==drawer || $("cardSocketAction")!==button ||
+          !economyReady() || economyPending || itemUsePending || ownServerCharacter()?.alive!==true ||
+          (tab && (forgePageTarget!==target || forgePageAction!==tab)))return;
+      const item=forgeTargetItem(target);
+      if(!item || item.itemId!==gear.itemId || gearStamp(item)!==stamp || (item.socket===undefined?"sealed":item.socket??"empty")!==expected){
+        toast("อุปกรณ์หรือช่องการ์ดเปลี่ยนไปแล้ว");renderBag();return;
+      }
+      economySend("card_socket",{requestId:economyRequestId(),target,gear:gear.itemId,expected,action,card,stamp},true);
     };
   }
   function renderForgeStock(preferred){

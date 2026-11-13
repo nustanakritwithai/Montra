@@ -91,7 +91,7 @@ test('already equipped gear has details and dismiss controls',()=>{
   const f=fixture();f.open();f.select(0);const modal=f.modal();
   for(const id of ['itemDetailModal','itemModalBackdrop','skillDetailModal','skillPopupBackdrop','equipPopup','equipPopupBackdrop'])assert.equal(f.$(id).parentNode,f.document.body,`independent body-level overlay ${id}`);
   assert.equal(modal.getAttribute('role'),'dialog');assert.equal(modal.getAttribute('aria-modal'),'true');
-  assert.deepEqual(modal.querySelectorAll('button, input, select, summary, a[href], [tabindex="0"]').filter(control=>control.getClientRects().length).map(control=>control.id),['itemModalClose','itemModalCloseBtn']);
+  assert.deepEqual(modal.querySelectorAll('button, input, select, summary, a[href], [tabindex="0"]').filter(control=>control.getClientRects().length).map(control=>control.id),['itemModalClose','bagDetailEnhance','itemModalCloseBtn']);
   for(const id of ['bagDetailItem','bagItemName','bagItemDescription','bagPanelStats','itemMetaLevel','itemMetaBound','itemMetaPrice'])assert(modal.contains(f.$(id)),id);
   for(const id of ['bagReturnItem','socketItemPreview','cardSocketPanel','socketCardChoice','cardSocketAction','gearGuide','guideTargetItem','bagOpenCraft','wearSidePicker','useBagItem','bagTrack','refineResource','bagKiln','sellBagMaterial','salvageGear','bagQuickDiff']){
     assert(f.ui.drawer.contains(f.$(id)),id);assert.equal(modal.contains(f.$(id)),false,id);
@@ -223,8 +223,10 @@ test('item picture stays visible and returns focus when a recipe becomes unavail
 test('forge bag details and card help retain the exact equipped side',()=>{
   const f=fixture();f.ctx.openForgePage('enhance','leftRing');assert.equal(f.$('forgeCardHelp').hidden,false);const before=f.snapshot(),modal=f.modal();
   f.$('forgeBag').click();assert.equal(modal.hidden,false);assert.equal(f.$('bagItemName').textContent,'แหวนทดสอบ');assert.equal(f.ctx.inspectingGear,'leftRing');
-  f.ctx.openForgePage('enhance','leftRing');f.$('forgeCardHelp').click();
-  assert.equal(f.ctx.drawerActive,'bag');assert.equal(f.ctx.inspectingGear,'leftRing');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('cardSocketPanel').scrolled,true);assert.equal(f.$('cardSocketPanel').getClientRects().length,1);assert.match(f.$('cardSocketAction').textContent,/ถอดการ์ด/);assert.equal(f.$('wearSidePicker').hidden,true);
+  f.$('bagDetailEnhance').click();
+  assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.$('forgeTargetButton').dataset.target,'worn:leftRing');
+  f.$('forgeCardHelp').click();
+  assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.$('forgeTargetButton').dataset.target,'worn:leftRing');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('cardSocketPanel').getClientRects().length,1);assert.match(f.$('cardSocketAction').textContent,/ถอดการ์ด/);
   assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
   f.$('cardSocketAction').click();const sent=f.mutations();assert.equal(sent.length,1);assert.equal(sent[0].command,'card_socket');assert.deepEqual(sent[0].payload,{requestId:sent[0].payload.requestId,target:'leftRing',gear:'ring',expected:'card',action:'remove',card:null,stamp:'left.3'});
 });

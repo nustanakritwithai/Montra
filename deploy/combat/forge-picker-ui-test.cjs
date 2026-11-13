@@ -181,7 +181,7 @@ test('Tab and Shift+Tab wrap visible enabled controls and leave ordinary keys to
 test('real drawer navigation and close destroy the open picker without restoring focus to removed controls',()=>{
   for(const route of ['forgeHome','forgeBag','forgeTabReroll']){
     const f=fixture();f.open();f.popup();const popup=f.$('forgePicker'),target=f.$('forgeTargetButton'),stale=f.button('bag:2');f.$(route).click();
-    assert.equal(popup.open,false,route);assert.equal(popup.closeCount,1,route);assert.equal(target.isConnected,false,route);assert.notEqual(f.document.activeElement,target,route);const before=f.snapshot();stale.onclick();assert.equal(f.mutations().length,0,route);assert.equal(f.snapshot(),before,route);
+    assert.equal(popup.open,false,route);assert.equal(popup.closeCount,1,route);assert.equal(target.isConnected,route==='forgeTabReroll',route);assert.notEqual(f.document.activeElement,target,route);const before=f.snapshot();stale.onclick();assert.equal(f.mutations().length,0,route);assert.equal(f.snapshot(),before,route);
     assert.equal(f.ctx.drawerActive,route==='forgeHome'?'smith':route==='forgeBag'?'bag':'forge',route);
   }
   const f=fixture();f.$('fieldMenuButton').focus();f.open();f.popup();const popup=f.$('forgePicker');f.ctx.closeDrawer();assert.equal(popup.open,false);assert.equal(f.ctx.drawerActive,null);assert.equal(f.ui.drawer.hidden,true);assert.equal(f.document.activeElement,f.$('fieldMenuButton'));assert.equal(f.$('worldInput').inert,false);

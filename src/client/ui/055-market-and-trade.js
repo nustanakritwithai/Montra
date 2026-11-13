@@ -10,7 +10,7 @@
   function finishEconomyPending(owner=null) {
     // Legacy replies for another timed-out action must not clear a newer forge's
     // timer or ownership. Generic uncorrelated errors/room teardown pass true.
-    if(economyPendingRequest?.command==="forge_weapon" && owner!==true && owner!==economyPendingRequest)return false;
+    if(["forge_weapon","card_socket"].includes(economyPendingRequest?.command) && owner!==true && owner!==economyPendingRequest)return false;
     economyPending=false;economyPendingRequest=null;clearTimeout(economyTimer);return true;
   }
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }

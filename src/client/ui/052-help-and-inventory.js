@@ -550,6 +550,16 @@
     equip.hidden=!canShowEquip;
     equip.disabled=use.disabled;
     equip.textContent=itemUsePending?"กำลังติดตั้ง…":confirmingBind?"ยืนยันผูกและสวม":"ติดตั้ง";
+    const enhance=$("bagDetailEnhance");
+    const canShowEnhance=!!chosen && (meta?.kind==="mainHand" || !!meta?.forge);
+    const enhanceDisabled=!economyReady() || itemUsePending || economyPending;
+    if((!canShowEnhance || enhanceDisabled) && document.activeElement===enhance)$("itemModalClose").focus({preventScroll:true});
+    enhance.hidden=!canShowEnhance;
+    enhance.disabled=enhanceDisabled;
+    const forgeTarget=inspectingGear==="mainHand"?equipped:inspectingGear??selectedBagSlot;
+    enhance.onclick=canShowEnhance?()=>{
+      if(drawerActive==="bag" && !$("itemDetailModal").hidden && !enhance.disabled)openForgePage("enhance",forgeTarget);
+    }:null;
     const produce=$("bagDetailProduce");
     const canShowProduce=!!chosen && (meta?.kind==="material" || chosen.itemId===SHRINE_SHARD);
     const produceDisabled=!economyReady();

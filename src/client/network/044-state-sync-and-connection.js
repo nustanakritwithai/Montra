@@ -738,8 +738,9 @@
         renderBag();
       });
       joined.onMessage("card_socket_result", result => {
-        if(room!==joined)return;
-        finishEconomyPending();
+        const ticket=economyPendingRequest;
+        if(room!==joined || ticket?.room!==joined || ticket.command!=="card_socket" || result?.requestId!==ticket.requestId)return;
+        finishEconomyPending(ticket);
         toast(result.action==="drill"?"เจาะรูสำเร็จ":result.action==="insert"?"ใส่"+(personalItems[result.socket]?.name||"การ์ด")+"แล้ว":"คืนการ์ดเข้ากระเป๋าแล้ว");
         renderBag();
       });
