@@ -194,8 +194,8 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/047-maps-and-strategy.js",
-    "bytes": 105638,
-    "sha256": "1da4854b1395cc09e136f054f59b5f6b0b38ca04684d8cbff895332c67cb0a28"
+    "bytes": 104542,
+    "sha256": "1eab63302b536471480af42a50f51e7236ad41a2a8b474c14e0846daa1d4620b"
   },
   {
     "path": "ui/055-market-and-trade.js",
@@ -299,8 +299,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2156832);
-  assert.equal(hash(bytes), '79688af4125838a63d5d6537f398bf748cea2f09f21739b9483076ae7c7bcd0d');
+  assert.equal(bytes.length, 2155736);
+  assert.equal(hash(bytes), 'e9909bffe1087a0b8ab37f140d34e1e0504708a843350734f52c74852765f995');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

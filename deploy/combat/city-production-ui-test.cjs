@@ -8,7 +8,7 @@ const source = readFileSync(join(__dirname, "../../src/client/ui/056-party-guild
 const strategy = readFileSync(join(__dirname,"../../src/client/ui/047-maps-and-strategy.js"),"utf8");
 const warUI = strategy.slice(strategy.indexOf("  const atlasCells ="),strategy.indexOf("  const warErrors=")) +
   strategy.slice(strategy.indexOf("  const warDateFormat="),strategy.indexOf("  function renderWarTerritories(")) +
-  strategy.slice(strategy.indexOf("  function atlasWarCountdown("),strategy.indexOf("  function updateAtlasWarTimes("));
+  strategy.slice(strategy.indexOf("  function warSiteCountdown("),strategy.indexOf("  function updateAtlasWarTimes("));
 const start = source.indexOf("  const cityProduct=");
 const end = source.indexOf("  let rebirthState=", start);
 assert(start >= 0 && end > start);
@@ -758,9 +758,9 @@ test("market shows both city war clocks and other cities independently of the tr
   },schedule:{[river]:{next:{startsAt:1030000}},mantra_capital:{next:{startsAt:1060000}}}};
   f.setNow(1100);
   f.ctx.updateCityMarketWarTimes();
-  assert.match(riverRow.children[1].textContent,/รอบนัดอีก 0:29/);
+  assert.equal(riverRow.children[1].textContent,"ท้าชิงได้เลย");
   assert.match(moonRow.children[1].textContent,/^รบ 0:09/);
-  assert.match(capitalRow.children[1].textContent,/รอบนัดอีก 0:59/);
+  assert.equal(capitalRow.children[1].textContent,"ท้าชิงได้เลย");
   f.button("จันทรา").onclick();
   assert.equal(f.nodes.cityProductionContent.dataset.marketFilter,moon);
   assert.equal(f.$("cityMarketWarTimes"),list);

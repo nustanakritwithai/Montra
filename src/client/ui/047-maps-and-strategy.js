@@ -703,11 +703,13 @@
         <button id="warTerritoryRoute" class="secondary" type="button">ดูเส้นทางไปด่าน</button>
         <ul id="warTerritoryTimes" class="war-time-list" role="list" aria-label="เวลาศึกทุกเมือง"></ul>
       </details>
-      <section id="warSchedulePanel" class="field-card" hidden>
-        <h3 class="gx-with-emblem" data-guild-icon="time">ตารางศึก</h3><label class="field" for="warScheduleCity">เมือง <select id="warScheduleCity"></select></label>
+      <details id="warSchedulePanel" class="field-card" hidden>
+        <summary>ลงทะเบียนศึกนัดหมาย</summary>
+        <p class="note">เปิดศึกที่จุดท้าชิงได้ทันทีเมื่อเมืองพร้อมท้าชิง</p>
+        <label class="field" for="warScheduleCity">เมือง <select id="warScheduleCity"></select></label>
         <p id="warScheduleTime" role="status"></p><form id="warRosterForm" hidden><fieldset id="warRoster"></fieldset>
         <button class="primary" type="submit">บันทึกรายชื่อ</button><button id="warRosterWithdraw" class="secondary" type="button">ถอนรายชื่อ</button></form>
-      </section>
+      </details>
       <section id="warTradePanel" class="field-card" hidden><h3 class="gx-with-emblem" data-guild-icon="haul">เส้นทางขนส่งกิลด์</h3><p id="warTradeStatus" role="status"></p><div id="warTradeActions" class="field-actions"></div></section>
     </div>`);
     if(typeof back==="function"){
@@ -753,7 +755,7 @@
   }
   function warTerritoryLabel(entry,serverNow){
     if(!entry)return "รอข้อมูล";
-    if(entry.phase==="open")return "พร้อมเปิดศึก";
+    if(entry.phase==="open")return "ท้าชิงได้เลย";
     if(entry.phase!=="battle" && entry.phase!=="protected")return warPhase(entry.phase);
     if(!Number.isFinite(entry.phaseEndsAt) || !Number.isFinite(serverNow))return "รอข้อมูล";
     const clock=warClockText(entry.phaseEndsAt,serverNow);
@@ -793,41 +795,19 @@
     $("warTerritoryRoute").hidden=site===activeMapId;
     if(panel.open)updateWarTimeRows($("warTerritoryTimes"),now);
   }
-  function atlasWarCountdown(site,now){
+  function warSiteCountdown(site,now){
     const entry=territoryState?.warTimes?.[site],phase=entry?.phase;
-    if(phase==="battle" || phase==="protected"){
-      const clock=warClockText(entry.phaseEndsAt,now);
-      if(clock)return {site,phase,at:entry.phaseEndsAt,clock};
-    }
-    const schedule=territoryState?.schedule?.[site];
-    const currentEnd=schedule?.current?.endsAt;
-    const currentClock=warClockText(currentEnd,now);
-    if(currentClock)return {site,phase:"window",at:currentEnd,clock:currentClock};
-    const at=schedule?.next?.startsAt,clock=warClockText(at,now);
-    return clock?{site,phase:"scheduled",at,clock}:null;
+    if(phase!=="battle" && phase!=="protected")return null;
+    const clock=warClockText(entry.phaseEndsAt,now);
+    return clock?{site,phase,at:entry.phaseEndsAt,clock}:null;
   }
-  function warSiteTimeLabel(site,now,countdown=atlasWarCountdown(site,now)){
-    const entry=territoryState?.warTimes?.[site],schedule=territoryState?.schedule?.[site];
-    let label=warTerritoryLabel(entry,now);
-    if(countdown?.phase==="battle" || countdown?.phase==="protected"){
-      const end=countdown.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ";
-      label+=" · "+end+warLocalDate(countdown.at);
-    }else if(countdown?.phase==="window"){
-      label="รอบนัดปัจจุบัน · เหลือ "+countdown.clock+" · ถึง "+warLocalDate(countdown.at);
-    }else if(countdown?.phase==="scheduled"){
-      const status=entry?.phase==="open"?label+" · ":"";
-      label=status+"รอบนัดอีก "+countdown.clock+" · "+warLocalDate(countdown.at);
-    }else if(Number.isFinite(schedule?.next?.startsAt)){
-      label=Number.isFinite(now)?"กำลังอัปเดตรอบนัด":"รอข้อมูล";
-    }else if(entry?.phase==="open"){
-      label+=" · เปิดตามการท้าชิง";
-    }else if(!entry && territoryState?.warTimes){
-      label="พื้นที่นี้ยังไม่เปิดศึก";
-    }
-    const next=schedule?.next?.startsAt;
-    if(countdown && countdown.phase!=="scheduled" && Number.isFinite(next) && next>now)
-      label+=" · รอบถัดไป "+warLocalDate(next);
-    return label;
+  function warSiteTimeLabel(site,now,countdown=warSiteCountdown(site,now)){
+    const entry=territoryState?.warTimes?.[site];
+    if(!entry && territoryState?.warTimes)return "พื้นที่นี้ยังไม่เปิดศึก";
+    const label=warTerritoryLabel(entry,now);
+    if(!countdown)return label;
+    const end=countdown.phase==="battle"?"จบไม่เกิน ":"เปิดตีได้ ";
+    return label+" · "+end+warLocalDate(countdown.at);
   }
   function createWarTimeRow(site,name,select){
     const row=document.createElement("li"),title=document.createElement(select?"button":"strong");
@@ -841,26 +821,27 @@
   function updateWarTimeRows(list,now){
     if(!list)return;
     for(const row of list.children){
-      const site=row.dataset.warSite,countdown=atlasWarCountdown(site,now);
+      const site=row.dataset.warSite,countdown=warSiteCountdown(site,now);
       const status=row.children[1],label=warSiteTimeLabel(site,now,countdown);
       if(status.textContent!==label)status.textContent=label;
-      const phase=countdown?.phase || "";
+      const phase=territoryState?.warTimes?.[site]?.phase || "";
       if(row.dataset.phase!==phase)row.dataset.phase=phase;
     }
   }
-  const atlasWarBadgePrefix={battle:"รบ",protected:"พัก",window:"รอบนี้",scheduled:"นัด"};
+  const atlasWarBadgePrefix={battle:"รบ",protected:"พัก"};
   function updateAtlasWarTimes(){
     const board=$("atlasBoard");
     if(!board)return;
     const now=territoryServerTime(),times=territoryState?.warTimes,deadlines=[];
     for(const badge of board.querySelectorAll("[data-atlas-war-site]")){
-      const countdown=atlasWarCountdown(badge.dataset.atlasWarSite,now);
+      const site=badge.dataset.atlasWarSite,phase=times?.[site]?.phase;
+      const countdown=warSiteCountdown(site,now);
       if(countdown)deadlines.push(countdown);
-      badge.hidden=!countdown;
-      if(!countdown)continue;
-      const text=atlasWarBadgePrefix[countdown.phase]+" "+countdown.clock;
+      const text=countdown?atlasWarBadgePrefix[phase]+" "+countdown.clock:phase==="open"?"ท้าชิงได้":"";
+      badge.hidden=!text;
+      if(!text)continue;
       if(badge.textContent!==text)badge.textContent=text;
-      if(badge.dataset.phase!==countdown.phase)badge.dataset.phase=countdown.phase;
+      if(badge.dataset.phase!==phase)badge.dataset.phase=phase;
     }
     const status=$("atlasWarStatus"),site=status?.dataset.site,entry=times?.[site];
     const selected=deadlines.find(item=>item.site===site);
@@ -872,22 +853,27 @@
       }
     }
     updateWarTimeRows($("atlasWarTimes"),now);
-    // On arrival, show the nearest round across the map. A selected destination can override it.
-    const priority={battle:0,window:1,scheduled:2,protected:3};
+    // Prefer an active battle when the player has not selected a site.
+    const priority={battle:0,protected:1};
     deadlines.sort((a,b)=>priority[a.phase]-priority[b.phase] || a.at-b.at);
     const strip=$("atlasWarStrip"),display=$("atlasWarClock"),message=$("atlasWarMessage"),link=$("atlasWarBoard");
-    const countdown=(strip.dataset.focused==="true" && selected) || deadlines[0];
+    const focused=strip.dataset.focused==="true" && entry;
+    const countdown=focused?selected:deadlines[0];
     const target=countdown?.site || site;
     link.dataset.site=target || "";
-    link.hidden=!times?.[target] && !territoryState?.schedule?.[target];
-    const clock=countdown?.clock || "--:--";
-    const reason=countdown?{
-      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",window:"สิ้นสุดรอบนัด",scheduled:"รอบนัดถัดไป",
-    }[countdown.phase]+" · "+(worldDefinitions?.[countdown.site]?.name || countdown.site):
-      times && Object.keys(times).length?"รอเปิดศึก":
+    link.hidden=!times?.[target];
+    const clock=countdown?.clock || "";
+    const openCount=Object.values(times || {}).filter(time=>time.phase==="open").length;
+    const name=worldDefinitions?.[target]?.name || target;
+    const reason=countdown?(countdown.phase==="battle"?"สิ้นสุดศึก":"สิ้นสุดคุ้มครอง")+" · "+name:
+      focused?warTerritoryLabel(entry,now)+" · "+name:
+      openCount?"ท้าชิงได้ "+openCount+" พื้นที่":
+      times?"รออัปเดตสถานะศึก":
       mode==="live" && room?.state?.territoryWarAvailable?"รอข้อมูลจากเซิร์ฟเวอร์":
-      mode==="live"?"สงครามยังไม่เปิดในห้องนี้":"เข้าออนไลน์เพื่อดูเวลา";
-    if(strip.dataset.phase!==(countdown?.phase || ""))strip.dataset.phase=countdown?.phase || "";
+      mode==="live"?"สงครามยังไม่เปิดในห้องนี้":"เข้าออนไลน์เพื่อดูสถานะ";
+    const phase=countdown?.phase || (focused?entry.phase:"");
+    if(strip.dataset.phase!==phase)strip.dataset.phase=phase;
+    display.hidden=!clock;
     if(display.textContent!==clock)display.textContent=clock;
     if(message.textContent!==reason)message.textContent=reason;
   }
@@ -1016,7 +1002,7 @@
     objectiveButton.textContent=battle?"ดูจุดยึดบนแผนที่สนาม":"ดูจุดเปิดศึกบนแผนที่";
     button.hidden=!actionable;
     button.onclick=null;
-    hint.textContent=!s?"เลือกด่านใน «สถานะด่านทั้งหมด» เพื่อดูเวลาและเส้นทาง":
+    hint.textContent=!s?"เลือกด่านใน «เวลาศึกทุกเมือง» เพื่อดูสถานะและเส้นทาง":
       battle?"สนามรบนี้ยังไม่เปิดให้ตัวละครของคุณเข้าร่วม":
       s.phase==="protected"?"รอพ้นช่วงคุ้มครองก่อนเปิดศึก":
       s.phase==="open"?"กิลด์ผู้ท้าชิงต้องให้ผู้บัญชาการหรือนายทหารเปิดศึกที่จุดท้าชิง":"";
@@ -1068,7 +1054,7 @@
       const rule=relay.effect==="gate"?"ฝ่ายบุกคุม แรงทุบประตูเพิ่มเป็น 30 · ฝ่ายรับคุม ลดเหลือ 10 · ปกติ 15":"เมื่อฝ่ายที่คุมมีคนมากกว่าที่ธงหลัก เกจธงเดินเพิ่ม 1 หน่วยต่อวินาที";
       $("warFlag").textContent+=" · "+relay.name+" ("+relay.x+", "+relay.z+")"+(status?" · "+status:"")+"\n"+rule+" · ทั้งสองฝ่ายอยู่จุดเสริมพร้อมกัน โบนัสหยุด";
     }
-    $("warLegacyRules").hidden=!!(territoryState?.schedule || s.civic || riverCity || isCastle);
+    $("warLegacyRules").hidden=!!(s.civic || riverCity || isCastle);
     const duration=s.civic && Number.isFinite(s.civic.durationMs)?Math.round(s.civic.durationMs/60000)+" นาที":null;
     const details=duration && Number.isInteger(s.civic.seatsPerSide)
       ?s.civic.seatsPerSide+" ต่อ "+s.civic.seatsPerSide+" · "+duration:duration;
@@ -1151,7 +1137,7 @@
       </div>
       <div class="atlas-war-strip" id="atlasWarStrip" role="group" aria-label="เวลาสงคราม">
         <div><strong>เวลาสงคราม</strong><span id="atlasWarMessage"></span></div>
-        <span id="atlasWarClock" class="atlas-war-clock" role="timer" aria-live="off">--:--</span>
+        <span id="atlasWarClock" class="atlas-war-clock" role="timer" aria-live="off" hidden></span>
         <button type="button" id="atlasWarBoard" hidden>ดูศึก</button>
       </div>
       <details class="war-times-details">

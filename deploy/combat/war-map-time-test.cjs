@@ -25,7 +25,7 @@ test('the war board formats the selected fort timer from server time', () => {
   vm.runInContext(slice(atlas, '  function warClockText(', '  function renderWarSchedule('), context);
   const label = context.warTerritoryLabel;
   assert.equal(label(null, 1000), 'รอข้อมูล');
-  assert.equal(label({phase: 'open'}, 1000), 'พร้อมเปิดศึก');
+  assert.equal(label({phase: 'open'}, 1000), 'ท้าชิงได้เลย');
   assert.equal(label({phase: 'battle', phaseEndsAt: 301000}, 1000), 'รบ 5:00');
   assert.equal(label({phase: 'protected', phaseEndsAt: 28801000}, 1000), 'คุ้มครอง 8:00:00');
   assert.equal(label({phase: 'protected', phaseEndsAt: 1000}, 1000), 'กำลังอัปเดต');
@@ -146,7 +146,8 @@ test('atlas clocks follow server time without moving the map or changing the rou
   f.context.territoryReceivedAt=1000;
   f.setNow(2500);
   f.context.updateAtlasWarTimes();
-  assert.equal(clock(origin).hidden,true);
+  assert.equal(clock(origin).hidden,false);
+  assert.equal(clock(origin).textContent,'ท้าชิงได้');
   assert.equal(clock(forest).textContent,'รบ 0:05');
   assert.equal(clock(forest).dataset.phase,'battle');
   assert.equal(clock(marsh).textContent,'พัก 0:19');
@@ -169,11 +170,11 @@ test('atlas clocks follow server time without moving the map or changing the rou
   f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.territoryState.schedule={drowned_marsh:{next:{startsAt:50000}}};
   f.context.updateAtlasWarTimes();
-  assert.equal(detail.textContent,'พร้อมเปิดศึก · รอบนัดอีก 0:20 · 04:00');
-  assert.equal(f.nodes.atlasWarClock.textContent,'0:20');
-  assert.equal(f.nodes.atlasWarMessage.textContent,'รอบนัดถัดไป · บึงพราย');
+  assert.equal(detail.textContent,'ท้าชิงได้เลย');
+  assert.equal(f.nodes.atlasWarClock.hidden,true);
+  assert.equal(f.nodes.atlasWarMessage.textContent,'ท้าชิงได้เลย · บึงพราย');
   assert.equal(clock(marsh).hidden,false);
-  assert.equal(clock(marsh).textContent,'นัด 0:20');
+  assert.equal(clock(marsh).textContent,'ท้าชิงได้');
 });
 
 test('the war strip stays visible in peace and surfaces a battle elsewhere on the atlas', () => {
@@ -183,8 +184,8 @@ test('the war strip stays visible in peace and surfaces a battle elsewhere on th
   }};
   f.context.territoryReceivedAt=1000;
   f.context.openStrategicMap();
-  assert.equal(f.nodes.atlasWarClock.textContent,'--:--');
-  assert.equal(f.nodes.atlasWarMessage.textContent,'รอเปิดศึก');
+  assert.equal(f.nodes.atlasWarClock.hidden,true);
+  assert.equal(f.nodes.atlasWarMessage.textContent,'ท้าชิงได้ 3 พื้นที่');
   assert.equal(f.nodes.atlasWarStrip.hidden,undefined);
   f.context.territoryState.warTimes.drowned_marsh={phase:'battle',phaseEndsAt:65000};
   f.context.updateAtlasWarTimes();
@@ -193,12 +194,12 @@ test('the war strip stays visible in peace and surfaces a battle elsewhere on th
   assert.equal(f.nodes.atlasBoard.children[1].attributes['aria-pressed'],'true');
 });
 
-test('default map shows the earliest scheduled round and links to that city', () => {
+test('calendar rounds cannot replace an open challenge or an active battle in the atlas', () => {
   const f=atlasFixture({war:true});
   f.context.territoryState={serverNow:5000,warTimes:{
-    ritual_village:{phase:'open'},drowned_marsh:{phase:'open'},
+    ritual_village:{phase:'open'},drowned_marsh:{phase:'battle',phaseEndsAt:65000},
   },schedule:{
-    ritual_village:{next:{startsAt:305000}},drowned_marsh:{next:{startsAt:65000}},
+    ritual_village:{current:{endsAt:25000},next:{startsAt:305000}},drowned_marsh:{next:{startsAt:15000}},
   }};
   f.context.territoryReceivedAt=1000;
   f.context.openStrategicMap();
@@ -208,43 +209,46 @@ test('default map shows the earliest scheduled round and links to that city', ()
   f.nodes.atlasWarBoard.onclick();
   assert.deepEqual(f.actions,[['war','drowned_marsh']]);
   f.nodes.atlasBoard.children[1].onclick();
-  assert.equal(f.nodes.atlasWarClock.textContent,'5:00');
+  assert.equal(f.nodes.atlasWarClock.hidden,true);
+  assert.equal(f.nodes.atlasWarMessage.textContent,'ท้าชิงได้เลย · หมู่บ้านอาคม');
   f.nodes.atlasRecenter.onclick();
+  assert.equal(f.nodes.atlasWarClock.hidden,false);
   assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
 });
 
-test('every atlas city has a live row and all scheduled cities show their own timer together', () => {
+test('every city has a live challenge status and real battle and protection timers tick together', () => {
   const f=atlasFixture({war:true});
   f.context.territoryState={serverNow:5000,warTimes:{
-    ritual_village:{phase:'open'},forbidden_forest:{phase:'open'},drowned_marsh:{phase:'open'},
+    ritual_village:{phase:'battle',phaseEndsAt:305000},forbidden_forest:{phase:'open'},
+    drowned_marsh:{phase:'protected',phaseEndsAt:65000},
   },schedule:{
-    ritual_village:{next:{startsAt:305000}},drowned_marsh:{next:{startsAt:65000}},
+    forbidden_forest:{next:{startsAt:805000}},drowned_marsh:{next:{startsAt:85000}},
   }};
   f.context.territoryReceivedAt=1000;
   f.context.openStrategicMap();
   const [village,forest,marsh]=f.nodes.atlasWarTimes.children;
-  const [,villagePin,,marshPin]=f.nodes.atlasBoard.children;
-  assert.equal(villagePin.children[2].textContent,'นัด 5:00');
-  assert.equal(marshPin.children[2].textContent,'นัด 1:00');
-  assert.match(village.children[1].textContent,/รอบนัดอีก 5:00/);
-  assert.equal(forest.children[1].textContent,'พร้อมเปิดศึก · เปิดตามการท้าชิง');
-  assert.match(marsh.children[1].textContent,/รอบนัดอีก 1:00/);
+  const [,villagePin,forestPin,marshPin]=f.nodes.atlasBoard.children;
+  assert.equal(villagePin.children[2].textContent,'รบ 5:00');
+  assert.equal(forestPin.children[2].textContent,'ท้าชิงได้');
+  assert.equal(marshPin.children[2].textContent,'พัก 1:00');
+  assert.match(village.children[1].textContent,/^รบ 5:00/);
+  assert.equal(forest.children[1].textContent,'ท้าชิงได้เลย');
+  assert.match(marsh.children[1].textContent,/^คุ้มครอง 1:00/);
   marsh.children[0].onclick();
   assert.equal(marshPin.attributes['aria-pressed'],'true');
   f.setNow(2000);
   f.context.updateAtlasWarTimes();
-  assert.match(village.children[1].textContent,/รอบนัดอีก 4:59/);
-  assert.match(marsh.children[1].textContent,/รอบนัดอีก 0:59/);
+  assert.match(village.children[1].textContent,/^รบ 4:59/);
+  assert.match(marsh.children[1].textContent,/^คุ้มครอง 0:59/);
   assert.equal(f.nodes.atlasWarTimes.children[2],marsh);
   f.setNow(61000);
   f.context.updateAtlasWarTimes();
-  assert.equal(marsh.children[1].textContent,'กำลังอัปเดตรอบนัด');
-  f.context.territoryState.schedule.drowned_marsh={
-    current:{startsAt:65000,endsAt:125000},next:{startsAt:605000},
-  };
+  assert.equal(marsh.children[1].textContent,'กำลังอัปเดต');
+  assert.equal(marshPin.children[2].hidden,true);
+  f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.updateAtlasWarTimes();
-  assert.match(marsh.children[1].textContent,/รอบนัดปัจจุบัน · เหลือ 1:00/);
-  assert.equal(marshPin.children[2].textContent,'รอบนี้ 1:00');
+  assert.equal(marsh.children[1].textContent,'ท้าชิงได้เลย');
+  assert.equal(marshPin.children[2].textContent,'ท้าชิงได้');
 });
 
 test('the war board lists only cities with schedules and opens the requested city', () => {

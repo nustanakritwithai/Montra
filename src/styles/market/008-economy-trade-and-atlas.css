@@ -103,7 +103,7 @@
 .atlas-war-clock {color:#ebd0a0;font-size:17px;font-weight:750;font-variant-numeric:tabular-nums;white-space:nowrap}
 .atlas-war-strip[data-phase="battle"] {border-color:#c8876b;background:#3b2723}
 .atlas-war-strip[data-phase="protected"] {border-color:#629eab;background:#19333b}
-.atlas-war-strip:is([data-phase="scheduled"],[data-phase="window"]) {border-color:#d7ad70}
+.atlas-war-strip[data-phase="open"] {border-color:#86ab8b}
 .war-times-details {border:1px solid #886e50;border-radius:8px;background:#16292b}
 .war-times-details > summary {min-height:44px;padding:11px 9px;color:#ffe2ab;cursor:pointer}
 .war-time-list {list-style:none;margin:0;padding:0 9px;color:#dcd6bc;font-size:12px;font-variant-numeric:tabular-nums}
@@ -114,7 +114,7 @@
   background:#253835;color:#f3e7cf;font-size:13px;text-align:left;
 }
 .war-time-list > li > span {overflow-wrap:anywhere}
-.war-time-list > li:is([data-phase="scheduled"],[data-phase="window"]) > span {color:#ffe2ab}
+.war-time-list > li[data-phase="open"] > span {color:#c9e7c8}
 .war-time-list > li[data-phase="battle"] > span {color:#ffba9e}
 .war-time-list > li[data-phase="protected"] > span {color:#b5e5f1}
 .atlas-scroll {
@@ -164,7 +164,7 @@
 }
 .atlas-war-time[data-phase="battle"] {background:#522b23;color:#ffdac3;border-color:#d99175}
 .atlas-war-time[data-phase="protected"] {background:#183b47;color:#d4f3fa;border-color:#73b9cb}
-.atlas-war-time:is([data-phase="scheduled"],[data-phase="window"]) {background:#45351f;color:#ffe8b8;border-color:#caa068}
+.atlas-war-time[data-phase="open"] {background:#19352c;color:#d3efd3;border-color:#83a789}
 .atlas-war-time[hidden] {display:none}
 .atlas-cell:focus-visible,.atlas-tools button:focus-visible,.atlas-scroll:focus-visible {outline:2px solid #fff0ba;outline-offset:2px}
 .atlas-summary {padding:8px 10px;border:1px solid #816946;border-radius:9px;background:#162c30}
