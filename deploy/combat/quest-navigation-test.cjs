@@ -42,7 +42,7 @@ function fixtureScript(browser = false) {
     let guide={title:'Fixture hunt',to:{x:12,z:0}},worldDefinitions={fixture:${JSON.stringify(map())}},activeFort=null;
     const me={x:0,y:0,z:0,alive:true,mapId:'fixture',combatState:'idle'};
     let room={state:{worldMapsAvailable:true,players:new Map([['me',me]])},send:(type,data)=>wire.push({type,data})};
-    const $=id=>document.getElementById(id),ui={quest:$('quest'),monsterStatus:{hidden:true}},marker={position:{},setEnabled(){}},avatars=new Map();
+    const $=id=>document.getElementById(id),ui={quest:$('quest')},marker={position:{},setEnabled(){}},avatars=new Map();
     let pendingClimb=null,selectedPkTargetId=null,spellTargetId=null,demoAutoAttack=false,demoDash=null;
     const triggerVoiceGuidance=()=>{},setTargetedSkill=()=>{},syncPKHud=()=>{},toast=t=>notices.push(t),playerLayer=p=>p.y;
     const currentItemHunt=()=>null,journeyNotesForPlayer=()=>({}),hudGuide=()=>guide;

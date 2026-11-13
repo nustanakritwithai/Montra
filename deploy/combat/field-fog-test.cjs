@@ -27,7 +27,7 @@ function fixture() {
     B: { Vector4: Vector, Color3: Vector, MaterialPluginBase: class {} },
     scene: { fogColor: { scaleToRef() {} }, particleSystems: [] },
     selectedForestTarget: "monster", selectedPkTargetId: "enemy", spellTargetId: "monster",
-    demoAutoAttack: true, ui: { monsterHint: {} }, hudTarget: { id: "monster", until: 1 }, syncPKHud() {},
+    demoAutoAttack: true, hudTarget: { id: "monster", until: 1 }, syncPKHud() {},
   };
   vm.runInNewContext(fog + "\nthis.uniform = fieldFog;", sandbox);
   return { sandbox, hero, enemy, node };

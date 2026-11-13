@@ -7,7 +7,7 @@ function fixtureScript(){return `
  const wire=[],notices=[];let dashes=0,profiles=0,mode='live',activeMapId='ritual_village',selectedForestTarget=null,selectedPkTargetId=null,spellTargetId=null,monsterReady=true,demoMonsterHp=100,demoAutoAttack=false;
  const MONSTER_ID='possessed-1',me={pathId:'seer',x:0,z:0};
  const room={state:{worldDefinition:'fixture',monsters:new Map()},send:(type,data)=>wire.push({type,data})};
- const $=id=>document.getElementById(id),ui={monsterHint:document.createElement('span')};
+ const $=id=>document.getElementById(id);
  const enemy={isEnabled:()=>true},marker={setEnabled(){}},triggerVoiceGuidance=()=>{},setTargetedSkill=()=>{},syncPKHud=()=>{},monsterName=()=>'',toast=text=>notices.push(text);
  const requestSwipeDash=()=>{dashes++;};
  const ownServerCharacter=()=>me,openCharacterProfile=()=>{profiles++;};

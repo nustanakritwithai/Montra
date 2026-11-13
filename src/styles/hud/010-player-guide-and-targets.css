@@ -19,10 +19,6 @@
 .quest-pointer i { font-style: normal; font-size: 15px; color: #f6cf7c; text-shadow: 0 0 6px #e8a83c99; transition: transform .25s ease; }
 .quest-pointer small { font-size: 9px; color: #e7d6b4; white-space: nowrap; }
 .online-count.safe { border-color: #5fcf9e99; color: #c9f5df; }
-.target-level { margin-left: auto; margin-right: 6px; font-size: 9.5px; font-weight: 700; color: #f3d18f; white-space: nowrap; }
-.monster-status.elite { border-color: #f0b54acc; box-shadow: 0 0 0 1px #f0b54a55, 0 6px 18px #000a, 0 0 18px #f0a83a44; }
-.monster-status.elite #monsterBar { background: linear-gradient(90deg, #a66a1c, #f4c35a); }
-#monsterHint { display: none; }
 
 @media (max-width: 640px) and (orientation: portrait) {
   .identity { width: min(60vw, 232px); padding: 7px 8px 6px; position: relative; }
@@ -42,11 +38,6 @@
   .quest::after { content: none; }
 
   .online-count { top: calc(var(--portrait-hud-top) + 96px); width: auto; max-width: 36vw; padding: 4px 8px; font-size: 9.5px; white-space: normal; line-height: 1.25; }
-
-  .monster-status { top: calc(var(--portrait-hud-top) + 146px); left: 50%; right: auto; transform: translateX(-50%); width: min(80vw, 300px); padding: 6px 9px 7px; border-radius: 10px; }
-  .monster-heading { font-size: 10.5px; }
-  .monster-heading strong { font-size: 9.5px; }
-  .monster-hp-track { height: 8px; margin-top: 5px; }
 }
 /* The older ".quest span" rule outranks plain classes; pin the pointer box by id. */
 #quest .quest-pointer { display: flex; }
@@ -56,7 +47,5 @@
   /* PK / safe-zone chip sits under the status chip instead of on top of it. */
   .pk-panel { top: calc(var(--portrait-hud-top) + 128px); width: min(36vw, 150px); }
   .online-count { max-width: min(36vw, 150px); min-height: 26px; }
-  /* With a target on screen, the frame drops below the PK chip column. */
-  .monster-status { top: calc(var(--portrait-hud-top) + 162px); }
 }
 

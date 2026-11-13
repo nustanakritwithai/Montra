@@ -111,26 +111,6 @@
     border-radius: 9px;
   }
 
-  /* Both combat panels share one narrow row directly below the quest. */
-  .monster-status {
-    top: calc(var(--portrait-hud-top) + 112px);
-    left: 8px;
-    width: min(52vw, 190px);
-    padding: 6px 7px;
-    border-radius: 9px;
-  }
-  .monster-heading { gap: 4px; font-size: 9px; }
-  .monster-heading > span {
-    display: block;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .monster-heading strong { font-size: 9px; flex-shrink: 0; }
-  .monster-hp-track { margin-top: 4px; height: 5px; }
-  #monsterHint { display: none; }
-
   .pk-panel {
     top: calc(var(--portrait-hud-top) + 112px);
     right: 8px;

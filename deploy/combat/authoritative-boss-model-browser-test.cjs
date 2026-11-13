@@ -21,7 +21,7 @@ const calls=[],handlers={},noop=()=>{},MAX_LIGHTS=4,shamanWaiting=[],spiritArmWa
 let shamanBody=null;const attachShamanModel=noop,attachSpiritArms=noop;
 Object.assign(globalThis,{activeMapId:'bound_temple',localId:'me',MONSTER_ID:'possessed-1',mode:'live',
  glowMats:new Set(),forestMonsters:new Map(),seerBindingEffects:new Map(),avatars:new Map(),expansionLabels:[],worldDefinitions:{},regionStyles:{},selectedForestTarget:null,selectedPkTargetId:null,spellTargetId:null,villageGhost:null,
- ui:{monsterHint:{}},hudTarget:{until:0},hudKills:{},SKILL_SOURCES:new Set(),$:()=>({textContent:''}),ownServerCharacter:()=>null,getLocalAvatar:()=>null,marker:{setEnabled:noop},syncPKHud:noop,setTargetedSkill:noop,triggerVoiceGuidance:noop,regionPaint:()=>null,fxNear:()=>true});
+ hudTarget:{until:0},hudKills:{},SKILL_SOURCES:new Set(),$:()=>({textContent:''}),ownServerCharacter:()=>null,getLocalAvatar:()=>null,marker:{setEnabled:noop},syncPKHud:noop,setTargetedSkill:noop,triggerVoiceGuidance:noop,regionPaint:()=>null,fxNear:()=>true});
 for(const n of ['toast','ghostVoice','ghostVoices','eventFx','SFX','spawnFx','sparks','shakeCamera','floatAtMonster','floatAtPlayer','triggerCombatCallout','playAction','hitBurst','playAttack','impactAt','registerComboHit','showTalisman','faceAvatarToward','auraFx'])globalThis[n]=(...a)=>calls.push([n,...a]);
 globalThis.room=globalThis.joined={sessionId:'me',state:{monsters:new Map(),players:new Map()},onMessage:(n,f)=>handlers[n]=f,send:(...a)=>calls.push(['send',...a])};
 ${productionSources().join('\n')}

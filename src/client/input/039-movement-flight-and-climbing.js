@@ -31,7 +31,6 @@
     setTargetedSkill(null);
     syncPKHud();
     demoAutoAttack = false;
-    if (!ui.monsterStatus.hidden) ui.monsterHint.textContent = "แตะผีเพื่อโจมตี";
     if (mode === "live" && room) {
       try { room.send("move", target); } catch (err) { toast("ส่งคำสั่งเดินไม่สำเร็จ"); return false; }
     } else if (mode === "demo") {

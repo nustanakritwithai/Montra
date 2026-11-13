@@ -40,7 +40,7 @@ jobs:
       - name: Verify combat HUD wiring
         shell: bash
         run: |
-          grep -q 'id="monsterStatus"' index.html
+          grep -q 'function updateTargetOverheadHud' main.js
           grep -q 'requestMonsterAttack' main.js
           grep -q 'syncMonsterState' main.js
 

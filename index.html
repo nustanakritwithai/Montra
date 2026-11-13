@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art-buffalo-mount-travel-atlas-atlas-landscape-small-pins-war-clock-visible-war-clock-scheduled-war-link-fix-20261113-city-market-all-war-times-open-challenge-read-only-item-details-audio-notices-single-market-header-item-recipe-link-mission-notices-inline-craft-stock-item-detail-equip" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art-buffalo-mount-travel-atlas-atlas-landscape-small-pins-war-clock-visible-war-clock-scheduled-war-link-fix-20261113-city-market-all-war-times-open-challenge-read-only-item-details-audio-notices-single-market-header-item-recipe-link-mission-notices-inline-craft-stock-item-detail-equip-remove-monster-panel" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -57,14 +57,6 @@
         </div>
       </section>
     <button id="quest" class="quest panel" type="button" aria-label="เดินอัตโนมัติไปภารกิจ · ดูรายละเอียดได้ในเมนูภารกิจ" aria-pressed="false"><img class="quest-icon info-icon" src="./assets/ui/info/quest.webp" alt="" width="24" height="24" draggable="false"><span class="quest-content"><strong>ภารกิจทดลอง</strong><span>แตะทางเดินไม้เพื่อสำรวจหมู่บ้าน</span><small id="questProgress" class="quest-progress" hidden></small><small id="questNavigationStatus" class="quest-progress" role="status" hidden></small></span><span id="questPointer" class="quest-pointer" hidden><i id="questArrow">➤</i><small id="questDistance"></small></span></button>
-    <section class="monster-status panel" id="monsterStatus" aria-label="สถานะมอนสเตอร์" hidden>
-      <img class="info-icon target-portrait" src="./assets/ui/info/spirit.webp" alt="" width="30" height="30" draggable="false">
-      <div class="target-info">
-        <div class="monster-heading"><span id="targetName"></span><b id="targetLevel" class="target-level"></b></div>
-        <div class="target-health"><div class="monster-hp-track" aria-hidden="true"><div id="monsterBar"></div></div><strong id="monsterText"></strong></div>
-        <small id="monsterHint" class="sr-only"></small>
-      </div>
-    </section>
     <button id="partyFrames" class="party-frames" type="button" aria-label="สมาชิกปาร์ตี้ · แตะเพื่อเปิด" hidden></button>
       </div>
       <section class="location-area">

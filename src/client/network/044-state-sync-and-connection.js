@@ -442,7 +442,6 @@
       onlinePlayers.clear(); enemy.setEnabled(false);
       selectedPkTargetId = null;
       monsterReady = false; demoAutoAttack = false; lastMonsterHitSeq = 0;
-      ui.monsterStatus.hidden = true;
       syncFortification(joined.state);
       if (summonAvatars.get(localId)?.demo) deleteSummonAvatar(localId);
       possessed = false;

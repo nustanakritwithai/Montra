@@ -86,7 +86,6 @@
     if (selectedForestTarget && !fieldTargetVisible(selectedForestTarget)) {
       selectedForestTarget = null;
       demoAutoAttack = false;
-      ui.monsterHint.textContent = "แตะเป้าหมายในระยะมองเห็น";
     }
     if (spellTargetId && !fieldTargetVisible(spellTargetId)) spellTargetId = null;
     if (selectedPkTargetId && !fieldTargetVisible(selectedPkTargetId)) {

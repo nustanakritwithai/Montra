@@ -23,8 +23,7 @@
 .location-area .mini-map { width:clamp(60px,9vw,88px); height:clamp(60px,9vw,88px); }
 .location-area .place-name { display:block; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin:0; font-size:11px; }
 .location-area .online-count { width:auto; max-width:100%; min-height:0; padding:3px 7px; text-align:right; font-size:10px; }
-.monster-status,.pk-panel { left:50%; right:auto; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); width:min(28vw,285px); }
-#game:has(#pkPanel:not([hidden])) .monster-status { display:none; }
+.pk-panel { left:50%; right:auto; top:max(12px,env(safe-area-inset-top)); transform:translateX(-50%); width:min(28vw,285px); }
 .field-dock { position:absolute; z-index:5; right:max(var(--field-gap),env(safe-area-inset-right)); bottom:max(var(--field-gap),env(safe-area-inset-bottom)); max-width:calc(100% - 2 * var(--field-gap)); pointer-events:none; }
 .field-dock .controls { position:relative; inset:auto; width:fit-content; max-width:100%; margin-left:auto; padding-top:clamp(25px,5dvh,54px); }
 .field-dock .skill-bar { width:fit-content; max-width:100%; margin:0 0 0 auto; padding:4px; justify-content:flex-end; gap:3px; border-radius:14px; background:#102420d9; border:1px solid var(--field-line); }
@@ -66,7 +65,7 @@
   .field-dock { bottom:calc(max(8px,env(safe-area-inset-bottom)) + 57px); }
   .field-shortcuts { left:50%; transform:translateX(-50%); bottom:max(8px,env(safe-area-inset-bottom)); }
   .field-shortcuts button { min-width:55px; }
-  .monster-status,.pk-panel { top:calc(max(8px,env(safe-area-inset-top)) + 130px); left:auto; right:8px; width:min(42vw,210px); transform:none; }
+  .pk-panel { top:calc(max(8px,env(safe-area-inset-top)) + 130px); left:auto; right:8px; width:min(42vw,210px); transform:none; }
   .menu-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (orientation:landscape) and (max-height:520px) {

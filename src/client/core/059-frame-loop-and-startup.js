@@ -992,7 +992,7 @@
     applyCameraShake(dt);
     driftMist(elapsed, camera.target);
     followShadow(camera.target); updateLanternLights(camera.target, dt, elapsed); watchFrameRate(dt);
-    if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(performance.now()); }
+    if ((hudIn -= dt) <= 0) { hudIn = .25; updateHud(); }
     updateFloatText();
     updateWorldFx(now); updateTargetRing(now); updateMonsterLabels(); updateTargetOverheadHud(now); updateComboHud(now); updatePartyTethers(now); updateWeaponAuras(now);
     { const hero = getLocalAvatar(); if (hero) window.MontraAudio?.listen(hero.x, hero.z);

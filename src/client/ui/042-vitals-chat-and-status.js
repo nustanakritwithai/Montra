@@ -429,7 +429,7 @@
     if (orbFx) { orbFx.hidden = !sorted.length; orbFx.innerHTML = fxBoxesHtml(sorted, sorted.length > 5 ? 4 : 5); }
   }
   let wasUnderwater = false;
-  function updateHud(now) {
+  function updateHud() {
     const me = mode === "live" ? ownServerCharacter() : null, hero = getLocalAvatar();
     const waterState = me?.alive ? me.waterState : "";
     const underwater = waterState === "submerged" || waterState === "drowning";
@@ -479,16 +479,7 @@
       triggerCombatCallout("low_hp");
     }
     updateCompactCharacterHud(me);
-    // Target frame: only while there is a target.
-    const tg = selectedForestTarget ? hudCurrentTarget(now) : null;
     syncGhostCaptureTarget();
-    hudSet(ui.monsterStatus, "tgh", !tg, "hidden");
-    if (tg) {
-      hudSet($("targetName"), "tgn", tg.name); hudSet($("targetLevel"), "tgl", "Lv " + tg.level + (tg.boss ? " · บอส" : tg.elite ? " · ชั้นสูง" : ""));
-      hudSet(ui.monsterBar, "tgw", tg.alive ? pctOf(tg.hp, tg.maxHp) : "0%", "width");
-      hudSet(ui.monsterText, "tgt", tg.alive ? Math.ceil(tg.hp) + "/" + Math.ceil(tg.maxHp) : "ปราบแล้ว");
-      ui.monsterStatus.classList.toggle("elite", Boolean(tg.elite));
-    }
     syncAdvancedSkillUI();
     if(drawerActive==="fieldSkills" && $("fieldSkillGraph"))renderSkillGraph(fieldSkillKind(),$("fieldSkillGraph"));
     const q=$("quest"),fighting=q.classList.contains("war-hud"),war=warObjectiveGuide(hero);

@@ -347,7 +347,7 @@ test('bag/profile contain no duplicate crafting panels; live HUD and shared refr
     for(const id of ['personalBench','benchRecipe','benchCraft','craftPanel','craftGlaive'])assert(!code.includes(`id="${id}"`),`duplicate ${id}`);
   }
   assert.match(source,/if \(drawerActive === "crafting"\) \{ renderCraftingPage\(\); return; \}/);
-  assert.match(slice('  function updateHud(now)','  async function connectOnline('),/\["bag","character","forge","crafting"\]\.includes\(drawerActive\)\) renderBag\(\)/);
+  assert.match(slice('  function updateHud()','  async function connectOnline('),/\["bag","character","forge","crafting"\]\.includes\(drawerActive\)\) renderBag\(\)/);
   assert.match(source,/smith:"character",forge:"character",crafting:"character"/);
   assert.equal([...source.matchAll(/function submitCraft\(/g)].length,1);
   assert.equal([...source.matchAll(/sendCraftMutation\(queued\?"craft_enqueue":"craft_weapon"/g)].length,1,'both crafting actions use the shared mutation sender');

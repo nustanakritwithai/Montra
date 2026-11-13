@@ -234,9 +234,6 @@
         mesh.metadata.warning.setEnabled(charging);
       }
       if(!ghost){mesh.position.set(Number(monster.x),Number(monster.y)+(monster.tier==="boss"?2.25:monster.tier==="elite"?1.74:.88),Number(monster.z));mesh.rotation.y=Number(monster.facing)||0;}
-      if(id===selectedForestTarget&&monster.mapId===activeMapId){
-        ui.monsterHint.textContent=(monster.tier==="boss"?"Boss · ":monster.tier==="elite"?"Elite · ":"")+monsterName(monster,id)+" · Lv "+monster.level+
-          (monster.aiState==="grazing"?" · เป็นกลาง":"")+(ownServerCharacter()?.targetId===id?" · ตีอัตโนมัติ":"");}
     });
     for(const [id,mesh] of forestMonsters)if(!seen.has(id)){mesh.metadata?.ghost?.rig?.metadata?.skeletons?.forEach(s=>s.dispose());mesh.dispose();forestMonsters.delete(id);}
     const me=ownServerCharacter(),map=worldDefinitions?.[activeMapId];
@@ -257,7 +254,6 @@
     selectedForestTarget=id;spellTargetId=id;selectedPkTargetId=null;syncPKHud();marker.setEnabled(false);
     setTargetedSkill(null);
     try { room.send("attack",{targetId:id}); } catch(error) { console.error("MONTRA forest attack",error);toast("ส่งคำสั่งโจมตีไม่สำเร็จ"); }
-    ui.monsterHint.textContent=monsterName(target,id)+" · Lv "+target.level;
   }
 
   function buildBoatPorts(map) {

@@ -19,7 +19,7 @@ function fixture(){
   activeMapId:'bound_temple',localId:'me',MONSTER_ID:'possessed-1',mode:'live',shamanBody:false,
   glowMats:new Set(),forestMonsters:new Map(),seerBindingEffects:new Map(),avatars:new Map(),expansionLabels:[],worldDefinitions:{},ATLAS_GHOSTS:{},regionStyles:{},
   selectedForestTarget:null,selectedPkTargetId:null,spellTargetId:null,villageGhost:null,
-  camera:{target:new B.Vector3(),radius:1000},ui:{monsterHint:{}},hudTarget:{until:0},hudKills:{},SKILL_SOURCES:new Set(),
+  camera:{target:new B.Vector3(),radius:1000},hudTarget:{until:0},hudKills:{},SKILL_SOURCES:new Set(),
   $:id=>{if(!nodes.has(id))nodes.set(id,{textContent:''});return nodes.get(id);},ownServerCharacter:()=>null,getLocalAvatar:()=>null,
   marker:{setEnabled:noop},syncPKHud:noop,setTargetedSkill:noop,triggerVoiceGuidance:noop,
   regionPaint:()=>null,fxNear:()=>true};

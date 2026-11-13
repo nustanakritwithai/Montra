@@ -95,7 +95,6 @@
       marker.setEnabled(false);
       try {
         room.send("attack", { targetId: MONSTER_ID });
-        ui.monsterHint.textContent = "กำลังสั่งโจมตีผ่านเซิร์ฟเวอร์";
       } catch (err) {
         console.error("MONTRA attack request failed", err);
         toast("ส่งคำสั่งโจมตีไม่สำเร็จ");

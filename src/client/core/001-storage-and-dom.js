@@ -45,7 +45,5 @@
     minimap: $("minimap"), quest: $("quest"),
     pkPanel: $("pkPanel"), pkTitle: $("pkTitle"), pkText: $("pkText"),
     pkHpTrack: $("pkHpTrack"), pkHpBar: $("pkHpBar"), pkHint: $("pkHint"),
-    monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
-    monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
 

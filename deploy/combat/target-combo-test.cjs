@@ -13,6 +13,7 @@ assert(mainSrc.includes('targetRingMesh.rotation.y = now * 0.0018'), 'target rin
 
 // 2. Verify Floating Target Overhead HUD in styles.css & main.js
 assert(cssSrc.includes('.target-overhead-hud'), 'styles.css contains .target-overhead-hud');
+assert(!fs.readFileSync('index.html', 'utf8').includes('id="monsterStatus"'), 'journal has no separate monster status panel');
 assert(cssSrc.includes('.target-overhead-delay-bar'), 'styles.css contains .target-overhead-delay-bar');
 assert(cssSrc.includes('.target-overhead-fill-bar'), 'styles.css contains .target-overhead-fill-bar');
 assert(mainSrc.includes('function ensureTargetOverheadHud()'), 'main.js defines ensureTargetOverheadHud');
