@@ -13,6 +13,7 @@ function dom(){
       classList:{contains:k=>classes.has(k),add(...keys){keys.forEach(k=>classes.add(k));},remove(...keys){keys.forEach(k=>classes.delete(k));},toggle(k,on){if(on===undefined)on=!classes.has(k);if(on)classes.add(k);else classes.delete(k);return on;}},
       setAttribute(k,v){v=String(v);this.attributes[k]=v;if(k==='class')this.className=v;if(k==='id'){this.id=v;elements.set(v,this);}if(k==='value')value=v;if(k==='hidden')this.hidden=true;if(k==='disabled')this.disabled=true;if(k.startsWith('data-'))this.dataset[k.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=v;},
       getAttribute(k){return this.attributes[k];},
+      removeAttribute(k){delete this.attributes[k];},
       append(...children){for(const child of children){if(child.parentNode)child.parentNode.children=child.parentNode.children.filter(c=>c!==child);child.parentNode=this;this.children.push(child);if(this.tagName==='SELECT'&&this.children.length===1)value=String(child.value);}},
       appendChild(child){this.append(child);return child;},addEventListener(type,handler){this["on"+type]=handler;},
       replaceChildren(...children){for(const child of this.children){if(child.contains(document.activeElement))document.activeElement=document.body;child.parentNode=null;}this.children=[];text='';value='';this.append(...children);},
@@ -75,11 +76,11 @@ function fixture(){
     itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?5:inventory.slots.filter(p=>p?.itemId===id).length+(stock?(inventory.forgeCopies[id]||0):0),bindItemHuntButton:button=>{button.hidden=true;},
     journeyNotesForPlayer:()=>({}),salvageSelectedGear(){},handleUseBagItem:()=>routes.push('use'),setBagPage:p=>{ctx.bagCurrentPage=p;},updateBagPagerUi(){},isItemInCategory:()=>true,
     bagMultiPageSliderHtml:()=>'<div id="bagGrid">'+Array.from({length:8},(_,i)=>`<button type="button" class="bag-slot" id="bagSlot${i}"><span class="bag-symbol"></span><span class="bag-quantity"></span></button>`).join('')+'</div>',
-    bagKilnRecipe:()=>null,renderGearGuide:()=>{d.$('gearGuide').hidden=true;},toast:message=>toasts.push(message),closeCraftRecipePopup(){},openCraftRecipePopup(){},refreshArtisanWallet(){},renderWorkbench(){},renderCraft(){},selectBenchRecipe:(...args)=>{routes.push(args);ctx.openCraftingPage();},
+    renderGearGuide:()=>{d.$('gearGuide').hidden=true;},toast:message=>toasts.push(message),closeCraftRecipePopup(){},openCraftRecipePopup(){},refreshArtisanWallet(){},renderWorkbench(){},renderCraft(){},selectBenchRecipe:(...args)=>{routes.push(args);ctx.openCraftingPage();},
   };
   ctx.room={state:{economyAvailable:true,inventoryAvailable:true,weaponsAvailable:true,forgeCatalog:JSON.stringify(config)}};
   vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
-  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+slice('  function gateFieldInput(','  const journalOrigins='));
+  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function bagKilnRecipe(','  let craftPagePosition=')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+slice('  function gateFieldInput(','  const journalOrigins='));
   run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
   const open=()=>ctx.openBag(),select=slot=>{const button=d.$('bagSlot'+slot);button.focus();button.click();},modal=()=>d.$('itemDetailModal'),snapshot=()=>JSON.stringify({inventory,gold:ctx.economyGold});
   return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
@@ -89,7 +90,7 @@ test('item modal contains item information and only two dismiss controls',()=>{
   const f=fixture();f.open();f.select(0);const modal=f.modal();
   for(const id of ['itemDetailModal','itemModalBackdrop','skillDetailModal','skillPopupBackdrop','equipPopup','equipPopupBackdrop'])assert.equal(f.$(id).parentNode,f.document.body,`independent body-level overlay ${id}`);
   assert.equal(modal.getAttribute('role'),'dialog');assert.equal(modal.getAttribute('aria-modal'),'true');
-  assert.deepEqual(modal.querySelectorAll('button, input, select, summary, a[href], [tabindex="0"]').map(control=>control.id),['itemModalClose','itemModalCloseBtn']);
+  assert.deepEqual(modal.querySelectorAll('button, input, select, summary, a[href], [tabindex="0"]').filter(control=>control.getClientRects().length).map(control=>control.id),['itemModalClose','itemModalCloseBtn']);
   for(const id of ['bagDetailItem','bagItemName','bagItemDescription','bagPanelStats','itemMetaLevel','itemMetaBound','itemMetaPrice'])assert(modal.contains(f.$(id)),id);
   for(const id of ['bagReturnItem','socketItemPreview','cardSocketPanel','socketCardChoice','cardSocketAction','gearGuide','guideTargetItem','bagOpenCraft','wearSidePicker','useBagItem','bagTrack','refineResource','bagKiln','sellBagMaterial','salvageGear','bagQuickDiff']){
     assert(f.ui.drawer.contains(f.$(id)),id);assert.equal(modal.contains(f.$(id)),false,id);
@@ -147,6 +148,42 @@ test('bag craft shortcut opens the dedicated crafting page',()=>{
   const f=fixture();f.open();const before=f.snapshot(),modal=f.modal();f.$('bagOpenCraft').click();
   assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.$('itemModalBackdrop').hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('worldInput').inert,true);assert.equal(f.document.activeElement,f.$('drawerMenuBack'));assert(f.$('personalBench'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
   f.$('craftBag').click();assert.equal(f.ctx.drawerActive,'bag');assert.equal(modal.hidden,true);f.select(1);assert.equal(modal.hidden,false,'modal remains reusable after route changes');
+});
+
+test('item picture opens the exact craft recipe and closes the detail overlay without a mutation',()=>{
+  const f=fixture();f.items.ring.recipe=[{item:'ore',qty:2}];f.open();f.select(1);
+  const link=f.$('bagDetailRecipe'),before=f.snapshot();
+  assert.equal(link.hidden,false);assert.equal(link.getAttribute('aria-label'),'ดูสูตร แหวนทดสอบ');
+  const tab={key:'Tab',shiftKey:true,preventDefault(){this.prevented=true;}};
+  f.$('itemModalClose').focus();f.listeners.get('keydown')(tab);assert.equal(tab.prevented,undefined);
+  link.focus();f.listeners.get('keydown')(tab);assert.equal(tab.prevented,true);assert.equal(f.document.activeElement,f.$('itemModalCloseBtn'));
+  link.click();assert.deepEqual(f.routes.at(-1),['all','1','ring']);
+  assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal().hidden,true);assert.equal(f.ui.drawer.inert,false);
+  assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+});
+
+test('recipe picture routes raw kiln materials and the legacy shrine ingredient',()=>{
+  const f=fixture();
+  f.items.mat_raw_wood_1={name:'ไม้ดิบ',kind:'material'};
+  f.items.mat_charcoal_1={name:'ถ่านไม้ชั้น 1',kind:'material',station:'kiln',level:10,recipe:[{item:'mat_raw_wood_1',qty:2}]};
+  f.inventory.slots[3]={itemId:'mat_raw_wood_1',quantity:3};
+  f.open();f.select(3);assert.equal(f.$('bagDetailRecipe').getAttribute('aria-label'),'ดูสูตร ถ่านไม้ชั้น 1');
+  f.$('bagDetailRecipe').click();assert.deepEqual(f.routes.at(-1),['kiln','10','mat_charcoal_1']);
+  f.inventory.slots[3]={itemId:'shrine_shard',quantity:1};
+  f.ctx.room.state.craftRecipe=JSON.stringify({output:'shrine_glaive',ingredient:'shrine_shard'});
+  f.open();f.select(3);f.$('bagDetailRecipe').click();
+  assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal().hidden,true);
+  assert.equal(f.$('craftPanel').open,true);assert.equal(f.$('craftPanel').scrolled,true);assert.equal(f.mutations().length,0);
+});
+
+test('item picture stays visible and returns focus when a recipe becomes unavailable',()=>{
+  const f=fixture();f.items.ring.recipe=[{item:'ore',qty:2}];f.open();f.select(1);
+  const link=f.$('bagDetailRecipe');link.focus();
+  delete f.items.ring.recipe;f.ctx.renderBag();
+  assert.equal(link.hidden,true);assert.equal(link.onclick,null);assert.equal(f.document.activeElement,f.$('itemModalClose'));
+  assert.equal(f.$('bagDetailItem').hidden,false);
+  f.items.ring.recipe=[{item:'ore',qty:2}];f.ctx.room.state.economyAvailable=false;f.ctx.renderBag();
+  assert.equal(link.hidden,true);link.click();assert.equal(f.ctx.drawerActive,'bag');assert.equal(f.mutations().length,0);
 });
 
 test('forge bag details and card help retain the exact equipped side',()=>{

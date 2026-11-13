@@ -172,8 +172,8 @@
     if(event.key==="Tab"){
       const available=[...modal.querySelectorAll('button:not(:disabled),input:not(:disabled),select:not(:disabled),summary,[tabindex="0"]')].filter(el=>el.getClientRects().length);
       const first=available[0],last=available.at(-1);
-      if(event.shiftKey && (document.activeElement===first || !modal.contains(document.activeElement))){event.preventDefault();last?.focus();}
-      else if(!event.shiftKey && (document.activeElement===last || !modal.contains(document.activeElement))){event.preventDefault();first?.focus();}
+      if(event.shiftKey && (document.activeElement===first || !available.includes(document.activeElement))){event.preventDefault();last?.focus();}
+      else if(!event.shiftKey && (document.activeElement===last || !available.includes(document.activeElement))){event.preventDefault();first?.focus();}
       return true;
     }
     return false;
@@ -539,7 +539,31 @@
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
+    renderBagRecipeLink(chosen?.itemId,target);
     renderBagQuickDetail(chosen,worn);
+  }
+  function renderBagRecipeLink(itemId,kilnRecipeId){
+    const recipeId=personalItems[itemId]?.recipe?.length?itemId:kilnRecipeId;
+    const recipe=personalItems[recipeId];
+    const ready=economyReady();
+    const benchRecipe=ready && cardDrill && recipe?.recipe?.length;
+    const shrineRecipe=ready && room?.state?.craftRecipe && (itemId==="shrine_glaive" || itemId===SHRINE_SHARD);
+    const link=$("bagDetailRecipe");
+    if(!benchRecipe && !shrineRecipe && document.activeElement===link)$("itemModalClose").focus({preventScroll:true});
+    link.hidden=!benchRecipe && !shrineRecipe;
+    link.onclick=null;
+    if(benchRecipe){
+      link.setAttribute("aria-label","ดูสูตร "+recipe.name);
+      link.onclick=()=>selectBenchRecipe(recipe.station==="kiln"?"kiln":"all",String(recipe.level||1),recipeId);
+    } else if(shrineRecipe){
+      link.setAttribute("aria-label","ดูสูตรง้าวจันทร์ผู้พิทักษ์");
+      link.onclick=()=>{
+        openCraftingPage();
+        const panel=$("craftPanel");
+        panel.open=true;panel.scrollIntoView({block:"center"});
+        panel.querySelector("summary")?.focus({preventScroll:true});
+      };
+    } else link.removeAttribute("aria-label");
   }
   function renderBagQuickDetail(chosen,worn){
     if(drawerActive!=="bag" || !$("bagQuickDetail"))return;
