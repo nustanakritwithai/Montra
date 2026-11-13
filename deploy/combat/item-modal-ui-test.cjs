@@ -70,7 +70,7 @@ function fixture(){
     BAG_PAGE_SIZE:4,BAG_TOTAL_PAGES:2,INVENTORY_SLOTS:6,bagCurrentPage:0,bagCategoryFilter:'all',selectedBagSlot:0,inspectingGear:null,preferredGearSlot:null,confirmBindKey:null,benchTrail:[],
     rarityNames:{common:'พื้นฐาน'},gearJobs:{blade:'นักดาบ'},bodyLabels:{leftRing:'แหวนซ้าย',rightRing:'แหวนขวา'},forgeNames:{melee:'ประชิด'},statNames:{atk:'โจมตี',hp:'HP'},statLine:()=>'',gearComparison:()=>'+1',
     currentBagSlots:()=>ctx.inventoryState?.slots,currentEquippedWeaponSlot:()=>ctx.inventoryState?.equippedWeaponSlot,ownServerCharacter:()=>player,economyReady:()=>ctx.mode==='live'&&!!ctx.room?.state?.economyAvailable,
-    economyGold:10000,economyPending:false,itemUsePending:false,cardDrill:{itemId:'ore',quantity:1,gold:10},gearGuides:null,craftResultRoom:null,craftResultMessage:'',
+    economyGold:10000,economyPending:false,itemUsePending:false,itemUseSequence:0,setTimeout(){},cardDrill:{itemId:'ore',quantity:1,gold:10},gearGuides:null,craftResultRoom:null,craftResultMessage:'',
     economyRequestId:()=>`request_${wire.length}`,economySend:(command,payload,durable)=>{wire.push({command,payload:plain(payload),durable});if(durable)ctx.economyPending=true;},window:{confirm:()=>true},
     Option:function(text,value){const el=d.node('option');el.textContent=text;el.value=value;return el;},
     itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?5:inventory.slots.filter(p=>p?.itemId===id).length+(stock?(inventory.forgeCopies[id]||0):0),bindItemHuntButton:button=>{button.hidden=true;},
@@ -78,15 +78,16 @@ function fixture(){
     bagMultiPageSliderHtml:()=>'<div id="bagGrid">'+Array.from({length:8},(_,i)=>`<button type="button" class="bag-slot" id="bagSlot${i}"><span class="bag-symbol"></span><span class="bag-quantity"></span></button>`).join('')+'</div>',
     renderGearGuide:()=>{d.$('gearGuide').hidden=true;},toast:message=>toasts.push(message),closeCraftRecipePopup(){},openCraftRecipePopup(){},refreshArtisanWallet(){},renderWorkbench(){},renderCraft(){},selectBenchRecipe:(...args)=>{routes.push(args);ctx.openCraftingPage();},
   };
-  ctx.room={state:{economyAvailable:true,inventoryAvailable:true,weaponsAvailable:true,forgeCatalog:JSON.stringify(config)}};
+  ctx.room={state:{economyAvailable:true,inventoryAvailable:true,weaponsAvailable:true,forgeCatalog:JSON.stringify(config)},send:(command,payload)=>wire.push({command,payload:plain(payload),durable:true})};
   vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
   run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function wearPositions(','  function pieceStat(')+slice('  function bagKilnRecipe(','  let craftPagePosition=')+slice('  function gearStamp(','  function salvageSelectedGear(')+slice('  function renderCardSocket(','  function openBag()')+slice('  function ensureItemDetailModalElements()','  const gearCoreSkills=')+slice('  function openBag()','  function updateFieldAlerts()')+slice('  function gateFieldInput(','  const journalOrigins='));
   run(slice('  document.addEventListener("keydown",event=>{\n    if (ui.drawer.hidden','  function updateChatBadge('));
+  const useRealEquipHandler=()=>run(slice('  function sendBagCommand(','  function ensureItemDetailModalElements()'));
   const open=()=>ctx.openBag(),select=slot=>{const button=d.$('bagSlot'+slot);button.focus();button.click();},modal=()=>d.$('itemDetailModal'),snapshot=()=>JSON.stringify({inventory,gold:ctx.economyGold});
-  return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
+  return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,useRealEquipHandler,mutations:()=>wire.filter(e=>e.durable)};
 }
 
-test('item modal contains item information and only two dismiss controls',()=>{
+test('already equipped gear has details and dismiss controls',()=>{
   const f=fixture();f.open();f.select(0);const modal=f.modal();
   for(const id of ['itemDetailModal','itemModalBackdrop','skillDetailModal','skillPopupBackdrop','equipPopup','equipPopupBackdrop'])assert.equal(f.$(id).parentNode,f.document.body,`independent body-level overlay ${id}`);
   assert.equal(modal.getAttribute('role'),'dialog');assert.equal(modal.getAttribute('aria-modal'),'true');
@@ -160,6 +161,29 @@ test('item picture opens the exact craft recipe and closes the detail overlay wi
   link.click();assert.deepEqual(f.routes.at(-1),['all','1','ring']);
   assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal().hidden,true);assert.equal(f.ui.drawer.inert,false);
   assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+});
+
+test('small equip button keeps bind confirmation and sends the selected accessory to the free side',()=>{
+  const f=fixture();f.useRealEquipHandler();delete f.inventory.equipment.rightRing;f.open();f.select(1);
+  const equip=f.$('bagDetailEquip');assert.equal(equip.hidden,false);assert.equal(equip.textContent,'ติดตั้ง');
+  assert.equal(equip.disabled,false);assert.equal(f.modal().contains(equip),true);
+  equip.focus();equip.click();
+  assert.equal(equip.textContent,'ยืนยันผูกและสวม');assert.equal(f.mutations().length,0);
+  equip.click();equip.click();
+  assert.deepEqual(f.mutations(),[{command:'equip_gear',payload:{slot:1,position:'rightRing',expected:'ring',stamp:'ring.3'},durable:true}]);
+  assert.equal(equip.disabled,true);assert.equal(f.document.activeElement,f.$('itemModalClose'));
+  f.inventory.slots[1]=null;f.ctx.itemUsePending=false;f.ctx.renderBag();assert.equal(equip.hidden,true);
+});
+
+test('equip button uses the original weapon command and is unavailable for unusable items',()=>{
+  const f=fixture();f.useRealEquipHandler();f.inventory.equippedWeaponSlot=null;f.inventory.slots[0].bound=true;f.open();
+  const equip=f.$('bagDetailEquip');f.select(0);f.player.level=10;f.ctx.renderBag();
+  assert.equal(equip.disabled,true);equip.click();assert.equal(f.mutations().length,0);
+  f.player.level=25;f.ctx.renderBag();f.ctx.closeItemDetailModal();equip.click();assert.equal(f.mutations().length,0);
+  f.select(2);assert.equal(equip.hidden,true);equip.click();assert.equal(f.mutations().length,0);
+  f.ctx.closeItemDetailModal();f.select(0);equip.click();
+  assert.deepEqual(f.mutations(),[{command:'equip_weapon',payload:{slot:0},durable:true}]);
+  f.inventory.equippedWeaponSlot=0;f.ctx.itemUsePending=false;f.ctx.renderBag();assert.equal(equip.hidden,true);
 });
 
 test('recipe picture routes raw kiln materials and the legacy shrine ingredient',()=>{

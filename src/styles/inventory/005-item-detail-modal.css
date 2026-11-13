@@ -279,6 +279,19 @@
   font-size: 13px;
   border-radius: 10px;
 }
+.item-modal-equip {
+  padding: 6px 12px;
+  border: 1px solid #b38c48;
+  border-radius: 8px;
+  background: #43321e;
+  color: #ffe2a0;
+  font-size: 12px;
+  font-weight: 700;
+  touch-action: manipulation;
+}
+.item-modal-equip:hover:not(:disabled) {
+  background: #664820;
+}
 
 .bag-detail-card {
   margin-top: 10px;

@@ -275,6 +275,10 @@
       resume.onclick=()=>{saveJourney({skipped:[],bossSkipped:false,deferredBosses:[],savedTraining:0});resume.hidden=true;closeDrawer();openCurrentQuest();};
     }
     if ($("useBagItem")) $("useBagItem").onclick = handleUseBagItem;
+    $("bagDetailEquip").onclick=()=>{
+      const button=$("bagDetailEquip");
+      if(drawerActive==="bag" && !$("itemDetailModal").hidden && !button.hidden && !button.disabled)handleUseBagItem();
+    };
     if (economyReady()) economySend("get_economy", {});
   }
   function renderBag() {
@@ -536,9 +540,16 @@
     if(!sell.hidden){sell.disabled=economyPending;sell.textContent="ขายวัสดุ 1 ชิ้น · "+meta.sellGold+" ทอง";}
     renderCardSocket(gear?chosen:null,slots);
     renderGearGuide(slots);
+    const confirmingBind=gear && !worn && !chosen.bound && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
-    use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
+    use.textContent=itemUsePending?"กำลังบันทึก…":confirmingBind?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
     if(meta?.kind==="card")use.textContent="เลือกอุปกรณ์เพื่อใส่การ์ด";
+    const equip=$("bagDetailEquip");
+    const canShowEquip=gear && !worn;
+    if((!canShowEquip || use.disabled) && document.activeElement===equip)$("itemModalClose").focus({preventScroll:true});
+    equip.hidden=!canShowEquip;
+    equip.disabled=use.disabled;
+    equip.textContent=itemUsePending?"กำลังติดตั้ง…":confirmingBind?"ยืนยันผูกและสวม":"ติดตั้ง";
     renderBagRecipeLink(chosen?.itemId,target);
     renderBagQuickDetail(chosen,worn);
   }
