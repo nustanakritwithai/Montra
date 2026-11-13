@@ -39,7 +39,6 @@
       const duration=Math.max(0,Math.min(action==="escape" ? 1500 : 2500,Number(durationMs)||0));
       grappleResponseTimer=setTimeout(()=>{if(grappleResponseMode===action)setGrappleResponse(null);},duration);
     }
-    positionSwordToast();
   }
   function syncSentinelUI(me) {
     const active=mode==="live" && room?.state?.sentinelAvailable===true && me?.pathId==="sentinel";
@@ -64,7 +63,7 @@
       slot.onclick=()=>{if(id==="protect")chooseSentinelAlly(id,node);else room.send("sentinel_core_skill",{skillId:id});};
       if(!times[index])staminaCost(slot,node.stamina,me);bar.append(slot);
     });
-    arrangeFieldSlots(bar,ids,skills,openSentinelBook);positionSwordToast();
+    arrangeFieldSlots(bar,ids,skills,openSentinelBook);
   }
   function chooseSentinelAlly(skillId,node) {
     const me=ownServerCharacter(),members=partyState?.members || [];
@@ -119,7 +118,6 @@
       };if(node && !times[index] && !continuation)staminaCost(slot,node.stamina,me);bar.append(slot);
     });
     arrangeFieldSlots(bar,ids,data.lessons,openBladeBook);
-    positionSwordToast();
   }
   function syncBladeCoreUI(me,data,bar){
     const ids=["blade_vanish","blade_heavy","blade_withdraw","blade_fury"],ranks=data.book.coreRanks || {};
@@ -134,7 +132,7 @@
       }else room.send("blade_core_skill",{skillId:id});};
       if(!times[index])staminaCost(button,node.stamina,me);bar.append(button);
     });
-    arrangeFieldSlots(bar,ids,skills,openBladeBook);positionSwordToast();
+    arrangeFieldSlots(bar,ids,skills,openBladeBook);
   }
   function openBladeBook() {
     if(mixedSkillData())return openUnifiedSkillBook();
@@ -231,7 +229,6 @@
       bar.append(slot);
     });
     arrangeFieldSlots(bar,ids,data.lessons,openOccultBook);
-    positionSwordToast();
   }
   function syncSeerCoreUI(me,data,bar){
     const ids=["seer_pot","seer_binding","seer_poison","seer_buffalo"],ranks=data.book.coreRanks || {},summoned=Boolean(room?.state?.summons?.has(localId));
@@ -255,7 +252,7 @@
       };
       if(!times[index] && !special)staminaCost(button,node.stamina,me);bar.append(button);
     });
-    arrangeFieldSlots(bar,ids,skills,openOccultBook);positionSwordToast();
+    arrangeFieldSlots(bar,ids,skills,openOccultBook);
   }
   function syncMenderCoreUI(me,data,bar){
     const ids=["mender_core_heal","mender_core_circle","mender_core_ward","mender_core_cleanse"],ranks=data.book.menderCoreRanks || {};
@@ -269,7 +266,7 @@
       button.onclick=()=>{if(id==="mender_core_heal")chooseOccultAlly(id,node.name,"mender_core_skill");else room.send("mender_core_skill",{skillId:id});};
       if(!times[index])staminaCost(button,node.stamina,me);bar.append(button);
     });
-    arrangeFieldSlots(bar,ids,skills,openOccultBook);positionSwordToast();
+    arrangeFieldSlots(bar,ids,skills,openOccultBook);
   }
   function chooseOccultAlly(skillId,name,command="occult_skill") {
     const members=partyState?.members || [], origin=room, map=activeMapId;
@@ -359,10 +356,9 @@
     if(active && now<muayInterruptUntil)parts.push(muayInterruptMessage);
     if(active && now<muayDefenseUntil)parts.push(muayDefenseMessage);
     if(active && muayFollowupSkill && now<muayFollowupUntil)parts.push("จังหวะต่อเนื่อง · "+(muayBookData()?.catalog?.skills?.[muayFollowupSkill]?.name || "วิชาขั้นสูง")+" พร้อม");
-    const wasHidden=label.hidden;label.hidden=parts.length===0;
+    label.hidden=parts.length===0;
     const message=parts.join(" · ");
-    const changed=label.textContent!==message;if(changed)label.textContent=message;
-    if(wasHidden!==label.hidden || changed)positionSwordToast();
+    if(label.textContent!==message)label.textContent=message;
   }
   function muayBookData() {
     const me=ownServerCharacter();
@@ -406,7 +402,7 @@
       if(!timing[i] && !second)staminaCost(button,node.stamina,me);
       bar.append(button);
     });
-    arrangeFieldSlots(bar,ids,skills,openMuayBook);positionSwordToast();
+    arrangeFieldSlots(bar,ids,skills,openMuayBook);
   }
   function openMuayBook() {
     if(mixedSkillData())return openUnifiedSkillBook();
@@ -500,11 +496,9 @@
     const now=performance.now(), parts=[];
     if (active && now<swordCounterUntil) parts.push("สวนกลับพร้อม");
     if (active && now<swordStanceUntil) parts.push("ตั้งดาบสวน "+Math.ceil((swordStanceUntil-now)/1000)+" วิ");
-    const message=parts.join(" · "), wasHidden=label.hidden;
+    const message=parts.join(" · ");
     label.hidden=parts.length===0;
-    const changed=label.textContent!==message;
-    if (changed) label.textContent=message;
-    if (wasHidden!==label.hidden || changed) positionSwordToast();
+    if(label.textContent!==message)label.textContent=message;
   }
   function syncSwordTreeButton(me) {
     const button=$("swordTreeButton");
@@ -577,8 +571,7 @@
   function syncSwordHotbar() {
     const bar=$("swordHotbar"), data=swordData();
     if (mode!=="live" || !data?.catalog?.core || data.me.pathId!=="phutthaisawan") {
-      const wasHidden=bar.hidden; bar.hidden=true; swordHotbarKey="";
-      if (!wasHidden) positionSwordToast();
+      bar.hidden=true; swordHotbarKey="";
       return;
     }
     if(renderMixedSkillHotbar(data.me,bar))return;
@@ -608,7 +601,6 @@
       bar.append(button);
     });
     arrangeFieldSlots(bar,slots,skills,openSwordTree);
-    positionSwordToast();
   }
   // One server-owned four-slot selection, preserving independent learning budgets.
   let fieldSkillOwner=null, mixedHotbarKey="", skillLoadoutKey="", skillLoadoutPending=null;
@@ -655,7 +647,7 @@
       if(s)b.onclick=()=>{if(!b.disabled && mixedSlotStillCurrent(s.kind,s.id,owner,mixed.school))s.kind==="core"?useMixedCoreSkill(s.id):useAdvancedSkill(s.id);};
       if(node && !times[i] && !special[i])staminaCost(b,node.stamina,me);bar.append(b);
     });
-    arrangeFieldSlots(bar,ids,skills,openSkillLoadout);positionSwordToast();return true;
+    arrangeFieldSlots(bar,ids,skills,openSkillLoadout);return true;
   }
   function useMixedCoreSkill(id){
     const mixed=mixedSkillData(),model=coreSkillGraphData(),me=ownServerCharacter(),owner=classSkillBookIdentity();

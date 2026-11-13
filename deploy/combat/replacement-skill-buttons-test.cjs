@@ -17,6 +17,7 @@ const hotbar = 'ui/048-class-books-and-hotbars.js';
 const source = [
   fragment(network, '  const REPLACEMENT_SKILLS', '  let connectionPending'),
   fragment('input/039-movement-flight-and-climbing.js', '  function castAtTarget(', '  function updateFlightButton('),
+  fragment(hotbar, '  let grappleResponseMode=', '  function syncSentinelUI('),
   fragment(hotbar, '  function useSwordSkill(', '  function learnedSlots('),
   fragment(hotbar, '  function renderMixedSkillHotbar(', '  function useMixedCoreSkill('),
   fragment(hotbar, '  function useAdvancedSkill(', '  function openSkillLoadout('),
@@ -54,6 +55,7 @@ function fixture(id, {party = false, bind = true} = {}) {
     querySelectorAll(){return this.children;},
     querySelector(query){return this.children.find(el=>query.includes('"'+el.dataset.slotNumber+'"'));}};
   const picker = {children:[],append(el){this.children.push(el);}};
+  const grappleResponse={hidden:true},grappleResponseButton=button();
   const room = {
     sessionId:'caster', state:{players:new Map([['caster',caster],['ally',ally]])},
     send(channel, data) {sent.push([channel,JSON.parse(JSON.stringify(data))]);},
@@ -66,12 +68,12 @@ function fixture(id, {party = false, bind = true} = {}) {
     setTimeout(fn,ms){const key=++timerId;timers.set(key,{fn,at:time+ms});return key;},
     clearTimeout(key){timers.delete(key);},
     document:{createElement:button,querySelector:()=>bar,addEventListener(name,fn){if(name==='keydown')keyboard=fn;}},
-    $:id=>id==='accountEntry'?{hidden:true}:picker,
+    $:id=>({accountEntry:{hidden:true},grappleResponse,grappleResponseButton})[id] || picker,
     openDrawer(id){context.drawerActive=id;},
     closeDrawer(){context.drawerActive='';},
     toast:text=>notices.push(text),
     monsterForSpell:targetId=>targetId==='monster'?monster:undefined,
-    syncPKHud(){},affordKey(){},staminaCost(){},positionSwordToast(){},openSkillLoadout(){},useMixedCoreSkill(){},
+    syncPKHud(){},affordKey(){},staminaCost(){},openSkillLoadout(){},useMixedCoreSkill(){},
     arrangeFieldSlots(element,ids){element.children.forEach((el,index)=>{el.dataset.skillId=ids[index];el.dataset.slotNumber=String(index+1);});},
     classSkillBookIdentity:()=>caster,
     mixedSlotStillCurrent:(slotKind,skill,owner,school)=>slotKind==='advanced' && skill===id && owner===caster && school===mixed.school,
@@ -112,6 +114,14 @@ function fixture(id, {party = false, bind = true} = {}) {
   return {id,context,caster,room,tree,bar,picker,sent,notices,feedback,actions,session,render,emit,offer,confirm,notice,at,press,
     click:()=>bar.children[0].click()};
 }
+
+test('clearing grapple state on session reset runs without the retired toast overlay',()=>{
+  const {context}=fixture('flowing_blades');
+  context.setGrappleResponse('escape',1000,10);
+  assert.equal(context.$('grappleResponse').hidden,false);
+  context.setGrappleResponse(null);
+  assert.equal(context.$('grappleResponse').hidden,true);
+});
 
 test('existing buttons cast the correct eight commands in all six classes after confirmation',()=>{
   for(const [id,,,,targetId] of variants){
