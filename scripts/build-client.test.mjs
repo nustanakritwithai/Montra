@@ -18,13 +18,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "ui/003-toast-and-mode.js",
-  "bytes": 1370,
-  "sha256": "7a6a098266f4a669a18ddf6c699774c731a64fc7af031b30a7d8da62f0e10bef"
+  "bytes": 799,
+  "sha256": "98e06f9f24f861d36ffefbc6ea4cc30e2e9a269e328f8d6c9e9fca4f4a4d6131"
 },
 {
   "path": "core/001-storage-and-dom.js",
-  "bytes": 3074,
-  "sha256": "989b3139af3ac5d9f4fe68cc2786470fdfe374a0853723e071568b2fdd444f42"
+  "bytes": 2253,
+  "sha256": "0ff3ae90e1122e0605c7a83217f115d1f4612880c18546587e645e802aac7038"
 },
 {
   "path": "combat/022-action-timelines.js",
@@ -143,8 +143,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 43509,
-  "sha256": "5db77f3f904499f406ab51b09daaa7899e08d13f7ad3ba950ca3337efbf613cb"
+  "bytes": 43487,
+  "sha256": "31c49e40058f609dcdcbdedbd84864a2736a0645dec412cc958f2bf67021a49a"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -161,8 +161,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/046-drawers-and-chat.js",
-    "bytes": 10645,
-    "sha256": "e000ea7906741dadccaaa340734cb6f344968c1361fb5ca92b94ed345531fa3f"
+    "bytes": 10590,
+    "sha256": "168f50b5c207083d2ac662c814a5b01276d245e40d154bf7a72e8a843c29d98b"
   },
   {
     "path": "ui/048-class-books-and-hotbars.js",
@@ -296,8 +296,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2162238);
-  assert.equal(hash(bytes), '69ee3c9afa79bf232f132ea8c78ae15aa132e161ea3f98099bfe3661d8383294');
+  assert.equal(bytes.length, 2160769);
+  assert.equal(hash(bytes), '568315105ff54564661a19c992017154acfa8cccb5c7021ac9a9a6f17b2b8348');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {

@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, 'audio.js'), 'utf8');
-function engine({ native = false, unlock = true } = {}) {
+function engine({ native = false, local = false, unlock = true } = {}) {
   const nodes = [], media = [], utterances = [], listeners = {}, timers = new Map(), timerDelays = new Map();
   let seq = 0, cancelled = 0;
   class Param {
@@ -38,7 +38,7 @@ function engine({ native = false, unlock = true } = {}) {
     suspend() { this.state = 'suspended'; return Promise.resolve(); }
   }
   const synth = {
-    getVoices: () => native ? [{ lang: 'th-TH', name: 'Thai' }] : [],
+    getVoices: () => native ? [{ lang: 'th-TH', name: 'Thai', localService: local }] : [],
     cancel() { cancelled++; utterances.at(-1)?.onerror({ error: 'canceled' }); },
     resume() {}, speak(u) { utterances.push(u); }
   };
@@ -59,6 +59,51 @@ function engine({ native = false, unlock = true } = {}) {
   if (unlock) window.MontraAudio.unlock();
   return { api: window.MontraAudio, test: window.__test, nodes, media, utterances, document, listeners, timers, timerDelays, cancelled: () => cancelled };
 }
+
+{
+  const e = engine({ native: true, local: true });
+  e.api.notify('  ลงเรือ   สำเร็จ  ');
+  assert.equal(e.utterances.length, 1);
+  assert.equal(e.utterances[0].lang, 'th-TH');
+  assert.equal(e.utterances[0].voice.localService, true);
+  assert.equal(e.api.voices, 0, 'speech replaces the chime');
+  e.api.notify('another notice');
+  assert.equal(e.utterances.length, 1, 'burst is throttled');
+  assert.equal(e.api.voices, 0, 'burst adds no chime');
+  e.utterances[0].onerror({ error: 'not-allowed' });
+  assert.equal(e.api.voices, 1, 'failed local speech uses one chime');
+  assert.equal(e.media.length, 0);
+}
+for (const native of [false, true]) {
+  const e = engine({ native });
+  e.api.notify('ข้อความแจ้งเตือน');
+  assert.equal(e.utterances.length, 0, 'a nonlocal voice must not get a notice');
+  assert.equal(e.media.length, 0, 'a notice never goes to the remote fallback');
+  assert.equal(e.api.voices, 1, 'use a chime without local Thai speech');
+}
+{
+  const e = engine({ native: true, local: true });
+  e.api.speak('คำตอบจากผู้แนะนำ');
+  e.api.notify('ข้อความแจ้งเตือน');
+  assert.equal(e.cancelled(), 0, 'the notice must not interrupt existing speech');
+  assert.equal(e.utterances.length, 1);
+  assert.equal(e.api.voices, 1);
+}
+for (const key of ['master', 'muted', 'ui', 'hidden']) {
+  const e = engine({ native: true, local: true });
+  if (key === 'hidden') e.document.hidden = true;
+  else e.api.set(key, key === 'muted');
+  e.api.notify('ข้อความแจ้งเตือน');
+  assert.equal(e.utterances.length + e.media.length + e.api.voices, 0, key);
+}
+{
+  const e = engine({ native: true, local: true });
+  e.api.notify('ข้อความแจ้งเตือน');
+  e.api.set('ui', 0);
+  assert.equal(e.api.isSpeaking(), false, 'muting notices stops an active spoken notice');
+  assert.equal(e.api.voices, 0);
+}
+
 function paths(node, target, seen = new Set()) {
   if (node === target) return [[node]];
   if (seen.has(node)) return [];

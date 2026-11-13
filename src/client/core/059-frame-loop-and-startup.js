@@ -811,7 +811,7 @@
     if (me) warm.position.set(me.x, me.y + 3.4, me.z + .6);
     scene.render();
   });
-  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); positionSwordToast(); });
+  window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); });
   window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
   // Reuse the player's human model for existing NPC roles and keep their hitboxes.
   attachNpcAvatar(questRangerRoot,"quest-ranger",rangerRobes[0],[rangerBody,rangerHead,rangerHat]);

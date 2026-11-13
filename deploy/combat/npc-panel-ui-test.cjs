@@ -114,35 +114,28 @@ test('map NPC buttons recheck range and open the matching dialogue for nearby pl
   assert.equal(calls.length, 0, 'stale map buttons cannot open the former NPC');
 });
 
-test('announces NPC feedback inside the active dialog without duplicating the field toast', () => {
-  const attributes = new Map();
+test('sends NPC feedback to sound and only the current screen-reader status', () => {
   const status = { textContent: '' }, field = {}, shade = {}, drawer = { hidden: false };
-  const toast = {
-    parentElement: null, classList: { add() {} },
-    setAttribute: (name, value) => attributes.set(name,value),
-    removeAttribute: name => attributes.delete(name),
-  };
-  const game = { children: [field, shade, drawer, toast] };
-  const body = { appendChild(node) { game.children.pop(); node.parentElement = body; } };
-  toast.parentElement = game;
+  const toast = { textContent: '' }, sounds = [];
+  const game = { children: [field, shade, drawer] };
   const api = runInNewContext(
     source('ui/003-toast-and-mode.js', '  function toast(', '  function setModeBadge(') +
     source('ui/046-drawers-and-chat.js', '  function gateFieldInput(', '  function closeDrawer(') +
     '\n({toast, gateFieldInput})',
-    { ui: { drawer, shade, toast }, $: id => id === 'game' ? game : status,
-      document: { body }, SFX() {}, positionSwordToast() {}, toastTimer: 0, setTimeout() {}, clearTimeout() {} });
-  assert.match(readFileSync('index.html','utf8'), /<section id="drawer"[\s\S]*?<div id="drawerStatus"[^>]*role="status"/);
+    { ui: { drawer, shade }, $: id => ({ game, drawerStatus: status, toast })[id],
+      window: { MontraAudio: { notify: message => sounds.push(message) } } });
+  const html = readFileSync('index.html','utf8');
+  assert.match(html, /<section id="drawer"[\s\S]*?<div id="drawerStatus" class="sr-only"[^>]*role="status"/);
+  assert.match(html, /<div id="toast" class="sr-only" role="status"/);
   api.gateFieldInput(true);
   api.toast('รักษาคู่หูแล้ว');
   assert.equal(field.inert, true);
   assert.equal(status.textContent, 'รักษาคู่หูแล้ว');
-  assert.equal(toast.textContent, status.textContent);
-  assert.equal(attributes.get('aria-hidden'), 'true');
+  assert.equal(toast.textContent, '');
   api.gateFieldInput(false);
-  assert.equal(attributes.has('aria-hidden'), false);
   assert.equal(field.inert, false);
   drawer.hidden = true;
   api.toast('กลับสู่สนาม');
   assert.equal(toast.textContent, 'กลับสู่สนาม');
-  assert.equal(attributes.has('aria-hidden'), false);
+  assert.deepEqual(sounds, ['รักษาคู่หูแล้ว', 'กลับสู่สนาม']);
 });

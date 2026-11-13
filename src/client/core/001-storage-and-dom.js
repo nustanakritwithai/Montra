@@ -39,7 +39,7 @@
   }
   let activeCharacterSlot = null;
   const ui = {
-    loading: $("loading"), loadingText: $("loadingText"), world: $("world"), toast: $("toast"),
+    loading: $("loading"), loadingText: $("loadingText"), world: $("world"),
     modeBadge: $("modeBadge"), onlineCount: $("onlineCount"), drawer: $("drawer"),
     drawerBody: $("drawerBody"), drawerTitle: $("drawerTitle"), shade: $("shade"),
     minimap: $("minimap"), quest: $("quest"),
@@ -48,15 +48,4 @@
     monsterStatus: $("monsterStatus"), monsterText: $("monsterText"),
     monsterBar: $("monsterBar"), monsterHint: $("monsterHint"),
   };
-  let toastTimer;
-  function positionSwordToast() {
-    // A hidden bank and display:contents wrappers have no rendered box. Anchor
-    // to the visible controls themselves so notices stay on screen in either bank.
-    const areas=Array.from(document.querySelectorAll(".field-prompts .warp-button:not([hidden]), .controls .sword-status:not([hidden]), .controls .sword-hotbar:not([hidden]) button"))
-      .map(el=>el.getBoundingClientRect()).filter(area=>area.width>0 && area.height>0);
-    if(!areas.length){ui.toast.style.removeProperty("bottom");return;}
-    const height=window.innerHeight,top=Math.min(...areas.map(area=>area.top));
-    const maxBottom=Math.max(8,height-ui.toast.getBoundingClientRect().height-8);
-    ui.toast.style.bottom=Math.max(8,Math.min(height-top+8,maxBottom))+"px";
-  }
 

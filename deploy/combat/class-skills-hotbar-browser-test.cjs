@@ -9,7 +9,7 @@ function slice(source,start,end){const a=source.indexOf(start),b=source.indexOf(
 function fixture(){
  const f=require('./class-skills-browser-test.cjs').fixture(),index=read('index.html');
  const dock=slice(index,'    <div class="field-dock">','    <section id="fishingPanel"');
- f.html=f.html.replace('<main id="game">','<main id="game">'+dock+'<div id="toast"></div>');
+ f.html=f.html.replace('<main id="game">','<main id="game">'+dock);
  const files=['SkillCatalog.ts','MuayRules.ts','BladeRules.ts','SentinelRules.ts','OccultRules.ts'].map(f=>read('deploy/combat/'+f)).join('\n');
  const nodes={};for(const id of Object.values(ids).flat()){
   const match=files.match(new RegExp('\\b'+id+':\\s*(\\{[^}]+\\})'));assert(match,'server core '+id);
@@ -22,8 +22,6 @@ let sentinelRequestKey='',sentinelHotbarKey='',sentinelCounterUntil=0,sentinelCo
 let spellTargetId='',activeMapId='ritual_village',partyState=null;
 const weaponModelFor=(id,path)=>path==='muay_boran'?'muay_wraps':'thai_dual';
 const monsterForSpell=()=>null,castAtTarget=()=>{};
-ui.toast=$('toast');
-${read('src/client/core/001-storage-and-dom.js').slice(read('src/client/core/001-storage-and-dom.js').indexOf('  function positionSwordToast()'))}
 ${slice(read('src/client/ui/042-vitals-chat-and-status.js'),'  const ORB_SEGS','  // ---- Resource strip')}
 const hotbarIds=${JSON.stringify(barIds)},serverNodes=${JSON.stringify(nodes)};
 fixture.syncHotbars=()=>{const me=ownServerCharacter();syncSwordHotbar();syncMuayHotbar();syncBladeUI(me);syncSentinelUI(me);syncOccultUI(me);layoutOrbArc();};

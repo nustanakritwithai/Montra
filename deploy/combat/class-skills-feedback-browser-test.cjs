@@ -5,9 +5,9 @@ const cases=[['phutthaisawan','sword_tree_needs_shrine'],['muay_boran','muay_boo
 function between(source,a,b){const start=source.indexOf(a),end=source.indexOf(b,start);assert(start>=0&&end>start,a);return source.slice(start,end);}
 function fixture(){
  const f=require('./class-skills-entry-browser-test.cjs').fixture();
- f.html=f.html.replace('<div id="toast"></div>',read('index.html').match(/<div id="toast"[^>]*><\/div>/)[0]);
+ f.html=f.html.replace('</body>',read('index.html').match(/<div id="toast"[^>]*><\/div>/)[0]+'</body>');
  f.script=f.script.replace('toast=message=>notices.push(message), ','');
- f.script+='\nlet toastTimer;\n'+between(read('src/client/ui/003-toast-and-mode.js'),'  function toast(','  function setModeBadge(');
+ f.script+='\nwindow.MontraAudio={notify:message=>notices.push(message)};\n'+between(read('src/client/ui/003-toast-and-mode.js'),'  function toast(','  function setModeBadge(');
  // The production rejection handler now checks combat-feature errors first.
  // Load that real helper and its data, retaining the class-rejection assertions.
  const combat=read('src/client/combat/008-weapon-party-boss-feedback.js');
@@ -17,10 +17,10 @@ function fixture(){
  f.script+='\nfunction showCombatFeatureError(){return false;}';
  f.script+='\nconst responses={},joined=room;let questNavigation=null,economyPending=false;room.onMessage=(name,callback)=>responses[name]=callback;\n'+between(network,'      joined.onMessage("command_rejected",','      joined.onMessage("warp_complete",');
  f.script+=between(network,'      joined.onMessage("sword_tree_changed",','      joined.onMessage("sword_counter_cleared",');
- f.script+='\nObject.assign(fixture,{reject:reason=>responses.command_rejected({reason}),accept:()=>responses.sword_tree_changed({action:"upgrade"}),notice:toast});';
+ f.script+='\nObject.assign(fixture,{reject:reason=>responses.command_rejected({reason}),accept:()=>responses.sword_tree_changed({action:"upgrade"}),notice:toast,lastNotice:()=>notices.at(-1)});';
  return f;
 }
-async function inspectNotice(page){await page.waitForFunction(()=>{const e=document.getElementById('toast');return e.classList.contains('show')&&Number(getComputedStyle(e).opacity)>.95;});return page.locator('#toast').evaluate(e=>{const r=e.getBoundingClientRect(),old=e.style.pointerEvents;e.style.pointerEvents='auto';const hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);e.style.pointerEvents=old;return{text:e.textContent,parent:e.parentElement.id||e.parentElement.tagName,inert:!!e.closest('[inert]'),topmost:hit===e,coveredBy:hit?.id||hit?.className,x:r.x,y:r.y,right:r.right,bottom:r.bottom,width:r.width,height:r.height,pointerEvents:getComputedStyle(e).pointerEvents,role:e.getAttribute('role')};});}
+async function inspectNotice(page){return page.evaluate(()=>{const e=document.getElementById(document.getElementById('drawer').hidden?'toast':'drawerStatus'),r=e.getBoundingClientRect();return{text:fixture.lastNotice(),status:e.textContent,inert:!!e.closest('[inert]'),clipped:e.classList.contains('sr-only')&&r.width<=1&&r.height<=1,role:e.getAttribute('role')};});}
 async function main(){
  const {chromium}=require('playwright'),f=fixture(),out=process.env.MONTRA_FEEDBACK_EVIDENCE||path.join(root,'class-skills-browser-evidence','feedback'),audit=process.argv.includes('--audit');fs.mkdirSync(out,{recursive:true});
  const server=http.createServer((req,res)=>{res.setHeader('Content-Type',(req.url==='/fixture.js'?'text/javascript':req.url==='/styles.css'?'text/css':'text/html')+'; charset=utf-8');res.end(req.url==='/fixture.js'?f.script:req.url==='/styles.css'?read('styles.css'):f.html);});await new Promise(r=>server.listen(0,'127.0.0.1',r));
@@ -33,18 +33,18 @@ async function main(){
    assert.equal(await page.evaluate(()=>fixture.wire.at(-1)?.payload.action),job==='phutthaisawan'?'upgrade':'core_upgrade');
    await page.evaluate(reason=>fixture.reject(reason),reason);
    const notice=await inspectNotice(page);report.cases.push({width,height,job,kind:'core',notice});
-   if(!audit){assert(notice.topmost&&!notice.inert,'Core rejection must be visible above modal: '+JSON.stringify(notice));assert.equal(notice.pointerEvents,'none');assert.equal(notice.role,'status');assert(notice.x>=0&&notice.y>=0&&notice.right<=width+1&&notice.bottom<=height+1);assert.match(notice.text,/กลางหมู่บ้าน/);}
+   if(!audit){assert(notice.clipped&&!notice.inert,'Core rejection uses a screen-reader status');assert.equal(notice.role,'status');assert.equal(notice.status,notice.text);assert.match(notice.text,/กลางหมู่บ้าน/);}
    await page.screenshot({path:path.join(out,width+'-'+job+'-core.png')});
    if(job==='phutthaisawan'){
-    await page.evaluate(()=>{fixture.setRanks({phuttha_core:1});fixture.accept();});assert.match(await page.locator('#skillModalBadge').textContent(),/1\/8/);const accepted=await inspectNotice(page);if(!audit)assert(accepted.topmost&&!accepted.inert,'Saved confirmation visible');
+    await page.evaluate(()=>{fixture.setRanks({phuttha_core:1});fixture.accept();});assert.match(await page.locator('#skillModalBadge').textContent(),/1\/8/);const accepted=await inspectNotice(page);if(!audit)assert(accepted.clipped&&accepted.text===accepted.status,'Saved confirmation sent to sound');
     const sendsBefore=await page.evaluate(()=>fixture.wire.length);await page.locator('#skillModalUpgradeBtn').click();assert.equal(await page.evaluate(()=>fixture.wire.length),sendsBefore+1,'feedback does not intercept repeated button');assert.equal(await page.evaluate(()=>fixture.wire.at(-1)?.payload.action),'upgrade');
    }
    await page.locator('#skillModalCloseBtn').click();
    const ready=await page.evaluate(()=>fixture.advancedModel().nodes.find(n=>!n.learned&&n.checks.every(c=>c.ok)).id);await page.evaluate(id=>fixture.select(id),ready);await page.locator('[data-sg-learn]').click();
    assert.equal(await page.evaluate(()=>fixture.wire.at(-1)?.payload.skillId),ready);await page.evaluate(reason=>fixture.reject(reason),reason);const advanced=await inspectNotice(page);report.cases.push({width,height,job,kind:'advanced',notice:advanced});
-   if(!audit)assert(advanced.topmost&&!advanced.inert,'Advanced rejection must be visible above drawer: '+JSON.stringify(advanced));
+   if(!audit)assert(advanced.clipped&&advanced.text===advanced.status,'Advanced rejection sent to sound');
    await page.screenshot({path:path.join(out,width+'-'+job+'-advanced.png')});await page.locator('#drawerClose').click();
-   if(!audit){await page.evaluate(()=>fixture.notice('ปิดตำราแล้ว'));assert((await inspectNotice(page)).topmost,'notice remains visible after close');}
+   if(!audit){await page.evaluate(()=>fixture.notice('ปิดตำราแล้ว'));const closed=await inspectNotice(page);assert(closed.clipped&&closed.status==='ปิดตำราแล้ว','field notice is available to sound and screen readers');}
   }await context.close();
  }assert.deepEqual(report.errors,[]);console.log((audit?'AUDIT ':'PASS ')+JSON.stringify(report));
  }catch(error){report.failure=error.stack;throw error;}finally{fs.writeFileSync(path.join(out,'report.json'),JSON.stringify(report,null,2));await browser.close();await new Promise(r=>server.close(r));}
