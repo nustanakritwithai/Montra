@@ -1698,6 +1698,12 @@
         toast(id ? "สวมใส่ " + bagMeta(id).name + " สำเร็จ · บันทึกแล้ว"
           : "ถอดอาวุธแล้ว · บันทึกบน VPS");
       });
+      joined.onMessage("best_weapon_unchanged", event => {
+        if(room!==joined)return;
+        itemUsePending=false;
+        renderBag();
+        toast(event?.reason==="already_best" ? "สวมอาวุธที่ดีที่สุดในกระเป๋าอยู่แล้ว" : "ไม่มีอาวุธในกระเป๋าที่สวมได้");
+      });
       joined.onMessage("item_used", event => {
         if (room !== joined) return;
         if (typeof finishHomeItemUse === "function") finishHomeItemUse(event?.slot);

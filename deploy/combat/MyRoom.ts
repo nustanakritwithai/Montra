@@ -116,7 +116,7 @@ import { PROGRESSION, SKILL_RANK_LEVELS, SKILL_RANK_PRACTICE, skillRankCost, ski
   monsterExperience, pointsAvailable, xpForNextLevel, type Allocations } from "./Progression.js";
 import {
   POTION_COOLDOWN_MS, grantRewardPotion, grantStackReward, bossAccessoryReward, SHRINE_RECIPE, SHRINE_SHARD, SHRINE_GLAIVE, parseUseItemCommand,
-  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, gearMana, overflowStaminaRegen, practiceLoot,
+  useInventoryItem, parseEquipWeaponCommand, equipInventoryWeapon, bestWeaponSlot, equipBody, parseBodyCommand, equippedStats, equipmentRatings, gearHealing, spiritGearPower, gearMana, overflowStaminaRegen, practiceLoot,
   equippedWeaponId, gearLook, weaponBonuses, type InventorySnapshot,
 } from "./ItemRules.js";
 
@@ -3920,16 +3920,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     void this.saveCharacter(id);
   }
 
-  private equipItem(client:Client,message:unknown,body:boolean):void {
+  private equipItem(client:Client,message:unknown,body:boolean,automatic=false):void {
       if(this.sentinelStuns.has(client.sessionId))return this.reject(client,"sentinel_stunned");
       if(this.sentinelWindups.has(client.sessionId))return this.reject(client,"sentinel_windup_active");
       const gearOrder=body ? parseBodyCommand(message) : null;
-      const order=body ? gearOrder : parseEquipWeaponCommand(message);
+      const order=body ? gearOrder : automatic ? (parseEmptyCommand(message)?{slot:null}:null) : parseEquipWeaponCommand(message);
       if (!order) return this.reject(client, "invalid_weapon_equip");
       const id = client.sessionId;
       const player = this.state.players.get(id);
       if (!player || !player.alive) return this.reject(client, "not_alive");
-      if (this.pendingWarps.has(id)) return this.reject(client, "character_busy");
+      if (this.pendingWarps.has(id) || this.pendingRewards.has(id) || this.pendingCharacterLeaves.has(id)) return this.reject(client, "character_busy");
       if (this.climbs.has(id) || this.flightTransitions.has(id) ||
           this.activeDashes.has(id)) return this.reject(client, "equipment_busy");
       const inventory = this.inventories.get(id);
@@ -3940,7 +3940,13 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       if (this.simulatedMs - (this.lastWeaponEquipMs.get(id) ?? -Infinity) < 700) {
         return this.reject(client, "equipment_cooldown");
       }
-      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId,player.level,gearOrder.stamp) : equipInventoryWeapon(inventory,order.slot,player.pathId,player.level);
+      const slot=automatic ? bestWeaponSlot(inventory,player.pathId,player.level) : order.slot;
+      if(automatic && (slot===null || slot===inventory.equippedWeaponSlot)){
+        this.lastWeaponEquipMs.set(id,this.simulatedMs);
+        client.send("best_weapon_unchanged",{reason:slot===null?"no_eligible_weapon":"already_best"});
+        return;
+      }
+      const change = gearOrder ? equipBody(inventory,gearOrder.position,gearOrder.slot,gearOrder.expected,player.pathId,player.level,gearOrder.stamp) : equipInventoryWeapon(inventory,slot,player.pathId,player.level);
       // Explicit guard works under both strict and non-strict Windows TS.
       if ("reason" in change) return this.reject(client, change.reason);
       const snapshot = this.captureCharacterSnapshot(id, change.inventory);
@@ -3966,7 +3972,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
           this.lastWeaponEquipMs.set(id, this.simulatedMs);
           client.send("inventory_state", change.inventory);
           if (!body) client.send("weapon_equipped", {
-            slot: order.slot, weaponId: change.weaponId,
+            slot, weaponId: change.weaponId, ...(automatic?{automatic:true}:{}),
           });
         } catch (error) {
           console.error("MONTRA weapon equip write failed:", id, error);
@@ -6188,6 +6194,7 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
       this.commitWarp(client, portal);
     },
     equip_weapon: (client:Client,message:unknown)=>this.equipItem(client,message,false),
+    equip_best_weapon: (client:Client,message:unknown)=>this.equipItem(client,message,false,true),
     equip_gear: (client:Client,message:unknown)=>this.equipItem(client,message,true),
 
     get_character_status: (client: Client, message: unknown) => {
