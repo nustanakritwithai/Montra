@@ -159,8 +159,9 @@ function fixture(raySlope=0,mapId="ritual_village") {
     point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);if(finishPlan)plan();
   };
   return {tick,tap,pointerEvent,marker,boat,model,wake,enemy,windowEvents,ghostOrders,packets,map,player,buttons,foggedTargets,
-    helmPose:()=>sandbox.sailingHelmPose("local"),course:(start,end)=>{
-      const search=sandbox.sailingCourse(map,start,end);
+    traffic:sandbox.room.state.boats, rejectGate:reason=>sandbox.rejectSailingGate(reason),
+    helmPose:()=>sandbox.sailingHelmPose("local"),course:(start,end,traffic)=>{
+      const search=sandbox.sailingCourse(map,start,end,traffic);
       let result;
       do result=search.next();while(!result.done);
       return Array.from(result.value);
@@ -353,10 +354,67 @@ test("tapping a water gate steers toward it and requests passage once in range",
   f.tap("touch",16,54,{isEnabled:()=>true,metadata:{waterGateId:gateId}});
   assert.ok(f.tick(100).throttle>0);
   Object.assign(f.boat,{x:14,z:54,anchored:false});
-  assert.deepEqual(f.tick(200),{type:"boat_intent",action:"warp",gateId});
+  assert.deepEqual(f.tick(200),{type:"boat_intent",action:"input",throttle:0,steer:0,passage:0,anchor:true});
+  f.boat.anchored=true;
+  assert.deepEqual(f.tick(300),{type:"boat_intent",action:"warp",gateId});
+  const sent=f.packets.length;
+  f.tick(400);
+  assert.equal(f.packets.length,sent,"pending passage sends no conflicting command");
+  assert.equal(f.marker.enabled,true);
+  Object.assign(f.boat,{passage:1,mapId:"drowned_marsh"});
+  f.tick(500);
+  assert.equal(f.marker.enabled,false,"authoritative passage cancels the old course");
+});
+
+test("a busy water gate waits at anchor and retries with a bounded attempt count",()=>{
+  const f=fixture(),gate=f.map.waterGates[0];
+  Object.assign(f.boat,{x:14,z:54,anchored:true});
+  f.tap("touch",gate.x,gate.z,{isEnabled:()=>true,metadata:{waterGateId:gate.id}});
+  assert.equal(f.tick(100).action,"warp");
+  assert.equal(f.rejectGate("boat_gate_busy"),true);
+  assert.equal(f.tick(1500).action,"input");
+  assert.equal(f.tick(1600).action,"warp");
+  assert.equal(f.rejectGate("boat_gate_cooldown"),true);
+  assert.equal(f.tick(3100).action,"warp");
+  assert.equal(f.rejectGate("boat_gate_busy"),false);
   assert.equal(f.marker.enabled,false);
-  f.boat.passage=1;
-  assert.deepEqual(f.tick(300),{type:"boat_intent",action:"input",throttle:0,steer:0,passage:1});
+  assert.equal(f.tick(5000).action,"input");
+  assert.equal(f.packets.filter(p=>p.action==="warp").length,3);
+});
+
+test("a water gate with no acknowledgement stops at anchor without replaying the transfer",()=>{
+  const f=fixture(),gate=f.map.waterGates[0];
+  Object.assign(f.boat,{x:14,z:54,anchored:true});
+  f.tap("touch",gate.x,gate.z,{isEnabled:()=>true,metadata:{waterGateId:gate.id}});
+  assert.equal(f.tick(100).action,"warp");
+  assert.equal(f.tick(3700).action,"input");
+  assert.equal(f.marker.enabled,false);
+  assert.equal(f.packets.filter(p=>p.action==="warp").length,1);
+});
+
+test("RRT diverts around another boat and stops for a new boat on its course",()=>{
+  const f=fixture();
+  f.map.bounds={minX:-50,maxX:50,minZ:20,maxZ:85};
+  f.map.water=[{x:-50,z:20,width:100,length:65}];
+  f.map.terrain={xs:[-50,50],zs:[20,85],heights:[[-2,-2],[-2,-2]]};
+  const start={x:0,z:51},end={x:30,z:51},other={x:15,z:51};
+  const route=f.course(start,end,[other]);
+  assert.ok(route.length>1);
+  let from=start;
+  for(const to of route){
+    for(let i=0;i<=40;i++)assert.ok(Math.hypot(from.x+(to.x-from.x)*i/40-other.x,from.z+(to.z-from.z)*i/40-other.z)>5.2);
+    from=to;
+  }
+  f.tap("touch",30,51);
+  assert.ok(f.tick(100).throttle>0);
+  Object.assign(f.boat,{x:8,anchored:false,speed:4});
+  f.traffic.set("passing",{...other,mapId:f.map.id,speed:0,heading:0});
+  const brake=f.tick(200);
+  assert.equal(brake.throttle,0);
+  assert.equal(brake.anchor,true);
+  assert.equal(f.planning(),true);
+  f.plan();
+  assert.equal(f.marker.enabled,true);
 });
 
 test("port markers steer to the berth and anchor, and the launch control works at an alternate port",()=>{

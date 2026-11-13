@@ -72,14 +72,17 @@ const waterSource=terrain.slice(terrain.indexOf("  function terrainCell"),terrai
 const courseSource=core.slice(core.indexOf("  function* sailingCourse"),core.indexOf("  function setSailingDestination"));
 const steeringSource=core.slice(core.indexOf("  function wrapSailingAngle"),core.indexOf('  $("boatLaunch")'));
 const findCourse=runInNewContext(waterSource+courseSource+"\nsailingCourse;");
-function navigator(point,boat){
-  const map=getWorldMap(boat.mapId),search=findCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
+function plotCourse(map,from,to){
+  const search=findCourse(map,from,to);
   let result;
   do result=search.next();while(!result.done);
-  const course=result.value;
+  return result.value;
+}
+function navigator(point,boat){
+  const map=getWorldMap(boat.mapId),course=plotCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
   assert.ok(course.length,"navigable course to "+JSON.stringify(point));
-  const scope={sailingDestination:{x:point.x,z:point.z,course,aligning:true,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
-    clearSailingDestination(){scope.sailingDestination=null;}};
+  const scope={sailingDestination:{x:point.x,z:point.z,course,aligning:true,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0},lastAdvance:0},
+    clearSailingDestination(){scope.sailingDestination=null;},toast(){},requestedBoatAnchor:null};
   return runInNewContext(steeringSource+"\nsailingInputForDestination;",scope);
 }
 async function sail(room,id,point,range=2.5){
@@ -118,9 +121,9 @@ const passengerOptions=opts();
 try{
   for(const map of Object.values(WORLD_MAPS)){
     const definition={...map,boatDock:{deck:{length:5.2}}};
-    const points=[...map.boatPorts.map(port=>port.berth),...map.waterGates];
+    const points=[...(map.boatPorts??[]).map(port=>port.berth),...map.waterGates??[]];
     for(const from of points)for(const to of points)if(from!==to)
-      assert.ok(findCourse(definition,from,to).length, map.id+" course "+JSON.stringify({from,to}));
+      assert.ok(plotCourse(definition,from,to).length, map.id+" course "+JSON.stringify({from,to}));
   }
   console.log("PASS client sailing routes between all docks and gates");
   const pilot=observe(await sdk.create("my_room",opts()));
