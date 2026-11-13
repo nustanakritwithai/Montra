@@ -163,6 +163,5 @@
   .nav-bar button { min-height: 40px; font-size: 11px; gap: 4px; }
   .nav-bar button span { font-size: 15px; }
   .version { display: none; }
-  .toast { bottom: calc(122px + env(safe-area-inset-bottom)); font-size: 11px; max-width: 86vw; }
 }
 

@@ -662,12 +662,14 @@
   let activeAudioEl = null;
   let speechSession = null;
   let speechGeneration = 0;
+  let lastNoticeAt = -Infinity;
 
-  function getThaiVoice() {
+  function getThaiVoice(localOnly = false) {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return null;
-    if (cachedThaiVoice) return cachedThaiVoice;
+    if (!localOnly && cachedThaiVoice) return cachedThaiVoice;
     try {
       const vList = window.speechSynthesis.getVoices() || [];
+      if (localOnly) return vList.find(v => v.localService === true && /^th(?:-|$)/i.test(v.lang)) || null;
       cachedThaiVoice = vList.find(v => v.lang === "th-TH" || v.lang.startsWith("th")) ||
         vList.find(v => /thai/i.test(v.name)) || null;
     } catch (_) {}
@@ -751,8 +753,8 @@
     const vol = Math.max(0, Math.min(1, (settings.master ?? 1) * (settings.voice ?? 0.85)));
     const p = PERSONAS[opts.persona || "guide"] || PERSONAS.guide;
     const session = speechSession = { opts, started: false, audio: null, timer: null };
-    session.timer = setTimeout(() => finishSpeech(session, { error: "start-timeout" }), 10000);
-    const thaiVoice = getThaiVoice();
+    session.timer = setTimeout(() => finishSpeech(session, { error: "start-timeout" }), opts.localOnly ? 1800 : 10000);
+    const thaiVoice = getThaiVoice(opts.localOnly);
     if ("speechSynthesis" in window && thaiVoice) {
       try {
         // Stay inside the user's tap. A delayed speak loses activation on some mobiles.
@@ -774,7 +776,25 @@
         return false;
       }
     }
-    return playAudioTtsStream(clean, vol, p, session);
+    if (!opts.localOnly) return playAudioTtsStream(clean, vol, p, session);
+    finishSpeech(session, { error: "local-voice-unavailable" });
+    return false;
+  }
+
+  function notify(text) {
+    if (document.hidden || !ctx || ctx.state !== "running" || settings.muted ||
+        !settings.master || !settings.ui || typeof text !== "string" || !text.trim()) return;
+    const now = performance.now();
+    if (now - lastNoticeAt < 1200) return;
+    lastNoticeAt = now;
+    const chime = () => { if (!document.hidden && settings.master && settings.ui) play("toast"); };
+    if (speechSession || !settings.voice) {
+      chime();
+      return;
+    }
+    // Notices may include player or server data. Only a local voice can read them.
+    const line = Array.from(text.replace(/\s+/g, " ").trim()).slice(0, 160).join("");
+    speak(line, { localOnly: true, rate: 1.15, onError: chime });
   }
 
   function stopSpeech() {
@@ -809,6 +829,7 @@
 
   window.MontraAudio = {
     play,
+    notify,
     speak,
     stopSpeech,
     isSpeaking,
@@ -821,6 +842,7 @@
       settings[key] = key === "muted" ? Boolean(value) : Math.max(0, Math.min(1, Number(value) || 0));
       applyVolumes(); save();
       if (previous !== settings[key] && ["master", "voice", "muted"].includes(key)) updateSpeechVolume();
+      if (key === "ui" && !settings.ui && speechSession?.opts.localOnly) stopSpeech();
     },
     get ready() { return Boolean(ctx && ctx.state === "running"); },
     get voices() { return voices.size; },

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#121d20" />
   <meta name="description" content="MONTRA — โลก MMORPG 3D อาคมไทย" />
   <title>MONTRA — โลกอาคม | Alpha 0.3.2</title>
-  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art-buffalo-mount-travel-atlas-atlas-landscape-small-pins-war-clock-visible-war-clock-scheduled-war-link-fix-20261113-city-market-all-war-times-open-challenge-read-only-item-details" />
+  <link rel="stylesheet" href="./styles.css?v=nested-recipes-20261108-attack-button-20261108-loot-feed-20261108-recipe-popup-20261108-advanced-loadout-20261109-skill-feedback-20261109-skill-menu-20261110-personal-housing-titan-crafting-market-combo-counter-target-hud-quick-potion-slot-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-ghost-pool-mobile-hud-monster-menu-ghost-jar-water-action-icons-companion-quick-controls-companion-discovery-shared-boat-access-companion-art-team-menu-water-button-offset-round-boat-access-ayutthaya-menu-art-buffalo-mount-travel-atlas-atlas-landscape-small-pins-war-clock-visible-war-clock-scheduled-war-link-fix-20261113-city-market-all-war-times-open-challenge-read-only-item-details-audio-notices" />
 </head>
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
@@ -81,7 +81,6 @@
       <small id="pkHint">แตะตัวผู้เล่นคนอื่นเพื่อโจมตี</small>
     </section>
     <aside id="lootFeed" class="loot-feed" role="status" aria-live="polite" aria-atomic="true" aria-label="ไอเท็มที่ได้รับล่าสุด" hidden></aside>
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <div id="warpLoading" class="warp-loading" role="status" hidden>กำลังเดินทาง…</div>
 
     <div class="field-dock">
@@ -302,11 +301,12 @@
   </div>
   <div id="equipPopupBackdrop" class="equip-popup-backdrop" hidden></div>
   <div id="equipPopup" class="equip-popup" hidden role="dialog" aria-modal="true" aria-label="เลือกอุปกรณ์"></div>
+  <div id="toast" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="./account-entry.js?v=rebirth-mastery"></script>
   <script src="https://cdn.babylonjs.com/babylon.js" defer></script>
   <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" defer></script>
   <script src="https://unpkg.com/@colyseus/sdk@0.18.1/dist/colyseus.js" defer></script>
-  <script src="./audio.js?v=0.16.1-audio-contracts" defer></script>
+  <script src="./audio.js?v=0.16.1-audio-notices" defer></script>
   <script src="./main.js?v=0.20.5-quest-autowalk-personal-housing-city-phases-1-4-replacement-skills-titan-crafting-market-himmapan-replacements-meteor-leader-city-trade-combat-feedback-trade-contracts-samlan-market-unified-hits-combo-counter-trade-routes-target-hud-market-contributions-bag-108-neutral-return-quick-potion-slot-himmapan-mountain-guild-city-npcs-voice-skill-art-bottom-skill-actions-guild-command-art-war-objectives-compact-potion-hold-sky-horizon-monster-menu-ghost-jar-water-action-icons-left-chat-fishing-shared-boat-access-companion-art-team-menu-ghost-healer-monster-water-habitat-capital-moat-siege-capital-grass-horizon-capital-outside-warps-capital-moat-restored-moat-surface-depth-capital-water-waves" defer onerror="window.MontraEntry?.worldUnavailable('โหลดเกมไม่สำเร็จ กรุณาลองอีกครั้ง')"></script>
 </body>
 </html>
