@@ -211,11 +211,45 @@
     button.disabled=!personalItems[id];name.textContent=label;amount.textContent="×"+quantity;
     button.append(createItemTile(id,{quantity}),name,amount);button.onclick=()=>inspectBenchItem(id);return button;
   }
+  function updateBenchFormulaStock(rootId,stock,batch){
+    for(const host of [$("benchCreatedFrom"),$("benchUsedFor")]){
+      for(const row of host.children){
+        if(!row.dataset.recipe)continue;
+        const multiplier=!benchInspectItem && row.dataset.recipe==="craft:"+rootId?batch:1;
+        const nodes=row.firstElementChild.children;
+        for(const node of nodes){
+          if(node.dataset.ingredientQty===undefined)continue;
+          const required=Number(node.dataset.ingredientQty)*multiplier;
+          const have=stock?.get(node.dataset.item) ?? 0,short=Math.max(0,required-have);
+          const amount=node.children[2],status=node.children[3];
+          const count=stock?"มี "+have+" / "+required:"ใช้ "+required;
+          const availability=stock?(short?"ขาด "+short:"ครบ"):"รอข้อมูล";
+          if(amount.textContent!==count)amount.textContent=count;
+          if(status.textContent!==availability)status.textContent=availability;
+          node.dataset.stock=stock?(short?"missing":"ready"):"loading";
+          const label="ดูสูตรและที่มาของ "+node.children[1].textContent+" · "+count+" · "+availability;
+          if(node.getAttribute("aria-label")!==label)node.setAttribute("aria-label",label);
+        }
+        const output=nodes[nodes.length-1],quantity=Number(row.dataset.outputQty)*multiplier;
+        const result=output.children[2],amount="×"+quantity;
+        if(result.textContent!==amount){
+          result.textContent=amount;
+          output.setAttribute("aria-label","ดูสูตรและที่มาของ "+output.children[1].textContent+" "+amount);
+        }
+      }
+    }
+  }
   function renderBenchRecipeExplorer(rootId){
     const panel=$("benchRecipeExplorer");if(!panel)return;
     const key=[$("benchGroup").value,$("benchLevel").value,rootId,craftPagePosition].join("/");
     if(panel.dataset.root!==key || benchInspectRoom!==room){benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;panel.dataset.root=key;benchInspectRoom=room;}
-    panel.hidden=!personalItems[rootId];if(panel.hidden){$("benchSelectedSummary").hidden=false;$("benchCraftDetails").hidden=false;$("benchCraftFooter").hidden=false;$("benchInspectBack").hidden=true;panel.dataset.graphKey="";return;}
+    panel.hidden=!personalItems[rootId];
+    if(panel.hidden){
+      $("benchSelectedSummary").hidden=false;$("benchCraftDetails").hidden=false;$("benchCraftFooter").hidden=false;
+      $("benchInspectBack").hidden=true;panel.dataset.graphKey="";
+      $("benchCreatedFrom").replaceChildren();$("benchUsedFor").replaceChildren();
+      return;
+    }
     const id=benchInspectItem||rootId,def=personalItems[id],nested=Boolean(benchInspectItem);
     $("benchSelectedSummary").hidden=nested;$("benchCraftDetails").hidden=nested;$("benchCraftFooter").hidden=nested;
     const graphKey=JSON.stringify([catalogRevision,key,id,benchUsesPage,refineInput]);
@@ -234,10 +268,13 @@
       if(!rows.length){const note=document.createElement("p");note.className="note";note.textContent=empty;host.append(note);return;}
       for(const edge of rows){
         const card=document.createElement("div"),formula=document.createElement("div"),caption=document.createElement("p");
-        card.className="ck-relation";card.dataset.recipe=edge.id;formula.className="ck-formula";
+        card.className="ck-relation";card.dataset.recipe=edge.id;card.dataset.outputQty=String(edge.quantity);
+        formula.className="ck-formula";
         for(const [index,part] of edge.inputs.entries()){
           if(index){const plus=document.createElement("span");plus.className="ck-recipe-symbol";plus.textContent="+";plus.setAttribute("aria-hidden","true");formula.append(plus);}
-          formula.append(benchRecipeNode(part.item,part.qty));
+          const input=benchRecipeNode(part.item,part.qty),status=document.createElement("small");
+          input.dataset.ingredientQty=String(part.qty);
+          status.className="ck-ingredient-stock";input.append(status);formula.append(input);
         }
         const arrow=document.createElement("span");arrow.className="ck-recipe-symbol";arrow.textContent="→";arrow.setAttribute("aria-hidden","true");
         formula.append(arrow,benchRecipeNode(edge.output,edge.quantity));
@@ -325,8 +362,13 @@
     renderBenchRecipeExplorer(select.value);
     $("craftRequirements").replaceChildren();
     const def=personalItems[select.value],button=$("benchCraft");
+    const batch=typeof selectedCraftQuantity==="function"?selectedCraftQuantity():1;
+    const multiplier=batch ?? 1;
+    const stock=slots?new Map():null;
+    for(const stack of slots || [])if(stack)stock.set(stack.itemId,(stock.get(stack.itemId) || 0)+stack.quantity);
+    updateBenchFormulaStock(select.value,stock,multiplier);
     bindItemHuntButton($("benchTrack"),select.value,Math.min(def?.copyLimit??1,itemHuntCount(select.value)+1));
-    const missing=def?.recipe.filter(r=>itemHuntCount(r.item)<r.qty && itemHuntSource(r.item,false)?.open)??[];
+    const missing=def?.recipe.filter(r=>(stock?.get(r.item) || 0)<r.qty*multiplier && itemHuntSource(r.item,false)?.open)??[];
     const supply=$("benchHuntChoice"),choices=missing.map(r=>r.item).join("|");
     if(supply.dataset.choices!==choices){
       const previous=supply.value;
@@ -335,7 +377,7 @@
     }
     supply.hidden=missing.length<2;
     const needed=missing.find(r=>r.item===supply.value);
-    bindItemHuntButton($("benchTrackSupply"),needed?.item,needed?.qty);
+    bindItemHuntButton($("benchTrackSupply"),needed?.item,needed?needed.qty*multiplier:undefined);
     const ingredient=def?.recipe.find(r=>personalItems[r.item]?.station==="kiln"),source=$("benchIngredient");
     source.hidden=!ingredient;
     if(ingredient){
@@ -349,38 +391,17 @@
     if(previous)back.textContent="กลับไปสูตร "+personalItems[previous.id].name;
     button.textContent=benchAction(def);
     $("benchOutput").textContent=def?.name||"เลือกสูตรสร้างของ";renderItemTile("benchOutputItem",def?select.value:null);
-    const ingredients=$("benchIngredients");
-    if(!def){ingredients.replaceChildren();ingredients.dataset.recipe="";}
     $("benchOwned").textContent="";$("benchCost").textContent="…";
     if(!def){$("benchInfo").textContent="ไม่มีสูตรในช่วงนี้ · เปลี่ยนเลเวลหรือประเภทสูตร";button.disabled=true;return;}
-    const counts=def.recipe.map(r=>(slots||[]).reduce((n,s)=>n+(s?.itemId===r.item?s.quantity:0),0));
-    const batch=typeof selectedCraftQuantity==="function"?selectedCraftQuantity():1;
-    const multiplier=batch ?? 1;
+    const counts=def.recipe.map(r=>stock?.get(r.item) || 0);
     const cost=(def.craftGold??workbenchGold)*multiplier;
     const low=(def.level||1)>level;
     $("benchInfo").textContent=[low?"ต้องการ Lv."+def.level:"Lv."+(def.level||1),statLine(def.stats),def.healHp?"ฟื้น HP "+def.healHp:"",def.healMana?"ฟื้น MP "+def.healMana:"",def.dropHint?"ล่าได้ที่ "+def.dropHint:"",def.forge&&def.level>=25?"มีออปชันสุ่มเมื่อสร้าง":""].filter(Boolean).join(" · ");
     $("benchCost").textContent=cost.toLocaleString()+" ทอง";
-    // Keep the same native buttons across live inventory ticks so keyboard/touch
-    // activation cannot lose its target between pointer down and click.
-    const ingredientKey=JSON.stringify([catalogRevision,select.value,def.recipe]);
-    if(ingredients.dataset.recipe!==ingredientKey){
-      ingredients.dataset.recipe=ingredientKey;ingredients.replaceChildren();
-      for(const part of def.recipe){
-        const row=document.createElement("li"),name=document.createElement("span"),count=document.createElement("strong");
-        name.textContent=personalItems[part.item]?.name||part.item;
-        row.append(benchRecipeNode(part.item,part.qty),name,count);ingredients.append(row);
-      }
-    }
-    for(const [i,part] of def.recipe.entries()){
-      const row=ingredients.children[i],count=row.children[2];
-      const required=part.qty*multiplier;
-      count.textContent=counts[i]+" / "+required;count.setAttribute("aria-label",(counts[i]>=required?"ครบ":"ขาด")+" · "+counts[i]+" / "+required);
-      row.classList.toggle("missing",counts[i]<required);
-    }
-    for(const [ok,label] of [[!low,"ระดับตัวละคร "+level+" / "+(def.level||1)],[Boolean(slots)&&def.recipe.every((r,i)=>counts[i]>=r.qty*multiplier),"วัสดุในกระเป๋า"],[economyGold!==null&&economyGold>=cost,"ทองเพียงพอ"],[Boolean(player?.alive),"ตัวละครมีชีวิต"]]){
+    for(const [ok,label] of [[!low,"ระดับตัวละคร "+level+" / "+(def.level||1)],[economyGold!==null&&economyGold>=cost,"ทองเพียงพอ"],[Boolean(player?.alive),"ตัวละครมีชีวิต"]]){
       const row=document.createElement("li");row.className=ok?"met":"missing";row.textContent=(ok?"✓ ":"✕ ")+label;$("craftRequirements").appendChild(row);
     }
-    const ore=def.recipe.find((r,i)=>counts[i]<r.qty && /^mat_metal_[1-7]$/.test(r.item));
+    const ore=def.recipe.find((r,i)=>counts[i]<r.qty*multiplier && /^mat_metal_[1-7]$/.test(r.item));
     if(ore){const tier=ore.item.split("_").pop();$("benchInfo").textContent+=" · แร่เหล็ก: ขุดก้อนหินปนแร่ชั้น "+tier+" 2 ก้อน แล้วเลือกในกระเป๋ากดแปรรูป · กดตามหาเพื่อดูตำแหน่งหิน";}
     const gear=def.kind==="mainHand" || wearPositions(def.kind).length;
     const limit=def.copyLimit??1,quantity=itemHuntCount(select.value),banked=inventoryState?.forgeCopies?.[select.value]??0,owned=gear && quantity>=limit && banked>=99;

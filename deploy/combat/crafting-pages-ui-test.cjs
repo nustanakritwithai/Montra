@@ -17,8 +17,12 @@ function node(tag='div'){
     append(...children){for(const child of children)this.appendChild(child);},
     appendChild(child){this.children.push(child);if(this.tagName==='SELECT'&&this.children.length===1)value=String(child.value);return child;},
     showModal(){this.open=true;},close(){this.open=false;},focus(){},scrollIntoView(){this.scrolled=true;},addEventListener(){},querySelectorAll(){return [];},click(){if(!this.disabled)this.onclick?.();}};
-  Object.defineProperties(el,{className:{get(){return [...classes].join(' ');},set(next){classes.clear();for(const name of String(next).split(/\s+/).filter(Boolean))classes.add(name);}},options:{get(){return this.children;}},value:{get(){return value;},set(next){next=String(next);value=this.tagName==='SELECT'&&!this.children.some(c=>String(c.value)===next)?'':next;}}});
+  Object.defineProperties(el,{firstElementChild:{get(){return this.children[0];}},className:{get(){return [...classes].join(' ');},set(next){classes.clear();for(const name of String(next).split(/\s+/).filter(Boolean))classes.add(name);}},options:{get(){return this.children;}},value:{get(){return value;},set(next){next=String(next);value=this.tagName==='SELECT'&&!this.children.some(c=>String(c.value)===next)?'':next;}}});
   return el;
+}
+function recipeIngredient(f,id){
+  return f.$('benchCreatedFrom').children.flatMap(row=>row.firstElementChild?.children || [])
+    .find(node=>node.dataset.item===id && node.dataset.ingredientQty!==undefined);
 }
 function fixture(){
   const elements=new Map(),wire=[],toasts=[],callbacks={},timers=new Map();let timerId=0,request=0;
@@ -99,7 +103,17 @@ test('supported server previews batch requirements and acknowledges a queued cra
   f.choose('all','mat_charcoal_1');
   f.$('benchQuantity').value='2';
   f.$('benchQuantity').oninput();
-  assert.match(f.$('benchIngredients').children[0].children[2].textContent,/5 \/ 4/);
+  const wood=recipeIngredient(f,'mat_raw_wood_1');
+  assert.equal(wood.children[2].textContent,'มี 5 / 4');
+  assert.equal(wood.children[3].textContent,'ครบ');
+  assert.equal(wood.dataset.stock,'ready');
+  assert.equal(f.$('benchCreatedFrom').children[0].firstElementChild.children.at(-1).children[2].textContent,'×2');
+  f.$('benchQuantity').value='3';f.$('benchQuantity').oninput();
+  assert.equal(recipeIngredient(f,'mat_raw_wood_1'),wood);
+  assert.equal(wood.children[2].textContent,'มี 5 / 6');
+  assert.equal(wood.children[3].textContent,'ขาด 1');
+  assert.equal(f.$('benchCraft').disabled,true);assert.equal(f.$('benchQueue').disabled,true);
+  f.$('benchQuantity').value='2';f.$('benchQuantity').oninput();
   f.$('benchQueue').click();
   const order=f.wire.find(msg=>msg.command==='craft_enqueue');
   assert.equal(order.payload.quantity,2);
@@ -129,15 +143,18 @@ test('crafting output, materials and shrine recipes use accessible inventory thu
     assert.equal(tile.children[1].className,'bag-quantity');assert.equal(tile.children[1].textContent,badge);assert.equal(tile.children[1].getAttribute('aria-hidden'),'true');
   };
   check(f.$('benchOutputItem').children[0],'ดาบคู่','🗡');assert.equal(f.$('benchOutput').textContent,'ดาบคู่');
-  let rows=f.$('benchIngredients').children;assert.equal(rows.length,1);
-  check(rows[0].children[0].children[0],'แท่งเหล็ก ×2','◆','×2');assert.equal(rows[0].children[1].textContent,'แท่งเหล็ก');assert.equal(rows[0].children[2].textContent,'2 / 2');
+  const ingot=recipeIngredient(f,'mat_ingot_1');
+  assert.equal(f.$('benchIngredients'),null);
+  check(ingot.children[0],'แท่งเหล็ก ×2','◆','×2');assert.equal(ingot.children[1].textContent,'แท่งเหล็ก');
+  assert.equal(ingot.children[2].textContent,'มี 2 / 2');
   check(f.$('craftShrineOutput').children[0],'ง้าวจันทร์ผู้พิทักษ์','◈');
   check(f.$('craftShrineInput').children[0],'เศษตรา ×5','◆','×5');
   f.choose('kiln','mat_ingot_1');check(f.$('benchOutputItem').children[0],'แท่งเหล็ก','◆');
-  rows=f.$('benchIngredients').children;assert.equal(rows.length,2);check(rows[0].children[0].children[0],'แร่เหล็ก ×2','◆','×2');check(rows[1].children[0].children[0],'ถ่าน','◆');
-  f.run('renderBag();renderBag();');assert.equal(f.$('benchOutputItem').children.length,1);assert.equal(f.$('benchIngredients').children.length,2,'refresh replaces thumbnails rather than accumulating them');
+  const ore=recipeIngredient(f,'mat_metal_1'),coal=recipeIngredient(f,'mat_charcoal_1');
+  check(ore.children[0],'แร่เหล็ก ×2','◆','×2');check(coal.children[0],'ถ่าน','◆');
+  f.run('renderBag();renderBag();');assert.equal(f.$('benchOutputItem').children.length,1);assert.equal(recipeIngredient(f,'mat_metal_1'),ore);
   for(const item of Object.values(f.items))delete item.recipe;
-  f.ctx.catalogRevision++;f.run('renderBag()');assert.equal(f.$('benchOutputItem').hidden,true);assert.equal(f.$('benchOutputItem').children.length,0);assert.equal(f.$('benchIngredients').children.length,0);
+  f.ctx.catalogRevision++;f.run('renderBag()');assert.equal(f.$('benchOutputItem').hidden,true);assert.equal(f.$('benchOutputItem').children.length,0);assert.equal(f.$('benchRecipeExplorer').hidden,true);
   assert.equal(f.mutations().length,0,'display updates never send crafting mutations');
 });
 
@@ -154,7 +171,8 @@ test('live gold and inventory events refresh counts, costs and insufficient-reso
   const f=fixture();f.choose('all','blade_25');f.callbacks.economy_state({gold:59});assert.equal(f.$('benchCraft').disabled,true);assert.equal(f.$('craftGold').textContent,'59 ทอง');
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);f.callbacks.economy_state({gold:60});assert.equal(f.$('benchCraft').disabled,false);
   const changed=f.payload();changed.slots[0].quantity=1;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,true);
-  const row=f.$('benchIngredients').children[0];assert.equal(row.children[2].textContent,'1 / 2');assert.equal(row.children[0].children[0].children[1].textContent,'×2','thumbnail shows required quantity, not current stock');assert.equal(row.classList.contains('missing'),true);
+  const ingredient=recipeIngredient(f,'mat_ingot_1');assert.equal(ingredient.children[2].textContent,'มี 1 / 2');
+  assert.equal(ingredient.children[3].textContent,'ขาด 1');assert.equal(ingredient.dataset.stock,'missing');
   f.ctx.inventoryState.forgeCopies.mat_ingot_1=99;f.ctx.inventoryState.equipment.leftRing='mat_ingot_1';f.run('renderBag()');
   assert.equal(f.$('benchCraft').disabled,true,'only carried material stacks satisfy crafting ingredients');
   changed.slots[0].quantity=2;f.callbacks.inventory_state(changed);assert.equal(f.$('benchCraft').disabled,false);
@@ -314,4 +332,4 @@ test('bag/profile contain no duplicate crafting panels; live HUD and shared refr
 console.log(`PASS dedicated crafting page: ${assertions} focused regression groups`);
 
 }
-module.exports={fixture};
+module.exports={fixture,recipeIngredient};

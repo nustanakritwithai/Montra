@@ -122,8 +122,7 @@ test('inventory and item displays share one 50px size and inherit the same slot 
   assert.match(rule('.bag-slot.item-slot'),/flex\s*:\s*0 0 var\(--item-slot-size\)/);assert.match(rule('.bag-slot.item-slot'),/pointer-events\s*:\s*none/);assert.match(rule('.bag-slot.item-slot'),/flex-direction\s*:\s*row/);
   for(const selector of ['.bag-slot.item-slot','.wear-tile','.equip-candidate-slot'])assert.doesNotMatch(rule(selector),/(?:^|;)\s*(?:background|border(?:-radius|-color)?|box-shadow)\s*:/,`${selector} must inherit inventory skin`);
   assert.match(rule('.item-slot-host[hidden],.item-preview[hidden]'),/display\s*:\s*none/);
-  assert.match(rule('.craft-ingredients li'),/grid-template-columns\s*:\s*var\(--item-slot-size\)/);
-  assert(!rules.some(r=>r.selector==='.craft-ingredients span'),'ingredient text rules must not style thumbnail symbols');
+  assert.match(rule('.ck-recipe-node .item-slot'),/--item-slot-size\s*:/);
 });
 
 test('all item display surfaces use shared thumbnails while interactive inventory slots stay buttons',()=>{
@@ -131,7 +130,7 @@ test('all item display surfaces use shared thumbnails while interactive inventor
   for(const id of ids){assert((source+index).includes(`id="${id}"`),`missing host ${id}`);assert.match(source,new RegExp(`renderItem(?:Tile|Preview)\\("${id}"\\s*,`),`missing shared renderer ${id}`);}
   assert.match(source,/renderItemPreview\("fieldGoalItem",goal\?\.comparison\?\.piece\|\|goal\?\.recipe\|\|goal\?\.bossGear/);
   for(const id of ['marketItem','auctionItem','tradeItem'])assert(source.includes(`id="${id}Preview"`),`missing selected preview ${id}`);
-  assert.match(slice('  function renderWorkbench(','  function renderCraft('),/row\.append\(benchRecipeNode\(part\.item,part\.qty\),name,count\)/);
+  assert.match(slice('  function renderBenchRecipeExplorer(','  function benchAction('),/benchRecipeNode\(part\.item,part\.qty\)/);
   assert.match(slice('  function benchRecipeNode(','  function renderBenchRecipeExplorer('),/button\.append\(createItemTile\(id,\{quantity\}\),name,amount\)/);
   const central=slice('  function renderCentralMarket(','  function renderEconomy()');
   assert.match(central,/createMarketProduct\(item\.item,/);assert.match(central,/piece=\{itemId:item\.item,quantity:1\},card=createMarketProduct\(piece,/);

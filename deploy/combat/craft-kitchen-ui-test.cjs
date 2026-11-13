@@ -1,6 +1,6 @@
 // Exercise the real workbench functions, native-select model and existing wire guards.
 const assert=require('node:assert/strict');
-const {fixture}=require('./crafting-pages-ui-test.cjs');
+const {fixture,recipeIngredient}=require('./crafting-pages-ui-test.cjs');
 let tests=0;const test=(name,fn)=>{fn();tests++;console.log('PASS '+name);};
 test('craft kitchen shell names unsupported systems without fabricated skill or probability numbers',()=>{
   const f=fixture();f.run('openCraftingPage()');
@@ -51,11 +51,11 @@ test('locked recipe cards describe actual level requirement, never pretend recip
 });
 test('material checks and card stock refresh from inventory; duplicate clicks still send once',()=>{
   const f=fixture();f.choose('all','blade_25');
-  assert.equal(f.$('benchIngredients').children[0].children[2].getAttribute('aria-label'),'ครบ · 2 / 2');
+  assert.equal(recipeIngredient(f,'mat_ingot_1').getAttribute('aria-label'),'ดูสูตรและที่มาของ แท่งเหล็ก · มี 2 / 2 · ครบ');
   const payload=f.payload();payload.slots[0].quantity=1;f.callbacks.inventory_state(payload);
-  assert.match(f.$('craftRequirements').children[1].textContent,/✕/);assert.equal(f.$('benchCraft').disabled,true);
+  assert.equal(recipeIngredient(f,'mat_ingot_1').children[3].textContent,'ขาด 1');assert.equal(f.$('benchCraft').disabled,true);
   payload.slots[0].quantity=2;payload.slots[5]={itemId:'blade_25',quantity:1};f.callbacks.inventory_state(payload);
-  assert.match(f.$('craftRequirements').children[1].textContent,/✓/);
+  assert.equal(recipeIngredient(f,'mat_ingot_1').children[3].textContent,'ครบ');
   const card=f.$('craftRecipeGrid').children.find(c=>c.children[1].textContent==='ดาบคู่');assert.equal(card.children[2].textContent,'มีอยู่ 1');
   f.$('benchCraft').click();f.$('benchCraft').onclick();assert.equal(f.mutations().length,1);
 });

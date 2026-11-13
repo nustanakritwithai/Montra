@@ -64,11 +64,11 @@ async function main(){
    await check('root-node-and-lost-focus-escape');
    await page.evaluate(()=>f.choose('all','blade_25'));
    await clickItem('#benchCreatedFrom','mat_ingot_1');assert.equal(await page.locator('#benchInspectTitle').textContent(),'แท่งเหล็ก');await check('ingot-formula');
-   await clickItem('#benchCreatedFrom','mat_metal_1');assert.match(await page.locator('#benchCreatedFrom').textContent(),/หินปนแร่.*×2.*แร่เหล็ก.*×1.*แปรรูป/);await check('refining-formula');
+   await clickItem('#benchCreatedFrom','mat_metal_1');assert.match(await page.locator('#benchCreatedFrom').textContent(),/หินปนแร่.*มี 0 \/ 2.*ขาด 2.*แร่เหล็ก.*×1.*แปรรูป/);await check('refining-formula');
    await clickItem('#benchCreatedFrom','raw_ore');assert.match(await page.locator('#benchCreatedFrom').textContent(),/ไม่มีสูตรสร้างหรือแปรรูป/);await check('raw-material');
    await page.locator('#benchInspectBack').click();assert.equal(await page.locator('#benchInspectTitle').textContent(),'แร่เหล็ก');
    await page.locator('#benchInspectRoot').click();assert.equal(await page.locator('#benchCraftDetails').isVisible(),true);
-   const ingredient=page.locator('#benchIngredients button[data-item="mat_ingot_1"]');await ingredient.focus();
+   const ingredient=page.locator('#benchCreatedFrom button[data-ingredient-qty][data-item="mat_ingot_1"]');await ingredient.focus();
    await page.evaluate(()=>{f.run('renderBag();renderBag()');f.callbacks.economy_state({gold:999});});
    assert.equal(await ingredient.evaluate(e=>e===document.activeElement),true,'live polling preserves keyboard focus');
    await ingredient.press('Enter');assert.equal(await page.locator('#benchInspectTitle').textContent(),'แท่งเหล็ก');
