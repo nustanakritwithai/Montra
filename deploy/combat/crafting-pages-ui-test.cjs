@@ -93,6 +93,30 @@ function fixture(){
 }
 
 if(require.main===module){
+test('material entry lists all recipes that consume it, including locked ones',()=>{
+  const f=fixture();f.player.level=1;f.run('openCraftingPage(null,"mat_raw_wood_1")');
+  assert.deepEqual(f.ids(),['potion_1','mat_charcoal_1']);
+  assert.equal(f.$('craftMaterialStatus').hidden,false);assert.match(f.$('craftMaterialStatus').textContent,/ไม้ดิบ/);
+  assert.equal(f.$('craftRecipePopup').open,false);assert.equal(f.$('craftPanel').hidden,true);
+  f.$('craftRecipeGrid').children.find(card=>card.dataset.recipe==='mat_charcoal_1').click();
+  assert.equal(f.$('craftRecipePopup').open,true);assert.equal(f.$('benchRecipe').value,'mat_charcoal_1');
+  f.$('craftRecipePopupClose').click();f.$('craftClearMaterial').click();
+  assert.equal(f.$('craftMaterialStatus').hidden,true);assert(f.ids().includes('mat_ingot_1'));assert.equal(f.mutations().length,0);
+  f.run('openCraftingPage(null,"mat_ingot_1")');
+  assert(f.ids().includes('blade_50'));assert(f.ids().every(id=>f.items[id].recipe.some(part=>part.item==='mat_ingot_1')));
+});
+
+test('material entry preserves legacy shrine production and identifies materials refined in the bag',()=>{
+  const f=fixture();f.run('openCraftingPage(null,"shrine_shard")');
+  assert.equal(f.$('craftPanel').hidden,false);assert.equal(f.$('craftPanel').open,true);
+  assert.equal(f.$('craftRecipePopup').open,false);assert.equal(f.mutations().length,0);
+  f.items.mat_raw_stone_1={name:'หินดิบ',kind:'material',refinesTo:'mat_metal_1'};
+  f.run('openCraftingPage(null,"mat_raw_stone_1")');
+  assert.deepEqual(f.ids(),[]);assert.equal(f.$('benchCraft').disabled,true);
+  assert.match(f.$('craftMaterialStatus').textContent,/แปรรูปเป็น แร่เหล็ก ได้ในกระเป๋า/);
+  f.$('craftClearMaterial').click();assert.equal(f.$('craftPanel').hidden,false);
+});
+
 test('supported server previews batch requirements and acknowledges a queued craft',()=>{
   const f=fixture();
   f.run('openCraftingPage()');

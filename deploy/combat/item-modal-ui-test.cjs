@@ -200,6 +200,16 @@ test('recipe picture routes raw kiln materials and the legacy shrine ingredient'
   assert.equal(f.$('craftPanel').open,true);assert.equal(f.$('craftPanel').scrolled,true);assert.equal(f.mutations().length,0);
 });
 
+test('small produce button opens the production page for the selected material',()=>{
+  const f=fixture();f.open();f.select(2);
+  const produce=f.$('bagDetailProduce');assert.equal(produce.hidden,true);
+  f.ctx.closeItemDetailModal();f.select(3);assert.equal(produce.hidden,false);
+  const before=f.snapshot();produce.click();
+  assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal().hidden,true);assert.equal(f.ui.drawer.inert,false);
+  assert.equal(f.ctx.craftMaterialId,'ore');assert.equal(f.$('benchGroup').value,'all');
+  assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+});
+
 test('item picture stays visible and returns focus when a recipe becomes unavailable',()=>{
   const f=fixture();f.items.ring.recipe=[{item:'ore',qty:2}];f.open();f.select(1);
   const link=f.$('bagDetailRecipe');link.focus();

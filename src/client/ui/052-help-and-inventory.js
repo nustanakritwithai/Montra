@@ -550,6 +550,15 @@
     equip.hidden=!canShowEquip;
     equip.disabled=use.disabled;
     equip.textContent=itemUsePending?"กำลังติดตั้ง…":confirmingBind?"ยืนยันผูกและสวม":"ติดตั้ง";
+    const produce=$("bagDetailProduce");
+    const canShowProduce=!!chosen && (meta?.kind==="material" || chosen.itemId===SHRINE_SHARD);
+    const produceDisabled=!economyReady();
+    if((!canShowProduce || produceDisabled) && document.activeElement===produce)$("itemModalClose").focus({preventScroll:true});
+    produce.hidden=!canShowProduce;
+    produce.disabled=produceDisabled;
+    produce.onclick=canShowProduce?()=>{
+      if(drawerActive==="bag" && !$("itemDetailModal").hidden && !produce.disabled)openCraftingPage(null,chosen.itemId);
+    }:null;
     renderBagRecipeLink(chosen?.itemId,target);
     renderBagQuickDetail(chosen,worn);
   }
