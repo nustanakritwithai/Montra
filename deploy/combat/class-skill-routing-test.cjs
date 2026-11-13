@@ -53,7 +53,7 @@ test('the minimap flyout offers services and the journal without the removed sho
   assert.doesNotMatch(hud,/id="(?:petButton|skillLoadoutButton)"/);
   assert.match(character,/id="petButton"/);
   assert.match(character,/id="skillLoadoutButton"/);
-  let journal=0;
+  let journal=0,homeEntry=false;
   const buttons=[];
   const nav={after(){}};
   const node=()=>({dataset:{},setAttribute(){},style:{setProperty(){}},querySelector:()=>null,
@@ -62,8 +62,11 @@ test('the minimap flyout offers services and the journal without the removed sho
   vm.runInNewContext(flyout,{
     document:{querySelector:()=>nav,createElement:node,addEventListener(){}},
     $:id=>id==='fieldMenuButton'?menu:node(), addEventListener(){},openFieldMenu(){journal++;},
+    openHomePanel(enter){homeEntry=enter;},
   });
-  assert.deepEqual(buttons.map(b=>b.dataset.menuSource),['menuGuild','marketButton','menuQuest','modeButton','helpButton','fieldMenu']);
+  assert.deepEqual(buttons.map(b=>b.dataset.menuSource),['menuHome','menuGuild','marketButton','menuQuest','modeButton','helpButton','fieldMenu']);
+  buttons[0].onclick();
+  assert.equal(homeEntry,true);
   buttons.at(-1).onclick();
   assert.equal(journal,1);
 });

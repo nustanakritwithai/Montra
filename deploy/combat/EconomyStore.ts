@@ -30,7 +30,7 @@ const MAX_GOLD = 1_000_000_000;
 const HUNGER_POINT_MS = 240_000;
 const THIRST_POINT_MS = 120_000;
 const GARDEN_GROWTH_MS = 120_000;
-const HOME_PRICES = [0, 100, 200] as const;
+const HOME_UPGRADE_PRICE = 200;
 
 function cookingLevel(xp: number) {
   return xp >= 15 ? 3 : xp >= 5 ? 2 : 1;
@@ -1192,18 +1192,25 @@ export class EconomyStore {
       furniture, parts, garden, serverNow: now, cooking: this.cookingState(id)};
   }
 
+  ensureHome(id: string): void {
+    characterId(id);
+    this.db.prepare("INSERT INTO homes(actor,level) VALUES(?,1) ON CONFLICT(actor) DO NOTHING").run(id);
+  }
+
   homeAction(id: string, order: HomeAction, now = Date.now(), mayPlaceWall?: (cell:number,rotation:0|1)=>boolean) {
     const {requestId, ...intent} = order;
     return this.once(id, requestId, "home_action", intent, () => {
+      if (order.action === "buy") {
+        this.ensureHome(id);
+        return {action: order.action};
+      }
       const account = this.account(id), level = Number(this.db.prepare("SELECT level FROM homes WHERE actor=?").get(id)?.level ?? 0);
-      if (order.action === "buy" || order.action === "upgrade") {
-        const targetLevel = order.action === "buy" ? 1 : 2;
-        if (level !== targetLevel - 1) throw Error("home_level_unavailable");
-        const cost = HOME_PRICES[targetLevel];
-        if (account.gold < cost) throw Error("insufficient_gold");
-        account.gold -= cost;
+      if (order.action === "upgrade") {
+        if (level !== 1) throw Error("home_level_unavailable");
+        if (account.gold < HOME_UPGRADE_PRICE) throw Error("insufficient_gold");
+        account.gold -= HOME_UPGRADE_PRICE;
         this.put(id, account);
-        this.db.prepare("INSERT INTO homes VALUES(?,?) ON CONFLICT(actor) DO UPDATE SET level=excluded.level").run(id,targetLevel);
+        this.db.prepare("UPDATE homes SET level=2 WHERE actor=?").run(id);
       } else {
         if (level === 0) throw Error("home_required");
         if ("plot" in order) this.tendGarden(id, order, level, account, now);

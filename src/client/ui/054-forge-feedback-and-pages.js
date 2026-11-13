@@ -623,7 +623,7 @@
 
   function homeCommandError(reason) {
     const errors = {
-      home_required:"ซื้อเรือนส่วนตัวก่อน", home_unavailable:"เรือนส่วนตัวยังใช้ไม่ได้",
+      home_required:"ยังเปิดเรือนไม่ได้ · กรุณารีเฟรชเกม", home_unavailable:"เรือนส่วนตัวยังใช้ไม่ได้",
       home_village_required:"กลับมาที่เขตพักในหมู่บ้านเพื่อเข้าเรือน",
       home_build_location:"เข้าเรือนส่วนตัวก่อนสร้าง จัดวาง หรือทำสวน",
       home_wall_blocked:"ขยับออกจากตำแหน่งผนังก่อนวางหรือหมุน",
@@ -652,12 +652,14 @@
     renderHomePanel();
   }
 
-  function openHomePanel() {
+  function openHomePanel(enter = false) {
     homeNotice = "";
     openDrawer("home","เรือนส่วนตัว",
       '<section id="homePanel" class="home-panel"><p id="homeSummary"></p><p id="homeNotice" role="status"></p><div id="homeControls"></div></section>');
     renderHomePanel();
     readHomeState(true);
+    if (enter === true && ownServerCharacter()?.mapId === "ritual_village")
+      sendHomeAction("enter_home",{},false);
   }
 
   function renderHomePanel() {
@@ -673,9 +675,8 @@
     controls.replaceChildren();
     $("homeNotice").textContent = homeNotice;
     $("homeSummary").textContent = !available ? "เรือนส่วนตัวต้องใช้เซิร์ฟเวอร์ออนไลน์รุ่นที่รองรับ" :
-      !homeSnapshot ? "กำลังอ่านข้อมูลเรือนจากเซิร์ฟเวอร์…" :
-      level ? "เรือนระดับ "+level+(inHome?" · อยู่ในเรือนของคุณ":" · เข้าเรือนจากเขตพักหมู่บ้าน") :
-      "ซื้อเรือนจากเขตพักในหมู่บ้านเพื่อเริ่มจัดเรือนและทำสวน";
+      inHome ? (homeSnapshot?"เรือนระดับ "+level:"กำลังอ่านข้อมูลเรือนจากเซิร์ฟเวอร์…") :
+      "เข้าเรือนฟรีจากเขตพักหมู่บ้านอาคม";
     if (!available) return;
 
     function button(host, label, action, disabled = false, key = label) {
@@ -692,8 +693,7 @@
     }
     const act = (action, props={}) => sendHomeAction("home_action",{action,...props});
     button(controls,"รีเฟรชข้อมูล",()=>readHomeState(true));
-    if (homeSnapshot && level===0) button(controls,"ซื้อเรือน · 100 ทอง",()=>act("buy"),own?.mapId!=="ritual_village");
-    if (level && !inHome) button(controls,"เข้าเรือน",()=>sendHomeAction("enter_home",{},false),own?.mapId!=="ritual_village");
+    if (!inHome) button(controls,"เข้าเรือน",()=>sendHomeAction("enter_home",{},false),own?.mapId!=="ritual_village");
     if (inHome) {
       button(controls,"กลับหมู่บ้าน",()=>sendHomeAction("leave_home",{},false));
       if (level===1) button(controls,"อัปเกรดเรือน · 200 ทอง",()=>act("upgrade"));
