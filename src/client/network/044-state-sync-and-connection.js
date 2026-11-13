@@ -1825,8 +1825,17 @@
         : ok ? "เชื่อมต่อแล้ว · ตัวละครยังไม่บันทึกถาวร"
              : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
     } catch (err) {
-      if (joined && room !== joined) {
-        try { await joined.leave(); } catch (_) { /* release rejected slot */ }
+      if (joined) {
+        const entered = room === joined;
+        if (entered) {
+          // Detach before leaving so the live disconnect handler does not reopen the slot picker.
+          room = null;
+          clearSyncPoll();
+        }
+        try { await joined.leave(); } catch (error) { console.warn("MONTRA failed entry leave", error); }
+        if (entered) {
+          try { showDemo(); } catch (error) { console.warn("MONTRA failed entry reset", error); }
+        }
       }
       console.error("MONTRA connection failed",err);
       ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ";

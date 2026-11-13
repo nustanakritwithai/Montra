@@ -11,15 +11,17 @@ const equipCode = read('src/client/render/026-avatar-auras-and-lifecycle.js')
   .split('  function weaponModelFor')[1].split('  const trimGold')[0];
 const swordFile = tier => `thai-sword-${String(tier).padStart(2, '0')}.glb`;
 
-function fixture() {
+function fixture({ throwOnFirstLoad = false } = {}) {
   const fetches = [];
   const instances = [];
+  let loadAttempts = 0;
   const context = {
     scene: {}, MAX_LIGHTS: 4,
     B: { Axis: { Y: 'blade axis' }, Space: { LOCAL: 'local' }, SceneLoader: {
       IsPluginForExtensionAvailable: () => true,
       LoadAssetContainerAsync(base, file) {
         assert.equal(base, './assets/weapons/');
+        if (++loadAttempts === 1 && throwOnFirstLoad) throw new Error('loader unavailable');
         return new Promise((resolve, reject) => fetches.push({ file, resolve, reject }));
       },
     } },
@@ -137,4 +139,20 @@ test('failed loads retain the fallback and disposed hands ignore completed loads
   hand.disposed = true;
   await finish(fetches[1]);
   assert.equal(instances.length, 0);
+});
+
+test('a synchronous loader error leaves the old swordsman playable with both fallback blades', async () => {
+  const { avatar, fetches, instances, equip, finish, settle } = fixture({ throwOnFirstLoad: true });
+  assert.doesNotThrow(() => equip('wp_twins_10'));
+  await settle();
+  const hands = [avatar.weaponModels.thai_left, avatar.weaponModels.thai_right];
+  assert(hands.every(hand => hand.enabled && hand.fallback.enabled));
+  assert.equal(instances.length, 0);
+
+  equip('ritual_dagger', '');
+  equip('wp_twins_10');
+  assert.deepEqual(fetches.map(request => request.file), [swordFile(8)]);
+  await finish(fetches[0]);
+  assert.equal(instances.length, 2);
+  assert(hands.every(hand => hand.enabled && !hand.fallback.enabled));
 });

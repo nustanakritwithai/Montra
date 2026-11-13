@@ -12,7 +12,8 @@
   }
   function loadHeldBlade(file) {
     if (!heldBladeAssets.has(file)) {
-      const load = B.SceneLoader.LoadAssetContainerAsync("./assets/weapons/", file, scene).then(container => {
+      const load = (async () => {
+        const container = await B.SceneLoader.LoadAssetContainerAsync("./assets/weapons/", file, scene);
         for (const material of container.materials) {
           // Soften reflections so the cutting edge reads under direct light at night.
           if (material.metallic > .45) material.metallic = .45;
@@ -21,7 +22,7 @@
           material.maxSimultaneousLights = MAX_LIGHTS;
         }
         return container;
-      }).catch(error => {
+      })().catch(error => {
         heldBladeAssets.delete(file);
         console.warn("MONTRA held blade", file, error);
         return null;
@@ -33,11 +34,11 @@
   function setHeldBlade(root, file, kind) {
     if (!B.SceneLoader?.IsPluginForExtensionAvailable?.(".glb")) return;
     const previous = heldBladeByHand.get(root);
-    if (previous?.file === file && (previous.model || heldBladeAssets.has(file))) return;
+    if (previous?.file === file && (previous.model || previous.loading)) return;
     previous?.model?.dispose();
     const fallback = previous?.fallback || root.getChildMeshes(true).find(mesh => mesh.name === "held " + kind);
     fallback?.setEnabled(true);
-    const request = { file, fallback, model: null };
+    const request = { file, fallback, model: null, loading: true };
     heldBladeByHand.set(root, request);
     loadHeldBlade(file).then(container => {
       // Equipping another tier or leaving the map can happen during the fetch.
@@ -55,7 +56,9 @@
       for (const mesh of model.getChildMeshes()) mesh.isPickable = false;
       request.model = model;
       fallback?.setEnabled(false);
-    }).catch(error => console.warn("MONTRA blade instance", file, error));
+    }).catch(error => console.warn("MONTRA blade instance", file, error)).finally(() => {
+      request.loading = false;
+    });
   }
   // ---- Skinned Thai male body (assets/characters/thai-male.glb) ----
   // 8,472-triangle mobile mesh with a 25-joint T-pose skeleton (every rest
