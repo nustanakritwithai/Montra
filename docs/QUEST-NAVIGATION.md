@@ -22,7 +22,8 @@ their existing details instead of guessing a location.
   search as a fallback for tight approaches. Both validate wall, obstacle,
   terrain and bridge clearance along the route.
 - The planner prefers dry routes. It can use a wading route on maps where
-  crossing canals is supported without water exposure. Mounted routes avoid
+  crossing canals is supported without water exposure. A player already in
+  water can tap a dry bank to take a walkable route out. Mounted routes avoid
   water that would dismount the rider in Drowned Marsh and Mantra Capital.
   Search work yields between frames (256 nodes or a 6ms budget per slice), keeping
   cancel/camera controls responsive while the chip shows that it is finding a route.

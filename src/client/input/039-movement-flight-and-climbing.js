@@ -275,12 +275,12 @@
   function questNavigationPoint(p) {
     return Boolean(p && Number.isFinite(p.x) && Number.isFinite(p.z));
   }
-  function questNavigationGeometry(map, fort, mounted=false, allowWading=false) {
-    if (!map?.bounds || map.strategic?.rampart) return null;
+  function questNavigationGeometry(map, fort, mounted=false, waterMode="dry") {
+    if (!map?.bounds || map.strategic?.rampart && waterMode!=="exit") return null;
     const radius = .45, bounds = map.bounds;
     const walls = [...(map.walls || [])];
     if (map.id === "ritual_village" && fort) walls.push({x:fort.x-fort.width/2,z:fort.z-fort.length/2,width:fort.width,length:fort.length});
-    const deepWater=(allowWading ? [] : map.water||[]).filter(area=>!map.shallowWater?.some(shelf=>
+    const deepWater=(waterMode==="dry" ? map.water||[] : []).filter(area=>!map.shallowWater?.some(shelf=>
       shelf.x===area.x && shelf.z===area.z && shelf.width===area.width && shelf.length===area.length));
     const blockers=[...walls,...deepWater];
     const circles = map.obstacles || [];
@@ -342,20 +342,34 @@
     return {clear,bounds};
   }
   function groundHasWaterExposure(map){return map.id==="drowned_marsh" || map.id==="mantra_capital";}
-  function* questNavigationPlan(map, from, target, fort, mounted=false, exact=false, retry=0) {
-    const dry=yield* planGroundGeometry(questNavigationGeometry(map,fort,mounted),from,target,exact,retry);
-    if(dry || !map?.terrain || !map.water?.length || groundHasWaterExposure(map))return dry && {path:dry,allowWading:false};
-    // Some canals divide a map with no bridge. The server permits wading here.
-    const wade=yield* planGroundGeometry(questNavigationGeometry(map,fort,mounted,true),from,target,exact,retry);
-    return wade && {path:wade,allowWading:true};
+  function groundPointInWater(map,point){
+    return questNavigationPoint(point) && worldWaterDepth(map,point.x,point.z)>0 &&
+      walkHeight(map,point.x,point.z)<map.waterLevel;
   }
-  function* planGroundGeometry(geometry, from, target, exact, retry) {
+  function groundWaterExit(map,from,target,mounted){
+    return !mounted && groundPointInWater(map,from) && !groundPointInWater(map,target);
+  }
+  function* questNavigationPlan(map, from, target, fort, mounted=false, exact=false, retry=0) {
+    const escapingWater=groundWaterExit(map,from,target,mounted);
+    if(!escapingWater){
+      const dry=yield* planGroundGeometry(questNavigationGeometry(map,fort,mounted),from,target,exact,retry);
+      if(dry || !map?.terrain || !map.water?.length || groundHasWaterExposure(map))return dry && {path:dry,waterMode:"dry"};
+    }
+    // Let a player already in the water reach a dry bank, including on
+    // exposure maps. Ordinary wading fallbacks still use the dry route first.
+    const waterMode=escapingWater ? "exit" : "wade";
+    const dryEnd=escapingWater ? point=>!groundPointInWater(map,point) : undefined;
+    const path=yield* planGroundGeometry(questNavigationGeometry(map,fort,mounted,waterMode),from,target,exact,retry,dryEnd);
+    return path && {path,waterMode};
+  }
+  function* planGroundGeometry(geometry, from, target, exact, retry, canEnd=()=>true) {
     if(!geometry || !questNavigationPoint(from) || !questNavigationPoint(target))return null;
     const {clear,bounds}=geometry,ends=[{x:target.x,z:target.z}];
     // Stand near resources/NPCs rather than requiring their occupied center.
     for(let i=0;i<12;i++){const angle=Math.atan2(from.z-target.z,from.x-target.x)+i*Math.PI/6;ends.push({x:target.x+Math.cos(angle)*1.25,z:target.z+Math.sin(angle)*1.25});}
-    const validEnds=exact && clear(ends[0],ends[0]) ? [ends[0]] :
-      ends.filter(p=>clear(p,p)).sort((a,b)=>Math.hypot(a.x-from.x,a.z-from.z)-Math.hypot(b.x-from.x,b.z-from.z));
+    const validEnd=point=>canEnd(point) && clear(point,point);
+    const validEnds=exact && validEnd(ends[0]) ? [ends[0]] :
+      ends.filter(validEnd).sort((a,b)=>Math.hypot(a.x-from.x,a.z-from.z)-Math.hypot(b.x-from.x,b.z-from.z));
     if(!validEnds.length || !clear(from,from))return null;
     const direct=validEnds.find(p=>clear(from,p));if(direct)return [direct];
     yield;
@@ -455,16 +469,19 @@
     nav.planner=null;
     if(!result.value){cancelQuestNavigation("ไม่พบทางเดินที่ปลอดภัย · เลือกจุดหมายใหม่");return;}
     nav.path=result.value.path;
-    nav.allowWading=result.value.allowWading;
+    nav.waterMode=result.value.waterMode;
     nav.progressAt=now;nav.nextTick=0;syncQuestNavigationUi();
   }
   function startGroundTapRoute(map,me,target){
     if(!me?.alive || me.mapId!==activeMapId || Math.abs(playerLayer(me))>.15 || territoryState?.local?.inField ||
         ["climbing","ascending","descending","dashing"].includes(me.combatState))return false;
-    const mounted=Boolean(me.mounted),geometry=questNavigationGeometry(map,activeFort,mounted);
-    if(!geometry || geometry.clear(me,target))return false;
-    // A deliberate water tap still uses the normal wading controls on foot.
-    if(!mounted && map.water?.some(w=>waterAreaContains(w,target.x,target.z)) && !walkBridgeAt(map,target.x,target.z))return false;
+    const mounted=Boolean(me.mounted),escapingWater=groundWaterExit(map,me,target,mounted);
+    if(!escapingWater){
+      const geometry=questNavigationGeometry(map,activeFort,mounted);
+      if(!geometry || geometry.clear(me,target))return false;
+      // Preserve direct wading taps. A dry bank can be inside the water rectangle.
+      if(!mounted && map.water?.some(w=>waterAreaContains(w,target.x,target.z)) && !walkBridgeAt(map,target.x,target.z))return false;
+    }
     const now=performance.now();
     const nav={room,owner:localId,mapId:activeMapId,manual:true,mounted,target,path:null,waypoint:null,
       nextTick:0,nextSend:0,started:now,progressAt:now,position:{x:me.x,z:me.z},retries:0};
@@ -593,7 +610,7 @@
     if(now<nav.nextSend)return;
     const end=nav.path[0],distance=Math.hypot(end.x-me.x,end.z-me.z),scale=Math.min(1,(nav.mounted?6:4)/distance);
     const waypoint={x:Math.round((me.x+(end.x-me.x)*scale)*100)/100,z:Math.round((me.z+(end.z-me.z)*scale)*100)/100};
-    if(!questNavigationGeometry(map,activeFort,nav.mounted,nav.allowWading)?.clear(me,waypoint)){
+    if(!questNavigationGeometry(map,activeFort,nav.mounted,nav.waterMode)?.clear(me,waypoint)){
       if(!retryGroundTapRoute(nav,map,me,now))cancelQuestNavigation("เส้นทางเปลี่ยนหรือมีสิ่งกีดขวาง · เลือกทางใหม่");
       return;
     }
