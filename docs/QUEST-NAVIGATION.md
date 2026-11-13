@@ -17,13 +17,19 @@ their existing details instead of guessing a location.
   objective after each arrival. A failed warp stops the route; no repeated warp
   attempts. Cancelling after a warp was already sent cannot retract that server
   operation, but prevents any further route commands.
-- Ground routes avoid supplied map walls, water, circular obstacles, the village
-  fort and steep terrain faces. Decorative meshes do not invent extra collisions.
-  A bounded A* search returns failure rather than walking through blocked geometry.
+- Ground taps and quest routes use the same collision data. Clear ground taps
+  send a direct move. Detours use bounded RRT-Connect with the existing grid
+  search as a fallback for tight approaches. Both validate wall, obstacle,
+  terrain and bridge clearance along the route.
+- The planner prefers dry routes. It can use a wading route on maps where
+  crossing canals is supported without water exposure. Mounted routes avoid
+  water that would dismount the rider in Drowned Marsh and Mantra Capital.
   Search work yields between frames (256 nodes or a 6ms budget per slice), keeping
   cancel/camera controls responsive while the chip shows that it is finding a route.
-- Follow authoritative arrival before advancing short (at most 4m) waypoints. No
-  blind client-speed simulation. Escort routes pause for the NPC to catch up.
+- Follow authoritative arrival before advancing waypoints of up to 4m on foot
+  or 6m while mounted. Escort routes pause for the NPC to catch up.
+- A blocked ground tap route replans once. A new tap, a manual action, or a
+  change between walking and mounted movement cancels the previous route.
 - Stop on changed goal/target, death, disconnect/character change, manual actions,
   hidden page, unexpected map change, stuck movement, server rejection or timeout.
 - A valid swipe-dash gesture stops the outstanding navigation waypoint before

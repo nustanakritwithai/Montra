@@ -93,7 +93,7 @@ test('production incremental planner yields short slices with a real monotonic c
     } while(!result.done);
     if(count>1)yieldingRoutes++;
     totalSlices+=count;
-    if(c.map.id==='stress')assert.equal(result.value,null);else assert.ok(result.value?.length,c.label);
+    if(c.map.id==='stress')assert.equal(result.value,null);else assert.ok(result.value?.path.length,c.label);
   }
   assert.ok(yieldingRoutes>0,'Difficult routes release execution between batches');
   durations.sort((a,b)=>a-b);

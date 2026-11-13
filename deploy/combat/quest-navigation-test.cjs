@@ -106,6 +106,36 @@ function run() {
   const wade=f.plan(map({water:[shelf],shallowWater:[{...shelf}]}),from,target);
   assert.ok(wade?.length===1 && Math.hypot(wade[0].x-target.x,wade[0].z-target.z)<=1.25001,"wade across a marked shallow shelf");
   console.log('PASS quest planner: obstacle, wall, water, corner, sealed map, bounds, terrain, village fort');
+  const tapWorld=map({walls:[{x:4,z:-5,width:2,length:10}]});
+  for(const mounted of [false,true]){
+    f=fixture();f.world({fixture:tapWorld});f.change({mounted});f.manual(12,0);
+    assert(f.state()?.manual && f.state()?.planner,'ground tap starts a shared route');
+    assert.equal(f.wire.length,0,'no command before finding a safe route');
+    for(let n=1;n<=300 && f.state()?.planner;n++)f.tick(1000+n*16);
+    assert(f.state()?.path.length);
+    assertClear(tapWorld,f.me,f.state().path);
+    assert.deepEqual(plain(f.state().path.at(-1)),{x:12,z:0},'tap keeps the exact open destination');
+    f.tick(6000);
+    const first=f.wire.at(-1)?.data;
+    assert(first && Math.hypot(first.x,first.z)<=(mounted?6:4)+.02,'waypoint length matches travel mode');
+    for(let n=1;n<=30 && f.active();n++){
+      Object.assign(f.me,f.wire.at(-1).data);f.tick(6000+n*500);
+    }
+    assert(!f.active());
+    assert(Math.hypot(f.me.x-12,f.me.z)<.05,'reached the selected ground point');
+  }
+  f=fixture();f.world({fixture:tapWorld});f.change({mounted:true});f.manual(12,0);
+  f.change({mounted:false});f.tick(1016);assert(!f.active(),'dismount cancels a mounted route');
+  f=fixture();f.world({fixture:tapWorld});f.manual(12,0);f.manual(-2,0);
+  assert(!f.active(),'a new clear tap takes over from a pending detour');
+  assert.deepEqual(plain(f.wire.at(-1)),{type:'move',data:{x:-2,z:0}});
+  const marsh=map({id:'drowned_marsh',waterLevel:0,water:[{x:-2,z:-4,width:4,length:8}],
+    shallowWater:[{x:-2,z:-4,width:4,length:8}],terrain:{xs:[-20,-3,-2,2,3,20],zs:[-20,20],
+      heights:[[0,0,-.6,-.6,0,0],[0,0,-.6,-.6,0,0]],maxGrade:.8}});
+  assert(f.geometry(marsh,null,false).clear(from,target),'walking can cross the marked shallow shelf');
+  assert(!f.geometry(marsh,null,true).clear(from,target),'mounted route rejects a shelf deep enough to cause a dismount');
+  console.log('PASS ground tap routing: exact endpoint, walking, buffalo, takeovers and deep-water clearance');
+  f=fixture();
   f.start();assert(f.active());assert.equal(f.wire.length,1);assert.equal(f.wire[0].type,'move');
   assert(Math.hypot(f.wire[0].data.x,f.wire[0].data.z)<=4.01,'bounded move hop');
   f.tick(1500);assert.equal(f.wire.length,1,'no command without authoritative arrival');
