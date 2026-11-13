@@ -69,11 +69,14 @@ const core=await readFile(new URL("../../src/client/core/059-frame-loop-and-star
 const terrain=await readFile(new URL("../../src/client/world/017-region-terrain.js",import.meta.url),"utf8");
 const waterSource=terrain.slice(terrain.indexOf("  function terrainCell"),terrain.indexOf("  // ---- Ground patches"))+
   terrain.slice(terrain.indexOf("  function terrainHeight"),terrain.indexOf("  const waterPolygons"));
-const courseSource=core.slice(core.indexOf("  function sailingCourse"),core.indexOf("  function setSailingDestination"));
+const courseSource=core.slice(core.indexOf("  function* sailingCourse"),core.indexOf("  function setSailingDestination"));
 const steeringSource=core.slice(core.indexOf("  function wrapSailingAngle"),core.indexOf('  $("boatLaunch")'));
 const findCourse=runInNewContext(waterSource+courseSource+"\nsailingCourse;");
 function navigator(point,boat){
-  const map=getWorldMap(boat.mapId),course=findCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
+  const map=getWorldMap(boat.mapId),search=findCourse({...map,boatDock:{deck:{length:5.2}}},boat,point);
+  let result;
+  do result=search.next();while(!result.done);
+  const course=result.value;
   assert.ok(course.length,"navigable course to "+JSON.stringify(point));
   const scope={sailingDestination:{x:point.x,z:point.z,course,aligning:true,progress:{x:boat.x,z:boat.z,heading:boat.heading,at:0}},
     clearSailingDestination(){scope.sailingDestination=null;}};

@@ -147,33 +147,102 @@
     const map=worldDefinitions[activeMapId],port=map?.boatPorts?.find(entry=>entry.id===id);
     return Boolean(port && setSailingDestination(port.berth,map.waterLevel,undefined,port));
   }
-  function sailingCourse(map,start,end) {
-    if(!map.boatLanes?.length)return [end];
+  function* sailingCourse(map,start,end) {
+    if(![start.x,start.z,end.x,end.z].every(Number.isFinite))return [];
+    // Older world definitions did not ship water depth or a river network.
+    if(map.waterLevel===undefined || !map.terrain)return [end];
     const radius=map.boatDock.deck.length/2, bounds=map.bounds;
-    const rim=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8)*radius,Math.sin(i*Math.PI/8)*radius]);
+    const rim=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8),Math.sin(i*Math.PI/8)]);
     const gap=(a,b)=>Math.hypot(a.x-b.x,a.z-b.z);
-    const clear=(a,b)=>{
-      const length=gap(a,b),steps=Math.max(1,Math.ceil(length/.65));
+    const free=(x,z,clearance)=>{
+      if(x-clearance<bounds.minX || x+clearance>bounds.maxX || z-clearance<bounds.minZ || z+clearance>bounds.maxZ ||
+          worldWaterDepth(map,x,z)<.45 || map.obstacles?.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+clearance))return false;
+      if(map.walls?.some(w=>{
+        const dx=Math.max(w.x-x,0,x-w.x-w.width),dz=Math.max(w.z-z,0,z-w.z-w.length);
+        return dx*dx+dz*dz<=clearance*clearance;
+      }))return false;
+      return rim.every(([dx,dz])=>worldWaterDepth(map,x+dx*clearance,z+dz*clearance)>0);
+    };
+    let checks=0;
+    function* clear(a,b){
+      const length=gap(a,b),steps=Math.max(1,Math.ceil(length/.45));
       for(let i=0;i<=steps;i++){
         const x=a.x+(b.x-a.x)*i/steps,z=a.z+(b.z-a.z)*i/steps;
-        // Allow the hull to start and finish close to a pier. Leave steering
-        // room along the leg itself, especially at the mouth of a side channel.
         const clearance=radius+Math.min(.22,Math.min(i,steps-i)*length/steps*.12);
-        if(x-clearance<bounds.minX || x+clearance>bounds.maxX || z-clearance<bounds.minZ || z+clearance>bounds.maxZ ||
-            worldWaterDepth(map,x,z)<.45 || map.obstacles?.some(o=>Math.hypot(x-o.x,z-o.z)<o.radius+clearance))return false;
-        if(!rim.every(([dx,dz])=>{
-          const px=x+dx*clearance/radius,pz=z+dz*clearance/radius;
-          return worldWaterDepth(map,px,pz)>0 && !map.walls?.some(w=>px>=w.x && px<=w.x+w.width && pz>=w.z && pz<=w.z+w.length);
-        }))return false;
+        if(++checks>=24){checks=0;yield;}
+        if(!free(x,z,clearance))return false;
       }
       return true;
+    }
+    if(!free(start.x,start.z,radius) || !free(end.x,end.z,radius))return [];
+    if(yield* clear(start,end))return [end];
+
+    // RRT-Connect grows from both ends. Like MonsterRRT, use a seeded xorshift
+    // and smooth only across traversable edges. River lanes bias the samples.
+    const lanes=map.boatLanes??[], waters=map.water??[];
+    let seed=(Math.round(start.x*16)^Math.imul(Math.round(start.z*16),71)^
+      Math.imul(Math.round(end.x*16),16777619)^Math.round(end.z*16))||71;
+    const rand=()=>{seed^=seed<<13;seed^=seed>>>17;seed^=seed<<5;return (seed>>>0)/4294967296;};
+    const sample=(target)=>{
+      const bias=rand();
+      if(bias<.15)return target;
+      if(bias<.65 && lanes.length){
+        const [a,b]=lanes[Math.floor(rand()*lanes.length)], t=rand();
+        return {x:a.x+(b.x-a.x)*t+(rand()-.5)*3,z:a.z+(b.z-a.z)*t+(rand()-.5)*3};
+      }
+      const area=waters[Math.floor(rand()*waters.length)];
+      return area && {x:area.x+rand()*area.width,z:area.z+rand()*area.length};
     };
-    if(clear(start,end))return [end];
+    const step=Math.min(7,Math.max(2.5,radius*1.6));
+    function* extend(tree,target){
+      let nearest=tree[0], best=Infinity;
+      for(const node of tree){
+        const distance=(node.point.x-target.x)**2+(node.point.z-target.z)**2;
+        if(distance<best){nearest=node;best=distance;}
+      }
+      if(best<1e-8)return nearest;
+      const t=Math.min(1,step/Math.sqrt(best));
+      const point=t===1?target:{x:nearest.point.x+(target.x-nearest.point.x)*t,z:nearest.point.z+(target.z-nearest.point.z)*t};
+      if(!(yield* clear(nearest.point,point)))return null;
+      const node={point,parent:nearest};
+      tree.push(node);
+      return node;
+    }
+    function trace(node){
+      const path=[];
+      for(;node;node=node.parent)path.push(node.point);
+      return path;
+    }
+    const fromStart=[{point:start,parent:null}], fromEnd=[{point:end,parent:null}];
+    for(let i=0;i<220 && fromStart.length+fromEnd.length<360;i++){
+      if(i>0 && i%16===0)yield;
+      const forward=i%2===0, a=forward?fromStart:fromEnd, b=forward?fromEnd:fromStart;
+      const target=sample(b[0].point), grown=target&&(yield* extend(a,target));
+      if(!grown)continue;
+      for(let j=0;j<8 && fromStart.length+fromEnd.length<360;j++){
+        const joined=yield* extend(b,grown.point);
+        if(!joined)break;
+        if(gap(joined.point,grown.point)>1e-4)continue;
+        const path=trace(forward?grown:joined).reverse().concat(trace(forward?joined:grown).slice(1));
+        const course=[];
+        for(let at=0;at<path.length-1;){
+          // Limit long shortcut probes in winding canals; existing tree edges remain valid.
+          let next=Math.min(at+24,path.length-1);
+          while(next>at+1 && !(yield* clear(path[at],path[next])))next--;
+          course.push(path[next]);
+          at=next;
+        }
+        return course;
+      }
+    }
+
+    // Long authored waterways also have a deterministic route if the tree runs out of samples.
     const points=[start,end];
     function add(p){if(!points.some(q=>gap(p,q)<.01))points.push(p);}
-    for(const [a,b] of map.boatLanes){
+    for(const [a,b] of lanes){
       add(a);add(b);
       const dx=b.x-a.x,dz=b.z-a.z;
+      if(!dx && !dz)continue;
       for(const p of [start,end]){
         const t=Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.z-a.z)*dz)/(dx*dx+dz*dz)));
         add({x:a.x+t*dx,z:a.z+t*dz});
@@ -193,18 +262,18 @@
       remaining.delete(i);
       for(const j of remaining){
         const length=distance[i]+gap(points[i],points[j]);
-        if(length<distance[j] && clear(points[i],points[j])){distance[j]=length;from[j]=i;}
+        if(length<distance[j] && (yield* clear(points[i],points[j]))){distance[j]=length;from[j]=i;}
       }
     }
     return [];
   }
   function setSailingDestination(point,waterY,gate,port) {
     const boat = ownBoatState(),map=worldDefinitions[activeMapId];
-    const course=sailingCourse(map,boat,point);
-    if(!course.length){toast("ไม่พบร่องน้ำไปยังจุดนี้");return false;}
     cancelQuestNavigation("",false);
-    sailingDestination = {x:point.x,z:point.z,gate,port,course,aligning:Boolean(map.boatLanes?.length),
-      progress:{x:boat.x,z:boat.z,heading:boat.heading,at:performance.now()}};
+    const now=performance.now();
+    sailingDestination = {x:point.x,z:point.z,gate,port,map,
+      progress:{x:boat.x,z:boat.z,heading:boat.heading,at:now},lastAdvance:now};
+    planSailingCourse(sailingDestination,boat);
     if (!sailingMarker) {
       sailingMarker = marker.clone("sailing destination");
       sailingMarker.isPickable = false;
@@ -214,12 +283,41 @@
     requestedBoatAnchor = false;
     return true;
   }
+  function planSailingCourse(goal,boat){
+    goal.course=null;
+    goal.planner=sailingCourse(goal.map,{x:boat.x,z:boat.z},{x:goal.x,z:goal.z});
+  }
+  function advanceSailingCourse(boat,now){
+    const goal=sailingDestination;
+    if(!goal?.planner)return;
+    const result=goal.planner.next();
+    if(!result.done)return;
+    goal.planner=null;
+    if(!result.value.length){
+      clearSailingDestination();
+      requestedBoatAnchor=true;
+      toast("ไม่พบร่องน้ำไปยังจุดนี้");
+      return;
+    }
+    if(Math.hypot(boat.x-goal.progress.x,boat.z-goal.progress.z)>.2){
+      goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
+      planSailingCourse(goal,boat);
+      return;
+    }
+    goal.course=result.value;
+    requestedBoatAnchor=false;
+    goal.aligning=Boolean(goal.replanned || goal.map.boatLanes?.length || goal.course.length>1);
+    goal.reverse=undefined;
+    goal.progress={x:boat.x,z:boat.z,heading:boat.heading,at:now};
+    goal.lastAdvance=now;
+  }
   function wrapSailingAngle(angle) {
     return Math.atan2(Math.sin(angle),Math.cos(angle));
   }
   function sailingInputForDestination(boat, now) {
     const goal = sailingDestination;
     if (!goal) return {throttle:0,steer:0};
+    if(goal.planner){requestedBoatAnchor=true;return {throttle:0,steer:0};}
     const course=goal.course;
     while(course?.length>1 && Math.hypot(course[0].x-boat.x,course[0].z-boat.z)<=.2){
       course.shift();
@@ -236,17 +334,29 @@
       return null;
     }
     const progress = goal.progress;
-    if (Math.hypot(boat.x-progress.x,boat.z-progress.z) >= .25 ||
+    const advanced=Math.hypot(boat.x-progress.x,boat.z-progress.z) >= .25;
+    if (advanced) goal.lastAdvance=now;
+    if (advanced ||
         Math.abs(wrapSailingAngle(boat.heading-progress.heading)) >= .16) {
-      goal.progress = {x:boat.x,z:boat.z,heading:boat.heading,at:now};
+      goal.progress = {x:advanced?boat.x:progress.x,z:advanced?boat.z:progress.z,heading:boat.heading,at:now};
     }
-    if ((!course || course.length===1) && distance <= 1.35 || now-goal.progress.at >= 2800) {
+    const arrived=(!course || course.length===1) && distance<=1.35;
+    const stuck=now-goal.progress.at>=2800 || now-goal.lastAdvance>=6500;
+    if(!arrived && stuck && goal.map && !goal.replanned){
+      goal.replanned=true;
+      planSailingCourse(goal,boat);
+      requestedBoatAnchor=true;
+      return {throttle:0,steer:0};
+    }
+    if (arrived || stuck) {
       clearSailingDestination();
       if(goal.port && distance<=1.35 && course?.length===1){
         requestedBoatAnchor=true;
         toast("ถึง"+goal.port.name+" · กดลงจากเรือเมื่อเรือหยุด");
       }else if(goal.port)toast("ทางเข้าท่าติดขัด · ลองเข้าจากอีกมุม");
       else if(goal.gate)toast("ทางเข้าประตูน้ำติดขัด · ลองเข้าจากอีกมุม");
+      else if(stuck)toast("เส้นทางเรือติดขัด · เลือกจุดหมายใหม่");
+      if(stuck && !arrived)requestedBoatAnchor=true;
       return {throttle:0,steer:0};
     }
     const bearing = Math.atan2(dx,dz);
@@ -442,7 +552,9 @@
     exitButton.hidden = !boat;
     $("boatAccess").hidden = boardButton.hidden && exitButton.hidden;
     boatPanel.hidden = !Array.from(boatPanel.children).some(control=>!control.hidden);
-    if (!helm || now < nextHelmInput) return;
+    if (!helm) return;
+    advanceSailingCourse(boat,now);
+    if (now < nextHelmInput) return;
     nextHelmInput = now + 100;
     const input=sailingInputForDestination(boat,now);
     if(!input)return;

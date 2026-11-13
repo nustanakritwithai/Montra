@@ -151,13 +151,20 @@ function fixture(raySlope=0,mapId="ritual_village") {
   sandbox.$("boatPanel").children = ["boatLaunch","boatHelm","boatAccess"].map(sandbox.$);
   sandbox.$("boatAccess").children = ["boatBoard","boatExit"].map(sandbox.$);
   const tick = value=>{now=value;sandbox.updateSailing(now,.02);return packets.at(-1);};
+  const planning=()=>vm.runInNewContext('Boolean(sailingDestination?.planner)',sandbox);
+  const plan=()=>{while(planning())sandbox.advanceSailingCourse(boat,now);};
   tick(0);
   const pointerEvent = (kind,type,id=1) => canvasEvents[kind]({button:0,pointerType:type,pointerId:id,clientX:100,clientY:110});
-  const tap = (type,x,z,hit=ground) => {
-    point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);
+  const tap = (type,x,z,hit=ground,finishPlan=true) => {
+    point = {x,z};selected=hit;pointerEvent("pointerdown",type);pointerEvent("pointerup",type);if(finishPlan)plan();
   };
   return {tick,tap,pointerEvent,marker,boat,model,wake,enemy,windowEvents,ghostOrders,packets,map,player,buttons,foggedTargets,
-    helmPose:()=>sandbox.sailingHelmPose("local"),
+    helmPose:()=>sandbox.sailingHelmPose("local"),course:(start,end)=>{
+      const search=sandbox.sailingCourse(map,start,end);
+      let result;
+      do result=search.next();while(!result.done);
+      return Array.from(result.value);
+    },plan,planning,
     aimGhost:()=>{sandbox.targetedSkill="ghostAttack";},stats:()=>({rayCalls,attacks,walks})};
 }
 
@@ -220,7 +227,44 @@ test("a touch on open water uses the same input, even without a ground mesh",()=
   assert.equal(f.stats().rayCalls,1);
   assert.ok(f.tick(100).throttle<0,"the existing helm can reverse toward a target behind it");
   f.tick(3100);
-  assert.equal(f.marker.enabled,false,"no motion or turn clears a blocked destination");
+  assert.equal(f.marker.enabled,true,"one replan keeps the selected destination");
+  f.plan();
+  f.tick(6000);
+  assert.equal(f.marker.enabled,false,"a second stall clears the blocked destination");
+});
+
+test("RRT finds a swept water route around a wall without authored river lanes",()=>{
+  const f=fixture();
+  f.map.bounds={minX:-30,maxX:30,minZ:-30,maxZ:30};
+  f.map.water=[{x:-30,z:-30,width:60,length:60}];
+  f.map.terrain={xs:[-30,30],zs:[-30,30],heights:[[-2,-2],[-2,-2]]};
+  f.map.walls=[{x:-1,z:-24,width:2,length:32}];
+  const start={x:-18,z:0}, end={x:18,z:0}, route=f.course(start,end);
+  assert.ok(route.length>1,"must search beyond a straight course");
+  assert.deepEqual(route.at(-1),end);
+  assert.deepEqual(f.course(start,end),route,"the same endpoints reproduce the route");
+  const points=[start,...route];
+  for(let i=1;i<points.length;i++){
+    const a=points[i-1], b=points[i];
+    for(let j=0;j<=100;j++){
+      const x=a.x+(b.x-a.x)*j/100,z=a.z+(b.z-a.z)*j/100;
+      assert.ok(Math.hypot(Math.max(0,Math.abs(x)-1),Math.max(0,z-8,-24-z))>2.58,"hull clears the wall along each leg");
+    }
+  }
+  f.map.walls[0].length=54;
+  f.map.walls[0].z=-27;
+  assert.equal(f.course(start,end).length,0,"a sealed waterway must not send thrust through the wall");
+});
+
+test("helm waits for a complete course and cancels pending planning when the window blurs",()=>{
+  const f=fixture();
+  f.tap("touch",48,54,null,false);
+  assert.equal(f.planning(),true);
+  assert.deepEqual(f.tick(100),{type:"boat_intent",action:"input",throttle:0,steer:0});
+  f.windowEvents.blur();
+  assert.equal(f.marker.enabled,false);
+  assert.equal(f.planning(),false);
+  assert.equal(f.tick(200).throttle,0);
 });
 
 test("a tilted ray intersects the visible village river surface",()=>{
