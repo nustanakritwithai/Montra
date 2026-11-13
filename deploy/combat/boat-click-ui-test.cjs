@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const {readFileSync} = require("node:fs");
 const {resolve} = require("node:path");
+const {createHash} = require("node:crypto");
 const {test} = require("node:test");
 const vm = require("node:vm");
 
@@ -15,6 +16,90 @@ const picking = pointer.slice(0,pointer.indexOf('  ui.world.addEventListener("po
 const villageWater = village.slice(village.indexOf("  const villageWaterLevel"),village.indexOf("  const lanternPaper"));
 const terrainCell = terrain.slice(terrain.indexOf("  function terrainCell"),terrain.indexOf("  // ---- Ground patches"));
 const waterDepth = terrain.slice(terrain.indexOf("  function terrainHeight"),terrain.indexOf("  const waterPolygons"));
+
+test("all three dugout LODs match the reviewed assets and expose the same animation nodes", () => {
+  const assets = resolve(root, "assets/boats");
+  const receipt = JSON.parse(readFileSync(resolve(assets, "validation.json"), "utf8"));
+  assert.equal(receipt.files.length, 3);
+  for (const [lod, entry] of receipt.files.entries()) {
+    assert.equal(entry.filename, `MONTRA-ayutthaya-dugout-LOD${lod}.glb`);
+    const bytes = readFileSync(resolve(assets, entry.filename));
+    assert.equal(bytes.length, entry.bytes);
+    assert.equal(createHash("sha256").update(bytes).digest("hex"), entry.sha256);
+    const gltf = JSON.parse(bytes.toString("utf8", 20, 20 + bytes.readUInt32LE(12)));
+    const names = new Set(gltf.nodes.map(node => node.name));
+    for (const name of ["Dugout_Hull", "Paddle", "Seat", "Cargo"]) assert.ok(names.has(name), name);
+  }
+});
+
+test("dugout LODs load once, preserve the deck and ignore a load after the boat despawns", async () => {
+  const source = core.slice(core.indexOf("  const dugoutContainers"), core.indexOf("  function sendBoatIntent"));
+  const deck = {width: 2.1, length: 5.2, y: .88};
+  const loaded = [], requests = new Map(), instances = [];
+  class Vector {
+    constructor(x=0, y=0, z=0) { this.set(x,y,z); }
+    set(x,y,z) { Object.assign(this,{x,y,z}); }
+    clone() { return new Vector(this.x,this.y,this.z); }
+  }
+  class Transform {
+    constructor(name) { this.name=name; this.position=new Vector(); this.scaling=new Vector(1,1,1); this.rotation=new Vector(); }
+    dispose() { this.disposed=true; }
+    isDisposed() { return this.disposed; }
+    getChildMeshes() { return []; }
+  }
+  const container = {instantiateModelsToScene() {
+    const root = new Transform("__root__"), hull = new Transform("Dugout_Hull");
+    const seat = new Transform("Seat"), paddle = new Transform("Paddle");
+    seat.position.set(0,.142,-.43); paddle.position.set(.219,.153,-.84);
+    root.getDescendants = () => [seat,paddle,hull];
+    instances.push(root);
+    return {rootNodes:[root],dispose(){root.dispose();}};
+  }};
+  const sandbox = {
+    $:()=>({}), LITE:false, scene:{}, performance:{now:()=>0}, console,
+    B:{TransformNode:Transform, SceneLoader:{LoadAssetContainerAsync(path,file) {
+      assert.equal(path,"./assets/boats/"); loaded.push(file);
+      return new Promise(resolve=>requests.set(file,resolve));
+    }}},
+  };
+  vm.runInNewContext(source,sandbox);
+  const make = () => {
+    const node = new Transform("boat");
+    node.scaling.set(deck.width/.95,deck.y/.16,deck.length/5.1);
+    node.metadata={sailingBoat:true,fallback:new Transform("fallback"),sternPaddle:new Transform("fallback paddle")};
+    return node;
+  };
+  const boat = make(), peer = make();
+  const fallback = boat.metadata.fallback;
+  sandbox.updateDugoutModel(boat,deck,10,0);
+  sandbox.updateDugoutModel(peer,deck,10,0);
+  sandbox.updateDugoutModel(boat,deck,10,0);
+  assert.equal(loaded.length,1);
+  assert.equal(boat.metadata.fallback.disposed,undefined);
+  peer.dispose();
+  requests.get(loaded[0])(container);
+  await new Promise(setImmediate);
+  assert.equal(instances.length,1);
+  assert.equal(fallback.disposed,true);
+  const near = boat.metadata.dugout;
+  assert.equal(near.lod,0);
+  assert.ok(Math.abs((near.root.position.y+near.seat.position.y*near.root.scaling.y)*boat.scaling.y-deck.y)<1e-8);
+  const moving={helmId:"local",speed:3,anchored:false};
+  const original = near.stowed.clone();
+  for (let i=0;i<30;i++) sandbox.animateDugout(near,moving,.10,i*16,.016);
+  assert.ok(near.paddle.rotation.y>.8 && near.row>.9);
+  moving.anchored=true;
+  for (let i=0;i<55;i++) sandbox.animateDugout(near,moving,0,i*16,.016);
+  assert.ok(Math.abs(near.paddle.position.z-original.z)<.001);
+  sandbox.updateDugoutModel(boat,deck,25,500);
+  assert.equal(loaded.length,1,"distance hysteresis holds the near model");
+  sandbox.updateDugoutModel(boat,deck,34,500);
+  assert.equal(boat.metadata.dugout,near,"old model remains during loading");
+  requests.get(loaded[1])(container);
+  await new Promise(setImmediate);
+  assert.equal(boat.metadata.dugout.lod,1);
+  assert.equal(near.root.disposed,true);
+});
 
 function fixture(raySlope=0,mapId="ritual_village") {
   const canvasEvents = {}, windowEvents = {}, packets = [], ghostOrders = [], buttons = new Map();
@@ -49,7 +134,7 @@ function fixture(raySlope=0,mapId="ritual_village") {
       if(!buttons.has(id))buttons.set(id,{hidden:true,dataset:{},children:[],setAttribute(name,value){this[name]=value;}});
       return buttons.get(id);
     },
-    localId:"local",mode:"live",activeMapId:map.id,worldDefinitions:{[map.id]:map},
+    localId:"local",mode:"live",activeMapId:map.id,worldDefinitions:{[map.id]:map},LITE:false,
     room:{state:{boatsAvailable:true,boats:new Map([["boat",boat]]),players:new Map([["local",player]])},send:(type,payload)=>packets.push({type,...payload})},
     ownServerCharacter:()=>player,performance:{now:()=>now},toast(){},cancelQuestNavigation(){},
     fishingSelect:false,resourcePickers:new Map(),forestMonsters:new Map(),fortRoot:{isEnabled:()=>false},enemy,

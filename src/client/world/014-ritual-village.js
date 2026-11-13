@@ -128,16 +128,22 @@
     node.position.set(x, sailingBoat ? 0 : villageWaterLevel, z);
     node.rotation.y = angle;
     node.metadata = {sailingBoat,villageWater:!sailingBoat};
-    vbox("boat hull", 0, -.02, 0, .95, .34, 3.2, darkWood, node);
-    vbox("boat floor", 0, .14, 0, .75, .04, 3.0, wooden, node);
+    const hull = sailingBoat ? new B.TransformNode("boat fallback", scene) : node;
+    if (sailingBoat) {
+      hull.parent = node;
+      hull.metadata = {sailingBoat: true};
+      node.metadata.fallback = hull;
+    }
+    vbox("boat hull", 0, -.02, 0, .95, .34, 3.2, darkWood, hull);
+    vbox("boat floor", 0, .14, 0, .75, .04, 3.0, wooden, hull);
     // Sailing coordinates point +Z toward the bow, even when the boat reverses.
-    vcyl("boat bow", 0, .025, 2.05, 1.0, .95, 0, darkWood, 4, node).rotation.x = Math.PI / 2;
-    vcyl("bow garland", 0, .24, 2.35, .23, .12, .03, clothRed, 5, node).rotation.x = .8;
-    vbox("forward bench", 0, .195, .8, .8, .06, .22, woodenAlt, node);
-    vbox("stern transom", 0, .08, -1.63, .95, .27, .14, woodenAlt, node);
+    vcyl("boat bow", 0, .025, 2.05, 1.0, .95, 0, darkWood, 4, hull).rotation.x = Math.PI / 2;
+    vcyl("bow garland", 0, .24, 2.35, .23, .12, .03, clothRed, 5, hull).rotation.x = .8;
+    vbox("forward bench", 0, .195, .8, .8, .06, .22, woodenAlt, hull);
+    vbox("stern transom", 0, .08, -1.63, .95, .27, .14, woodenAlt, hull);
     if(sailingBoat){
       const paddle=new B.TransformNode("stern paddle",scene);
-      paddle.parent=node;paddle.metadata={sailingBoat:true};
+      paddle.parent=hull;paddle.metadata={sailingBoat:true};
       paddle.position.set(.30,.235,-1.49);paddle.rotation.x=-.22;
       vbox("paddle shaft",0,0,-.12,.033,.015,1.21,woodenAlt,paddle);
       vbox("paddle blade",0,0,-.78,.14,.019,.34,wooden,paddle);
