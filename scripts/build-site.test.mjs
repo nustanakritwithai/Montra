@@ -20,6 +20,22 @@ test('static packaging rejects stale generated CSS before writing output', () =>
   } finally { rmSync(temp, { recursive: true, force: true }); }
 });
 
+test('static packaging rejects a stylesheet href with a missing closing quote', () => {
+  const temp = mkdtempSync(join(tmpdir(), 'montra-style-link-'));
+  try {
+    const source = join(temp, 'source'), output = join(temp, 'output');
+    cpSync(join(root, 'src'), join(source, 'src'), { recursive: true });
+    writeFileSync(join(source, 'main.js'), assembleClient());
+    cpSync(join(root, 'styles.css'), join(source, 'styles.css'));
+    const html = readFileSync(join(root, 'index.html'), 'utf8');
+    const broken = html.replace(/(href="\.\/styles\.css\?[^"\n]+)"/, '$1');
+    assert.notEqual(broken, html, 'fixture removes the stylesheet closing quote');
+    writeFileSync(join(source, 'index.html'), broken);
+    assert.throws(() => buildSite(output, revision, source), /well-formed versioned styles\.css link/);
+    assert.equal(existsSync(output), false);
+  } finally { rmSync(temp, { recursive: true, force: true }); }
+});
+
 test('two builds are byte-identical and preserve the existing Pages payload', () => {
   const temp = mkdtempSync(join(tmpdir(), 'montra-build-'));
   try {

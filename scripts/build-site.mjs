@@ -19,14 +19,16 @@ export function buildSite(output, revision, source = root) {
   assert.match(revision, /^[a-f0-9]{40}$/, 'Build revision must be a full Git commit SHA');
   prepareClient(source); // Generate if absent; refuse stale or hand-edited output.
   checkStyles(source); // Preserve the exact ordered cascade and generated CSS.
+  const html = readFileSync(join(source, 'index.html'), 'utf8');
+  const styleLinks = [...html.matchAll(/^[ \t]*<link rel="stylesheet" href="\.\/styles\.css\?v=[a-zA-Z0-9._-]+"[ \t]*\/?>[ \t]*\r?$/gm)];
+  assert.equal(styleLinks.length, 1, 'Expected one well-formed versioned styles.css link in index.html');
+  const script = /(<script src="\.\/main\.js\?[^"\n]+)(" defer)/g;
+  assert.equal([...html.matchAll(script)].length, 1, 'Expected exactly one versioned main.js script');
   mkdirSync(output, { recursive: true });
   assert.equal(readdirSync(output).length, 0, 'Build output must be empty');
   for (const file of ['index.html', 'main.js', 'audio.js', 'account-entry.js', 'styles.css']) {
     cpSync(join(source, file), join(output, file));
   }
-  const html = readFileSync(join(source, 'index.html'), 'utf8');
-  const script = /(<script src="\.\/main\.js\?[^"\n]+)(" defer)/g;
-  assert.equal([...html.matchAll(script)].length, 1, 'Expected exactly one versioned main.js script');
   writeFileSync(join(output, 'index.html'), html.replace(script, `$1&amp;rev=${revision}$2`));
   cpSync(join(source, 'assets'), join(output, 'assets'), { recursive: true });
   const swords = Array.from({ length: 8 }, (_, i) => `assets/weapons/thai-sword-0${i + 1}.glb`);
