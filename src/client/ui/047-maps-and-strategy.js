@@ -697,10 +697,11 @@
         </details>
       </section>
       <details id="warTerritories" class="field-card" hidden>
-        <summary>สถานะด่านทั้งหมด</summary>
+        <summary>เวลาศึกทุกเมือง</summary>
         <label class="field" for="warTerritorySite">พื้นที่ <select id="warTerritorySite"></select></label>
         <p id="warTerritoryOwner"></p><p id="warTerritoryStatus"></p>
         <button id="warTerritoryRoute" class="secondary" type="button">ดูเส้นทางไปด่าน</button>
+        <ul id="warTerritoryTimes" class="war-time-list" role="list" aria-label="เวลาศึกทุกเมือง"></ul>
       </details>
       <section id="warSchedulePanel" class="field-card" hidden>
         <h3 class="gx-with-emblem" data-guild-icon="time">ตารางศึก</h3><label class="field" for="warScheduleCity">เมือง <select id="warScheduleCity"></select></label>
@@ -737,8 +738,11 @@
     renderWarPanel();
     if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
   }
+  const warDateFormat=new Intl.DateTimeFormat("th-TH",{
+    weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false,
+  });
   function warLocalDate(ms){
-    return new Date(ms).toLocaleString("th-TH",{weekday:"short",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false});
+    return warDateFormat.format(ms);
   }
   function warClockText(at,serverNow){
     if(!Number.isFinite(at) || !Number.isFinite(serverNow))return "";
@@ -769,25 +773,25 @@
       const preferred=picker.value || panel.dataset.site || activeMapId;
       picker.replaceChildren(...sites.map(site=>new Option(worldDefinitions[site].name,site)));
       if(sites.includes(preferred))picker.value=preferred;
+      const times=$("warTerritoryTimes");
+      if(times)times.replaceChildren(...sites.map(site=>createWarTimeRow(site,worldDefinitions[site].name)));
     }
     picker.onchange=updateWarTerritoryStatus;
+    panel.ontoggle=updateWarTerritoryStatus;
     updateWarTerritoryStatus();
   }
   function updateWarTerritoryStatus(){
     const panel=$("warTerritories"),picker=$("warTerritorySite");
     if(!panel || panel.hidden || !picker?.value)return;
-    const site=picker.value,entry=territoryState?.warTimes?.[site];
+    const site=picker.value;
     const now=territoryServerTime();
-    const status=$("warTerritoryStatus"),owner=$("warTerritoryOwner"),schedule=territoryState?.schedule?.[site];
-    let label=warTerritoryLabel(entry,now);
-    if(entry?.phase==="open" && schedule?.next)
-      label+=" · รอบนัดถัดไป "+warLocalDate(schedule.next.startsAt)+" (เวลาเครื่อง)";
-    if(Number.isFinite(entry?.phaseEndsAt) && entry.phaseEndsAt>now)
-      label+=" · "+(entry.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ")+warLocalDate(entry.phaseEndsAt)+" (เวลาเครื่อง)";
+    const status=$("warTerritoryStatus"),owner=$("warTerritoryOwner");
+    const label=warSiteTimeLabel(site,now);
     const ownerLabel="ผู้ครอง · "+(territoryState?.owners?.[site] || "เป็นกลาง");
     if(owner.textContent!==ownerLabel)owner.textContent=ownerLabel;
     if(status.textContent!==label)status.textContent=label;
     $("warTerritoryRoute").hidden=site===activeMapId;
+    if(panel.open)updateWarTimeRows($("warTerritoryTimes"),now);
   }
   function atlasWarCountdown(site,now){
     const entry=territoryState?.warTimes?.[site],phase=entry?.phase;
@@ -795,10 +799,56 @@
       const clock=warClockText(entry.phaseEndsAt,now);
       if(clock)return {site,phase,at:entry.phaseEndsAt,clock};
     }
-    const at=territoryState?.schedule?.[site]?.next?.startsAt;
-    const clock=warClockText(at,now);
+    const schedule=territoryState?.schedule?.[site];
+    const currentEnd=schedule?.current?.endsAt;
+    const currentClock=warClockText(currentEnd,now);
+    if(currentClock)return {site,phase:"window",at:currentEnd,clock:currentClock};
+    const at=schedule?.next?.startsAt,clock=warClockText(at,now);
     return clock?{site,phase:"scheduled",at,clock}:null;
   }
+  function warSiteTimeLabel(site,now,countdown=atlasWarCountdown(site,now)){
+    const entry=territoryState?.warTimes?.[site],schedule=territoryState?.schedule?.[site];
+    let label=warTerritoryLabel(entry,now);
+    if(countdown?.phase==="battle" || countdown?.phase==="protected"){
+      const end=countdown.phase==="battle"?"จบไม่เกิน ":schedule?"สิ้นสุดคุ้มครอง ":"เปิดตีได้ ";
+      label+=" · "+end+warLocalDate(countdown.at);
+    }else if(countdown?.phase==="window"){
+      label="รอบนัดปัจจุบัน · เหลือ "+countdown.clock+" · ถึง "+warLocalDate(countdown.at);
+    }else if(countdown?.phase==="scheduled"){
+      const status=entry?.phase==="open"?label+" · ":"";
+      label=status+"รอบนัดอีก "+countdown.clock+" · "+warLocalDate(countdown.at);
+    }else if(Number.isFinite(schedule?.next?.startsAt)){
+      label=Number.isFinite(now)?"กำลังอัปเดตรอบนัด":"รอข้อมูล";
+    }else if(entry?.phase==="open"){
+      label+=" · เปิดตามการท้าชิง";
+    }else if(!entry && territoryState?.warTimes){
+      label="พื้นที่นี้ยังไม่เปิดศึก";
+    }
+    const next=schedule?.next?.startsAt;
+    if(countdown && countdown.phase!=="scheduled" && Number.isFinite(next) && next>now)
+      label+=" · รอบถัดไป "+warLocalDate(next);
+    return label;
+  }
+  function createWarTimeRow(site,name,select){
+    const row=document.createElement("li"),title=document.createElement(select?"button":"strong");
+    title.textContent=name;
+    if(select){title.type="button";title.onclick=select;}
+    const status=document.createElement("span");
+    row.dataset.warSite=site;
+    row.append(title,status);
+    return row;
+  }
+  function updateWarTimeRows(list,now){
+    if(!list)return;
+    for(const row of list.children){
+      const site=row.dataset.warSite,countdown=atlasWarCountdown(site,now);
+      const status=row.children[1],label=warSiteTimeLabel(site,now,countdown);
+      if(status.textContent!==label)status.textContent=label;
+      const phase=countdown?.phase || "";
+      if(row.dataset.phase!==phase)row.dataset.phase=phase;
+    }
+  }
+  const atlasWarBadgePrefix={battle:"รบ",protected:"พัก",window:"รอบนี้",scheduled:"นัด"};
   function updateAtlasWarTimes(){
     const board=$("atlasBoard");
     if(!board)return;
@@ -806,10 +856,9 @@
     for(const badge of board.querySelectorAll("[data-atlas-war-site]")){
       const countdown=atlasWarCountdown(badge.dataset.atlasWarSite,now);
       if(countdown)deadlines.push(countdown);
-      const visible=countdown && countdown.phase!=="scheduled";
-      badge.hidden=!visible;
-      if(!visible)continue;
-      const text=(countdown.phase==="battle"?"รบ ":"พัก ")+countdown.clock;
+      badge.hidden=!countdown;
+      if(!countdown)continue;
+      const text=atlasWarBadgePrefix[countdown.phase]+" "+countdown.clock;
       if(badge.textContent!==text)badge.textContent=text;
       if(badge.dataset.phase!==countdown.phase)badge.dataset.phase=countdown.phase;
     }
@@ -818,14 +867,13 @@
     if(status){
       status.hidden=!entry && !selected;
       if(!status.hidden){
-        let text=warTerritoryLabel(entry,now);
-        if(selected?.phase==="scheduled")
-          text+=" · รอบนัดอีก "+selected.clock+" · "+warLocalDate(selected.at);
+        const text=warSiteTimeLabel(site,now,selected);
         if(status.textContent!==text)status.textContent=text;
       }
     }
+    updateWarTimeRows($("atlasWarTimes"),now);
     // On arrival, show the nearest round across the map. A selected destination can override it.
-    const priority={battle:0,scheduled:1,protected:2};
+    const priority={battle:0,window:1,scheduled:2,protected:3};
     deadlines.sort((a,b)=>priority[a.phase]-priority[b.phase] || a.at-b.at);
     const strip=$("atlasWarStrip"),display=$("atlasWarClock"),message=$("atlasWarMessage"),link=$("atlasWarBoard");
     const countdown=(strip.dataset.focused==="true" && selected) || deadlines[0];
@@ -834,7 +882,7 @@
     link.hidden=!times?.[target] && !territoryState?.schedule?.[target];
     const clock=countdown?.clock || "--:--";
     const reason=countdown?{
-      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",scheduled:"รอบนัดถัดไป",
+      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",window:"สิ้นสุดรอบนัด",scheduled:"รอบนัดถัดไป",
     }[countdown.phase]+" · "+(worldDefinitions?.[countdown.site]?.name || countdown.site):
       times && Object.keys(times).length?"รอเปิดศึก":
       mode==="live" && room?.state?.territoryWarAvailable?"รอข้อมูลจากเซิร์ฟเวอร์":
@@ -1106,13 +1154,18 @@
         <span id="atlasWarClock" class="atlas-war-clock" role="timer" aria-live="off">--:--</span>
         <button type="button" id="atlasWarBoard" hidden>ดูศึก</button>
       </div>
+      <details class="war-times-details">
+        <summary>เวลาศึกทุกเมือง</summary>
+        <ul id="atlasWarTimes" class="war-time-list" role="list" aria-label="เวลาศึกทุกเมือง"></ul>
+      </details>
       <div class="atlas-scroll" id="atlasScroll" tabindex="0" role="region" aria-label="แผนที่อาณาจักร แตะพื้นที่เพื่อดูเส้นทาง"><div class="atlas-board" id="atlasBoard"></div></div>
       <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>
     </div>`);
     const backButton=$("backLocalMap");
     if(typeof back==="function")backButton.textContent="‹ กลับหน้าก่อน";
     backButton.onclick=typeof back==="function"?back:openMap;
-    const board=$("atlasBoard"),scroll=$("atlasScroll"),detail=$("atlasDetail"),cells=new Map(),edges=[];
+    const board=$("atlasBoard"),scroll=$("atlasScroll"),detail=$("atlasDetail"),warTimes=$("atlasWarTimes");
+    const cells=new Map(),edges=[];
     const warLink=$("atlasWarBoard");
     warLink.onclick=()=>{
       const site=warLink.dataset.site;
@@ -1151,6 +1204,7 @@
       button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
       if(id===origin){button.classList.add("here");button.setAttribute("aria-current","location");}
       board.append(button);cells.set(id,button);button.onclick=()=>select(id,true);
+      warTimes.append(createWarTimeRow(id,map.name,()=>{select(id,true);center(id);}));
     }
     let travel=boats && boatAtHelm()?"waterGates":"portals";
     let selected=typeof destination==="string" && cells.has(destination)?destination:origin;

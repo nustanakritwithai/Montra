@@ -506,8 +506,11 @@
         if(drawerActive==="war")renderWarPanel();
         if(drawerActive==="strategy")updateAtlasWarTimes();
         if(drawerActive==="guild")renderGuild();
-        if(drawerActive==="cityMarket" && cityMarkets && Object.keys(citySiteNames).some(site=>
-          previousOwners?.[site]!==message.owners?.[site] || previousWarTimes?.[site]?.phase!==message.warTimes?.[site]?.phase))refreshCityMarkets();
+        if(drawerActive==="cityMarket"){
+          updateCityMarketWarTimes();
+          if(cityMarkets && Object.keys(citySiteNames).some(site=>
+            previousOwners?.[site]!==message.owners?.[site] || previousWarTimes?.[site]?.phase!==message.warTimes?.[site]?.phase))refreshCityMarkets();
+        }
         if(drawerActive==="cityMission" && cityMission && Object.keys(citySiteNames).some(site=>
           previousOwners?.[site]!==message.owners?.[site] || previousWarTimes?.[site]?.phase!==message.warTimes?.[site]?.phase)){
           refreshCityMission();

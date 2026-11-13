@@ -803,6 +803,30 @@
   function openCityMarket(navigation,draft=null){
     cityMarkets=null;cityTradeDraft=draft;cityMarketQuotePending=false;
     openCityBoard("cityMarket","ตลาดประจำเมือง",refreshCityMarkets,navigation);
+    if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
+  }
+  function updateCityMarketWarTimes(){
+    const now=territoryServerTime();
+    updateWarTimeRows($("cityMarketWarTimes"),now);
+    updateWarTimeRows($("cityMarketOtherWarTimes"),now);
+  }
+  function renderCityMarketWarTimes(body,cities){
+    const times=marketText("ul","war-time-list city-market-war-times","");
+    times.id="cityMarketWarTimes";
+    times.setAttribute("role","list");
+    times.setAttribute("aria-label","เวลาศึกเมืองตลาด");
+    for(const site of cities)times.append(createWarTimeRow(site,citySiteNames[site]));
+    body.append(times);
+    const other=Object.keys(worldDefinitions || {}).filter(site=>atlasCells[site] && !cities.includes(site));
+    if(other.length){
+      const details=cityMarketDetails("cityMarketWarDetails","เวลาศึกเมืองและพื้นที่อื่น","time",cityTradeDraft);
+      const list=marketText("ul","war-time-list","");
+      list.id="cityMarketOtherWarTimes";
+      list.setAttribute("role","list");
+      for(const site of other)list.append(createWarTimeRow(site,worldDefinitions[site].name));
+      details.append(list);body.append(details);
+    }
+    updateCityMarketWarTimes();
   }
   const cityMarketStatuses={
     unowned:"เมืองยังไม่มีผู้ครอง",disabled:"พักเปิดรับคำสั่งใหม่",siege:"พักระหว่างศึก",
@@ -1158,6 +1182,7 @@
     const markets=cityMarketRows();
     const cities=[...new Set(markets.map(market=>market.site))];
     const filter=renderCityMarketOverview(body,cities,draft);
+    if(room.state.territoryWarAvailable && cities.length)renderCityMarketWarTimes(body,cities);
     appendCityTradePin(body,"market");
     const preferred=filter==="all"?(cityMarkets.atMarket || body.dataset.site):filter;
     if(preferred) cities.sort((a,b)=>Number(b===preferred)-Number(a===preferred));

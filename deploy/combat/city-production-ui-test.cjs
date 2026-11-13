@@ -5,6 +5,10 @@ const test = require("node:test");
 const vm = require("node:vm");
 
 const source = readFileSync(join(__dirname, "../../src/client/ui/056-party-guild-and-rebirth.js"), "utf8");
+const strategy = readFileSync(join(__dirname,"../../src/client/ui/047-maps-and-strategy.js"),"utf8");
+const warUI = strategy.slice(strategy.indexOf("  const atlasCells ="),strategy.indexOf("  const warErrors=")) +
+  strategy.slice(strategy.indexOf("  const warDateFormat="),strategy.indexOf("  function renderWarTerritories(")) +
+  strategy.slice(strategy.indexOf("  function atlasWarCountdown("),strategy.indexOf("  function updateAtlasWarTimes("));
 const start = source.indexOf("  const cityProduct=");
 const end = source.indexOf("  let rebirthState=", start);
 assert(start >= 0 && end > start);
@@ -39,16 +43,18 @@ function node(tag = "div") {
 }
 
 function fixture({enabled = true, recovery = true, member = true, workshopSupported = false,
-  purchaseSupported = false, missionSupported = false, governanceAvailable = false, marketSupported = false} = {}) {
+  purchaseSupported = false, missionSupported = false, governanceAvailable = false, marketSupported = false, warAvailable = false} = {}) {
   const nodes = {}, wire = [], timers = new Map();
   let serial = 0, now = 100;
   const walk = el => [el, ...el.children.flatMap(walk)];
   const $ = id => nodes[id] || (nodes.cityProductionContent && walk(nodes.cityProductionContent).find(el => el.id === id));
   const ctx = {
-    $, mode:"live", territoryState:null, document: {createElement: node}, performance: {now: () => now}, activeMapId: "sam_lan_estuary",
+    $, mode:"live", territoryState:null, territoryReceivedAt:100, worldDefinitions:null,
+    document: {createElement: node}, performance: {now: () => now}, activeMapId: "sam_lan_estuary",
+    warPhase: phase => phase,
     room: {state: {cityProductionAvailable: enabled, cityRecoveryAvailable: recovery,
       cityWorkshopSupported: workshopSupported, cityPurchaseSupported: purchaseSupported, cityMissionSupported: missionSupported,
-      cityGovernanceAvailable: governanceAvailable, cityMarketSupported: marketSupported},
+      cityGovernanceAvailable: governanceAvailable, cityMarketSupported: marketSupported, territoryWarAvailable: warAvailable},
       send(command, payload) { wire.push({command, payload: plain(payload)}); }},
     guildState: member ? {id: "guild-1", name: "สามลาน"} : null,
     inventoryState: {slots: [{itemId: wood, quantity: 10}, {itemId: stone, quantity: 6}]},
@@ -68,7 +74,7 @@ function fixture({enabled = true, recovery = true, member = true, workshopSuppor
     clearTimeout(id) { timers.delete(id); },
     window: {confirm: () => true},
   };
-  vm.runInNewContext(source.slice(start,end),ctx);
+  vm.runInNewContext(warUI+source.slice(start,end),ctx);
   const elements = () => walk(nodes.cityProductionContent);
   const button = text => elements().find(el => el.tag === "button" && el.textContent === text);
   const submit = (text, ...values) => {
@@ -734,6 +740,36 @@ test("city market filters preserve the current quote input and wait for a fresh 
   assert.equal(f.wire.at(-1).payload.total,31);
   f.ctx.cityReceiveResult(f.wire.at(-1).payload);
   assert.equal(f.button("ยืนยันซื้อแร่").disabled,true);
+});
+
+test("market shows both city war clocks and other cities independently of the trade filter", () => {
+  const f=fixture({marketSupported:true,warAvailable:true}),river="sam_lan_estuary",moon="moon_pass";
+  f.ctx.worldDefinitions={[river]:{name:"สามลาน"},[moon]:{name:"จันทรา"},mantra_capital:{name:"นครเวียงมนตรา"}};
+  f.ctx.openCityMarket();
+  assert.deepEqual(f.wire.slice(-2).map(message=>message.command),["get_city_markets","get_territories"]);
+  f.ctx.cityReceiveMarkets({serverNow:1000000,history:[],atSite:river,markets:[
+    {site:river,epoch:1,status:"open",prices:[]},{site:moon,epoch:2,status:"paused",prices:[]},
+  ]});
+  const list=f.$("cityMarketWarTimes"),[riverRow,moonRow]=list.children;
+  const [capitalRow]=f.$("cityMarketOtherWarTimes").children;
+  assert.equal(riverRow.children[1].textContent,"รอข้อมูล");
+  f.ctx.territoryState={serverNow:1000000,warTimes:{
+    [river]:{phase:"open"},[moon]:{phase:"battle",phaseEndsAt:1010000},mantra_capital:{phase:"open"},
+  },schedule:{[river]:{next:{startsAt:1030000}},mantra_capital:{next:{startsAt:1060000}}}};
+  f.setNow(1100);
+  f.ctx.updateCityMarketWarTimes();
+  assert.match(riverRow.children[1].textContent,/รอบนัดอีก 0:29/);
+  assert.match(moonRow.children[1].textContent,/^รบ 0:09/);
+  assert.match(capitalRow.children[1].textContent,/รอบนัดอีก 0:59/);
+  f.button("จันทรา").onclick();
+  assert.equal(f.nodes.cityProductionContent.dataset.marketFilter,moon);
+  assert.equal(f.$("cityMarketWarTimes"),list);
+  assert.ok(list.children.every(row=>!row.hidden));
+  const details=f.$("cityMarketWarDetails");details.open=true;
+  f.ctx.cityReceiveMarkets({serverNow:1000001,history:[],atSite:river,markets:[
+    {site:river,epoch:1,status:"open",prices:[]},{site:moon,epoch:2,status:"paused",prices:[]},
+  ]});
+  assert.equal(f.$("cityMarketWarDetails").open,true);
 });
 
 test("a guild market shortcut puts the selected market first and retains both back paths", () => {

@@ -152,7 +152,7 @@ test('atlas clocks follow server time without moving the map or changing the rou
   assert.equal(clock(marsh).textContent,'พัก 0:19');
   assert.equal(f.nodes.atlasWarClock.textContent,'0:19');
   assert.equal(f.nodes.atlasWarMessage.textContent,'สิ้นสุดคุ้มครอง · บึงพราย');
-  assert.equal(detail.textContent,'คุ้มครอง 0:19');
+  assert.equal(detail.textContent,'คุ้มครอง 0:19 · เปิดตีได้ 04:00');
   assert.equal(detail.attributes['aria-live'],'off');
   f.setNow(7000);
   f.context.updateAtlasWarTimes();
@@ -172,7 +172,8 @@ test('atlas clocks follow server time without moving the map or changing the rou
   assert.equal(detail.textContent,'พร้อมเปิดศึก · รอบนัดอีก 0:20 · 04:00');
   assert.equal(f.nodes.atlasWarClock.textContent,'0:20');
   assert.equal(f.nodes.atlasWarMessage.textContent,'รอบนัดถัดไป · บึงพราย');
-  assert.equal(clock(marsh).hidden,true);
+  assert.equal(clock(marsh).hidden,false);
+  assert.equal(clock(marsh).textContent,'นัด 0:20');
 });
 
 test('the war strip stays visible in peace and surfaces a battle elsewhere on the atlas', () => {
@@ -210,6 +211,40 @@ test('default map shows the earliest scheduled round and links to that city', ()
   assert.equal(f.nodes.atlasWarClock.textContent,'5:00');
   f.nodes.atlasRecenter.onclick();
   assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
+});
+
+test('every atlas city has a live row and all scheduled cities show their own timer together', () => {
+  const f=atlasFixture({war:true});
+  f.context.territoryState={serverNow:5000,warTimes:{
+    ritual_village:{phase:'open'},forbidden_forest:{phase:'open'},drowned_marsh:{phase:'open'},
+  },schedule:{
+    ritual_village:{next:{startsAt:305000}},drowned_marsh:{next:{startsAt:65000}},
+  }};
+  f.context.territoryReceivedAt=1000;
+  f.context.openStrategicMap();
+  const [village,forest,marsh]=f.nodes.atlasWarTimes.children;
+  const [,villagePin,,marshPin]=f.nodes.atlasBoard.children;
+  assert.equal(villagePin.children[2].textContent,'นัด 5:00');
+  assert.equal(marshPin.children[2].textContent,'นัด 1:00');
+  assert.match(village.children[1].textContent,/รอบนัดอีก 5:00/);
+  assert.equal(forest.children[1].textContent,'พร้อมเปิดศึก · เปิดตามการท้าชิง');
+  assert.match(marsh.children[1].textContent,/รอบนัดอีก 1:00/);
+  marsh.children[0].onclick();
+  assert.equal(marshPin.attributes['aria-pressed'],'true');
+  f.setNow(2000);
+  f.context.updateAtlasWarTimes();
+  assert.match(village.children[1].textContent,/รอบนัดอีก 4:59/);
+  assert.match(marsh.children[1].textContent,/รอบนัดอีก 0:59/);
+  assert.equal(f.nodes.atlasWarTimes.children[2],marsh);
+  f.setNow(61000);
+  f.context.updateAtlasWarTimes();
+  assert.equal(marsh.children[1].textContent,'กำลังอัปเดตรอบนัด');
+  f.context.territoryState.schedule.drowned_marsh={
+    current:{startsAt:65000,endsAt:125000},next:{startsAt:605000},
+  };
+  f.context.updateAtlasWarTimes();
+  assert.match(marsh.children[1].textContent,/รอบนัดปัจจุบัน · เหลือ 1:00/);
+  assert.equal(marshPin.children[2].textContent,'รอบนี้ 1:00');
 });
 
 test('the war board lists only cities with schedules and opens the requested city', () => {
