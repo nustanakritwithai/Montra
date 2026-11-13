@@ -70,6 +70,7 @@ function atlasFixture({boats = true, helm = false, war = false} = {}) {
     territoryState:null, territoryReceivedAt:0, performance:{now:()=>now}, warLocalDate:()=> '04:00',
     room: {state: {boatsAvailable: boats,cityMarketSupported: true,territoryWarAvailable:war}, send: (...args) => sent.push(args)},
     boatAtHelm: () => helm, sailThroughGate: id => actions.push(id), closeDrawer: () => actions.push('close'), openMap: () => actions.push('local'),
+    openWarPanel: (back,site) => { actions.push(['war',site]); back(); },
     document: {createElement: element,createElementNS: (_namespace,tag) => element(tag)},
     openDrawer(_name,_title,html) {
       markup = html;
@@ -168,9 +169,9 @@ test('atlas clocks follow server time without moving the map or changing the rou
   f.context.territoryState.warTimes.drowned_marsh={phase:'open'};
   f.context.territoryState.schedule={drowned_marsh:{next:{startsAt:50000}}};
   f.context.updateAtlasWarTimes();
-  assert.equal(detail.textContent,'พร้อมเปิดศึก · ศึกถัดไปอีก 0:20 · 04:00');
+  assert.equal(detail.textContent,'พร้อมเปิดศึก · รอบนัดอีก 0:20 · 04:00');
   assert.equal(f.nodes.atlasWarClock.textContent,'0:20');
-  assert.equal(f.nodes.atlasWarMessage.textContent,'เริ่มศึกถัดไป · บึงพราย');
+  assert.equal(f.nodes.atlasWarMessage.textContent,'รอบนัดถัดไป · บึงพราย');
   assert.equal(clock(marsh).hidden,true);
 });
 
@@ -189,6 +190,47 @@ test('the war strip stays visible in peace and surfaces a battle elsewhere on th
   assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
   assert.equal(f.nodes.atlasWarMessage.textContent,'สิ้นสุดศึก · บึงพราย');
   assert.equal(f.nodes.atlasBoard.children[1].attributes['aria-pressed'],'true');
+});
+
+test('default map shows the earliest scheduled round and links to that city', () => {
+  const f=atlasFixture({war:true});
+  f.context.territoryState={serverNow:5000,warTimes:{
+    ritual_village:{phase:'open'},drowned_marsh:{phase:'open'},
+  },schedule:{
+    ritual_village:{next:{startsAt:305000}},drowned_marsh:{next:{startsAt:65000}},
+  }};
+  f.context.territoryReceivedAt=1000;
+  f.context.openStrategicMap();
+  assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
+  assert.equal(f.nodes.atlasWarBoard.dataset.site,'drowned_marsh');
+  assert.equal(f.nodes.atlasWarBoard.hidden,false);
+  f.nodes.atlasWarBoard.onclick();
+  assert.deepEqual(f.actions,[['war','drowned_marsh']]);
+  f.nodes.atlasBoard.children[1].onclick();
+  assert.equal(f.nodes.atlasWarClock.textContent,'5:00');
+  f.nodes.atlasRecenter.onclick();
+  assert.equal(f.nodes.atlasWarClock.textContent,'1:00');
+});
+
+test('the war board lists only cities with schedules and opens the requested city', () => {
+  const picker={dataset:{site:'moon_pass'},options:[],replaceChildren(...options){this.options=options;this.value=options[0]?.value;}};
+  const panel={},time={},form={};
+  const nodes={warSchedulePanel:panel,warScheduleCity:picker,warScheduleTime:time,warRosterForm:form};
+  const context=vm.createContext({
+    $: id=>nodes[id], activeMapId:'ritual_village', guildState:null, worldDefinitions:{}, warLocalDate:ms=>String(ms),
+    Option:function(text,value){this.text=text;this.value=value;},
+    territoryState:{schedule:{
+      ritual_village:{next:{startsAt:20000,locksAt:10000}},
+      moon_pass:{next:{startsAt:40000,locksAt:30000}},
+      drowned_marsh:null,
+    }},
+  });
+  vm.runInContext(slice(atlas,'  function renderWarSchedule(','  function renderWarRoutes('),context);
+  context.renderWarSchedule();
+  assert.deepEqual(picker.options.map(option=>option.value),['ritual_village','moon_pass']);
+  assert.equal(picker.value,'moon_pass');
+  assert.match(time.textContent,/รอบถัดไป 40000/);
+  assert.equal(form.hidden,true);
 });
 
 test('small atlas buttons and their clock badges have room at the narrow board width', () => {

@@ -714,7 +714,10 @@
       $("warBack").onclick=back;
     }
     const overview=$("warTerritories");
-    if(overviewSite){overview.dataset.site=overviewSite;overview.open=true;}
+    if(overviewSite){
+      overview.dataset.site=overviewSite;overview.open=true;
+      $("warScheduleCity").dataset.site=overviewSite;
+    }
     $("warTerritoryRoute").onclick=()=>{
       const site=$("warTerritorySite").value;
       if(site)openStrategicMap(site,()=>openWarPanel(back,site));
@@ -817,19 +820,21 @@
       if(!status.hidden){
         let text=warTerritoryLabel(entry,now);
         if(selected?.phase==="scheduled")
-          text+=" · ศึกถัดไปอีก "+selected.clock+" · "+warLocalDate(selected.at);
+          text+=" · รอบนัดอีก "+selected.clock+" · "+warLocalDate(selected.at);
         if(status.textContent!==text)status.textContent=text;
       }
     }
-    // Prioritize a real timer on the selected site. Otherwise surface the next
-    // relevant deadline even when the matching marker is outside the viewport.
+    // On arrival, show the nearest round across the map. A selected destination can override it.
     const priority={battle:0,scheduled:1,protected:2};
     deadlines.sort((a,b)=>priority[a.phase]-priority[b.phase] || a.at-b.at);
-    const countdown=selected || deadlines[0];
-    const strip=$("atlasWarStrip"),display=$("atlasWarClock"),message=$("atlasWarMessage");
+    const strip=$("atlasWarStrip"),display=$("atlasWarClock"),message=$("atlasWarMessage"),link=$("atlasWarBoard");
+    const countdown=(strip.dataset.focused==="true" && selected) || deadlines[0];
+    const target=countdown?.site || site;
+    link.dataset.site=target || "";
+    link.hidden=!times?.[target] && !territoryState?.schedule?.[target];
     const clock=countdown?.clock || "--:--";
     const reason=countdown?{
-      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",scheduled:"เริ่มศึกถัดไป",
+      battle:"สิ้นสุดศึก",protected:"สิ้นสุดคุ้มครอง",scheduled:"รอบนัดถัดไป",
     }[countdown.phase]+" · "+(worldDefinitions?.[countdown.site]?.name || countdown.site):
       times && Object.keys(times).length?"รอเปิดศึก":
       mode==="live" && room?.state?.territoryWarAvailable?"รอข้อมูลจากเซิร์ฟเวอร์":
@@ -841,11 +846,12 @@
   function renderWarSchedule(){
     const panel=$("warSchedulePanel"),schedule=territoryState?.schedule;
     if(!panel)return;
-    panel.hidden=!schedule;
-    if(!schedule)return;
-    const picker=$("warScheduleCity"),cities=Object.keys(schedule);
+    const cities=Object.keys(schedule || {}).filter(site=>Number.isFinite(schedule[site]?.next?.startsAt));
+    panel.hidden=!cities.length;
+    if(panel.hidden)return;
+    const picker=$("warScheduleCity");
     if(picker.options.length!==cities.length || Array.from(picker.options).some((o,i)=>o.value!==cities[i])){
-      const preferred=picker.value || activeMapId;
+      const preferred=picker.value || picker.dataset.site || activeMapId;
       picker.replaceChildren(...cities.map(site=>new Option(worldDefinitions?.[site]?.name || site,site)));
       if(cities.includes(preferred))picker.value=preferred;
     }
@@ -1098,6 +1104,7 @@
       <div class="atlas-war-strip" id="atlasWarStrip" role="group" aria-label="เวลาสงคราม">
         <div><strong>เวลาสงคราม</strong><span id="atlasWarMessage"></span></div>
         <span id="atlasWarClock" class="atlas-war-clock" role="timer" aria-live="off">--:--</span>
+        <button type="button" id="atlasWarBoard" hidden>ดูศึก</button>
       </div>
       <div class="atlas-scroll" id="atlasScroll" tabindex="0" role="region" aria-label="แผนที่อาณาจักร แตะพื้นที่เพื่อดูเส้นทาง"><div class="atlas-board" id="atlasBoard"></div></div>
       <div class="atlas-summary" id="atlasDetail" aria-live="polite"></div>
@@ -1106,6 +1113,11 @@
     if(typeof back==="function")backButton.textContent="‹ กลับหน้าก่อน";
     backButton.onclick=typeof back==="function"?back:openMap;
     const board=$("atlasBoard"),scroll=$("atlasScroll"),detail=$("atlasDetail"),cells=new Map(),edges=[];
+    const warLink=$("atlasWarBoard");
+    warLink.onclick=()=>{
+      const site=warLink.dataset.site;
+      if(site)openWarPanel(()=>openStrategicMap(selected,back),site);
+    };
     const ids=Object.keys(maps).filter(id=>atlasCells[id]);
     const svgNS="http://www.w3.org/2000/svg",linkLayer=document.createElementNS(svgNS,"svg");
     linkLayer.setAttribute("viewBox","0 0 400 827");linkLayer.setAttribute("preserveAspectRatio","none");linkLayer.setAttribute("aria-hidden","true");
@@ -1138,7 +1150,7 @@
       button.append(icon,label,clock);
       button.setAttribute("aria-label",map.name+(id===origin?" · คุณอยู่ที่นี่":""));
       if(id===origin){button.classList.add("here");button.setAttribute("aria-current","location");}
-      board.append(button);cells.set(id,button);button.onclick=()=>select(id);
+      board.append(button);cells.set(id,button);button.onclick=()=>select(id,true);
     }
     let travel=boats && boatAtHelm()?"waterGates":"portals";
     let selected=typeof destination==="string" && cells.has(destination)?destination:origin;
@@ -1147,8 +1159,9 @@
       scroll.scrollTop=cell.offsetTop-scroll.clientHeight/2;
       scroll.scrollLeft=cell.offsetLeft-scroll.clientWidth/2;
     }
-    function select(id){
+    function select(id,focused){
       selected=id;
+      if(focused!==undefined)$("atlasWarStrip").dataset.focused=String(focused);
       const water=travel==="waterGates",map=maps[id],path=travelRoute(maps,origin,id,travel);
       board.dataset.travel=travel;
       if(boats){
@@ -1184,8 +1197,8 @@
       $("atlasLand").onclick=()=>{travel="portals";select(selected);};
       $("atlasWater").onclick=()=>{travel="waterGates";select(selected);};
     }
-    $("atlasRecenter").onclick=()=>{select(origin);center(origin);};
-    select(selected);center(selected);
+    $("atlasRecenter").onclick=()=>{select(origin,false);center(origin);};
+    select(selected,typeof destination==="string" && cells.has(destination));center(selected);
     if(mode==="live" && room?.state?.territoryWarAvailable)room.send("get_territories",{});
   }
   function openMap() {
