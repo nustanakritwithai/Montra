@@ -125,18 +125,17 @@ async function craftCases(page,check){
  await page.locator('#craftRecipePopupClose').click();
  for(const category of ['food','furniture']){
   await page.locator('#ckCategory-'+category).click();
-  assert.equal(await page.locator('#craftComingSoon').isVisible(),true);
-  assert.match(await page.locator('#craftComingSoon').textContent(),/เร็วๆ นี้/);
-  assert.equal(await page.locator('#craftRecipePane').isVisible(),false);
-  assert.equal(await page.locator('#craftDetailPane').isVisible(),false);
+  assert.equal(await page.locator('#craftRecipeEmpty').isVisible(),true);
+  assert.equal(await page.locator('#craftRecipePane').isVisible(),true);
+  assert.equal(await page.locator('#craftRecipePopup').isVisible(),false);
   // Also exercise a stale handler, which must not submit the hidden prior recipe.
   await page.evaluate(()=>document.getElementById('benchCraft').onclick());
   assert.equal(await page.evaluate(()=>f.mutations().length),0);
-  await check('craft-unsupported-'+category);
+  await check('craft-empty-'+category);
  }
  await page.locator('#drawerClose').click();assert.equal(await page.locator('#drawer').isVisible(),false);
  await page.locator('#fixtureOpen').click();
- assert.equal(await page.locator('#craftComingSoon').isVisible(),false);
+ assert.equal(await page.locator('#craftRecipeEmpty').isVisible(),false);
  assert.equal(await page.locator('#craftRecipePopup').isVisible(),false);
  await check('craft-reopen');
  await page.locator('#ckCategory-weapons').click();

@@ -2,12 +2,10 @@
 const assert=require('node:assert/strict');
 const {fixture,recipeIngredient}=require('./crafting-pages-ui-test.cjs');
 let tests=0;const test=(name,fn)=>{fn();tests++;console.log('PASS '+name);};
-test('craft kitchen shell names unsupported systems without fabricated skill or probability numbers',()=>{
+test('recipe page uses one drawer heading and a compact category strip',()=>{
   const f=fixture();f.run('openCraftingPage()');
-  assert.match(f.ctx.title,/งานช่างและครัว/);assert.match(f.ctx.html,/เลือกของ → เตรียมวัสดุ → ลงมือสร้าง/);
-  assert.match(f.ctx.html,/ทักษะทำอาหาร · เร็วๆ นี้/);assert.match(f.ctx.html,/โอกาสคุณภาพ.*เร็วๆ นี้/);
-  assert(!f.ctx.html.includes('EXP 0/30'));assert(!f.ctx.html.includes('คิวงาน 0/3'));
-  assert.equal(f.$('craftPlayerLevel').textContent,'ตัวละคร LV.25');
+  assert.equal(f.ctx.title,'งานช่างและครัว');assert.doesNotMatch(f.ctx.html,/ck-hero|craftPlayerLevel/);
+  assert.equal(f.$('craftPageStatus').hidden,true);
   assert.equal(f.$('ckCategory-all').getAttribute('aria-pressed'),'true');
 });
 test('six recipe cards per page, bounded pagination and native-select/card synchronization',()=>{
@@ -31,16 +29,55 @@ test('new category buttons filter only real server recipe kinds',()=>{
   }
   assert.equal(f.mutations().length,0);
 });
-test('food/furniture coming-soon cannot craft hidden previous recipe; direct recipe routes recover',()=>{
-  const f=fixture();f.choose('all','blade_25');
-  for(const category of ['food','furniture']){
-    f.$('ckCategory-'+category).click();assert.equal(f.$('craftComingSoon').hidden,false);
-    assert.equal(f.$('craftRecipePane').hidden,true);assert.equal(f.$('craftDetailPane').hidden,true);
-    assert.match(f.$('craftComingSoon').textContent,/เร็วๆ นี้/);f.$('benchCraft').onclick();
-    assert.equal(f.mutations().length,0);
+test('food and furniture change recipes in place and check the craft location at submission',()=>{
+  const f=fixture();
+  const ingredients=[{item:'mat_raw_wood_1',qty:1}];
+  const base={path:'all',level:1,recipe:ingredients,craftGold:0};
+  f.items.fish_soup={...base,name:'ต้มปลา',kind:'consumable',food:true,cookingLevel:1};
+  f.items.grilled_fish={...base,name:'ปลาย่าง',kind:'consumable',food:true,cookingLevel:2};
+  f.items.wood_wall={...base,name:'ผนังไม้',kind:'material',furniture:true};
+  f.player.mapId='ritual_village';
+  f.choose('all','blade_25');
+  const picker=f.$('benchRecipe'), grid=f.$('craftRecipeGrid'), popup=f.$('craftRecipePopup');
+  assert.equal(f.$('benchLevel').value,'25');
+  const pending=f.wire.length;
+  for(const [category,recipes] of [['food',['fish_soup','grilled_fish']],['furniture',['wood_wall']],['medicine',['potion_1']]]){
+    f.$('ckCategory-'+category).click();
+    assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.$('benchRecipe'),picker);
+    assert.equal(f.$('craftRecipeGrid'),grid);assert.equal(f.$('craftRecipePopup'),popup);
+    assert.equal(popup.open,false);assert.deepEqual(f.ids(),recipes);assert.equal(f.$('benchLevel').value,'auto');
+    assert.equal(f.$('ckCategory-'+category).getAttribute('aria-pressed'),'true');
   }
-  f.choose('kiln','mat_ingot_1');assert.equal(f.$('craftComingSoon').hidden,true);
-  assert.equal(f.$('craftDetailPane').hidden,false);f.$('benchCraft').click();assert.equal(f.mutations().length,1);
+  assert.equal(f.wire.length,pending,'changing tabs does not request another page or send a mutation');
+  f.$('ckCategory-food').click();
+  grid.children.find(card=>card.dataset.recipe==='grilled_fish').click();
+  assert.equal(popup.open,true);assert.equal(f.$('benchCraft').disabled,true);
+  assert.match(f.$('craftRequirements').children.at(-1).textContent,/เตาครัว.*ระดับ 2/);
+  f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
+  f.$('craftRecipePopupClose').click();
+  f.$('ckCategory-furniture').click();grid.children[0].click();
+  assert.equal(f.$('benchCraft').disabled,true);
+  assert.match(f.$('craftRequirements').children.at(-1).textContent,/ผลิตที่เรือนส่วนตัว/);
+  f.player.mapId='personal_home_'+'a'.repeat(32);
+  f.run('renderCraftingPage()');assert.equal(f.$('benchCraft').disabled,false);
+  f.player.mapId='ritual_village';
+  f.$('benchCraft').onclick();assert.equal(f.mutations().length,0,'rechecks map before sending');
+  f.callbacks.economy_error({reason:'home_build_location'});
+  assert.match(f.$('craftActionStatus').textContent,/ผลิตในเรือนส่วนตัว/);
+  f.$('craftRecipePopupClose').click();
+  f.$('ckCategory-food').click();grid.children.find(card=>card.dataset.recipe==='fish_soup').click();
+  assert.equal(f.$('benchCraft').disabled,false);
+  f.$('benchCraft').click();assert.equal(f.mutations().length,1);
+  assert.equal(f.mutations()[0].payload.recipeId,'fish_soup');
+});
+test('an empty home recipe category stays in the workbench and cannot submit the prior recipe',()=>{
+  const f=fixture();f.choose('all','blade_25');f.$('ckCategory-furniture').click();
+  assert.equal(f.ctx.drawerActive,'crafting');assert.deepEqual(f.ids(),[]);
+  assert.equal(f.$('craftRecipeEmpty').hidden,false);
+  assert.equal(f.$('craftRecipePopup').open,false);
+  f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
+  f.choose('kiln','mat_ingot_1');assert.equal(f.$('craftRecipeEmpty').hidden,true);
+  f.$('benchCraft').click();assert.equal(f.mutations().length,1);
 });
 test('locked recipe cards describe actual level requirement, never pretend recipe learning exists',()=>{
   const f=fixture();f.choose('all','blade_50');

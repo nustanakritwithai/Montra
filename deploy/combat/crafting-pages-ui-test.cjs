@@ -49,6 +49,8 @@ function fixture(){
   const shrine={id:'shrine_glaive_recipe',ingredient:'shrine_shard',quantity:5,gold:80,itemLevel:25,output:'shrine_glaive'};
   const player={alive:true,level:25,pathId:'blade',persistent:true};
   const ctx={$,Option:class{constructor(text,value){this.text=text;this.value=String(value);}},document:{createElement:tag=>node(tag)},
+    homeMapTemplate:{id:"personal_home"},
+    openHomePanel(){assert.fail("recipe categories must not open the home panel");},
     mode:'live',drawerActive:null,personalItems:items,cardDrill:{gold:10},catalogRevision:1,workbenchGold:40,refineInput:2,
     inventoryState:{version:1,slots,equippedWeaponSlot:null,equipment:{},forgeCopies:{}},economyGold:1000,economyPending:false,economyTimer:null,itemUsePending:false,
     centralMarketVersion:0,INVENTORY_SLOTS:12,POTION_ITEM_ID:'small_potion',SHRINE_SHARD:'shrine_shard',WEAPON_META:{},
@@ -76,6 +78,7 @@ function fixture(){
     slice('  function wearPositions(','  function gearDestination(')+
     slice('  const benchTrail=[];','  function gearStamp(')+
     slice('  let craftBatchMax=','  function openForgePage(')+
+    slice('  function isPrivateHomeMap(','  function resetHomeClient(')+
     slice('  function renderBag()','  const gearCoreSkills=')+
     slice('  let economyPendingRequest=','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()'));
@@ -152,7 +155,7 @@ test('supported server previews batch requirements and acknowledges a queued cra
 
 test('smith routes to dedicated crafting page and back, with a fresh economy read',()=>{
   const f=fixture();f.run('openSmith()');f.$('smithCraft').click();
-  assert.equal(f.ctx.drawerActive,'crafting');assert.match(f.ctx.title,/สร้างของ/);assert.equal(f.$('personalBench').hidden,false);
+  assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.ctx.title,'งานช่างและครัว');assert.equal(f.$('personalBench').hidden,false);
   assert.equal(f.wire.at(-1).command,'get_economy');assert.equal(f.$('benchGroup').value,'role');assert.equal(f.$('craftGold').textContent,'1,000 ทอง');
   f.$('craftHome').click();assert.equal(f.ctx.drawerActive,'smith');f.$('smithCraft').click();f.$('craftBag').click();assert.equal(f.ctx.drawerActive,'bag');
 });
@@ -265,7 +268,7 @@ test('empty and changing catalogs invalidate choices, refresh costs, and never s
   f.run('renderBag()');assert.equal(f.$('benchRecipe').value,'blade_25');assert.equal(f.$('benchCost').textContent,'95 ทอง');assert(f.ids().includes('blade_new'));
   f.$('benchRecipe').value='unknown_recipe';f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);assert.equal(f.$('benchCraft').disabled,true);
   for(const item of Object.values(f.items))delete item.recipe;
-  f.ctx.catalogRevision++;f.run('renderBag()');assert.deepEqual(f.ids(),[]);assert.equal(f.$('benchCraft').disabled,true);assert.match(f.$('benchInfo').textContent,/ไม่มีสูตร/);
+  f.ctx.catalogRevision++;f.run('renderBag()');assert.deepEqual(f.ids(),[]);assert.equal(f.$('benchCraft').disabled,true);assert.equal(f.$('craftRecipeEmpty').hidden,false);
   f.$('benchCraft').onclick();assert.equal(f.mutations().length,0);
 });
 

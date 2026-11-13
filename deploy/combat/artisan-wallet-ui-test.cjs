@@ -11,7 +11,7 @@ function fixture(drawer='crafting'){
   const elements=new Map(),wire=[],callbacks={},timers=new Map(),toasts=[];
   let now=100000,depth=0,maxDepth=0,renderCount=0,timerId=0,sendHook=null;
   const player={alive:true,persistent:true,level:1},slots=[];
-  for(const id of ['personalBench','benchRecipe','craftPageResult','craftPageStatus','craftGold','craftActionStatus','craftPlayerLevel','craftComingSoon','craftRecipePane','craftDetailPane','benchGroup',
+  for(const id of ['personalBench','benchRecipe','craftPageResult','craftPageStatus','craftGold','craftActionStatus','benchGroup',
     ...['all','food','medicine','weapons','armor','materials','furniture'].map(c=>'ckCategory-'+c),
     'forgeTargetButton','forgePageStatus','forgeGold','forgeTargetLocation','forgeEmpty',
     'forgeEnhanceSection','forgeRerollSection','forgeItemName','forgeInfo','forgeCopyItem','forgeSealItem','forgePanel']){
@@ -23,7 +23,7 @@ function fixture(drawer='crafting'){
   const room=makeRoom('initial');
   const ctx={$:id=>elements.get(id)||null,Date:{now:()=>now},mode:'live',questNavigation:null,room,joined:room,localId:'me',drawerActive:drawer,
     forgeAnimation:null,forgeAnimationBusy:()=>false,cancelForgeAnimation(){},renderForgeAnimation(){},failForgeAnimation(){},economyPendingRequest:null,economyGold:null,economyPending:false,economyTimer:null,itemUsePending:false,centralMarketVersion:0,
-    craftComingSoon:'',craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
+    craftPageRoom:room,craftPagePosition:null,craftRecipeTarget:null,benchTrail:[],cardDrill:{},craftResultRoom:null,craftResultMessage:'',
     forgePageRoom:room,forgePageTarget:null,forgePageIdentity:null,forgePageAction:'enhance',
     warpPending:false,fishingPending:false,ownServerCharacter:()=>player,currentBagSlots:()=>slots,
     renderWorkbench(){},renderCraft(){},renderForge(){},renderForgeStock(){},renderForgePicker(){},renderItemTile(){},
@@ -39,7 +39,7 @@ function fixture(drawer='crafting'){
   vm.createContext(ctx);
   vm.runInContext(slice('  function finishEconomyPending(','  function economyItemName(')+
     slice('  function economySend(','  function economyRequestId()')+
-    'function renderCraftQueue(){} function applyCraftCapabilities(){} function showCombatFeatureError(){return false;}\n'+slice('  function renderCraftingPage()','  function submitCraft(')+
+    'function renderCraftQueue(){} function applyCraftCapabilities(){} function showCombatFeatureError(){return false;}\n'+slice('  const craftCategories=','  function openCraftingPage(')+slice('  function renderCraftingPage()','  function submitCraft(')+
     slice('  function renderForgePage()','  function submitForge(')+
     slice('      joined.onMessage("economy_state",','      joined.onMessage("market_state",')+
     slice('      joined.onMessage("command_rejected",','      joined.onMessage("warp_complete",')+

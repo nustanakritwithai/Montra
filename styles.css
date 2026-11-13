@@ -3116,18 +3116,15 @@ button.gx-with-emblem { justify-content: center; }
 /* Craft & kitchen: real workbench recipes, no simulated cooking/house state. */
 .drawer:has(.crafting-page) { width:min(1100px,calc(100vw - 32px)); left:50%; right:auto; bottom:18px; transform:translateX(-50%); border:2px solid #b89858; border-radius:14px; background:linear-gradient(125deg,#192c23,#090f0d 65%); box-shadow:0 0 0 3px #151810,0 0 0 4px #75603b,0 22px 80px #000c; }
 .drawer:has(.crafting-page) .drawer-header { background:linear-gradient(90deg,#263c2b,#111d16); border-color:#a08348; }
+.drawer:has(.crafting-page) .drawer-header { margin-bottom:5px; padding-block:2px; }
+.drawer:has(.crafting-page) .drawer-header h2 { font-size:16px; }
 .crafting-page { --ck-gold:#d5b66e; --ck-line:#89734280; color:#e7ddc3; }
-.ck-hero { display:flex; justify-content:space-between; align-items:center; gap:18px; padding:10px 8px 18px; border-bottom:1px solid var(--ck-line); }
-.crafting-page .ck-hero h3 { font-size:26px; margin:2px 0; color:#f2db9c; text-shadow:0 2px 6px #000; }
-.ck-hero p { color:#c4c3a2; }
 .ck-eyebrow { font-size:10px; letter-spacing:.1em; color:#b99c60; }
-.ck-skill { display:grid; gap:7px; min-width:180px; padding:12px 18px; border:1px solid var(--ck-line); border-radius:6px; background:#0b1712; color:#dfca8c; }
-.ck-skill span { font-size:11px; color:#b6b9a6; }
-.crafting-page .forge-nav { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-.crafting-page .forge-nav button { width:auto; margin-top:10px; padding:8px 14px; background:#20372b; border-color:var(--ck-line); }
-.ck-wallet { margin-left:auto; color:#c5bd9b; }.ck-wallet strong { display:inline-block; margin-left:12px; color:#f0d184; }
-.ck-categories { display:flex; gap:6px; padding:8px 0 12px; flex-wrap:wrap; }
-.ck-categories button { min-height:42px; flex:1; border:1px solid var(--ck-line); border-radius:5px; color:#e2d7b1; background:linear-gradient(#273b2b,#15241a); font:inherit; padding:8px 12px; }
+.crafting-page .forge-nav { display:flex; gap:5px; align-items:center; flex-wrap:wrap; }
+.crafting-page .forge-nav button { width:auto; margin:0; padding:5px 8px; font-size:12px; background:#20372b; border-color:var(--ck-line); }
+.ck-wallet { margin-left:auto; color:#c5bd9b; font-size:12px; }.ck-wallet strong { margin-left:4px; color:#f0d184; }
+.ck-categories { display:flex; gap:4px; margin:6px 0; padding:2px 1px; overflow-x:auto; }
+.ck-categories button { flex:1 0 auto; min-height:44px; padding:5px 8px; white-space:nowrap; border:1px solid var(--ck-line); border-radius:5px; color:#e2d7b1; background:linear-gradient(#273b2b,#15241a); font:inherit; font-size:12px; }
 .ck-categories button[aria-pressed="true"] { background:linear-gradient(#b39451,#68502c); color:#fff0c1; border-color:#e4c77b; box-shadow:inset 0 0 8px #f4d58733; }
 .ck-workspace { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:20px; padding:14px; border:1px solid var(--ck-line); border-radius:6px; background:#0c1813aa; }
 .ck-recipes,.ck-detail { min-width:0; }.ck-detail { padding-left:20px; border-left:1px solid var(--ck-line); }
@@ -3148,9 +3145,9 @@ button.gx-with-emblem { justify-content: center; }
 .ck-requirements { list-style:none; margin:10px 0; padding:0; display:grid; grid-template-columns:1fr 1fr; gap:5px; font-size:12px; }.ck-requirements .met { color:#b8cf9a; }.ck-requirements .missing { color:#edac92; }
 .crafting-page #benchCraft { background:linear-gradient(#bfa05b,#7a572d); border:1px solid #edcb78; border-radius:6px; color:#fff0c8; box-shadow:inset 0 0 0 2px #735a30; }
 .ck-tracking { display:flex; flex-wrap:wrap; gap:6px; }.crafting-page .ck-tracking button { flex:1 1 45%; background:#1a2b20; border-color:var(--ck-line); padding:8px; font-size:12px; }
-.ck-future { color:#a8b09c; }.ck-coming { text-align:center; padding:60px 20px; border:1px solid var(--ck-line); background:#0d1b14; color:#e1cc90; }
+.ck-future { color:#a8b09c; }
 .crafting-page button:focus-visible { outline:2px solid #f4d688; outline-offset:3px; }
-@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); bottom:6px; max-height:calc(100dvh - max(16px,env(safe-area-inset-top))); padding-left:12px; padding-right:12px; }.drawer:has(.crafting-page) .drawer-header { margin-left:-12px; margin-right:-12px; }.ck-workspace { grid-template-columns:1fr; padding:10px; gap:14px; }.ck-detail { border-left:0; border-top:1px solid var(--ck-line); padding:14px 0 0; }.ck-hero { align-items:flex-start; gap:8px; }.crafting-page .ck-hero h3 { font-size:21px; }.ck-skill { min-width:0; padding:8px; font-size:12px; }.ck-skill span { font-size:10px; }.ck-categories button { flex:1 0 20%; padding:8px; }.ck-grid { gap:7px; }.ck-recipe { min-height:143px; }.ck-wallet { font-size:12px; }.ck-requirements { gap:7px; } }
+@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); bottom:6px; max-height:calc(100dvh - max(16px,env(safe-area-inset-top))); padding-left:12px; padding-right:12px; }.drawer:has(.crafting-page) .drawer-header { margin-left:-12px; margin-right:-12px; }.ck-workspace { grid-template-columns:1fr; padding:10px; gap:14px; }.ck-detail { border-left:0; border-top:1px solid var(--ck-line); padding:14px 0 0; }.ck-grid { gap:7px; }.ck-recipe { min-height:143px; }.ck-requirements { gap:7px; } }
 @media(prefers-reduced-motion:reduce) { .crafting-page * { scroll-behavior:auto; } }
 
 /* The recipe graph is read-only; native buttons expose every ingredient by touch or keyboard. */
@@ -3196,7 +3193,7 @@ button.gx-with-emblem { justify-content: center; }
 .ck-popup .ck-recipe-node .item-slot { --item-slot-size:38px; }
 .ck-popup .ck-recipe-symbol { font-size:16px; }
 .ck-popup .ck-future { display:none; }
-@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); }.ck-hero { padding-bottom:10px; }.crafting-page .ck-hero h3 { font-size:18px; }.ck-skill { font-size:11px; }.ck-recipe { min-height:108px; } }
+@media(max-width:700px) { .drawer:has(.crafting-page) { width:calc(100vw - 12px); }.ck-recipe { min-height:108px; } }
 @media(max-width:380px) { .ck-popup-body { padding:10px; }.ck-popup .ck-inspect-nav { gap:4px; }.ck-popup .ck-inspect-nav button { font-size:12px; padding:6px; } }
 
 .ck-popup p { margin:8px 0; }
@@ -6513,10 +6510,12 @@ button.gx-with-emblem { justify-content: center; }
 }
 /* World Market shell over the existing market catalog. */
 #drawer:has(.world-market){width:min(1100px,96vw);max-width:96vw;left:50%;right:auto;transform:translateX(-50%);background:#0f1a33;border:2px solid #c9a24a;box-shadow:0 0 0 1px #5a4317,0 18px 50px rgba(0,0,0,.6)}
+#drawer:has(.world-market) .drawer-header{margin-bottom:5px;padding-block:2px}
+#drawer:has(.world-market) .drawer-header h2{font-size:16px}
 .world-market{color:#e7ecf7;font-size:13px}
 .wm-coins{color:#f2d27a;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
-.wm-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
-.wm-tabs button{flex:1 1 auto;background:#16264a;color:#b9c6e4;border:1px solid #2d4373;border-radius:6px 6px 0 0;padding:8px 10px;cursor:pointer;font-weight:600}
+.wm-tabs{display:flex;gap:4px;margin:4px 0 8px;padding:2px 1px;overflow-x:auto}
+.wm-tabs button{flex:1 0 auto;min-height:44px;white-space:nowrap;background:#16264a;color:#b9c6e4;border:1px solid #2d4373;border-radius:6px;padding:5px 8px;cursor:pointer;font-size:12px;font-weight:600}
 .wm-tabs button[aria-pressed=true]{background:#f2c94c;color:#2a1d00;border-color:#f2c94c}
 .world-market[data-view=search] .market-catalog,.world-market[data-view=price] .market-catalog,.world-market[data-view=wish] .market-catalog,.world-market[data-view=rules] .market-catalog{display:none}
 .world-market .market-tabs{display:none}
