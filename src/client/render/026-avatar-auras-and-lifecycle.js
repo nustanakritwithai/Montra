@@ -173,6 +173,18 @@
       r.arms[i].rotation.x = -.5;
       r.elbows[i].rotation.x = .72;
     }
+    if (a.dugoutSeat && !a.skin) {
+      const stroke = a.dugoutSeat.stroke || 0;
+      r.body.position.y = .12 - 1.2;
+      for (let i = 0; i < 2; i++) {
+        r.legs[i].rotation.set(-1.42, 0, i ? -.12 : .12);
+        r.knees[i].rotation.x = -1.38;
+        r.arms[i].rotation.x = -.60 + (i ? stroke : -stroke) * .28;
+        r.elbows[i].rotation.x = .74;
+      }
+    } else if (!a.mounted && !a.skin) {
+      for (const leg of r.legs) leg.rotation.z = 0;
+    }
     r.body.rotation.x = .07 * m + ((a.dashUntil || 0) > now ? .3 : 0);
     if ((a.swingUntil || 0) > now) {
       const p = 1 - (a.swingUntil - now) / 380;

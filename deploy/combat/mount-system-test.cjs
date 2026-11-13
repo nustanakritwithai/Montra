@@ -26,7 +26,7 @@ assert.ok(fs.statSync('assets/ui/buffalo-mount.webp').size > 0);
 assert.match(main, /mount_summon: \{\s*title: "ควายอาคม"/);
 assert.match(main, /e\.key\?\.toLowerCase\(\) === "h"/);
 assert.match(main, /const mountMult=me\.mounted\?1\.6:1/);
-assert.match(main, /seatBuffaloRider\(a\)/);
+assert.match(main, /seatAvatarRider\(a, a\.buffalo\?\.seat\)/);
 
 const avatar = { id: 'local', mounted: false };
 const player = { mounted: false, alive: true };

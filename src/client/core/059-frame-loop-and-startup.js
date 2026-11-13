@@ -1,8 +1,88 @@
-  // Live boats use the village boat mesh and the server's Pirate Fruit deck dimensions.
+  // Live boats keep the authoritative deck and load their visual model independently.
   const sailingMeshes = new Map();
+  const dugoutContainers = new Map();
+  const dugoutLodDistances = LITE ? [0, 26] : [24, 53];
   const boatPanel = $("boatPanel");
   let nextHelmInput = 0, requestedBoatAnchor = null, currentHelmBoat = "";
   let sailingDestination = null, sailingMarker = null;
+
+  function dugoutContainer(lod, now) {
+    let entry = dugoutContainers.get(lod);
+    if (!entry || (entry.retryAt && now >= entry.retryAt)) {
+      const file = `MONTRA-ayutthaya-dugout-LOD${lod}.glb`;
+      entry = {retryAt: 0};
+      dugoutContainers.set(lod, entry);
+      entry.load = B.SceneLoader.LoadAssetContainerAsync("./assets/boats/", file, scene, undefined, ".glb").catch(error => {
+        entry.retryAt = performance.now() + 30000;
+        console.warn("MONTRA dugout could not load", error);
+        return null;
+      });
+    }
+    return entry;
+  }
+
+  function updateDugoutModel(node, deck, distance, now) {
+    if (!B.SceneLoader?.LoadAssetContainerAsync || !node.metadata.sailingBoat) return;
+    const current = node.metadata.dugout;
+    const [near, far] = dugoutLodDistances;
+    const lod = near && distance < near + (current?.lod === 0 ? 5 : 0) ? 0 :
+      distance < far + (current?.lod === 1 ? 5 : 0) ? 1 : 2;
+    node.metadata.dugoutWanted = lod;
+    if (current?.lod === lod || node.metadata.dugoutFailed === lod) return;
+    const entry = dugoutContainer(lod, now);
+    if (entry.retryAt || node.metadata.dugoutPending === entry) return;
+    node.metadata.dugoutPending = entry;
+    entry.load.then(container => {
+      if (node.isDisposed() || node.metadata.dugoutWanted !== lod || node.metadata.dugoutPending !== entry || !container) return;
+      const model = container.instantiateModelsToScene(name => name, false, {doNotInstantiate: true});
+      let root;
+      try {
+        const nodes = model.rootNodes.flatMap(root => [root, ...root.getDescendants()]);
+        const seat = nodes.find(part => part.name === "Seat");
+        const paddle = nodes.find(part => part.name === "Paddle");
+        if (!seat || !paddle || !nodes.some(part => part.name === "Dugout_Hull")) throw new Error("Incomplete dugout model");
+        root = new B.TransformNode("dugout visual", scene);
+        root.parent = node;
+        // Convert the authored 4 m hull to the existing deck envelope and keep its keel in the water.
+        const heightScale = deck.y / (.16 + seat.position.y);
+        root.scaling.set(.95 / .85, heightScale / node.scaling.y, 5.1 / 4);
+        root.position.y = .16 - seat.position.y * root.scaling.y;
+        for (const part of model.rootNodes) part.parent = root;
+        for (const mesh of root.getChildMeshes()) mesh.isPickable = false;
+        paddle.rotationQuaternion = null;
+        const stowed = paddle.position.clone();
+        const previous = node.metadata.dugout;
+        previous?.root.dispose();
+        node.metadata.dugout = {lod, root, seat, paddle, stowed, row: previous?.row ?? 0, side: previous?.side};
+        node.metadata.fallback?.dispose();
+        node.metadata.fallback = node.metadata.sternPaddle = null;
+      } catch (error) {
+        model.dispose();
+        root?.dispose();
+        throw error;
+      }
+    }).catch(error => {
+      if (!node.isDisposed()) node.metadata.dugoutFailed = lod;
+      console.warn("MONTRA dugout could not attach", error);
+    }).finally(() => {
+      if (!node.isDisposed() && node.metadata.dugoutPending === entry) node.metadata.dugoutPending = null;
+    });
+  }
+
+  function animateDugout(model, boat, turn, now, dt) {
+    const power = boat.helmId && !boat.anchored ? Math.min(1, Math.abs(boat.speed) / 3 + Math.abs(turn) * 5) : 0;
+    model.row += (power - model.row) * (1 - Math.exp(-dt * 9));
+    const phase = now * .005;
+    const targetSide = Math.abs(turn) > .07 ? Math.sign(turn) : Math.tanh(Math.sin(phase * .5) * 5);
+    model.side ??= targetSide;
+    model.side += (targetSide - model.side) * (1 - Math.exp(-dt * 8));
+    const stroke = Math.sin(phase), side = model.side;
+    model.stroke = stroke * model.row;
+    const {paddle, stowed, seat, row} = model;
+    paddle.position.set(stowed.x + (side * .17 - stowed.x) * row,
+      stowed.y + (seat.position.y + .12 - stowed.y) * row, stowed.z + (seat.position.z + .17 - stowed.z) * row);
+    paddle.rotation.set((.29 + .13 * Math.cos(phase)) * row, side * (1.10 + .29 * stroke) * row, 0);
+  }
 
   function sendBoatIntent(action, fields = {}) {
     if (mode !== "live" || !room?.state?.boatsAvailable) return;
@@ -226,10 +306,15 @@
     const state=mode==="live"?room?.state:null;
     const player=state?.players?.get(id);
     const boat=player?.boatId && state.boats?.get(player.boatId);
-    if(!boat || boat.helmId!==id || boat.mapId!==activeMapId)return null;
+    if(!boat || player.alive===false || boat.helmId!==id || boat.mapId!==activeMapId)return null;
     const node=sailingMeshes.get(player.boatId),deck=worldDefinitions?.[activeMapId]?.boatDock?.deck;
     if(!node || !deck)return null;
     const stern=deck.helmZ??-deck.length*.22,heading=node.rotation.y;
+    const dugout=node.metadata.dugout;
+    if(dugout && player.combatState==="idle"){
+      const seat=dugout.seat.computeWorldMatrix(true).getTranslation();
+      return {x:seat.x,y:seat.y,z:seat.z,facing:heading+Math.PI,dugout};
+    }
     return {x:node.position.x+stern*Math.sin(heading),y:node.position.y+deck.y,
       z:node.position.z+stern*Math.cos(heading),facing:player.combatState==="idle"?heading+Math.PI:null};
   }
@@ -318,6 +403,8 @@
       const turn = Math.atan2(Math.sin(yaw),Math.cos(yaw));
       node.rotation.y += turn*blend;
       if(map.id==="mantra_capital")updateCapitalBoatWater(node,boat,map,now);
+      updateDugoutModel(node,dock.deck,Math.hypot(node.position.x-(camera.target?.x??node.position.x),node.position.z-(camera.target?.z??node.position.z)),now);
+      if(node.metadata.dugout){animateDugout(node.metadata.dugout,boat,turn,now,dt);return;}
       const paddle=node.metadata.sternPaddle;
       if(paddle){
         const stroke=boat.helmId?Math.min(1,Math.abs(boat.speed)/3+Math.abs(turn)*5):0;
@@ -541,8 +628,9 @@
       const dashing = a.dashUntil > now;
       const blend = 1 - Math.exp(-dt * (dashing ? 25 : 14));
       const helmPose=sailingHelmPose(a.id);
+      a.dugoutSeat=helmPose?.dugout ?? null;
       if(helmPose){
-        // Attach the pilot to the rendered stern as the hull turns and moves.
+        // Attach the pilot to the rendered seat as the hull turns and moves.
         a.x=helmPose.x;a.y=helmPose.y;a.z=helmPose.z;
       }else{
         a.x += (a.targetX - a.x) * blend;

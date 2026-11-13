@@ -1,0 +1,41 @@
+{
+  "validator": "2.0.0-dev.3.10",
+  "files": [
+    {
+      "filename": "MONTRA-ayutthaya-dugout-LOD0.glb",
+      "bytes": 1861632,
+      "triangles": 3980,
+      "textureDimensions": [
+        1024,
+        256
+      ],
+      "numErrors": 0,
+      "numWarnings": 0,
+      "sha256": "f4194be6a8cfc5ff2f93e19ebb2c0ed335244ae4cef47c31437864a2431c5857"
+    },
+    {
+      "filename": "MONTRA-ayutthaya-dugout-LOD1.glb",
+      "bytes": 549632,
+      "triangles": 1402,
+      "textureDimensions": [
+        512,
+        128
+      ],
+      "numErrors": 0,
+      "numWarnings": 0,
+      "sha256": "53c5dd259a19b4a7add09521ba5eb81fc6c91de562acf03d467e4f1ed12a2adc"
+    },
+    {
+      "filename": "MONTRA-ayutthaya-dugout-LOD2.glb",
+      "bytes": 164432,
+      "triangles": 550,
+      "textureDimensions": [
+        256,
+        64
+      ],
+      "numErrors": 0,
+      "numWarnings": 0,
+      "sha256": "ff8cdf20cfbf657390aa19dd188fadade08a5109480686062b2fb7fc05463d2b"
+    }
+  ]
+}

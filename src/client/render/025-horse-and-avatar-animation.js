@@ -148,15 +148,16 @@
     group.start(name !== "Mount", rate);
   }
 
-  const buffaloSeatInverse = new B.Matrix(), buffaloSeatDelta = new B.Vector3();
-  function seatBuffaloRider(a) {
-    const seat = a.buffalo?.seat, skin = a.skin, hips = skin?.nodes.Hips;
+  const riderSeatInverse = new B.Matrix(), riderSeatDelta = new B.Vector3();
+  function seatAvatarRider(a, seat, height = 0) {
+    const skin = a.skin, hips = skin?.nodes.Hips;
     if (!seat || !hips) return;
-    a.node.computeWorldMatrix(true).invertToRef(buffaloSeatInverse);
-    seat.computeWorldMatrix(true).getTranslationToRef(buffaloSeatDelta);
-    buffaloSeatDelta.subtractInPlace(hips.computeWorldMatrix(true).getTranslation());
-    B.Vector3.TransformNormalToRef(buffaloSeatDelta, buffaloSeatInverse, buffaloSeatDelta);
-    skin.holder.position.addInPlace(buffaloSeatDelta);
+    a.node.computeWorldMatrix(true).invertToRef(riderSeatInverse);
+    seat.computeWorldMatrix(true).getTranslationToRef(riderSeatDelta);
+    riderSeatDelta.y += height;
+    riderSeatDelta.subtractInPlace(hips.computeWorldMatrix(true).getTranslation());
+    B.Vector3.TransformNormalToRef(riderSeatDelta, riderSeatInverse, riderSeatDelta);
+    skin.holder.position.addInPlace(riderSeatDelta);
   }
 
   // Server state per avatar; a revival plays the get-up action.
@@ -762,6 +763,22 @@
         }
       }
     } else if (act && now >= act.end) a.action = null;
+    const rowing = !dead && a.dugoutSeat;
+    if (rowing) {
+      const {row, side = 0, stroke = 0} = rowing;
+      off.fill(0);
+      set("Hips", 0, 0, 0);
+      bend(.13 + .20 * stroke, .28 * side * row, -.11 * side * row);
+      set("LeftUpLeg", -1.42, 0, .13); set("RightUpLeg", -1.42, 0, -.13);
+      set("LeftLeg", 1.37, 0, 0); set("RightLeg", 1.37, 0, 0);
+      set("LeftFoot", .04, 0, 0); set("RightFoot", .04, 0, 0);
+      set("LeftArm", -.54 + .28 * stroke, 0, -1.39 + .23 * side * row);
+      set("RightArm", -.54 - .28 * stroke, 0, 1.39 + .23 * side * row);
+      set("LeftForeArm", 0, -.49 - .12 * stroke, 0);
+      set("RightForeArm", 0, .49 - .12 * stroke, 0);
+      set("LeftHand", 0, 0, 0); set("RightHand", 0, 0, 0);
+      spin = 0;
+    }
     if (a.mounted && !dead) {
       // Seated pose is visual only; collision and position remain on the server.
       // Upright seat, legs astride the barrel (thighs forward and out, shins hanging back along the
@@ -782,7 +799,7 @@
       add("Neck", -pitch * .2, -yaw * .45, -(P.Hips[2] + P.Spine[2] + P.Chest[2]) * .4);
       add("Head", -pitch * .25, -yaw * .4, 0);
     }
-    if (grounded && !a.mounted) {
+    if (grounded && !a.mounted && !rowing) {
       // Feet stay flat on the ground under the leg chain.
       for (const side of ["Left", "Right"]) {
         const upleg = P[side + "UpLeg"], leg = P[side + "Leg"];
@@ -801,7 +818,10 @@
     for (let i = 0; i < 3; i++) o[i] += (off[i] - o[i]) * blend;
     n.Hips.position.set(a.skin.rest.hipsX + o[0], a.skin.rest.hipsY + o[1], a.skin.rest.hipsZ + o[2]);
     if (a.skin.holder) a.skin.holder.rotation.y = Math.PI + (a.mounted ? 0 : spin); // whole-body turns (sweep, dance)
-    if (a.mounted) seatBuffaloRider(a);
+    if (a.mounted) seatAvatarRider(a, a.buffalo?.seat);
+    else if (rowing) seatAvatarRider(a, rowing.seat, .12);
+    else if (a.wasDugoutSeated) a.skin.holder.position.setAll(0);
+    a.wasDugoutSeated = Boolean(rowing);
     // Hands: grip what is held, clench for Muay Thai and shields, open for casting, wai and rallies, relax otherwise.
     {
       const relaxed = [.3, 0], grip = [1, 0], fist = [0, 1], open = [0, 0];
@@ -812,7 +832,7 @@
       let left = weapon === "muay_wraps" ? fist : weapon === "thai_dual" ? grip : off === "jar" || off === "bell" ? grip : off === "shield" || off === "guard" || off === "brace" ? [.2, .8] : relaxed;
       if (acting === "drink") right = grip;
       if (openHands) { left = open; if (!weapon || weapon === "muay_wraps") right = open; }
-      if (a.mounted) left = right = grip;
+      if (a.mounted || rowing?.row > .12) left = right = grip;
       if (dead) { left = right = [.15, 0]; }
       setHandPose(a, left, right, dt);
     }

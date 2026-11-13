@@ -98,8 +98,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "world/014-ritual-village.js",
-  "bytes": 31633,
-  "sha256": "dd8de522cded58715a96126091b957a9281e7956421567b8d373117c0537939d"
+  "bytes": 31851,
+  "sha256": "52cb339aacd84f06d3b6ec9a1cbf488aede03b18dec9954a018eefac22b323da"
 },
 {
   "path": "world/013-ground-and-fortification.js",
@@ -113,13 +113,13 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "render/026-avatar-auras-and-lifecycle.js",
-  "bytes": 18710,
-  "sha256": "f6501cdc783b09a92ad1348191e5ad5b7019dd525433372d309a7ae59039c9ef"
+  "bytes": 19174,
+  "sha256": "630c018d4949c9431e00619e5f1d786469ced3595cf94947a6124a26e9de8c14"
 },
 {
   "path": "render/025-horse-and-avatar-animation.js",
-  "bytes": 55170,
-  "sha256": "8071e9a9008cf6ec64d1e8f294c6442cc23e689cbf8ffa09adbb80696cea085d"
+  "bytes": 56148,
+  "sha256": "ab6f8190ea1832074c56e2b248ddab3c037ba3fc9c3ce2d8091d0b85dd69b64a"
 },
 {
   "path": "render/021-character-models.js",
@@ -143,8 +143,8 @@ const reviewedReleaseFragments = new Map([
 },
 {
   "path": "core/059-frame-loop-and-startup.js",
-  "bytes": 38793,
-  "sha256": "b3493d4dda7b2d649663b6aeb6f60e365a69c433355771b5b8a99d45127f6903"
+  "bytes": 43509,
+  "sha256": "5db77f3f904499f406ab51b09daaa7899e08d13f7ad3ba950ca3337efbf613cb"
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
@@ -299,8 +299,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2155736);
-  assert.equal(hash(bytes), 'e9909bffe1087a0b8ab37f140d34e1e0504708a843350734f52c74852765f995');
+  assert.equal(bytes.length, 2162112);
+  assert.equal(hash(bytes), 'e247a976951f546f9d3a67b25455d03618455469a62e8c107f95760496d4d924');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
