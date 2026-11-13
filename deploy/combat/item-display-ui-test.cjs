@@ -143,7 +143,7 @@ test('all item display surfaces use shared thumbnails while interactive inventor
 });
 
 test('forge hidden materials and centered modal controls keep the shared theme',()=>{
-  assert.match(css,/\.forge-page \.item-preview\[hidden\].*display:\s*none !important/);
+  assert.match(css,/\.forge-material \.item-preview\[hidden\]\s*\{\s*display\s*:\s*none\s*;/);
   for(const control of ['.primary','.secondary','select']){
     const selector='.drawer-body '+control+',.item-detail-modal '+control+' {';
     assert(css.includes(selector),`shared control theme ${control}`);

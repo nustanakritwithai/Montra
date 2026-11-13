@@ -739,15 +739,8 @@
       });
       joined.onMessage("card_socket_result", result => {
         if(room!==joined)return;
-        const ticket=economyPendingRequest;
-        if(ticket?.room!==joined || ticket.command!=="card_socket" || result?.requestId!==ticket.requestId ||
-            result.gear!==ticket.gear || result.action!==ticket.action)return;
-        finishEconomyPending(ticket);
-        const message=result.action==="drill"?"เจาะช่องสำเร็จ · เปิดช่องการ์ดแล้ว":result.action==="insert"
-          ?"ฝัง"+(personalItems[result.socket]?.name||"การ์ด")+"แล้ว · "+statLine(personalItems[result.socket]?.stats)
-          :"คืนการ์ดเข้ากระเป๋าแล้ว";
-        setForgeSocketOutcome(ticket,message,result.action);
-        toast(message);
+        finishEconomyPending();
+        toast(result.action==="drill"?"เจาะรูสำเร็จ":result.action==="insert"?"ใส่"+(personalItems[result.socket]?.name||"การ์ด")+"แล้ว":"คืนการ์ดเข้ากระเป๋าแล้ว");
         renderBag();
       });
       joined.onMessage("forge_copy_claimed", result => {
@@ -841,7 +834,6 @@
         if (room !== joined) return;
         if (typeof homeCommandError === "function" && homeCommandError(message?.reason)) return;
         if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอถูกปฏิเสธ · ตรวจอุปกรณ์และค่าใช้จ่ายอีกครั้ง");
-        const workshopTicket=economyPendingRequest?.command==="card_socket"?economyPendingRequest:null;
         finishEconomyPending(true);
         const reasons={craft_queue_full:"คิวคราฟต์เต็ม",craft_job_unavailable:"งานนี้รับไปแล้วหรือไม่มีในคิว",craft_job_not_ready:"งานยังไม่เสร็จ",market_favorite_limit:"รายการโปรดเต็ม",forge_downgrade_unconfirmed:"กรุณารีเฟรชแล้วตรวจโอกาสลดขั้นก่อนยืนยัน",forge_stock_changed:"ยอดของสำรองเปลี่ยนแล้ว · ตรวจคลังช่างอีกครั้ง",forge_risk_unconfirmed:"กรุณายืนยันความเสี่ยงที่อุปกรณ์จะแตก",forge_remove_card:"ถอดการ์ดก่อนตีขั้นที่อุปกรณ์อาจแตก",forge_missing_copy:"ของรุ่นเดียวกันไม่พอ · ดูคลังช่าง",forge_donor_changed:"ชิ้นที่เลือกเปลี่ยนไป กรุณาเลือกใหม่",forge_stock_full:"คลังช่างเก็บของรุ่นนี้ครบแล้ว",accessory_limit:"มีเครื่องประดับแบบนี้ครบ 2 ชิ้นแล้ว",item_bound:"ของชิ้นนี้ผูกกับตัวละครแล้ว",craft_missing_material:"วัตถุดิบไม่ครบ",craft_missing_shard:"ต้องมีเศษตราผู้พิทักษ์ก่อนคราฟต์",forge_max_rank:"ถึงขั้นสูงสุดแล้ว",forge_item_changed:"อาวุธเปลี่ยนไป · เลือกชิ้นที่จะตีบวกอีกครั้ง",insufficient_gold:"เงินไม่พอ",inventory_full:"กระเป๋าเต็ม",duplicate_weapon:"มีอาวุธชนิดนี้อยู่แล้ว",item_equipped:"ถอดอาวุธก่อนทำรายการ",item_unavailable:"ไม่มีไอเท็มตามจำนวน",listing_unavailable:"รายการนี้ขายหรือยกเลิกแล้ว",listing_limit:"ฝากขายได้สูงสุด 20 รายการ",cannot_buy_own_listing:"ซื้อสินค้าของตัวเองไม่ได้",invalid_trade:"ข้อเสนอเปลี่ยนแล้ว กรุณาตรวจสอบอีกครั้ง",invalid_gold:"จำนวนเงินไม่ถูกต้อง",request_id_conflict:"คำขอซ้ำไม่ตรงรายการเดิม"};
         const socketErrors={item_level_required:"เลเวลยังไม่ถึงที่อุปกรณ์กำหนด",card_gear_level:"การ์ดนี้ต้องใช้อุปกรณ์เลเวลสูงกว่านี้",socket_changed:"อุปกรณ์หรือรูการ์ดเปลี่ยนไปแล้ว",card_unavailable:"ไม่มีการ์ดที่เลือกในกระเป๋า",drill_missing_metal:"แร่เหล็กไม่พอสำหรับเจาะรู"};
@@ -852,9 +844,7 @@
         const gatherErrors={resource_range:"ขยับเข้าใกล้ต้นไม้หรือหินบนแผนที่นี้",resource_ground:"ลงจากควายหรือลงสู่พื้นก่อนเก็บวัตถุดิบ",resource_empty:"จุดนี้กำลังฟื้นตัว",resource_cooldown:"รอสักครู่ก่อนเก็บครั้งถัดไป",starter_supply_limit:"สินค้าสำรองถึงจำนวนจำกัดวันนี้แล้ว",auction_limit:"เปิดประมูลได้ไม่เกิน 20 รายการ",auction_bid_limit:"มีรายการเสนอราคาค้างสูงสุด 20 รายการ",auction_unavailable:"ประมูลจบแล้วหรือรายการไม่พร้อมใช้งาน",cannot_bid_own_auction:"เสนอราคาประมูลของตัวเองไม่ได้",auction_bid_too_low:"ราคาต้องสูงกว่าราคาล่าสุด",auction_claim_unavailable:"ยังรับรายการนี้ไม่ได้",auction_cancel_unavailable:"ยกเลิกไม่ได้เมื่อมีผู้เสนอราคาแล้ว",auction_credit_unavailable:"ยังไม่มีเงินรอรับหรือเงินในตัวเต็ม",
           fish_water:"แตะจุดในน้ำเพื่อเหวี่ยงเบ็ด",fish_ground:"ลงจากควายและยืนบนพื้นก่อนตกปลา",fish_range:"เข้าใกล้น้ำในระยะ 9 เมตร",fish_blocked:"มีสิ่งกีดขวางระหว่างคุณกับน้ำ",fish_interrupted:"การตกปลาถูกขัดจังหวะ",fish_expired:"รอบตกปลาหมดแล้ว",fish_pending:"รับปลาที่จับไว้ก่อนเริ่มตกใหม่",fish_no_pending:"ไม่มีปลารอรับ"};
         if(fishingPending){fishingPending=false;if(message?.reason!=="inventory_full")clearFishing(false);}
-        const notice=recipeError || gatherErrors[message?.reason] || socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง";
-        if(workshopTicket)setForgeSocketOutcome(workshopTicket,notice,"notice");
-        toast(notice);renderEconomy();renderBag();
+        toast(recipeError || gatherErrors[message?.reason] || socketErrors[message?.reason] || reasons[message?.reason] || "ทำรายการไม่สำเร็จ · ลองตรวจข้อมูลอีกครั้ง"); renderEconomy();renderBag();
       });
       joined.onMessage("trade_update", message => {
         if (room !== joined || typeof message?.tradeId !== "string") return;
@@ -1658,13 +1648,10 @@
         if (typeof info?.reason==="string" && info.reason.startsWith("party_")) { toast(info.reason==="party_rate_limited" ? "ทำรายการเร็วเกินไป · รอสักครู่" : "ยังใช้ปาร์ตี้ไม่ได้ · ตรวจการเชื่อมต่อ"); return; }
         if (["economy_unavailable","economy_rate_limited","invalid_economy_request","invalid_trade","trade_unavailable","trade_expired","character_busy"].includes(info?.reason) && (drawerActive === "economy" || economyPending)) {
           if(economyPendingRequest?.command==="forge_weapon")failForgeAnimation("คำขอยังไม่ได้รับการยืนยัน · ตรวจอุปกรณ์ก่อนทำซ้ำ");
-          const workshopTicket=economyPendingRequest?.command==="card_socket"?economyPendingRequest:null;
           finishEconomyPending(true);
           if (["trade_unavailable","trade_expired"].includes(info.reason)) activeTrade=null;
           const reason={economy_unavailable:"ต้องเข้า LIVE ที่เปิดระบบตลาด",economy_rate_limited:"ทำรายการเร็วเกินไป · รอสักครู่",character_busy:"กำลังบันทึกข้อมูล · ลองใหม่",trade_expired:"ข้อเสนอเทรดหมดอายุ",trade_unavailable:"ไม่พบข้อเสนอเทรด"};
-          const notice=reason[info.reason] || "คำขอไม่ถูกต้อง";
-          if(workshopTicket)setForgeSocketOutcome(workshopTicket,notice,"notice");
-          toast(notice); renderEconomy(); renderBag(); return;
+          toast(reason[info.reason] || "คำขอไม่ถูกต้อง"); renderEconomy(); renderBag(); return;
         }
         if (info?.reason === "character_busy") { toast("กำลังบันทึกข้อมูล รอสักครู่"); return; }
         if (["invalid_chat", "chat_rate_limited", "chat_unavailable", "chat_party_unavailable", "chat_target_unavailable", "chat_bug_rate_limited"].includes(info?.reason)) {

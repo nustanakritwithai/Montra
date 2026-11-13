@@ -35,10 +35,9 @@ function harness({reduced=false,confirm=true,throwSend=false,animationEnd=true}=
 }
 function setup(options){const h=harness(options);
   Object.assign(h.ctx,{refreshArtisanWallet(){},currentBagSlots:()=>h.inventory.slots,closeForgePicker(){},selectForgeTarget(){h.ctx.forgePageTarget=null;h.ctx.forgePageIdentity=null;},forgeTargetChoices:()=>h.inventory.slots[0]?[{target:0,key:'bag:0',location:'bag'}]:[],forgeLabel:item=>' +'+item.forge.rank,
-    renderItemTile(id,item){h.$(id).textContent=item?.forge?'+'+item.forge.rank:'';},renderForge(item){h.$('forgePanel').hidden=!item;h.$('forgeEnhance').disabled=h.ctx.economyPending;h.$('forgeReroll').disabled=h.ctx.economyPending;},renderForgePicker(){}});
+    renderItemTile(id,item){h.$(id).textContent=item.forge?'+'+item.forge.rank:'';},renderForge(item){h.$('forgePanel').hidden=!item;h.$('forgeEnhance').disabled=h.ctx.economyPending;h.$('forgeReroll').disabled=h.ctx.economyPending;},renderForgePicker(){}});
   h.ctx.renderBag=()=>{h.renders.push('bag');h.ctx.renderForgePage();};
   h.run(slice('  function renderForgePage()', '  function submitForge('));h.run(slice('  function gearStamp(', '  function accessoryStamp('));
-  h.run(slice('  function forgeGearLevel(', '  function forgeSupplyCount('));
 h.run(slice('  let forgeAnimation=', '  function forgeTargetItem('));h.run(slice('  function submitForge(', '  function openBag()'));h.run(slice('  let economyPendingRequest=', '  function economyReady()'));h.run(slice('  function economySend(', '  function economyRequestId()'));h.ctx.finishCraftMutation=()=>false;h.run(slice('      joined.onMessage("craft_result",', '      joined.onMessage("market_result",'));h.run(slice('      joined.onMessage("economy_error",', '      joined.onMessage("trade_update",'));h.ctx.renderForgePage();return h;}
 function installLifecycle(h){
   Object.assign(h.ctx,{ui:{drawer:element(),shade:element(),drawerBody:element(),drawerTitle:element()},drawerOpener:null,fieldTrainingTip:null,SFX(){},closeForgePicker(){},closeEquipPopup(){},closeItemDetailModal(){},gateFieldInput(){},ownServerCharacter:()=>({level:25})});

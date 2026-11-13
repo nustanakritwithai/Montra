@@ -493,87 +493,53 @@
     if(window.confirm(prompt))economySend("salvage_gear",{requestId:economyRequestId(),slot,gear:item.itemId,stamp,bound,socket},true);
     renderBag();
   }
-  function forgeGearLevel(gear){
-    return bagMeta(gear?.itemId)?.level||(gear?.itemId==="shrine_glaive"?12:1);
-  }
-  function forgeSupplyCount(have,need,unit){
-    return "มี "+have+" / "+need+" "+unit+(have<need?" · ขาด "+(need-have):"");
-  }
   function renderCardSocket(gear,slots) {
-    const workshop=drawerActive==="forge";
-    const panel=$(workshop?"cardSocketPanel":"bagSocketLink");
-    if(!panel)return;
-    panel.hidden=!gear || !slots || !economyReady() || !cardDrill;
+    const panel=$("cardSocketPanel");
+    panel.hidden=!gear || !economyReady() || !cardDrill;
     if(panel.hidden)return;
-    const button=$(workshop?"cardSocketAction":"bagSocketOpen"),info=$(workshop?"cardSocketInfo":"bagSocketInfo");
-    const expected=gear.socket===undefined?"sealed":gear.socket??"empty";
-    const busy=economyPending || itemUsePending || !ownServerCharacter()?.alive;
-    const target=workshop?forgePageTarget:inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
-    if(!workshop){
-      info.textContent=expected==="sealed"?"ยังไม่เจาะช่องการ์ด":expected==="empty"?"ช่องการ์ดว่าง":personalItems[gear.socket]?.name||"ฝังการ์ดแล้ว";
-      button.disabled=busy;
-      button.onclick=()=>{if(drawerActive==="bag" && !button.disabled)openForgePage(expected==="sealed"?"drill":"card",target);};
-      return;
-    }
-    const select=$("socketCardChoice"),title=$("forgeSocketTitle"),change=$("forgeSocketChange");
-    const drill=forgePageAction==="drill";
+    const button=$("cardSocketAction"), select=$("socketCardChoice"), info=$("cardSocketInfo");
     const count=id=>slots.reduce((n,s)=>n+(s?.itemId===id?s.quantity:0),0);
-    const action=drill?"drill":expected==="empty"?"insert":"remove";
-    title.textContent=drill?"เจาะช่องการ์ด":expected==="sealed"||expected==="empty"?"ฝังการ์ด":"การ์ดที่ฝังอยู่";
-    change.textContent=drill?(expected==="sealed"?"0 → 1 ช่อง":"เปิดแล้ว"):expected==="sealed"?"ยังไม่เจาะ":"";
-    select.hidden=drill || expected!=="empty";
-    select.disabled=busy;
-    if(drill!==(expected==="sealed")){
-      renderItemPreview("socketItemPreview",null);
-      info.textContent=drill?"อุปกรณ์ชิ้นนี้เปิดช่องแล้ว":"เปิดช่องการ์ดก่อนฝัง";
-      button.textContent=drill?"ไปฝังการ์ด":"ไปเจาะช่อง";
-      button.disabled=busy;
-      button.onclick=()=>switchForgeTab(drill?"card":"drill");
-      return;
-    }
-    let allowed=false,card=null;
+    const expected=gear.socket===undefined?"sealed":gear.socket===null?"empty":gear.socket;
+    const action=expected==="sealed"?"drill":expected==="empty"?"insert":"remove";
+    let allowed=true, card=null;
+    select.hidden=action!=="insert";
     if(action==="drill"){
-      const have=count(cardDrill.itemId),need=cardDrill.quantity;
-      renderItemPreview("socketItemPreview",{itemId:cardDrill.itemId,quantity:need},forgeSupplyCount(have,need,"ชิ้น"));
-      info.textContent=economyGold===null?"กำลังโหลดจำนวนทอง":economyGold<cardDrill.gold?"ทองขาด "+(cardDrill.gold-economyGold):"เปิดช่องสำหรับการ์ดมอนสเตอร์ 1 ใบ";
-      button.textContent="เจาะช่อง · "+cardDrill.gold+" ทอง";
-      allowed=economyGold!==null && economyGold>=cardDrill.gold && have>=need;
+      const metal=personalItems[cardDrill.itemId];
+      info.textContent="ยังไม่ได้เจาะ · เจาะได้ 1 รู ใช้ "+cardDrill.gold+" ทอง และ"+(metal?.name||"แร่เหล็ก")+" "+count(cardDrill.itemId)+"/"+cardDrill.quantity;
+      button.textContent="เจาะรู · "+cardDrill.gold+" ทอง";
+      allowed=economyGold!==null && economyGold>=cardDrill.gold && count(cardDrill.itemId)>=cardDrill.quantity;
     }else if(action==="insert"){
-      const level=forgeGearLevel(gear);
-      const cards=Object.entries(personalItems).filter(([id,def])=>def.kind==="card" && (def.level||1)<=level && count(id)>0);
-      const key=cards.map(([id])=>id+":"+count(id)).join("|");
-      if(select.dataset.cards!==key){
-        const previous=select.value;
-        select.dataset.cards=key;
-        select.replaceChildren(...cards.map(([id,def])=>new Option(def.name+" · "+count(id)+" ใบ",id)));
-        if(cards.some(([id])=>id===previous))select.value=previous;
+      const cards=Object.entries(personalItems).filter(([,def])=>def.kind==="card");
+      const gearLevel=personalItems[gear.itemId]?.level||(gear.itemId==="shrine_glaive"?12:1);
+      if(select.options.length!==cards.length){
+        select.replaceChildren();
+        for(const [id,def] of cards){
+          const opt=document.createElement("option");opt.value=id;opt.textContent=def.name+" · ของ Lv."+(def.level||1)+"+";select.appendChild(opt);
+        }
       }
-      if(!select.value && cards.length)select.value=cards[0][0];
-      select.hidden=!cards.length;
-      select.onchange=()=>renderForgePage();
-      card=select.value||null;
-      allowed=cards.some(([id])=>id===card);
-      renderItemPreview("socketItemPreview",card,allowed?statLine(personalItems[card].stats)+" เมื่อสวม":"");
-      info.textContent=allowed?"ใช้การ์ดที่เลือก 1 ใบ":"ไม่มีการ์ดในกระเป๋าที่ใช้กับอุปกรณ์ชิ้นนี้ได้";
-      button.textContent="ฝังการ์ด";
+      if(select.dataset.gear!==gear.itemId){
+        select.dataset.gear=gear.itemId;
+        const compatible=cards.filter(([,def])=>(def.level||1)<=gearLevel);
+        const choice=compatible.find(([id])=>count(id)>0)??compatible[0];
+        if(choice)select.value=choice[0];
+      }
+      card=select.value;
+      const def=personalItems[card];
+      allowed=!!def && count(card)>0 && (def.level||1)<=gearLevel;
+      info.textContent=def?"รูว่าง · "+statLine(def.stats)+" เมื่อสวม · อุปกรณ์ Lv."+(def.level||1)+" ขึ้นไป · ดรอปจาก"+def.monster+" "+def.chancePct+"% · มี "+count(card)+" ใบ":"รูว่าง";
+      button.textContent="ใส่การ์ดที่เลือก";
     }else{
       const def=personalItems[gear.socket];
       allowed=!!def && slots.some(s=>!s || (s.itemId===gear.socket && s.quantity<99));
-      renderItemPreview("socketItemPreview",gear.socket,statLine(def?.stats)+" เมื่อสวม");
-      info.textContent=allowed?"ถอดฟรี · การ์ดจะกลับเข้ากระเป๋า":"ต้องมีที่ว่างในกระเป๋าเพื่อรับการ์ดคืน";
-      button.textContent="ถอดการ์ด";
+      info.textContent=(def?.name||"การ์ด")+" · "+statLine(def?.stats)+(allowed?"":" · ต้องมีที่ว่างในกระเป๋า");
+      button.textContent="ถอดการ์ดคืนกระเป๋า";
     }
-    button.disabled=busy || !allowed;
-    const stamp=gearStamp(gear);
+    renderItemPreview("socketItemPreview",action==="drill"?{itemId:cardDrill.itemId,quantity:cardDrill.quantity}:action==="insert"?card:gear.socket,action==="drill"?"วัตถุดิบเจาะรู":"การ์ด");
+    button.disabled=!allowed || economyPending || itemUsePending || ownServerCharacter()?.alive!==true;
+    const target=inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot);
     button.onclick=()=>{
-      if(button.disabled || !economyReady() || !ownServerCharacter()?.alive || economyPending || itemUsePending || forgePageRoom!==room || drawerActive!=="forge" ||
-          forgePageAction!==(drill?"drill":"card") || forgePageTarget!==target)return;
-      const current=forgeTargetItem(target),socket=current?.socket===undefined?"sealed":current.socket??"empty";
-      if(!current || current.itemId!==gear.itemId || gearStamp(current)!==stamp || socket!==expected){
-        toast("อุปกรณ์หรือช่องการ์ดเปลี่ยนไปแล้ว");renderForgePage();return;
-      }
-      forgePresentationResult=null;
-      economySend("card_socket",{requestId:economyRequestId(),target,gear:gear.itemId,expected,action,card,stamp},true);
+      economySend("card_socket",{requestId:economyRequestId(),target,gear:gear.itemId,expected,action,card,...accessoryStamp(gear)},true);
+      renderBag();
     };
   }
   function renderForgeStock(preferred){
@@ -634,21 +600,9 @@
     const have=bank+Number(!!selector.value),ready=have>=need;
     $("forgeProgress").max=config.chances.length;
     $("forgeProgress").value=rank;
-    const nextRank=$("forgeNextRank"),rankGain=$("forgeRankGain"),odds=$("forgeOdds");
-    if(nextRank)nextRank.textContent=max?"+"+rank:"+"+rank+" → +"+(rank+1);
-    if(rankGain){
-      const rating=step=>profile?(profile.enhanceRatings?.[step]??profile.enhanceMax*step/10):step;
-      const stat=forgeNames[profile?.primary||(item.itemId==="spirit_staff"?"ranged":"melee")];
-      rankGain.textContent=max||!terms?"":stat+" ใน PvE +"+Number(rating(rank).toFixed(2))+" → +"+Number(rating(rank+1).toFixed(2));
-    }
-    if(odds){
-      const shatter=terms?.breakChance??(terms?.breakOnFailure?100-terms.chance-(terms.downgradeChance??0):0);
-      odds.textContent=max||!terms?"":"สำเร็จ "+terms.chance+"% · ลดขั้น "+(terms.downgradeChance??0)+"% · แตก "+shatter+"%";
-      odds.dataset.risk=String(!!(shatter||terms?.downgradeChance));
-    }
     $("forgeSupply").textContent=max?"ตีบวกครบ +"+config.chances.length:!terms?"รอเซิร์ฟเวอร์อัปเดตสูตร":
-      forgeSupplyCount(have,need,"ชิ้น")+" · คลังช่าง "+bank+(selector.value?" + กระเป๋า 1":"")+
-      (risk && item.socket?" · ถอดการ์ดก่อน":"");
+      "ใช้ "+meta.name+" รุ่นเดียวกัน "+need+" ชิ้น · คลังช่างมี "+bank+" ชิ้น"+(selector.value?" · รวมชิ้นจากกระเป๋า 1 ชิ้น":"")+
+      " · "+forgeRiskText(terms,rank)+(risk && item.socket?" · ถอดการ์ดก่อน":"");
     if((risk || terms?.downgradeChance) && ready)$("forgeSupply").textContent+=" · หลังตีเหลือในคลัง "+(have-need)+" ชิ้น";
     const missing=Math.max(0,need-have);
     bindItemHuntButton($("forgeTrack"),missing?item.itemId:null,itemHuntCount(item.itemId,true)+missing,false,true);
@@ -656,20 +610,23 @@
     recipe.hidden=!missing || (!meta.recipe && item.itemId!=="shrine_glaive");
     recipe.onclick=()=>{if(meta.recipe)selectBenchRecipe("all",String(meta.level||1),item.itemId);else{openCraftingPage();$("craftPanel").open=true;$("craftPanel").scrollIntoView({block:"center"});}};
     if(missing && WEAPON_META[item.itemId] && item.itemId!=="shrine_glaive")$("forgeSupply").textContent+=" · ล่าผีสิงที่หมู่บ้านอาคม";
-    upgrade.textContent=max?"ตีบวกเต็มแล้ว":terms?"ตี +"+(rank+1)+" · "+cost+" ทอง":"รอสูตรตีบวก";
+    upgrade.textContent=max?"ตีบวกเต็มแล้ว":terms?"ตี +"+(rank+1)+" · "+cost+" ทอง · "+terms.chance+"%":"รอสูตรตีบวก";
     const seal=profile?"ref_seal_"+profile.materialTier:null, seals=seal?itemHuntCount(seal):0;
     renderItemPreview("forgeSealItem",seal,"ตราสำหรับสุ่มออปชัน");
-    rerollButton.textContent="สุ่มออปชัน · "+reroll+" ทอง";
+    rerollButton.textContent="สุ่มออปชัน · "+reroll+" ทอง"+(seal?" · "+(personalItems[seal]?.name||seal)+" "+seals+"/1":"");
     const busy=economyPending || itemUsePending || !ownServerCharacter()?.alive || (ownServerCharacter()?.level||1)<level || economyGold===null;
     selector.disabled=busy;
     upgrade.disabled=max||!terms||busy||economyGold<cost||!ready||!!(risk && item.socket);
     rerollButton.disabled=busy||economyGold<reroll||!!seal&&!seals;
     const cap=profile?(profile.affixTierCap??(level<25?1:level<65?2:3)):3;
-    $("forgeAffixInfo").textContent="สุ่มได้ "+(profile?.pool||["melee","ranged"]).map(k=>forgeNames[k]).join(" / ")+" ถึงขั้น "+cap+" · ค่าใหม่แทนที่ค่าเดิมและอาจต่ำลง";
+    const affix=f?.affix,actual=affix?(forgeNames[affix.stat]+" +"+(profile?(profile.affixMax*affix.tier/3).toFixed(1):affix.tier)):"ยังไม่มีออปชัน";
+    const rating=profile?(profile.enhanceRatings?.[rank]??profile.enhanceMax*rank/10):rank;
+    const boost=profile?forgeNames[profile.primary]+" +"+rating.toFixed(1)+" (สูงสุด "+profile.enhanceMax+")":"พลังอาวุธ +"+rank;
+    $("forgeInfo").textContent=["+"+rank,boost,actual,"โบนัสช่างสำหรับ PvE"].join(" · ");
+    $("forgeAffixInfo").textContent="สุ่มได้ "+(profile?.pool||["melee","ranged"]).map(k=>forgeNames[k]).join(" / ")+" ถึงขั้น "+cap+" · ออปชันใหม่แทนที่ของเดิม และอาจได้ขั้นที่ต่ำกว่าเดิม";
     const pity=f?.rerollMisses??0;
     $("forgeRerollPity").textContent=cap===1?"อุปกรณ์นี้สุ่มได้ขั้น 1 เท่านั้น":pity>=config.rareAfter?"ครั้งถัดไปรับออปชันขั้น "+cap:"สุ่มยังไม่ถึงขั้นสูงสุด "+pity+"/"+config.rareAfter+" ครั้ง · ครบแล้วครั้งถัดไปได้ขั้น "+cap;
-    $("forgeRerollSupply").textContent=seal?forgeSupplyCount(seals,1,"ชิ้น"):"";
+    $("forgeRerollSupply").textContent=seal?"ใช้ "+(personalItems[seal]?.name||seal)+" 1 ชิ้น · มี "+seals+" ชิ้น":"อาวุธรุ่นนี้ใช้ทองในการสุ่มออปชัน";
     $("forgeCardHelp").hidden=!(risk && item.socket);
-    const goldNeeded=forgePageAction==="reroll"?reroll:cost;
-    $("forgeActionStatus").textContent=economyPending?"กำลังรอผลบันทึกจากเซิร์ฟเวอร์…":itemUsePending?"รอรายการอุปกรณ์ก่อน":!ownServerCharacter()?.alive?"รอเกิดใหม่ก่อนทำรายการ":(ownServerCharacter()?.level||1)<level?"ต้องการ Lv."+level:economyGold===null?"กำลังโหลดจำนวนทอง":economyGold<goldNeeded?"ทองขาด "+(goldNeeded-economyGold):"";
+    $("forgeActionStatus").textContent=economyPending?"กำลังรอผลบันทึกจากเซิร์ฟเวอร์…":itemUsePending?"รอรายการอุปกรณ์ก่อน":!ownServerCharacter()?.alive?"รอเกิดใหม่ก่อนทำรายการ":(ownServerCharacter()?.level||1)<level?"ต้องการ Lv."+level:economyGold===null?"กำลังโหลดจำนวนทอง":"";
   }

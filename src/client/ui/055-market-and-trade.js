@@ -8,8 +8,9 @@
   function updateTradeBadge() { const badge=$("tradeUnread"); if (badge) badge.hidden=!tradeUnread; updateFieldAlerts(); }
   let economyPendingRequest=null;
   function finishEconomyPending(owner=null) {
-    // A late legacy reply cannot release the lock for a newer workshop request.
-    if(["forge_weapon","card_socket"].includes(economyPendingRequest?.command) && owner!==true && owner!==economyPendingRequest)return false;
+    // Legacy replies for another timed-out action must not clear a newer forge's
+    // timer or ownership. Generic uncorrelated errors/room teardown pass true.
+    if(economyPendingRequest?.command==="forge_weapon" && owner!==true && owner!==economyPendingRequest)return false;
     economyPending=false;economyPendingRequest=null;clearTimeout(economyTimer);return true;
   }
   function economyReady() { return mode === "live" && room?.state?.economyAvailable === true && ownServerCharacter()?.persistent === true; }
@@ -170,24 +171,18 @@
     if (!economyReady() || !room) { if(command==="forge_weapon")failForgeAnimation("การเชื่อมต่อยังไม่พร้อม · ยังไม่ได้ส่งคำขอ");toast("เข้าเล่นออนไลน์บนเซิร์ฟเวอร์ที่เปิดระบบตลาดก่อน");return; }
     if (durable && economyPending) return;
     const target=room,ticket={room:target,command,requestId:payload?.requestId};
-    if(command==="card_socket")Object.assign(ticket,{target:payload.target,gear:payload.gear,action:payload.action});
     if (durable) {
       economyPending=true;economyPendingRequest=ticket;clearTimeout(economyTimer);
       economyTimer=setTimeout(()=>{
         if (room!==target || !economyPending || economyPendingRequest!==ticket) return;
         if(command==="forge_weapon")failForgeAnimation("ยังไม่ได้รับผล · ผลยังไม่ยืนยัน ตรวจอุปกรณ์และยอดก่อนทำซ้ำ");
-        if(command==="card_socket")setForgeSocketOutcome(ticket,"ยังไม่ได้รับผล · ตรวจอุปกรณ์ก่อนทำซ้ำ","notice");
         finishEconomyPending(ticket);toast("ยังไม่ได้รับผล · ตรวจยอดและรายการก่อนทำซ้ำ");
         try { target.send("get_economy",{}); if(centralMarketVersion){requestMarketOverview();requestMarketPage(true);}else target.send("market_list",{}); } catch (_) {}
         renderEconomy();renderBag();
       },6000);
     }
     try { target.send(command,payload); } catch (_) {
-      if(durable && economyPendingRequest===ticket){
-        if(command==="forge_weapon")failForgeAnimation("ส่งคำขอไม่สำเร็จ · ตรวจอุปกรณ์ก่อนทำซ้ำ");
-        if(command==="card_socket")setForgeSocketOutcome(ticket,"ส่งคำขอไม่สำเร็จ","notice");
-        finishEconomyPending(ticket);
-      }
+      if(durable && economyPendingRequest===ticket){if(command==="forge_weapon")failForgeAnimation("ส่งคำขอไม่สำเร็จ · ตรวจอุปกรณ์ก่อนทำซ้ำ");finishEconomyPending(ticket);}
       toast("ส่งคำขอไม่สำเร็จ");
     }
     renderEconomy();renderBag();
