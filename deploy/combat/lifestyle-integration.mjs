@@ -79,12 +79,14 @@ try {
     assert.equal(drank.healed,0);
     assert.equal(artisan.events.findLast(e=>e.type==="needs_state").data.water,65);
     await pause(360);
-    await send(artisan,"enter_home",{},"command_rejected",v=>v.reason==="home_required");
-    await mutateHome(2,"buy");
+    const goldBeforeHome=(await send(artisan,"get_economy",{},"economy_state")).gold;
+    assert.equal((await send(artisan,"get_home",{},"home_state")).level,0);
     await send(artisan,"craft_weapon",{requestId:request(8),recipeId:"furniture_kitchen"},"economy_error",v=>v.reason==="home_build_location");
     const entry = await send(artisan,"enter_home",{},"warp_complete");
     assert.match(entry.mapId,/^personal_home_[a-f0-9]{32}$/);
     await until(()=>artisan.me()?.mapId===entry.mapId,"owner reaches separate house map");
+    assert.equal((await send(artisan,"get_home",{},"home_state")).level,1);
+    assert.equal((await send(artisan,"get_economy",{},"economy_state")).gold,goldBeforeHome);
     await send(artisan,"craft_weapon",{requestId:request(3),recipeId:"furniture_kitchen"},"craft_result");
     const home = await mutateHome(4,"place",{itemId:"furniture_kitchen",cell:2});
     assert.equal(home.cooking.kitchen,true);
@@ -131,7 +133,6 @@ try {
 
     const other = await join("e",artisan.room.roomId);
     await until(()=>!other.room.state.players.has(artisan.room.sessionId),"private owner is hidden from village");
-    await send(other,"home_action",{requestId:request(9),action:"buy"},"home_state",v=>v.level===1);
     const otherEntry=await send(other,"enter_home",{},"warp_complete");
     await until(()=>other.me()?.mapId===otherEntry.mapId,"second owner reaches their house");
     assert.notEqual(otherEntry.mapId,entry.mapId);
@@ -143,6 +144,9 @@ try {
     const fighter = await join("d",artisan.room.roomId);
     assert.equal(fighter.me().pathId,"seer");
     assert.equal(fighter.me().mapId,"forbidden_forest");
+    await send(fighter,"enter_home",{},"command_rejected",v=>v.reason==="home_village_required");
+    assert.equal((await send(fighter,"get_home",{},"home_state")).level,0);
+    await pause(550);
     const target = await until(()=>fighter.room.state.monsters.get("forest_west_1"),"nearby monster");
     const id = fighter.room.sessionId;
     await send(fighter,"fly",{},"flight_finished",v=>v.playerId===id && v.flying);

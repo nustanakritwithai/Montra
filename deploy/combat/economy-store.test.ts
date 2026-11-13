@@ -250,8 +250,13 @@ test("home ownership, kitchen, furniture and watered crops survive restart and k
     store.craftPersonal(a,request(602),"food_herbal_fish_soup",1,5);
     assert.equal(store.cookingState(a).level,2);
     assert.throws(()=>store.craftPersonal(a,request(601),"food_grilled_fish"),/cooking_kitchen_required/);
+    const beforeHome=store.getAccount(a).gold;
+    store.ensureHome(a);
+    store.ensureHome(a);
+    home(603,"buy"); // A legacy client can still send the old command.
     home(603,"buy");
-    home(603,"buy");
+    assert.equal(store.homeState(a).level,1);
+    assert.equal(store.getAccount(a).gold,beforeHome);
     store.craftPersonal(a,request(604),"furniture_kitchen");
     assert.throws(()=>home(605,"place",{itemId:"furniture_kitchen",cell:4}),/home_cell_invalid/);
     home(606,"place",{itemId:"furniture_kitchen",cell:1});
@@ -275,10 +280,12 @@ test("home ownership, kitchen, furniture and watered crops survive restart and k
     store.homeAction(a,harvest,now+120_000);
     assert.equal(store.getAccount(a).inventory.slots.find(s=>s?.itemId==="mat_herb_1")?.quantity,before+3);
     home(613,"upgrade");
+    store.ensureHome(a);
+    home(615,"buy");
     assert.equal(store.homeState(a,now).plotCount,4);
     home(614,"remove",{cell:2});
     assert.equal(store.cookingState(a).kitchen,false);
-    assert.equal(store.getAccount(a).gold,STARTER_GOLD-317);
+    assert.equal(store.getAccount(a).gold,STARTER_GOLD-217);
   } finally {store.close();rmSync(dir,{recursive:true,force:true});}
 });
 

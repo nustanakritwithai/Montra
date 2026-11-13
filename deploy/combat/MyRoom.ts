@@ -6814,9 +6814,6 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
         this.sentinelStuns.has(id) || this.sentinelWindups.has(id) || this.muayControlled(id)) return this.reject(client,"movement_busy");
     if (entering) {
       if (player.mapId !== DEFAULT_MAP_ID || !isRestArea(DEFAULT_MAP_ID,player)) return this.reject(client,"home_village_required");
-      const home = characterStore.economy.homeState(character);
-      if (!home.level) return this.reject(client,"home_required");
-      this.cacheHomeWalls(homeMapId(character),home.parts);
     } else if (!this.inOwnedHome(id,character)) return this.reject(client,"home_unavailable");
     const destination = entering ? homeMapId(character) : DEFAULT_MAP_ID;
     const portal: WorldPortal = {id:entering?"enter_home":"leave_home", x:player.x, z:player.z,
@@ -6831,6 +6828,16 @@ export class MyRoom extends Room<{ state: MyRoomState }> {
     };
     const result = checkWarpDestination(portal, context);
     if ("reason" in result) return this.reject(client,result.reason);
+    if (entering) {
+      try {
+        const store = characterStore.economy;
+        store.ensureHome(character);
+        this.cacheHomeWalls(destination,store.homeState(character).parts);
+      } catch (error) {
+        console.error("MONTRA home initialization failed",error);
+        return this.reject(client,"home_unavailable");
+      }
+    }
     this.commitWarp(client,result.portal);
   }
 
