@@ -198,6 +198,7 @@ export const MyRoomState = schema({
   battlefieldFog: t.boolean().default(false),
   // Collection entries can be withdrawn from an individual StateView.
   battlefieldVillageMonsters: t.map(Monster).view(),
+  bestWeaponAvailable: t.boolean().default(true),
 }, "MyRoomState");
 
 export type MyRoomState = SchemaType<typeof MyRoomState>;

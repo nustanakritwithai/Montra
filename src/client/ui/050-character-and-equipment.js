@@ -307,6 +307,7 @@
     const worn = wornGearAt(slotKey, slots);
     const wornMeta = worn ? bagMeta(worn.itemId) : null;
     const char = ownServerCharacter() || { characterName: "นที", level: 1, pathId: "phutthaisawan" };
+    const canChooseBest = slotKey === "mainHand" && mode === "live" && room?.state?.bestWeaponAvailable === true;
 
     // Candidates: ONLY items in bag that can be equipped in this specific slot!
     const candidates = [];
@@ -406,11 +407,19 @@
       '</div>' +
       '<div class="equip-popup-content">' +
         wornHtml +
+        (canChooseBest ? '<button type="button" class="secondary" id="equipPopupBest" aria-describedby="equipPopupBestHint">สวมอาวุธที่ดีที่สุด</button><p id="equipPopupBestHint" class="equip-section-title">เทียบพลังโจมตี PvE ตามอาชีพ อาวุธบางชิ้นจะผูกกับตัวละครเมื่อสวม</p>' : '') +
         candHtml +
         '<button type="button" class="secondary" id="equipPopupCloseBtn">ปิด</button>' +
       '</div>';
 
     renderItemTile("equipWornItem",worn,{equipped:true});
+    const bestButton=$("equipPopupBest");
+    if(bestButton){
+      bestButton.disabled=itemUsePending || !inventoryState || !char.alive;
+      bestButton.onclick=()=>{
+        if(!itemUsePending)sendBagCommand("equip_best_weapon",{});
+      };
+    }
     if (worn && (wornMeta?.kind === "mainHand" || wornMeta?.forge)) {
       const forge = document.createElement("button");
       forge.type = "button"; forge.className = "secondary";

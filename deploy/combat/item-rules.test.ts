@@ -8,8 +8,10 @@ import {
   validateInventory, parseUseItemCommand, useInventoryItem,
   RITUAL_DAGGER_ID, ARCANE_SWORD_ID, SPIRIT_STAFF_ID,
   grantStarterWeapons, parseEquipWeaponCommand, equipInventoryWeapon,
-  equippedWeaponId, weaponBonuses,
+  equippedWeaponId, weaponBonuses, bestWeaponSlot, type InventorySnapshot,
 } from "./ItemRules.js";
+import {plainForge} from "./ForgeRules.js";
+import {personalItem} from "./PersonalItems.js";
 
 test("Inventory: 108 slots, 3 potions and permanent starter weapon kit", () => {
   const stock = makeStarterInventory();
@@ -171,6 +173,39 @@ test("Weapon loadout: equip sword and staff, unequip, preserve item counts and d
   assert.equal(none.inventory.slots[0]!.quantity,3);
   assert.equal(none.inventory.slots[2]!.quantity,1);
   assert.equal(none.inventory.slots[3]!.quantity,1);
+});
+
+test("Best weapon uses eligible PvE stats, preserves class skills and keeps the current weapon on a tie", () => {
+  const bag=makeStarterInventory();
+  bag.slots[4]={itemId:"wp_twins_1",quantity:1};
+  bag.slots[5]={itemId:"wp_twins_10",quantity:1};
+  bag.slots[6]={itemId:"wp_wand_1",quantity:1};
+  bag.slots[7]={itemId:"shrine_glaive",quantity:1,forge:{...plainForge(),rank:10}};
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),2,"keep the sword skill family, including legacy gear");
+  assert.equal(bestWeaponSlot(bag,"seer",1),6,"score spell attack for occult paths");
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",100),5,"eligible capstone outranks the training weapon");
+  bag.slots[2]!.forge={...plainForge(),rank:3};
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),2,"include the legacy upgrade");
+  bag.slots[107]={itemId:"arcane_sword",quantity:1,forge:{...plainForge(),rank:3}};
+  bag.equippedWeaponSlot=107;
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),107,"a tie preserves the worn copy on any page");
+  bag.slots[107]!.forge!.affix={stat:"melee",tier:1};
+  bag.equippedWeaponSlot=2;
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),107,"include the attack affix");
+  assert.equal(bag.equippedWeaponSlot,2,"selection does not mutate the bag");
+  const empty:InventorySnapshot={...bag,slots:bag.slots.map(():null=>null),equippedWeaponSlot:null};
+  assert.equal(bestWeaponSlot(empty,"phutthaisawan",1),null);
+});
+
+test("Best weapon: sockets and forge ratings use the same values as combat", () => {
+  const bag=makeStarterInventory();
+  bag.slots[4]={itemId:"wp_twins_1",quantity:1,forge:{...plainForge(),rank:3}};
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),4);
+  const atkCard="card_bamboo";
+  assert((personalItem(atkCard)?.stats.atk??0)>0);
+  bag.slots[4]!.forge=undefined;
+  bag.slots[4]!.socket=atkCard;
+  assert.equal(bestWeaponSlot(bag,"phutthaisawan",1),4);
 });
 
 test("Weapon loadout: validate strict equip command and reject forged damage/stacks", () => {

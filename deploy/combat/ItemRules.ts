@@ -5,7 +5,8 @@ import {dynamicDropChance} from "./DynamicBalance.js";
 import {randomInt} from "node:crypto";
 import { PROGRESSION, baseManaAtLevel, type CombatStats } from "./Progression.js";
 import { MUAY_WRAP_ID } from "./MuayRules.js";
-import { gearSchools, usesStaff, OUTFIT_LEVELS, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
+import { gearSchools, usesStaff, wearsTwinSwords, wearsWraps, OUTFIT_LEVELS, type CatalystId, type SalveId, type ForgeRating,type BrewId,type FieldToolId } from "./PersonalItems.js";
+import { isOccultPath } from "./CharacterBuilds.js";
 /**
  * MONTRA V0.2.7 — authoritative permanent equipment.
  * Existing v0.2.6 inventory JSON (version:1, slots:[...]) stays readable.
@@ -235,6 +236,36 @@ export function parseEquipWeaponCommand(payload: unknown): {slot:number|null} | 
   const slot = payload.slot as number;
   return slot >= 0 && slot < INVENTORY_SLOT_COUNT ? {slot} : null;
 }
+function weaponEquipEligibility(item:InventoryStack|undefined|null,path:string|undefined,level:number) {
+  if (!item) return {reason:"item_unavailable"} as const;
+  if (!isWeaponId(item.itemId)) return {reason:"not_weapon"} as const;
+  const definition=personalItem(item.itemId);
+  if (definition && definition.path!==path) return {reason:"wrong_item_class"} as const;
+  if ((definition?.level??1)>level) return {reason:"item_level_required"} as const;
+  return {weaponId:item.itemId,definition};
+}
+
+/** Choose for PvE attacks while keeping access to weapon-gated class skills. */
+export function bestWeaponSlot(bag:InventorySnapshot,path:string,level:number):number|null {
+  const magic=isOccultPath(path);
+  const stat=magic?"magicAtk":"atk";
+  let best:{slot:number; classSkill:boolean; attack:number}|null=null;
+  for (const [slot,item] of bag.slots.entries()) {
+    if (!item) continue;
+    const eligible=weaponEquipEligibility(item,path,level);
+    if ("reason" in eligible) continue;
+    const classSkill=path==="phutthaisawan" ? wearsTwinSwords(eligible.weaponId) :
+      path==="muay_boran" && wearsWraps(eligible.weaponId);
+    const bonuses=weaponBonuses({version:1,slots:[item],equippedWeaponSlot:0});
+    const attack=(eligible.definition?.stats[stat]??0)+(personalItem(item.socket)?.stats[stat]??0)+
+      (magic?bonuses.ranged:bonuses.melee);
+    if (!best || Number(classSkill)>Number(best.classSkill) ||
+        classSkill===best.classSkill && (attack>best.attack ||
+          attack===best.attack && slot===bag.equippedWeaponSlot)) best={slot,classSkill,attack};
+  }
+  return best?.slot??null;
+}
+
 export function equipInventoryWeapon(
   inventory: InventorySnapshot, slot: number | null, path?:string, level=1,
 ): EquipWeaponResult {
@@ -247,20 +278,16 @@ export function equipInventoryWeapon(
     ok: true, inventory: { ...previous, equippedWeaponSlot: null },
     weaponId: null,
   };
-  if (!Number.isSafeInteger(slot) || slot < 0 || slot >= INVENTORY_SLOT_COUNT ||
-      previous.slots[slot] === null) {
+  if (!Number.isSafeInteger(slot) || slot < 0 || slot >= INVENTORY_SLOT_COUNT) {
     return { ok: false, reason: "item_unavailable" };
   }
-  const selected = previous.slots[slot]!;
-  if (!isWeaponId(selected.itemId)) return { ok: false, reason: "not_weapon" };
-  const definition=personalItem(selected.itemId);
-  if (definition && definition.path!==path) return {ok:false,reason:"wrong_item_class"};
-  if ((definition?.level??1)>level)return {ok:false,reason:"item_level_required"};
-  if (definition) previous.slots[slot]={...selected,bound:true};
+  const eligible=weaponEquipEligibility(previous.slots[slot],path,level);
+  if ("reason" in eligible) return {ok:false,reason:eligible.reason};
+  if (eligible.definition) previous.slots[slot]={...previous.slots[slot]!,bound:true};
   return {
     ok: true,
     inventory: { ...previous, equippedWeaponSlot: slot },
-    weaponId: selected.itemId,
+    weaponId: eligible.weaponId,
   };
 }
 
