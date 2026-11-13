@@ -231,6 +231,28 @@ test('forge bag details and card help retain the exact equipped side',()=>{
   f.$('cardSocketAction').click();const sent=f.mutations();assert.equal(sent.length,1);assert.equal(sent[0].command,'card_socket');assert.deepEqual(sent[0].payload,{requestId:sent[0].payload.requestId,target:'leftRing',gear:'ring',expected:'card',action:'remove',card:null,stamp:'left.3'});
 });
 
+test('monster card details open the existing drill tab and gear picker without sending a mutation',()=>{
+  const f=fixture();f.inventory.slots[2]={itemId:'card',quantity:1};f.open();f.select(2);
+  const drill=f.$('bagDetailDrill'),before=f.snapshot();
+  assert.equal(drill.hidden,false);assert.equal(drill.disabled,false);
+  f.ctx.economyPending=true;f.ctx.renderBag();
+  assert.equal(drill.disabled,true);drill.click();assert.equal(f.ctx.drawerActive,'bag');
+  f.ctx.economyPending=false;f.ctx.renderBag();
+  drill.click();
+  assert.equal(f.ctx.drawerActive,'forge');
+  assert.equal(f.modal().hidden,true);assert.equal(f.ui.drawer.inert,false);
+  assert.equal(f.$('forgeTabDrill').getAttribute('aria-pressed'),'true');
+  assert.equal(f.$('forgeTargetButton').dataset.target,'');
+  assert.equal(f.$('forgePicker').open,true);
+  const ring=f.$('forgePickerGrid').children.find(button=>button.dataset.forgeTarget==='bag:1');
+  assert(ring);ring.click();
+  assert.equal(f.$('forgePicker').open,false);
+  assert.equal(f.$('forgeTargetButton').dataset.target,'bag:1');
+  assert.match(f.$('cardSocketAction').textContent,/เจาะรู/);
+  assert.deepEqual(f.mutations(),[]);assert.equal(f.snapshot(),before);
+  f.open();f.select(1);assert.equal(drill.hidden,true);assert.equal(drill.onclick,null);
+});
+
 test('drawer navigation, close and reconnect teardown cannot leave modal or inert drawer behind',()=>{
   for(const target of ['smith','character','fieldMenu']){
     const f=fixture();f.open();f.select(1);f.ctx.openDrawer(target,target,'');assert.equal(f.modal().hidden,true,target);assert.equal(f.$('itemModalBackdrop').hidden,true,target);assert.equal(f.ui.drawer.inert,false,target);assert.equal(f.ctx.drawerActive,target);assert.equal(f.document.activeElement.getClientRects().length,1,target);

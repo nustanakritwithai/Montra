@@ -560,6 +560,17 @@
     enhance.onclick=canShowEnhance?()=>{
       if(drawerActive==="bag" && !$("itemDetailModal").hidden && !enhance.disabled)openForgePage("enhance",forgeTarget);
     }:null;
+    const drill=$("bagDetailDrill");
+    const isCard=meta?.kind==="card";
+    const drillDisabled=enhanceDisabled || !cardDrill;
+    if((!isCard || drillDisabled) && document.activeElement===drill)$("itemModalClose").focus({preventScroll:true});
+    drill.hidden=!isCard;
+    drill.disabled=drillDisabled;
+    drill.onclick=isCard?()=>{
+      if(drawerActive!=="bag" || $("itemDetailModal").hidden || drill.disabled)return;
+      openForgePage("drill",null);
+      openForgePicker();
+    }:null;
     const produce=$("bagDetailProduce");
     const canShowProduce=!!chosen && (meta?.kind==="material" || chosen.itemId===SHRINE_SHARD);
     const produceDisabled=!economyReady();
