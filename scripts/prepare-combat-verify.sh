@@ -15,6 +15,7 @@ cp deploy/combat/PrototypeTestRoom.ts deploy/combat/prototype-protocol-test-serv
 cp deploy/combat/prototype-test-process.mjs deploy/combat/prototype-test-process.test.mjs deploy/combat/prototype-protocol-integration.mjs deploy/combat/prototype-gameplay-integration.mjs deploy/combat/prototype-gameplay-room.test.mjs deploy/combat/prototype-shadow-integration.mjs deploy/combat/prototype-shadow-room.test.mjs deploy/combat/isolated-class-integrations.mjs deploy/combat/prototype-ws-restore.mjs deploy/combat/prototype-reward-crash.test.mjs deploy/combat/check-monster-reward-rollback.mjs combat-verify/
 cp deploy/combat/mixed-hotbar-integration.mjs combat-verify/
 cp deploy/combat/AccountStore.ts deploy/combat/AccountService.ts deploy/combat/AccountRoutes.ts deploy/combat/account-store.test.ts combat-verify/src/rooms/
+cp deploy/combat/MontraWebSocket.ts combat-verify/src/rooms/
 cp deploy/combat/account-integration.mjs combat-verify/account-integration.mjs
 cp deploy/combat/hunting-rebirth-integration.mjs deploy/combat/mastery-save-integration.mjs combat-verify/
 cp deploy/combat/learned-hotbar-integration.mjs deploy/combat/personal-equipment-integration.mjs combat-verify/
@@ -212,7 +213,8 @@ cat > combat-verify/src/index.ts <<'EOF'
 import { defineServer, defineRoom } from "colyseus";
 import { MyRoom } from "./rooms/MyRoom.js";
 import { installAccountRoutes } from "./rooms/AccountRoutes.js";
-export const server = defineServer({ rooms: { my_room: defineRoom(MyRoom) }, express: app => installAccountRoutes(app) });
+import { createMontraWebSocket } from "./rooms/MontraWebSocket.js";
+export const server = defineServer({ transport: createMontraWebSocket(), rooms: { my_room: defineRoom(MyRoom) }, express: app => installAccountRoutes(app) });
 export const ready = server.listen(Number(process.env.PORT || 4108));
 EOF
 cp deploy/combat/verify/package.json deploy/combat/verify/package-lock.json deploy/combat/verify/tsconfig.json combat-verify/

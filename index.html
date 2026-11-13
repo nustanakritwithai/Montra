@@ -31,7 +31,12 @@
     <symbol id="seal-heal" viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6Z"/></symbol>
   </svg>
   <section id="accountEntry" class="account-entry" aria-label="เข้าสู่ระบบ MONTRA"><div id="accountCard" class="account-card" role="dialog" aria-modal="true"><strong>MONTRA</strong><p>กำลังเตรียมหน้าเข้าสู่ระบบ…</p></div></section>
-  <div id="connectionRecovery" class="account-entry" role="status" hidden>กำลังกลับเข้าตัวละครเดิม…</div>
+  <div id="connectionRecovery" class="account-entry" hidden>
+    <div class="account-card">
+      <p id="connectionRecoveryStatus" role="status">กำลังกลับเข้าตัวละครเดิม…</p>
+      <button id="cancelConnectionRecovery" class="secondary" type="button">กลับไปเลือกตัวละคร</button>
+    </div>
+  </div>
   <main id="game" aria-label="MONTRA เกมสามมิติ">
     <canvas id="world" tabindex="0" aria-label="พื้นที่เกมสามมิติ แตะพื้นเพื่อเดิน"></canvas>
     <div id="loading" class="loading"><div class="loader-mark">๛</div><strong>MONTRA</strong><span id="loadingText">กำลังเตรียมหมู่บ้านอาคม...</span></div>

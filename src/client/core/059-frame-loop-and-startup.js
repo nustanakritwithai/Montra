@@ -1028,10 +1028,15 @@
   window.addEventListener("pagehide",event => {
     if (event.persisted) return;
     cancelOnlineRecovery();
+    cancelRoomEntry?.(roomEntryError(window.Colyseus.CloseCode.CONSENTED, "Page closed"));
     const old = room;
     room = null;
     clearSyncPoll();
-    if (old) void old.leave().catch(error => console.warn("MONTRA page leave", error));
+    if (old) void leaveRoomBounded(old);
+  });
+  $("cancelConnectionRecovery").addEventListener("click", () => {
+    cancelOnlineRecovery();
+    stopOnline("หยุดเชื่อมต่ออัตโนมัติแล้ว");
   });
   // Reuse the player's human model for existing NPC roles and keep their hitboxes.
   attachNpcAvatar(questRangerRoot,"quest-ranger",rangerRobes[0],[rangerBody,rangerHead,rangerHat]);
@@ -1051,6 +1056,6 @@
   window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
     cancelOnlineRecovery();
     const old = room; room = null; clearSyncPoll();
-    if (old) { try { await old.leave(); } catch (_) {} }
+    await leaveRoomBounded(old);
     showDemo();
   });

@@ -328,12 +328,63 @@
   }
 
   let connectionPending = false;
+  let cancelRoomEntry = null;
   let onlineRecovery = null;
   const roomRetryDelays = [350, 900, 1800, 3000];
+  function roomEntryError(code, message) {
+    return Object.assign(new Error(message), {code});
+  }
   function cancelOnlineRecovery() {
+    if (onlineRecovery) cancelRoomEntry?.(roomEntryError(window.Colyseus.CloseCode.CONSENTED, "Character recovery cancelled"));
     onlineRecovery = null;
     $("accountEntry").inert = false;
     $("connectionRecovery").hidden = true;
+  }
+  function closeRoomSocket(joined) {
+    try { joined?.connection?.close(); }
+    catch (error) { console.warn("MONTRA close room socket", error); }
+  }
+  async function leaveRoomBounded(joined) {
+    if (!joined || joined.connection?.isOpen === false) return;
+    let timer;
+    try {
+      await Promise.race([
+        joined.leave(),
+        new Promise(resolve => { timer = setTimeout(() => { closeRoomSocket(joined); resolve(); }, 1500); }),
+      ]);
+    } catch (error) {
+      closeRoomSocket(joined);
+      console.warn("MONTRA room leave failed", error);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function joinRoomBounded(endpoint, signal, admission) {
+    let openingRoom;
+    class MontraClient extends window.Colyseus.Client {
+      createRoom(...args) {
+        signal.throwIfAborted();
+        openingRoom = super.createRoom(...args);
+        return openingRoom;
+      }
+    }
+    const client = new MontraClient(endpoint, {fetchFn: (url, options) => fetch(url, {...options, signal})});
+    let abort;
+    try {
+      signal.throwIfAborted();
+      return await Promise.race([
+        new Promise((_, reject) => {
+          abort = () => { reject(signal.reason); closeRoomSocket(openingRoom); };
+          signal.addEventListener("abort", abort, {once:true});
+        }),
+        admission(client).then(joined => {
+          if (signal.aborted) { closeRoomSocket(joined); throw signal.reason; }
+          return joined;
+        }),
+      ]);
+    } finally {
+      signal.removeEventListener("abort", abort);
+    }
   }
   function canRejoinRoom(code) {
     const close = window.Colyseus.CloseCode;
@@ -350,13 +401,22 @@
     const status = $("connectionRecovery");
     $("game").inert = true;
     $("accountEntry").inert = true;
+    $("connectionRecoveryStatus").textContent = "กำลังกลับเข้าตัวละครเดิม…";
     status.hidden = false;
     let failure = "การเชื่อมต่อขาดหาย กรุณาเข้าเกมอีกครั้ง";
+    const deadline = performance.now() + 18000;
+    const timeout = setTimeout(() => {
+      if (onlineRecovery !== recovery) return;
+      cancelOnlineRecovery();
+      stopOnline("เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ กรุณาลองอีกครั้ง");
+    }, 18000);
     try {
-      showDemo();
+      if (mode === "live") showDemo();
       while (recovery.attempt < roomRetryDelays.length) {
         await new Promise(resolve => setTimeout(resolve, roomRetryDelays[recovery.attempt++]));
         if (onlineRecovery !== recovery) return;
+        if (performance.now() >= deadline) break;
+        $("connectionRecoveryStatus").textContent = "กำลังกลับเข้าตัวละครเดิม · ครั้งที่ " + recovery.attempt + " จาก " + roomRetryDelays.length;
         if (window.MontraEntry?.session() !== recovery.session) {
           stopOnline("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");
           return;
@@ -376,6 +436,7 @@
       window.MontraEntry?.open();
       window.MontraEntry?.failure(failure);
     } finally {
+      clearTimeout(timeout);
       if (onlineRecovery === recovery) cancelOnlineRecovery();
     }
   }
@@ -425,6 +486,9 @@
     if (connectButton) connectButton.disabled = true;
     let joined = null;
     let accountSession;
+    const controller = new AbortController();
+    cancelRoomEntry = reason => controller.abort(reason);
+    const timeout = setTimeout(() => controller.abort(roomEntryError(504, "หมดเวลารอการเชื่อมต่อ")), 8000);
     try {
       // Switching slots must finish saving and release the old account lease.
       if (room && mode === "live") {
@@ -433,30 +497,18 @@
         clearSyncPoll();
         resetGhostPot();
         showDemo();
-        try { await old.leave(); } catch (error) { console.warn("MONTRA old room leave", error); }
+        await leaveRoomBounded(old);
         await new Promise(resolve => setTimeout(resolve, 350));
       }
-      const client = new window.Colyseus.Client(endpoint, {
-        async fetchFn(url, options) {
-          try {
-            return await fetch(url, {...options, signal:AbortSignal.timeout?.(8000)});
-          } catch (error) {
-            if (error.name === "TimeoutError") {
-              throw new window.Colyseus.ServerError(504, "Matchmaking timed out");
-            }
-            throw error;
-          }
-        },
-      });
       accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
       const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1,inventoryVersion:1};
       let transferFailed=false;
       if(transfer?.roomId){
-        try{joined=await client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket});}
-        catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
+        try{joined=await joinRoomBounded(endpoint,controller.signal,client=>client.joinById(transfer.roomId,{...opts,warTicket:transfer.ticket}));}
+        catch(error){controller.signal.throwIfAborted();console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
-      if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      if(!joined)joined=await joinRoomBounded(endpoint,controller.signal,client=>client.joinOrCreate("my_room",opts));
       // MONTRA saves and releases the account lease when a socket drops.
       // A fresh join loads that save after the old room has released it.
       if (joined.reconnection) joined.reconnection.enabled = false;
@@ -477,6 +529,7 @@
         }
       });
       function checkConnection() {
+        controller.signal.throwIfAborted();
         if (disconnectError) throw disconnectError;
         if (window.MontraEntry?.session() !== accountSession ||
             (recovery && onlineRecovery !== recovery)) throw new Error("login_required");
@@ -1927,9 +1980,7 @@
           room = null;
           clearSyncPoll();
         }
-        if (joined.connection?.isOpen !== false) {
-          try { await joined.leave(); } catch (error) { console.warn("MONTRA failed entry leave", error); }
-        }
+        await leaveRoomBounded(joined);
         if (entered) {
           try { showDemo(); } catch (error) { console.warn("MONTRA failed entry reset", error); }
         }
@@ -1944,6 +1995,8 @@
       window.MontraEntry?.failure("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
     } finally {
+      clearTimeout(timeout);
+      cancelRoomEntry = null;
       if (connectButton) connectButton.disabled = false;
       connectionPending = false;
     }

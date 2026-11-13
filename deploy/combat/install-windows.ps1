@@ -58,6 +58,7 @@ if (!((Get-Content $roomFile -Raw).Contains("export class MyRoom"))) {
 if (!(Test-Path -LiteralPath $appConfig -PathType Leaf)) { throw "Cannot locate app.config.ts. No files were modified." }
 $appConfigText = Get-Content -LiteralPath $appConfig -Raw
 $hasAccountHook = $appConfigText.Contains('installAccountRoutes(app);')
+$hasMontraTransport = $appConfigText.Contains('transport: createMontraWebSocket()')
 $hasHuntHook = $appConfigText.Contains('installHuntEventRoutes(app);')
 $hasInlineHunt = $appConfigText.Contains("app.get('/api/hunt-event'")
 if (($hasHuntHook -and !$appConfigText.Contains('from "./rooms/HuntEventRoutes.js"')) -or
@@ -68,11 +69,17 @@ if (($hasAccountHook -and !$appConfigText.Contains('from "./rooms/AccountRoutes.
     (!$hasAccountHook -and ([regex]::Matches($appConfigText, 'express\s*:\s*\(app\)\s*=>\s*\{').Count -ne 1))) {
   throw "Cannot safely insert MONTRA account routes into app.config.ts. No files were modified."
 }
+if (($hasMontraTransport -and !$appConfigText.Contains('from "./rooms/MontraWebSocket.js"')) -or
+    (!$hasMontraTransport -and ($appConfigText -match '(?m)^\s*transport\s*:' -or
+      ([regex]::Matches($appConfigText, 'defineServer\(\s*\{').Count -ne 1)))) {
+  throw "Cannot safely configure the MONTRA WebSocket transport. No files were modified."
+}
 
 $files = @(
   @{ Name = "AccountStore.ts"; Target = "src\rooms\AccountStore.ts"; Check = "class AccountStore" },
   @{ Name = "AccountService.ts"; Target = "src\rooms\AccountService.ts"; Check = "function accounts" },
   @{ Name = "AccountRoutes.ts"; Target = "src\rooms\AccountRoutes.ts"; Check = "installAccountRoutes" },
+  @{ Name = "MontraWebSocket.ts"; Target = "src\rooms\MontraWebSocket.ts"; Check = "createMontraWebSocket" },
   @{ Name = "MyRoom.ts"; Target = "src\rooms\MyRoom.ts"; Check = "equip_weapon" },
   @{ Name = "LegacyGhostPot.ts"; Target = "src\rooms\LegacyGhostPot.ts"; Check = "class LegacyGhostWorker" },
   @{ Name = "GhostPool.ts"; Target = "src\rooms\GhostPool.ts"; Check = "function parseGhostCommand" },
@@ -258,6 +265,10 @@ try {
     }
     $updatedConfig = 'import { installHuntEventRoutes } from "./rooms/HuntEventRoutes.js";' + "`r`n" +
       ([regex]::new('installAccountRoutes\(app\);').Replace($updatedConfig, 'installAccountRoutes(app);' + "`r`n    installHuntEventRoutes(app);", 1))
+  }
+  if (!$hasMontraTransport) {
+    $updatedConfig = 'import { createMontraWebSocket } from "./rooms/MontraWebSocket.js";' + "`r`n" +
+      ([regex]::new('(defineServer\(\s*\{)').Replace($updatedConfig, '$1' + "`r`n  transport: createMontraWebSocket(),", 1))
   }
   if ($updatedConfig -ne $appConfigText) {
     Set-Content -LiteralPath $appConfig -Value $updatedConfig -Encoding UTF8
