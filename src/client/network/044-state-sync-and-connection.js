@@ -149,7 +149,9 @@
     if(typeof closeCraftRecipePanel==="function")closeCraftRecipePanel(false);
     clearSyncPoll();
     resetGhostPot();
-    if (mode === "live") { showDemo(); window.MontraEntry?.open(); window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง"); }
+    if (mode === "live") showDemo();
+    window.MontraEntry?.open();
+    window.MontraEntry?.failure(reason || "การเชื่อมต่อสิ้นสุด กรุณาเข้าเกมอีกครั้ง");
   }
   function resetGhostPot() {
     resetGhostPotUi();
@@ -326,9 +328,61 @@
   }
 
   let connectionPending = false;
+  let onlineRecovery = null;
+  const roomRetryDelays = [350, 900, 1800, 3000];
+  function cancelOnlineRecovery() {
+    onlineRecovery = null;
+    $("accountEntry").inert = false;
+    $("connectionRecovery").hidden = true;
+  }
+  function canRejoinRoom(code) {
+    const close = window.Colyseus.CloseCode;
+    return Number.isInteger(code) && [close.GOING_AWAY, close.NO_STATUS_RECEIVED, close.ABNORMAL_CLOSURE,
+      close.SERVER_SHUTDOWN, close.MAY_TRY_RECONNECT].includes(code);
+  }
+  function canRetryRoomEntry(error) {
+    return error.message === "character_already_online" ||
+      (error instanceof window.Colyseus.MatchMakeError && error.code === undefined) ||
+      canRejoinRoom(error.code) || [502, 503, 504, window.Colyseus.ErrorCode.MATCHMAKE_EXPIRED].includes(error.code);
+  }
+  async function recoverOnline(endpoint, slot, recovery) {
+    onlineRecovery = recovery;
+    const status = $("connectionRecovery");
+    $("game").inert = true;
+    $("accountEntry").inert = true;
+    status.hidden = false;
+    let failure = "การเชื่อมต่อขาดหาย กรุณาเข้าเกมอีกครั้ง";
+    try {
+      showDemo();
+      while (recovery.attempt < roomRetryDelays.length) {
+        await new Promise(resolve => setTimeout(resolve, roomRetryDelays[recovery.attempt++]));
+        if (onlineRecovery !== recovery) return;
+        if (window.MontraEntry?.session() !== recovery.session) {
+          stopOnline("เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง");
+          return;
+        }
+        try {
+          if (await connectOnline(endpoint, slot, null, null, recovery)) return;
+        } catch (error) {
+          if (onlineRecovery !== recovery) return;
+          console.warn("MONTRA character rejoin failed", error.code, error.message);
+          if (error.message === "login_required") failure = "เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง";
+          if (!canRetryRoomEntry(error)) break;
+        }
+      }
+      stopOnline(failure);
+    } catch (error) {
+      console.warn("MONTRA character recovery setup failed", error);
+      window.MontraEntry?.open();
+      window.MontraEntry?.failure(failure);
+    } finally {
+      if (onlineRecovery === recovery) cancelOnlineRecovery();
+    }
+  }
   let refreshCharacterSlotCards = null;
-  async function verifyJoinedSlot(joined, desiredSlot) {
+  async function verifyJoinedSlot(joined, desiredSlot, checkConnection) {
     for (let attempt = 0; attempt < 75; attempt++) {
+      checkConnection();
       const me = joined.state?.players?.get?.(joined.sessionId);
       if (me) {
         if (!me.persistent || !me.pathId) throw new Error("เซิร์ฟเวอร์ยังไม่รองรับบัญชีและอาชีพถาวร กรุณาติดต่อผู้ดูแล");
@@ -345,8 +399,8 @@
     }
     throw new Error("ไม่ได้รับข้อมูลตัวละครจากเซิร์ฟเวอร์");
   }
-  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null, characterSetup=null) {
-    if (connectionPending) return;
+  async function connectOnline(endpoint, requestedSlot = getPreferredSlot(endpoint), transfer=null, characterSetup=null, recovery=null) {
+    if (connectionPending || onlineRecovery !== recovery) return;
     if (![1,2,3].includes(requestedSlot)) {
       toast("เลือกช่องเซฟ 1, 2 หรือ 3 เท่านั้น");
       return;
@@ -370,6 +424,7 @@
     const connectButton = $("connectOnline");
     if (connectButton) connectButton.disabled = true;
     let joined = null;
+    let accountSession;
     try {
       // Switching slots must finish saving and release the old account lease.
       if (room && mode === "live") {
@@ -381,8 +436,19 @@
         try { await old.leave(); } catch (error) { console.warn("MONTRA old room leave", error); }
         await new Promise(resolve => setTimeout(resolve, 350));
       }
-      const client = new window.Colyseus.Client(endpoint);
-      const accountSession = window.MontraEntry?.session();
+      const client = new window.Colyseus.Client(endpoint, {
+        async fetchFn(url, options) {
+          try {
+            return await fetch(url, {...options, signal:AbortSignal.timeout?.(8000)});
+          } catch (error) {
+            if (error.name === "TimeoutError") {
+              throw new window.Colyseus.ServerError(504, "Matchmaking timed out");
+            }
+            throw error;
+          }
+        },
+      });
+      accountSession = window.MontraEntry?.session();
       if (!accountSession) throw new Error("กรุณาเข้าสู่ระบบก่อน");
       const opts={accountSession,characterSlot:requestedSlot,prototypeProtocolVersion:1,prototypeGameplayVersion:1,...(characterSetup?{characterSetup}:{}),worldVersion:1,templeVersion:1,atlasVersion:1,provinceVersion:1,warVersion:1,castleVersion:2,riverCityVersion:1,terrainVersion:1,atlasReliefVersion:1,originalReliefVersion:1,monsterAutoAttackVersion:1,homeVersion:1,inventoryVersion:1};
       let transferFailed=false;
@@ -391,6 +457,30 @@
         catch(error){console.warn("MONTRA battlefield admission",error);transferFailed=true;}
       }
       if(!joined)joined=await client.joinOrCreate("my_room",opts);
+      // MONTRA saves and releases the account lease when a socket drops.
+      // A fresh join loads that save after the old room has released it.
+      if (joined.reconnection) joined.reconnection.enabled = false;
+      let disconnectError = null;
+      let enteredAt = null;
+      const retry = recovery ?? {session:accountSession, attempt:0};
+      joined.onLeave((code, reason) => {
+        disconnectError = Object.assign(new Error(reason || "WebSocket closed"), {code});
+        if (room !== joined || enteredAt === null) return;
+        room = null;
+        clearSyncPoll();
+        console.warn("MONTRA room closed", code, reason);
+        if (performance.now() - enteredAt >= 30000) retry.attempt = 0;
+        if (canRejoinRoom(code) && window.MontraEntry?.session() === retry.session) {
+          void recoverOnline(endpoint, requestedSlot, retry);
+        } else {
+          stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
+        }
+      });
+      function checkConnection() {
+        if (disconnectError) throw disconnectError;
+        if (window.MontraEntry?.session() !== accountSession ||
+            (recovery && onlineRecovery !== recovery)) throw new Error("login_required");
+      }
       const skillSession = createReplacementSkillSession(joined, {
         currentActor: () => room === joined ? ownServerCharacter() : null,
         target: skillVfxTarget,
@@ -412,7 +502,12 @@
       // them once their handlers exist, or the panels stay empty until a change.
       const earlyMessages=new Map(), earlyHandlers=new Map();
       for(const type of ["guild_state","guild_recruitment","territory_state"])joined.onMessage(type,message=>{if(!earlyHandlers.has(type))earlyMessages.set(type,message);});
-      await verifyJoinedSlot(joined, requestedSlot);
+      const savedCharacter = await verifyJoinedSlot(joined, requestedSlot, checkConnection);
+      checkConnection();
+      if (retry.characterId && savedCharacter.characterId !== retry.characterId) {
+        throw new Error("ช่องตัวละครเปลี่ยนไปแล้ว กรุณาเลือกตัวละครอีกครั้ง");
+      }
+      retry.characterId = savedCharacter.characterId;
       cancelForgeAnimation(false,true);finishEconomyPending(true);
       clearCombatVfx();
       room = joined;
@@ -1803,9 +1898,6 @@
       } catch (err) { console.warn("Callbacks fallback to state updates",err); }
       // Some SDK/room combinations expose the collection only after the first full state sync.
       clearSyncPoll(); syncPoll = setInterval(() => { if (room === joined) { syncState(joined.state);requestGhostPotState(joined.state); } },350);
-      joined.onLeave(() => {
-        if (room === joined) stopOnline("เซิร์ฟเวอร์ตัดการเชื่อมต่อ กรุณาเข้าเกมอีกครั้ง");
-      });
       joined.onError((code,message) => { console.error("MONTRA room error",code,message); toast("เซิร์ฟเวอร์แจ้งข้อผิดพลาด " + code); });
       try {
         localStorage.setItem("montra_endpoint", endpoint);
@@ -1817,13 +1909,16 @@
       try { joined.send("get_character_slots", {}); } catch (_) { /* old S2 server */ }
       try { joined.send("get_inventory", {}); } catch (_) { /* older VPS */ }
       closeDrawer();
+      checkConnection();
       window.MontraEntry?.success();
+      enteredAt = performance.now();
       const active = joined.state?.players?.get?.(joined.sessionId);
       if(transferFailed)toast("เข้าห้องศึกไม่สำเร็จ · กลับมายังห้องโลกแล้ว");
       else toast(active?.persistent
         ? "เชื่อมต่อแล้ว · ตัวละครบันทึกบนเซิร์ฟเวอร์"
         : ok ? "เชื่อมต่อแล้ว · ตัวละครยังไม่บันทึกถาวร"
              : "เชื่อมต่อแล้ว กำลังรอข้อมูลตัวละคร");
+      return true;
     } catch (err) {
       if (joined) {
         const entered = room === joined;
@@ -1832,17 +1927,24 @@
           room = null;
           clearSyncPoll();
         }
-        try { await joined.leave(); } catch (error) { console.warn("MONTRA failed entry leave", error); }
+        if (joined.connection?.isOpen !== false) {
+          try { await joined.leave(); } catch (error) { console.warn("MONTRA failed entry leave", error); }
+        }
         if (entered) {
           try { showDemo(); } catch (error) { console.warn("MONTRA failed entry reset", error); }
         }
+      }
+      if (recovery) throw err;
+      if (!characterSetup && !transfer && accountSession && window.MontraEntry?.session() === accountSession &&
+          canRetryRoomEntry(err)) {
+        return recoverOnline(endpoint, requestedSlot, {session:accountSession, attempt:0});
       }
       console.error("MONTRA connection failed",err);
       ui.onlineCount.textContent = "การเชื่อมต่อไม่สำเร็จ";
       window.MontraEntry?.failure("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
       toast("เชื่อมต่อไม่สำเร็จ: " + (err.message || String(err)).slice(0,105));
-      if (connectButton) connectButton.disabled = false;
     } finally {
+      if (connectButton) connectButton.disabled = false;
       connectionPending = false;
     }
   }

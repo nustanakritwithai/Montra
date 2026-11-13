@@ -1025,7 +1025,14 @@
     scene.render();
   });
   window.addEventListener("resize",()=>{ resizeGameRenderer(); updateStatus(); });
-  window.addEventListener("pagehide",()=> { clearSyncPoll();if(room)try{room.leave();}catch(_){} });
+  window.addEventListener("pagehide",event => {
+    if (event.persisted) return;
+    cancelOnlineRecovery();
+    const old = room;
+    room = null;
+    clearSyncPoll();
+    if (old) void old.leave().catch(error => console.warn("MONTRA page leave", error));
+  });
   // Reuse the player's human model for existing NPC roles and keep their hitboxes.
   attachNpcAvatar(questRangerRoot,"quest-ranger",rangerRobes[0],[rangerBody,rangerHead,rangerHat]);
   attachNpcAvatar(defenseKeeperRoot,"defense-keeper",rangerRobes[3],[defenseBody,defenseHead]);
@@ -1042,6 +1049,7 @@
   ui.loading.hidden=true;
   setTimeout(()=>{warmCombatFx();warmMaterials();},1500);
   window.MontraEntry?.start((endpoint,slot,setup) => connectOnline(endpoint,slot,null,setup), async () => {
+    cancelOnlineRecovery();
     const old = room; room = null; clearSyncPoll();
     if (old) { try { await old.leave(); } catch (_) {} }
     showDemo();

@@ -159,7 +159,7 @@ test('explicit teardown disposes owned effects and text repeatedly without dispo
   for(const [file,start,end] of [['src/client/world/019-state-and-portals.js','  function switchWorld(','  function requestPortalWarp('],['src/client/combat/038-demo-and-monster-state.js','  function showDemo(',null]]) {
     const source=read(file),body=end?between(source,start,end):source.slice(source.indexOf(start));assert(body.includes('clearCombatVfx();'),file+' owns teardown');
   }
-  assert(between(network,'await verifyJoinedSlot(joined, requestedSlot);','room = joined;').includes('clearCombatVfx();'),'same-map new room clears all old effects');
+  assert(between(network,'await verifyJoinedSlot(','room = joined;').includes('clearCombatVfx();'),'same-map new room clears all old effects');
 });
 test('48 cosmetic planes leave room for complete telegraphs and pooled mesh reuse',()=>{
   const f=fixture({pool:true});
