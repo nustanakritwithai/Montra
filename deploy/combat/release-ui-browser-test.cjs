@@ -116,8 +116,8 @@ async function craftCases(page,check){
  }
  await page.locator('#ckCategory-all').click();await page.locator('#benchRecipe').selectOption('ring_25');
  assert.equal(await page.locator('#benchOutput').textContent(),'แหวน');
- await page.locator('#benchIngredient').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_ingot_1');
- await page.locator('#benchIngredient').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_charcoal_1');
+ await page.locator('#benchCreatedFrom button[data-item="mat_ingot_1"]').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_ingot_1');
+ await page.locator('#benchCreatedFrom button[data-item="mat_charcoal_1"]').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_charcoal_1');
  await check('craft-nested-ingredient');
  await page.locator('#benchBack').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'mat_ingot_1');
  await page.locator('#benchBack').click();assert.equal(await page.locator('#benchRecipe').inputValue(),'ring_25');

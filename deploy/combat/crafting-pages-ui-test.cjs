@@ -214,14 +214,14 @@ test('both accessory sides and ordinary body positions filter correctly; supply 
 
 test('nested ingredient trail restores exact recipe, level, group and body side; kiln accepts zero gold',()=>{
   const f=fixture();f.choose('all','ring_25','rightRing');assert.equal(f.$('benchRecipe').value,'ring_25');
-  f.$('benchIngredient').click();assert.equal(f.$('benchRecipe').value,'mat_ingot_1');assert.equal(f.$('benchGroup').value,'kiln');assert.equal(f.$('benchCost').textContent,'0 ทอง');
-  f.$('benchIngredient').click();assert.equal(f.$('benchRecipe').value,'mat_charcoal_1');assert.equal(f.$('benchCraft').textContent,'เผาถ่าน');
+  recipeIngredient(f,'mat_ingot_1').click();assert.equal(f.$('benchRecipe').value,'mat_ingot_1');assert.equal(f.$('benchGroup').value,'kiln');assert.equal(f.$('benchCost').textContent,'0 ทอง');
+  recipeIngredient(f,'mat_charcoal_1').click();assert.equal(f.$('benchRecipe').value,'mat_charcoal_1');assert.equal(f.$('benchCraft').textContent,'เผาถ่าน');
   f.ctx.economyGold=0;f.run('renderBag()');assert.equal(f.$('benchCraft').disabled,false);f.$('benchCraft').click();assert.equal(f.mutations().at(-1).payload.recipeId,'mat_charcoal_1');
   f.callbacks.craft_result({itemId:'mat_charcoal_1',spentGold:0});assert.match(f.$('craftActionStatus').textContent,/เผาถ่านสำเร็จ/);
   f.$('benchBack').click();assert.equal(f.$('benchRecipe').value,'mat_ingot_1');assert.equal(f.$('benchCraft').textContent,'หลอมเหล็ก');
   f.$('benchBack').click();assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.$('benchGroup').value,'all');assert.equal(f.$('benchLevel').value,'25');assert.equal(f.run('craftPagePosition'),'rightRing');
   assert.equal(f.$('benchBack').hidden,true);assert(f.ids().every(id=>f.items[id].kind==='ring'));
-  f.$('benchIngredient').click();f.change('benchGroup','materials');assert.equal(f.$('benchBack').hidden,true,'manual filtering clears obsolete back trail');
+  recipeIngredient(f,'mat_ingot_1').click();f.change('benchGroup','materials');assert.equal(f.$('benchBack').hidden,true,'manual filtering clears obsolete back trail');
 });
 
 test('catalog and connection guards hide stale mutation panels and defer requested recipes until catalog arrives',()=>{
@@ -288,7 +288,7 @@ test('economy failure/timeout refresh the crafting page without replaying a muta
 });
 
 test('stale room events cannot clear pending state, change gold, replace inventory or leak success',()=>{
-  const f=fixture();f.choose('all','ring_25','rightRing');f.$('benchIngredient').click();
+  const f=fixture();f.choose('all','ring_25','rightRing');recipeIngredient(f,'mat_ingot_1').click();
   const inventory=f.ctx.inventoryState;f.ctx.room={state:{economyAvailable:true,craftRecipe:''},send(){}};f.ctx.economyPending=true;
   f.callbacks.economy_state({gold:1});f.callbacks.inventory_state(f.payload({slots:Array(12).fill(null)}));f.callbacks.craft_result({itemId:'blade_25',spentGold:60});f.callbacks.economy_error({reason:'insufficient_gold'});
   assert.equal(f.ctx.economyPending,true);assert.equal(f.ctx.economyGold,1000);assert.equal(f.ctx.inventoryState,inventory);assert.equal(f.toasts.length,0);

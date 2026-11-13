@@ -168,7 +168,11 @@
     $("benchUsesDetails").open=false;
     renderCraftingPage();
     if(!popup.open)popup.showModal();
-    $("craftRecipePopupBody").scrollTop=0;$("craftRecipePopupTitle").focus?.({preventScroll:true});
+    focusBenchRecipe();
+  }
+  function focusBenchRecipe(){
+    $("craftRecipePopupBody").scrollTop=0;
+    $(benchInspectItem?"benchInspectTitle":"craftRecipePopupTitle").focus?.({preventScroll:true});
   }
   function handleCraftRecipePopupKey(event){
     const popup=$("craftRecipePopup");if(!popup?.open)return false;
@@ -181,8 +185,7 @@
     }
     return true;
   }
-  // Read-only recipe browsing. All edges come from the server item catalog;
-  // browsing never selects a bag slot or submits a craft/refine command.
+  // Items without a workbench recipe can still show their sources in the recipe dialog.
   let benchInspectItem=null,benchInspectTrail=[],benchInspectRoom=null,benchUsesPage=0;
   function benchRecipeEdges(){
     const edges=[];
@@ -193,15 +196,37 @@
     return edges;
   }
   function inspectBenchItem(id){
-    if(drawerActive!=="crafting" || !$("benchRecipeExplorer") || !personalItems[id])return;
-    const current=benchInspectItem||$("benchRecipe").value;
+    const def=personalItems[id];
+    if(drawerActive!=="crafting" || !$("craftRecipePopup")?.open || !def)return;
+    const rootId=$("benchRecipe").value,current=benchInspectItem||rootId;
     if(id===current)return;
+    if(def.recipe?.length && id!==rootId){
+      const earlier=benchTrail.findIndex(entry=>entry.id===id);
+      if(earlier>=0){
+        const previous=benchTrail[earlier];
+        benchTrail.length=earlier;
+        restoreBenchRecipe(previous);
+        return;
+      }
+      benchTrail.push({group:$("benchGroup").value,level:$("benchLevel").value,id:rootId,
+        position:craftPagePosition,quantity:$("benchQuantity").value,inspectItem:benchInspectItem,
+        inspectTrail:benchInspectTrail,usesPage:benchUsesPage});
+      if(benchTrail.length>32)benchTrail.shift();
+      $("benchQuantity").value="1";
+      selectBenchRecipe(def.station==="kiln"?"kiln":def.sourceBoss?"boss":"all",String(def.level||1),id);
+      return;
+    }
     const earlier=benchInspectTrail.indexOf(id);
     if(earlier>=0)benchInspectTrail=benchInspectTrail.slice(0,earlier);
     else benchInspectTrail=[...benchInspectTrail,current].slice(-32);
     benchInspectItem=id===$("benchRecipe").value?null:id;benchUsesPage=0;
-    renderCraftingPage();$("benchRecipeExplorer").scrollIntoView({block:"start"});
-    $(benchInspectItem?"benchInspectTitle":"craftRecipePopupTitle").focus?.({preventScroll:true});
+    $("benchUsesDetails").open=false;
+    renderCraftingPage();focusBenchRecipe();
+  }
+  function restoreBenchRecipe(target){
+    $("benchQuantity").value=target.quantity;
+    craftPagePosition=target.position;craftRecipeTarget=target;
+    renderCraftingPage();
   }
   function benchRecipeNode(id,quantity){
     const button=document.createElement("button"),name=document.createElement("span"),amount=document.createElement("small");
@@ -260,8 +285,15 @@
     const back=$("benchInspectBack"),home=$("benchInspectRoot");back.hidden=!nested;home.hidden=!nested;
     const prior=benchInspectTrail.at(-1)||rootId;
     back.textContent="‹ กลับไป "+(personalItems[prior]?.name||"สูตรก่อนหน้า");
-    back.onclick=()=>{benchInspectItem=benchInspectTrail.pop()||null;if(benchInspectItem===rootId)benchInspectItem=null;benchUsesPage=0;renderCraftingPage();$(benchInspectItem?"benchInspectTitle":"craftRecipePopupTitle").focus?.({preventScroll:true});};
-    home.onclick=()=>{benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;renderCraftingPage();$("craftRecipePopupTitle").focus?.({preventScroll:true});};
+    back.onclick=()=>{
+      benchInspectItem=benchInspectTrail.pop()||null;
+      if(benchInspectItem===rootId)benchInspectItem=null;
+      benchUsesPage=0;$("benchUsesDetails").open=false;renderCraftingPage();focusBenchRecipe();
+    };
+    home.onclick=()=>{
+      benchInspectItem=null;benchInspectTrail=[];benchUsesPage=0;
+      $("benchUsesDetails").open=false;renderCraftingPage();focusBenchRecipe();
+    };
     const edges=benchRecipeEdges(),from=edges.filter(edge=>edge.output===id),uses=edges.filter(edge=>edge.inputs.some(part=>part.item===id));
     function renderRows(hostId,rows,empty){
       const host=$(hostId);host.replaceChildren();
@@ -290,13 +322,6 @@
     $("benchUsesPrev").disabled=benchUsesPage===0;$("benchUsesNext").disabled=benchUsesPage>=pages-1;
     $("benchUsesPrev").onclick=()=>{benchUsesPage=Math.max(0,benchUsesPage-1);renderCraftingPage();};
     $("benchUsesNext").onclick=()=>{benchUsesPage++;renderCraftingPage();};
-    const choose=$("benchInspectChoose");choose.hidden=!nested||!def?.recipe;
-    choose.textContent="เปิดสูตรนี้เพื่อสร้าง";
-    choose.onclick=()=>{
-      if(!personalItems[id]?.recipe)return;
-      benchTrail.push({group:$("benchGroup").value,level:$("benchLevel").value,id:rootId,position:craftPagePosition});
-      selectBenchRecipe(def.station==="kiln"?"kiln":"all",String(def.level||1),id);
-    };
   }
   function benchAction(def){return def?.station!=="kiln"?"คราฟต์":def.family==="mat_charcoal"?"เผาถ่าน":"หลอมเหล็ก";}
   function bagKilnRecipe(id){
@@ -312,13 +337,16 @@
     craftPagePosition=position;
     craftRecipeTarget={group,level,id};
     renderCraftingPage();
-    openCraftRecipePopup();
   }
   function applyBenchRecipe(target,slots){
     $("benchGroup").value=target.group;renderWorkbench(slots);
     $("benchLevel").value=target.level;renderWorkbench(slots);
     $("benchRecipe").value=target.id;
-    craftRecipePage=Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===target.id)/6));renderWorkbench(slots);
+    craftRecipePage=Math.max(0,Math.floor([...$("benchRecipe").options].findIndex(o=>o.value===target.id)/6));
+    renderWorkbench(slots);
+    if($("benchRecipe").value===target.id && personalItems[target.inspectItem]){
+      benchInspectItem=target.inspectItem;benchInspectTrail=target.inspectTrail;benchUsesPage=target.usesPage;
+    }
   }
   function renderWorkbench(slots) {
     const panel=$("personalBench"), select=$("benchRecipe"), lv=$("benchLevel"), group=$("benchGroup");
@@ -378,17 +406,9 @@
     supply.hidden=missing.length<2;
     const needed=missing.find(r=>r.item===supply.value);
     bindItemHuntButton($("benchTrackSupply"),needed?.item,needed?needed.qty*multiplier:undefined);
-    const ingredient=def?.recipe.find(r=>personalItems[r.item]?.station==="kiln"),source=$("benchIngredient");
-    source.hidden=!ingredient;
-    if(ingredient){
-      source.textContent="ดูสูตร "+personalItems[ingredient.item].name;
-      source.onclick=()=>{
-        benchTrail.push({group:group.value,level:lv.value,id:select.value,position:craftPagePosition});
-        selectBenchRecipe("kiln",String(personalItems[ingredient.item].level),ingredient.item);
-      };
-    }
-    const previous=benchTrail[benchTrail.length-1],back=$("benchBack");back.hidden=!previous;
-    if(previous)back.textContent="กลับไปสูตร "+personalItems[previous.id].name;
+    const previous=benchTrail.at(-1),back=$("benchBack");
+    back.hidden=!previous || Boolean(benchInspectItem);
+    if(previous)back.textContent="‹ กลับไป "+(personalItems[previous.inspectItem || previous.id]?.name || "สูตรก่อนหน้า");
     button.textContent=benchAction(def);
     $("benchOutput").textContent=def?.name||"เลือกสูตรสร้างของ";renderItemTile("benchOutputItem",def?select.value:null);
     $("benchOwned").textContent="";$("benchCost").textContent="…";
