@@ -11,6 +11,7 @@
 <body>
   <!-- Shared seals for the field HUD and character sheet. -->
   <svg class="seal-library" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+    <defs><g id="hudPortraitFigure"><path d="M8 47V37c0-8 7-13 16-13s16 5 16 13v10" fill="#36594c"/><path d="m17 26 7 13 7-13-7 3Z" fill="#e8ba74"/><path d="M15 13c0-8 18-8 18 0v6c0 7-5 12-9 12s-9-5-9-12Z" fill="#ce9d71"/><path d="M13 18V12C13 3 34 2 35 13v7l-5-8-10 3-3 6Z" fill="#242421"/><path d="m12 14 1-5 20-1 2 5-11-2Z" fill="#bd963f"/><path d="m24 8 2 4-2 3-2-3Z" fill="#ffe6a1"/><path d="M19 20h2m6 0h2m-8 6h6" stroke="#563c30" stroke-width="1.5" stroke-linecap="round"/><path d="m10 37 9-5 5 9 5-9 9 5M24 41v7" fill="none" stroke="#b49450" stroke-width="2"/></g></defs>
     <symbol id="seal-hp" viewBox="0 0 24 24"><path d="M12 21S2.5 15 2.5 8.6C2.5 3.7 8.4 2.4 12 7c3.6-4.6 9.5-3.3 9.5 1.6C21.5 15 12 21 12 21Z"/><path d="M5 12h4l1.5-3 3 6 1.5-3h4"/></symbol>
     <symbol id="seal-stamina" viewBox="0 0 24 24"><path d="m14.7 2-12 12h7.4L9.3 22l12-13h-7.4Z"/></symbol>
     <symbol id="seal-xp" viewBox="0 0 24 24"><path d="m12 2 7.4 10L12 22 4.6 12Z"/><path d="m8 12 4-5 4 5-4 5Z"/></symbol>
@@ -40,7 +41,11 @@
         <div class="brand-row"><div class="brand">MONTRA <small>มนตรา</small></div><span id="modeBadge" class="badge">DEMO</span></div>
         <div class="profile-card">
           <button id="characterProfile" class="profile-trigger" type="button" title="ข้อมูลตัวละคร" aria-label="ข้อมูลตัวละคร" aria-haspopup="dialog" aria-controls="drawer">
-            <span class="portrait info-medallion" id="classGlyph" aria-hidden="true"><svg class="portrait-figure" viewBox="0 0 48 48"><defs><g id="hudPortraitFigure"><path d="M8 47V37c0-8 7-13 16-13s16 5 16 13v10" fill="#36594c"/><path d="m17 26 7 13 7-13-7 3Z" fill="#e8ba74"/><path d="M15 13c0-8 18-8 18 0v6c0 7-5 12-9 12s-9-5-9-12Z" fill="#ce9d71"/><path d="M13 18V12C13 3 34 2 35 13v7l-5-8-10 3-3 6Z" fill="#242421"/><path d="m12 14 1-5 20-1 2 5-11-2Z" fill="#bd963f"/><path d="m24 8 2 4-2 3-2-3Z" fill="#ffe6a1"/><path d="M19 20h2m6 0h2m-8 6h6" stroke="#563c30" stroke-width="1.5" stroke-linecap="round"/><path d="m10 37 9-5 5 9 5-9 9 5M24 41v7" fill="none" stroke="#b49450" stroke-width="2"/></g></defs><use href="#hudPortraitFigure"></use></svg><svg class="info-seal portrait-class"><use id="hudClassSeal" href="#seal-status"></use></svg><b id="levelBadge">1</b></span>
+            <span class="portrait info-medallion" id="classGlyph" aria-hidden="true">
+              <img class="portrait-figure" src="./assets/ui/info/montra-hud-portrait.webp" alt="" width="192" height="192" draggable="false">
+              <svg class="info-seal portrait-class"><use id="hudClassSeal" href="#seal-status"></use></svg>
+              <b id="levelBadge">1</b>
+            </span>
           </button>
           <div class="character-info"><strong id="characterName">นที</strong><span id="characterClass" class="character-class">นักผจญภัย</span></div>
         </div>
