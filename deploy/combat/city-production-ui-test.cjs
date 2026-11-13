@@ -28,8 +28,10 @@ function node(tag = "div") {
     focus() { this.focused = true; },
     scrollIntoView() { this.scrolled = true; },
     querySelectorAll(selector) {
-      const key=selector==="[data-contract-deadline]"?"contractDeadline":null;
-      return this.children.flatMap(child=>[...(key && child.dataset[key]?[child]:[]),...child.querySelectorAll(selector)]);
+      const key={"[data-contract-deadline]":"contractDeadline","[data-market-quantity]":"marketQuantity",
+        "[data-city-market-filter]":"cityMarketFilter","[data-city-market-site]":"cityMarketSite"}[selector];
+      const matches=child=>selector==="details[id]"?child.tag==="details" && child.id:key && child.dataset[key];
+      return this.children.flatMap(child=>[...(matches(child)?[child]:[]),...child.querySelectorAll(selector)]);
     },
     querySelector(tag) { return this.children.find(child=>child.tag===tag) || this.children.map(child=>child.querySelector(tag)).find(Boolean); },
     setAttribute(key,value) { (this.attributes ||= {})[key]=value; },
@@ -488,12 +490,13 @@ test("the neutral board uses its own quote, submits the selected bag slot, and p
   const listed=f.wire.at(-1).payload;
   assert.deepEqual(listed,{requestId:listed.requestId,action:"neutral_market_list",epoch:0,slot:2,amount:3,unitPrice:14});
   f.ctx.cityReceiveResult(listed);
+  f.ctx.cityReceiveMarkets({...state,serverNow:state.serverNow+1});
   f.submit("ยืนยันซื้อแร่",2);
   const bought=f.wire.at(-1).payload;
   assert.deepEqual(bought,{requestId:bought.requestId,action:"neutral_market_buy",epoch:0,amount:2,total:26});
   f.ctx.cityReceiveResult(bought);
   const retired={...market,epoch:null,enabled:false,prices:[],offers:[{id:"offer",state:"retired",remaining:2,unitPrice:14}]};
-  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralMarket:retired});
+  f.ctx.cityReceiveMarkets({...state,serverNow:state.serverNow+2,atMarket:null,neutralMarket:retired});
   assert.equal(f.button("ฝากแร่ขึ้นขาย"),undefined);
   f.button("รับแร่คืน").onclick();
   assert.equal(f.wire.at(-1).payload.action,"neutral_market_withdraw");
@@ -633,11 +636,12 @@ test("neutral return orders show wallet escrow, accept a quoted sale and support
   const bid=f.wire.at(-1).payload;
   assert.deepEqual(bid,{requestId:bid.requestId,action:"neutral_return_open",epoch:0,amount:2,unitPrice:40});
   f.ctx.cityReceiveResult({...bid,held:80});
+  f.ctx.cityReceiveMarkets({...state,serverNow:state.serverNow+1});
   f.submit("ยืนยันขายแร่",2);
   const sell=f.wire.at(-1).payload;
   assert.deepEqual(sell,{requestId:sell.requestId,action:"neutral_return_sell",epoch:0,amount:2,total:85});
   f.ctx.cityReceiveResult({...sell,total:85});
-  f.ctx.cityReceiveMarkets({...state,atMarket:null,neutralReturnMarket:{...reverse,epoch:null,enabled:false,prices:[],
+  f.ctx.cityReceiveMarkets({...state,serverNow:state.serverNow+2,atMarket:null,neutralReturnMarket:{...reverse,epoch:null,enabled:false,prices:[],
     orders:[{id:"old-order",state:"cancelled",unitPrice:40,pending:2,remaining:1,held:0}]}});
   assert.equal(f.button("เปิดใบสั่งซื้อที่สามลาน"),undefined);
   assert.equal(f.button("ยกเลิกใบสั่งซื้อ"),undefined);
@@ -684,6 +688,52 @@ test("a selected city's production page waits for matching data and keeps the sa
   assert(f.button("ดูเส้นทาง"));
   f.nodes.cityBack.onclick();
   assert.equal(returned,2);
+});
+
+test("city market filters preserve the current quote input and wait for a fresh server snapshot", () => {
+  const f=fixture({marketSupported:true}),river="sam_lan_estuary",moon="moon_pass";
+  f.ctx.openCityMarket();
+  const offer={site:river,epoch:1,status:"open",prices:[12,14]};
+  const bid={site:moon,epoch:2,status:"paused",prices:[]};
+  const state={serverNow:1_000_000,history:[],atSite:river,atMarket:river,wallet:100,walletSpace:100,
+    itemCount:0,bagSpace:6,markets:[offer,bid]};
+  f.ctx.cityReceiveMarkets(state);
+  const body=f.nodes.cityProductionContent;
+  const tabs=()=>body.querySelectorAll("[data-city-market-filter]");
+  const panels=()=>body.querySelectorAll("[data-city-market-site]");
+  assert.equal(tabs().find(tab=>tab.dataset.cityMarketFilter===river).attributes["aria-pressed"],"true");
+  assert.equal(panels().find(city=>city.dataset.cityMarketSite===moon).hidden,true);
+  tabs().find(tab=>tab.dataset.cityMarketFilter==="all").onclick();
+  assert.ok(panels().every(city=>!city.hidden));
+  const text=node=>[node.textContent,...node.children.map(text)].join(" ");
+  assert.match(text(panels().find(city=>city.dataset.cityMarketSite===moon)),/ตลาดปิด/);
+  assert.ok(f.button("ดูเส้นทาง"));
+  const quantity=()=>body.querySelectorAll("[data-market-quantity]")[0];
+  quantity().value="2";quantity().oninput();
+  const oldForm=quantity().parentElement.parentElement;
+  f.ctx.document.activeElement=quantity();
+  f.ctx.cityReceiveMarkets({...state,serverNow:1_000_001,markets:[{...offer,prices:[13,15]},bid]});
+  assert.equal(body.dataset.marketFilter,"all");
+  assert.equal(quantity().value,"2");
+  assert.equal(quantity().focused,true);
+  assert.match(text(body),/จ่ายทั้งหมด 28 ทอง/);
+  oldForm.onsubmit({preventDefault(){}});
+  assert.equal(f.wire.at(-1).command,"get_city_markets");
+  f.submit("ยืนยันซื้อแร่",2);
+  const sent=f.wire.at(-1).payload;
+  assert.equal(sent.total,28);
+  f.ctx.cityReceiveError({requestId:sent.requestId,reason:"city_market_price_changed"});
+  assert.equal(f.button("ยืนยันซื้อแร่").disabled,true);
+  f.ctx.cityReceiveMarkets(state);
+  assert.equal(f.button("ยืนยันซื้อแร่").disabled,true);
+  f.ctx.cityReceiveMarkets({...state,serverNow:1_000_002,markets:[{...offer,prices:[14,17]},bid]});
+  assert.equal(f.button("ยืนยันซื้อแร่").disabled,false);
+  assert.equal(quantity().value,"2");
+  assert.match(text(body),/จ่ายทั้งหมด 31 ทอง/);
+  f.submit("ยืนยันซื้อแร่",2);
+  assert.equal(f.wire.at(-1).payload.total,31);
+  f.ctx.cityReceiveResult(f.wire.at(-1).payload);
+  assert.equal(f.button("ยืนยันซื้อแร่").disabled,true);
 });
 
 test("a guild market shortcut puts the selected market first and retains both back paths", () => {

@@ -160,7 +160,59 @@
 .atlas-summary details {margin-top:4px}
 .atlas-summary summary {cursor:pointer;color:#ddc7a0;font-size:12px}
 .atlas-summary .atlas-sail {width:auto;min-height:44px;margin:5px 0;padding:6px 12px}
-.city-trade-comparison summary {cursor:pointer;min-height:44px}
+.city-market {display:grid;gap:9px;--city-gold:#f4d59f;--city-edge:#806b47}
+.city-market .city-market-overview {
+  display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;
+  padding:6px 10px;border:1px solid var(--city-edge);border-radius:9px;background:#182a24;
+}
+.city-market-overview strong {color:var(--city-gold);--gx-icon-size:22px;font-variant-numeric:tabular-nums}
+.city-market-overview time {color:#d5c7ab;font-size:12px}
+.city-market-tabs {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.city-market-tabs button {
+  min-height:44px;padding:5px;border:1px solid #817154;border-radius:7px;
+  background:#213530;color:#f3e7cf;font-weight:650;
+}
+.city-market-tabs button[aria-pressed=true] {background:#674b2b;border-color:#deb477;color:#fff2d2}
+.city-market-city {
+  display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:7px;
+  padding:9px;border:1px solid var(--city-edge);border-radius:10px;background:#14241f;
+}
+.city-market-city[hidden] {display:none}
+.city-market-city > h3 {margin:0;line-height:1.25;--gx-icon-size:26px}
+.city-market-city > .note {margin:0;color:#a9ddbf;text-align:right}
+.city-market .city-market-route {width:auto;min-height:44px;margin:0;padding:5px 9px;font-size:12px}
+.city-market-row {
+  grid-column:1/-1;min-width:0;padding:8px 9px;border:1px solid #72837460;
+  border-radius:8px;background:#20332b;
+}
+.city-market-row-head,.city-market-quote {display:flex;align-items:center;justify-content:space-between;gap:5px 8px;flex-wrap:wrap}
+.city-market-row-head {font-weight:700;color:#f2e8d3}
+.city-market-side {font-size:11px;padding:1px 6px;border-radius:4px;background:#493c2a;color:#fff0c9;white-space:nowrap}
+.city-market-side[data-side="sell"] {background:#254738;color:#d9f5e3}
+.city-market-quote {margin-top:4px;color:#e2dac1}
+.city-market-quote strong,.city-market-total {color:var(--city-gold);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.city-market-row .guild-actions {align-items:flex-end;gap:7px}
+.city-market-row .guild-actions .field {margin:2px 0 0}
+.city-market-row .guild-actions input {padding:7px 8px}
+.city-market-row .guild-actions button {margin:0;min-height:44px}
+.city-market .city-market-details {
+  padding:0 9px;border:1px solid var(--city-edge);border-radius:8px;background:#192a25;
+}
+.city-market .city-market-details[open] {padding-bottom:9px}
+.city-market .city-market-details > summary {
+  display:flex;align-items:center;min-height:44px;gap:6px;cursor:pointer;
+  color:#f5dfb7;font-weight:650;--gx-icon-size:23px;
+}
+.city-market-details > summary::after {content:"+";margin-left:auto;color:#dfbd85}
+.city-market-details[open] > summary::after {content:"−"}
+.city-market-row .city-market-details {margin-top:6px}
+.city-market .city-trade-direction .field {margin:4px 0}
+.city-market .city-trade-direction input {max-width:10rem;padding:6px 8px}
+@media (min-width:520px) {
+  .city-market-city {grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  .city-market-city > .city-market-route {justify-self:end}
+  .city-market-row {grid-column:auto;align-self:stretch}
+}
 .city-trade-direction {border-top:1px solid #aa8f5e66;margin-top:8px;padding-top:8px}
 .city-trade-direction h4 {color:#f5d8a3;margin:0}
 @media(max-width:380px){
