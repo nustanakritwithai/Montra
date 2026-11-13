@@ -487,7 +487,6 @@
       if(view==="wish")requestMarketFavorites();
       if(tab)switchTab(tab);else renderEconomy();
     };
-    $("wmClose").onclick=()=>closeDrawer();
     $("wmCategoryToggle").onclick=()=>{const list=$("wmCategoryList");list.hidden=!list.hidden;$("wmCategoryToggle").setAttribute("aria-expanded",String(!list.hidden));};
     for(const [key,label] of Object.entries(wmCategoryNames)){const b=$("wmCat-"+key);if(b)b.onclick=()=>{$("marketCategory").value=key;marketFilters.fixed={...marketFilters.fixed,category:key};wmPage=0;requestMarketPage(true);renderEconomy();};}
     $("wmFilterForm").onsubmit=event=>{
@@ -525,7 +524,7 @@
   function worldMarketShell(){
     const soon=' <em class="wm-soon-tag">'+WM_SOON+'</em>';
     return `<div class="world-market" id="worldMarket" data-view="search">
-<header class="wm-header"><div class="wm-coins" title="ทองในกระเป๋า"><span aria-hidden="true">◉</span> <strong id="wmCoins">—</strong></div><h2>ตลาดกลาง</h2><button id="wmClose" class="wm-close" type="button" aria-label="ปิดตลาด">✕</button></header>
+<div class="wm-coins" title="ทองในกระเป๋า" aria-hidden="true">◉ <strong id="wmCoins">—</strong></div><p id="economyStatus" class="sr-only" role="status"></p>
 <nav class="wm-tabs" aria-label="ตลาดกลาง">${WM_TABS.map(([v,label])=>`<button id="wmTab-${v}" type="button" title="${label}">${label}</button>`).join("")}<button id="wmCityPurchase" type="button" hidden>ใบสั่งซื้อกิลด์</button><button id="wmCityMarket" type="button" hidden>ตลาดประจำเมือง</button><button id="wmCityMission" type="button" hidden>ภารกิจเมือง</button></nav>
 <section id="wmMarketRecords" class="wm-details" aria-live="polite" hidden></section>
 <div id="wmSoon" class="wm-soon" hidden><h3>${WM_SOON}</h3><p>ราคาตลาดย้อนหลังและรายการที่อยากได้ยังไม่มีบนเซิร์ฟเวอร์</p></div>
@@ -564,8 +563,7 @@ ${marketAdvancedFields("wm")}
   function openEconomy() {
     tradeUnread=false; updateTradeBadge(); if (activeTrade) economyTab="trade";
     wmConfirm=false;wmShowDetails=false;
-    openDrawer("economy","ตลาดและการค้า",worldMarketShell()+`<div class="market-catalog">
- <header class="market-banner"><div><small>ตลาด MONTRA</small><h3>ตลาดกลาง</h3><p>เลือกไอเท็มจากร้านผู้เล่น</p></div><div class="economy-balance" id="economyStatus" role="status"></div></header>
+    openDrawer("economy","ตลาดกลาง",worldMarketShell()+`<div class="market-catalog">
  <nav class="market-tabs" aria-label="เลือกประเภทตลาด"><button id="economyMarketTab" type="button" aria-controls="economyMarketPanel">ซื้อทันที</button><button id="economyAuctionTab" type="button" aria-controls="economyAuctionPanel" disabled>ประมูล</button><button id="economyShopTab" type="button" aria-controls="economyShopPanel">ร้านของฉัน</button></nav>
  <div class="market-utilities" role="group" aria-label="บริการตลาด"><button id="economySupplyTab" type="button" aria-controls="economySupplyPanel" disabled>สินค้าสำรอง</button><button id="economyTradeTab" type="button" aria-controls="economyTradePanel">เทรดใกล้ตัว</button><button id="economyCityPurchase" type="button" hidden>ใบสั่งซื้อกิลด์</button><button id="economyCityMarket" type="button" hidden>ตลาดประจำเมือง</button><button id="economyCityMission" type="button" hidden>ภารกิจเมือง</button></div>
  <p id="marketActionStatus" class="market-action-status" role="status" hidden></p>

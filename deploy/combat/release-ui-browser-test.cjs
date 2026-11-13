@@ -37,7 +37,8 @@ function html(){return `<!doctype html><html><head><meta charset="utf-8"><meta n
 async function marketCases(page,check){
  await page.evaluate(()=>{f.page([f.row(1),f.row(2,'weapon')]);f.callbacks.market_overview({credit:0,auctions:[],supply:{items:[{item:'wood',price:10,remaining:3}]}});});
  await check('market-search');
- assert.equal(await page.locator('.wm-header h2').textContent(),'ตลาดกลาง');
+ assert.equal(await page.locator('#drawerTitle').textContent(),'ตลาดกลาง');
+ assert.equal(await page.locator('#drawer h2:visible').count(),1);
  assert.deepEqual(await page.locator('.wm-tabs button:visible').allTextContents(),['ค้นหา','ราคาตลาด','รายการที่อยากได้','ขาย','รายการของฉัน','ประมูล','กฎตลาด','เทรดใกล้ตัว','ร้านค้าสำรอง']);
  assert.equal(await page.locator('#wmCityPurchase').isVisible(),false);
  assert.equal(await page.locator('#wmBuy').textContent(),'ซื้อ');
@@ -69,7 +70,7 @@ async function marketCases(page,check){
  await page.locator('#wmBuy').click();
  assert.match(await page.locator('#wmPick').textContent(),/ยืนยันซื้อ/);
  assert.equal(await page.evaluate(()=>f.wire.filter(x=>x.command==='market_buy').length),0);
- await page.locator('#wmClose').click();assert.equal(await page.locator('#drawer').isVisible(),false);
+ await page.locator('#drawerClose').click();assert.equal(await page.locator('#drawer').isVisible(),false);
  await page.locator('#fixtureOpen').click();
  assert.doesNotMatch(await page.locator('#wmPick').textContent(),/ยืนยันซื้อ/);
  await check('market-reopen-clears-confirmation');
@@ -85,7 +86,7 @@ async function marketCases(page,check){
   if(view==='trade')assert.equal(await page.locator('#tradeInvite').isEnabled(),true);
   if(view==='supply')assert.equal(await page.locator('#starterSupplyRows .market-product-action').isVisible(),true);
   await check('market-'+view);
-  await page.locator('#wmClose').click();await page.locator('#fixtureOpen').click();
+  await page.locator('#drawerClose').click();await page.locator('#fixtureOpen').click();
   assert.equal(await page.locator('#worldMarket').getAttribute('data-view'),view);
   await check('market-reopen-'+view);
  }

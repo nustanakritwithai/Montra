@@ -34,7 +34,7 @@ function fixture({central=true}={}){
     updateTradeBadge(){},renderBag(){},toast:message=>toasts.push(message),fishingPending:false,itemUsePending:false,
     setTimeout:fn=>{timers.set(++seq,fn);return seq;},clearTimeout:id=>timers.delete(id),
     window:{crypto:{getRandomValues(bytes){bytes.fill(++seq);}}},
-    openDrawer(name,title,html){ctx.drawerActive=name;ctx.html=html;elements.clear();
+    openDrawer(name,title,html){ctx.drawerActive=name;ctx.drawerTitle=title;ctx.html=html;elements.clear();
       for(const m of html.matchAll(/<([a-z][a-z0-9]*)\b([^>]*\bid="([^"]+)"[^>]*)>/g)){const el=node(m[1]);el.hidden=/\bhidden\b/.test(m[2]);el.disabled=/\bdisabled\b/.test(m[2]);const v=m[2].match(/\bvalue="([^"]*)"/);if(v)el.value=v[1];elements.set(m[3],el);}
       for(const m of html.matchAll(/<select\b[^>]*id="([^"]+)"[^>]*>([\s\S]*?)<\/select>/g))for(const o of m[2].matchAll(/<option value="([^"]*)">([^<]*)<\/option>/g)){const option=node('option');option.value=o[1];option.textContent=o[2];$(m[1]).append(option);}
     },
@@ -198,7 +198,8 @@ test('timeout recovery, reconnect reset and old room replies never replay purcha
 });
 
 test('World Market shell: tabs, row table, client filters, sort, two-step Buy and coming-soon views',()=>{
-  const f=fixture();assert.match(f.ctx.html,/<h2>ตลาดกลาง<\/h2>/);
+  const f=fixture();assert.equal(f.ctx.drawerTitle,'ตลาดกลาง');
+  assert.doesNotMatch(f.ctx.html,/<header\b|wmClose|<h[23]>ตลาดกลาง/);
   for(const v of ['search','price','wish','sell','orders','auction','rules'])assert(f.$('wmTab-'+v),'tab '+v);
   assert.equal(f.$('wmTab-search').getAttribute('aria-pressed'),'true');assert.equal(f.$('wmCoins').textContent,'1,000');
   const a={...f.row(1,'weapon'),price:900},b={...f.row(2),price:50},c={...f.row(3,'stone'),price:300};

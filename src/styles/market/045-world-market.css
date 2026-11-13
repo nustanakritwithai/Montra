@@ -1,15 +1,12 @@
 /* World Market shell over the existing market catalog. */
 #drawer:has(.world-market){width:min(1100px,96vw);max-width:96vw;left:50%;right:auto;transform:translateX(-50%);background:#0f1a33;border:2px solid #c9a24a;box-shadow:0 0 0 1px #5a4317,0 18px 50px rgba(0,0,0,.6)}
 .world-market{color:#e7ecf7;font-size:13px}
-.wm-header{display:flex;align-items:center;gap:12px;padding:6px 4px 10px;border-bottom:1px solid #c9a24a66}
-.wm-header h2{flex:1;margin:0;text-align:center;color:#f2d27a;letter-spacing:.06em;font-size:20px}
-.wm-coins{color:#f2d27a;font-weight:700;min-width:90px}
-.wm-close{background:transparent;border:1px solid #c9a24a;color:#f2d27a;border-radius:6px;width:32px;height:32px;cursor:pointer}
+.wm-coins{color:#f2d27a;font-weight:700;text-align:right;font-variant-numeric:tabular-nums}
 .wm-tabs{display:flex;flex-wrap:wrap;gap:4px;margin:10px 0}
 .wm-tabs button{flex:1 1 auto;background:#16264a;color:#b9c6e4;border:1px solid #2d4373;border-radius:6px 6px 0 0;padding:8px 10px;cursor:pointer;font-weight:600}
 .wm-tabs button[aria-pressed=true]{background:#f2c94c;color:#2a1d00;border-color:#f2c94c}
 .world-market[data-view=search] .market-catalog,.world-market[data-view=price] .market-catalog,.world-market[data-view=wish] .market-catalog,.world-market[data-view=rules] .market-catalog{display:none}
-.world-market .market-banner,.world-market .market-tabs{display:none}
+.world-market .market-tabs{display:none}
 .wm-body{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px}
 .wm-filters form{display:flex;flex-direction:column;gap:8px;background:#122042;border:1px solid #2d4373;border-radius:8px;padding:10px}
 .wm-filters label{display:flex;flex-direction:column;gap:3px;color:#b9c6e4}
