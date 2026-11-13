@@ -218,12 +218,13 @@
     popup.showModal();$("forgeTargetButton").setAttribute("aria-expanded","true");renderForgePicker();
     (popup.querySelector('[aria-pressed="true"]')||$("forgePickerClose")).focus({preventScroll:true});
   }
-  function openForgeBag(){
+  function openForgeBag(showDetails=true){
     const target=forgePageTarget;
     openBag();
     if(typeof target==="string")inspectingGear=target;
     else if(Number.isInteger(target)){inspectingGear=null;selectedBagSlot=target;}
-    renderBag();triggerBagPanelPop();
+    if(showDetails)openItemDetailModal(selectedBagSlot);
+    else renderBag();
   }
   let craftBatchMax=0, craftQueueMax=0, craftQueueState=null, craftQueueRequestedAt=-Infinity;
   let craftQueueTimer=null, craftRetry=null;
@@ -418,8 +419,8 @@
       '<section id="forgeEnhanceSection"><h3>ขั้นตีบวก</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวก"></progress><p class="note forge-risk" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><div id="forgeDonorItem" class="item-preview"></div><button id="forgeCardHelp" class="secondary" type="button" hidden>เปิดกระเป๋าเพื่อถอดการ์ดก่อน</button><button class="primary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button></section>'+
       '<section id="forgeRerollSection"><h3>สุ่มออปชัน</h3><p class="note" id="forgeAffixInfo"></p><p class="note" id="forgeRerollSupply"></p><p class="note" id="forgeRerollPity"></p><p class="note">ไม่เปลี่ยนรุ่น ความหายาก หรือขั้นตีบวกของอุปกรณ์</p><button class="primary" type="button" id="forgeReroll"></button></section><p class="note" id="forgeActionStatus" role="status"></p></section>'+
       '<details id="forgeStock" class="forge-card" hidden><summary>คลังช่าง · ของรุ่นเดียวกัน</summary><div id="forgeStockItem" class="item-preview"></div><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></details></div>');
-    $("forgeHome").onclick=openSmith;$("forgeBag").onclick=openForgeBag;
-    $("forgeCardHelp").onclick=()=>{openForgeBag();$("cardSocketPanel")?.scrollIntoView({block:"center"});};
+    $("forgeHome").onclick=openSmith;$("forgeBag").onclick=()=>openForgeBag();
+    $("forgeCardHelp").onclick=()=>{openForgeBag(false);$("cardSocketPanel")?.scrollIntoView({block:"center"});};
     for(const [id,value] of [["forgeTabEnhance","enhance"],["forgeTabReroll","reroll"]]){
       $(id).setAttribute("aria-pressed",String(forgePageAction===value));
       $(id).onclick=()=>openForgePage(value,forgePageTarget);
@@ -510,14 +511,32 @@
       '</div>' +
       bagMultiPageSliderHtml() +
       '<div class="bag-dots" id="bagDots"><span class="dot on"></span><span class="dot"></span><span class="dot"></span></div>' +
-      '<p class="note" style="text-align:center;font-size:12px;margin:10px 0 0;color:#c7b28a;">แตะที่ช่องไอเท็มเพื่อดูคุณสมบัติสเตตัสและใช้งาน</p>' +
+      '<p class="note" style="text-align:center;font-size:12px;margin:10px 0 0;color:#c7b28a;">แตะไอเท็มเพื่อดูรายละเอียด</p>' +
       '<section class="bag-detail-card" id="bagQuickDetail" aria-label="รายละเอียดไอเท็มที่เลือก">'+
         '<div class="item-preview"><div id="bagQuickItem" class="item-slot-host"></div><div><strong id="bagQuickName"></strong><p class="note" id="bagQuickSub"></p></div></div>'+
-        '<div class="item-stats-grid" id="bagQuickStats"></div><div class="item-diff-card" id="bagQuickDiff" hidden></div><p class="note" id="bagQuickDescription"></p>'+
+        '<div class="item-stats-grid" id="bagQuickStats"></div><p class="note" id="bagQuickDescription"></p>'+
         '<div class="item-meta-row"><span class="item-meta-tag" id="bagQuickLevel" hidden></span><span class="item-meta-tag" id="bagQuickBound" hidden></span><span class="item-meta-tag item-price-tag" id="bagQuickPrice" hidden></span></div>'+
-        '<div class="bag-quick-actions"><div class="wear-sides" id="bagQuickSides" role="group" aria-label="เลือกข้างที่สวม" hidden><button class="secondary" type="button"></button><button class="secondary" type="button"></button></div>'+
-        '<button class="primary" type="button" id="bagQuickUse"></button><button class="secondary" type="button" id="bagQuickForge" hidden></button><button class="secondary" type="button" id="bagQuickCraft"></button>'+
-        '<button class="secondary" type="button" id="bagQuickTrack" hidden></button><button class="secondary" type="button" id="bagQuickRefine" hidden></button><button class="secondary" type="button" id="bagQuickKiln" hidden></button><button class="secondary" type="button" id="bagQuickSell" hidden></button><button class="secondary" type="button" id="bagQuickSalvage" hidden></button></div></section>'+
+      '</section>'+
+      '<section aria-labelledby="bagManageTitle"><h3 id="bagManageTitle">จัดการไอเท็มที่เลือก</h3>'+
+        '<div class="item-diff-card" id="bagQuickDiff" hidden></div>'+
+        '<div class="bag-quick-actions">'+
+          '<div class="wear-sides" id="wearSidePicker" role="group" aria-label="เลือกข้างที่สวม" hidden><button class="secondary" type="button"></button><button class="secondary" type="button"></button></div>'+
+          '<button class="primary" type="button" id="useBagItem"></button>'+
+          '<button class="secondary" type="button" id="bagTrack" hidden></button>'+
+          '<button class="secondary" type="button" id="refineResource" hidden></button>'+
+          '<button class="secondary" type="button" id="bagKiln" hidden></button>'+
+          '<button class="secondary" type="button" id="sellBagMaterial" hidden></button>'+
+          '<button class="secondary" type="button" id="salvageGear" hidden></button>'+
+        '</div>'+
+        '<div id="bagReturnItem" class="item-preview" hidden></div>'+
+        '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><div id="socketItemPreview" class="item-preview"></div><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>'+
+      '</section>'+
+      '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary>'+
+        '<select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p>'+
+        '<select id="guideSlot" aria-label="ตำแหน่งแนะนำ"></select><div id="guideItems" class="item-slots"><div id="guideTargetItem" class="item-preview"></div><div id="guideCurrentItem" class="item-preview"></div><div id="guideCardItem" class="item-preview"></div><div id="guideNextItem" class="item-preview"></div></div>'+
+        '<p><strong id="guideName"></strong></p><select id="guideCopy" aria-label="เลือกชิ้นที่จะเทียบ" hidden></select><p class="note" id="guideCompare"></p><p class="note" id="guideStats"></p><p class="note" id="guideSource"></p>'+
+        '<button class="secondary" id="guideTrack" type="button" hidden></button><button class="secondary" id="guideTrackCard" type="button" hidden></button><button class="secondary" id="guideOpen" type="button"></button><button class="secondary" id="resumeFieldJourney" type="button" hidden>แสดงเป้าที่ข้ามไว้</button>'+
+      '</details>'+
       '<button class="secondary" id="bagOpenCraft" type="button">สร้างของ · โต๊ะช่าง</button>');
     $("bagOpenCraft").onclick=()=>openCraftingPage();
     bindBagControls();

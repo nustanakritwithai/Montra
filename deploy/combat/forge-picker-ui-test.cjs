@@ -76,7 +76,7 @@ function fixture(){
     itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?5:(ctx.inventoryState?.slots||[]).filter(p=>p?.itemId===id).length+Object.values(ctx.inventoryState?.equipment||{}).filter(v=>v===id).length+(stock?(ctx.inventoryState?.forgeCopies?.[id]||0):0),
     bindItemHuntButton:(button,id)=>{button.hidden=!id;},economyRequestId:()=>`request_${wire.length}`,window:{confirm:message=>{prompts.push(message);return true;}},
     economySend:(command,payload,durable)=>{wire.push({command,payload:plain(payload),durable});if(durable)ctx.economyPending=true;},renderBag:()=>{if(ctx.drawerActive==='forge')ctx.renderForgePage();},
-    openBag:()=>{ctx.openDrawer('bag','กระเป๋า','<div id="cardSocketPanel"></div>');routes.push('bag');},triggerBagPanelPop(){},selectBenchRecipe:(...args)=>routes.push(args),
+    openBag:()=>{ctx.openDrawer('bag','กระเป๋า','<div id="cardSocketPanel"></div>');routes.push('bag');},openItemDetailModal(){},selectBenchRecipe:(...args)=>routes.push(args),
   };
   ctx.room={state:{economyAvailable:true,forgeCatalog:JSON.stringify(config)}};
   vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);

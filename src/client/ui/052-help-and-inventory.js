@@ -160,10 +160,6 @@
     if(!modal || modal.hidden)return;
     if(backdrop){backdrop.hidden=true;backdrop.inert=true;}
     modal.hidden=true;modal.inert=true;ui.drawer.inert=false;
-    const totalSlots=BAG_PAGE_SIZE*BAG_TOTAL_PAGES;
-    for(let i=0;i<totalSlots;i++){
-      const slot=$("bagSlot"+i);if(slot){slot.classList.remove("bag-selected");slot.setAttribute("aria-pressed","false");}
-    }
     if(restore && drawerActive==="bag"){
       const target=itemDetailOpener?.isConnected && itemDetailOpener.getClientRects().length?itemDetailOpener:$("bagSlot"+selectedBagSlot)||$("drawerMenuBack");
       target?.focus({preventScroll:true});
@@ -183,9 +179,6 @@
     return false;
   }
 
-  function triggerBagPanelPop() {
-    openItemDetailModal(selectedBagSlot);
-  }
   function bindBagControls() {
     const isChar = drawerActive === "character";
     if (isChar) {
@@ -216,8 +209,6 @@
           return;
         }
         preferredGearSlot = inspectingGear; confirmBindKey = null; inspectingGear = null;
-        selectedBagSlot = i;
-        renderBag();
         openItemDetailModal(i);
       };
     }
@@ -265,7 +256,9 @@
         preferredGearSlot=button.dataset.position; confirmBindKey=null; renderBag();
       };
     }
-    if ($("gearGuide")) $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=$("guideCopy").onchange=()=>renderGearGuide(currentBagSlots());
+    if ($("gearGuide")) $("gearGuide").ontoggle=$("guideStyle").onchange=$("guideSlot").onchange=$("guideCopy").onchange=()=>{
+      if(drawerActive==="bag")renderGearGuide(currentBagSlots());
+    };
     if ($("refineResource")) $("refineResource").onclick=()=>{
       const id=currentBagSlots()?.[selectedBagSlot]?.itemId;
       if(!inspectingGear && personalItems[id]?.refinesTo)economySend("refine_resource",{expected:id,requestId:economyRequestId()},true);
@@ -281,8 +274,6 @@
       resume.hidden=!notes.skipped?.length && !notes.bossSkipped && !notes.deferredBosses?.length && !notes.savedTraining;
       resume.onclick=()=>{saveJourney({skipped:[],bossSkipped:false,deferredBosses:[],savedTraining:0});resume.hidden=true;closeDrawer();openCurrentQuest();};
     }
-    if ($("bagCraft")) $("bagCraft").onclick=()=>openCraftingPage();
-    if ($("bagForge")) $("bagForge").onclick=()=>openForgePage("enhance",inspectingGear==="mainHand"?currentEquippedWeaponSlot():(inspectingGear||selectedBagSlot));
     if ($("useBagItem")) $("useBagItem").onclick = handleUseBagItem;
     if (economyReady()) economySend("get_economy", {});
   }
@@ -383,19 +374,20 @@
       const item = slots?.[i];
       const meta = bagMeta(item?.itemId);
       const worn = i === equipped;
+      const selected = !!item && !inspectingGear && i === selectedBagSlot;
       const name = meta?.name || (item?.itemId === SHRINE_SHARD ? shardName : item ? "ยาเลือดเล็ก" : "ช่องว่าง");
       const matchesCat = isItemInCategory(item?.itemId, bagCategoryFilter);
       slot.className = "bag-slot";
       slot.classList.toggle("bag-filled", !!item);
       slot.classList.toggle("bag-equipped", worn);
-      slot.classList.toggle("bag-selected", i === selectedBagSlot);
+      slot.classList.toggle("bag-selected", selected);
       slot.classList.toggle("bag-slot-dim", !!item && !matchesCat);
       const art = getItemArtKey(item?.itemId, meta);
       if (item && art) slot.setAttribute("data-item-art", art);
       else slot.removeAttribute?.("data-item-art");
       if (meta?.rarity) slot.setAttribute("data-item-rarity", meta.rarity);
       else slot.removeAttribute?.("data-item-rarity");
-      slot.setAttribute("aria-pressed", String(i === selectedBagSlot));
+      slot.setAttribute("aria-pressed", String(selected));
       slot.setAttribute("aria-label", "ช่อง " + (i + 1) + " " + name + (worn ? " สวมอยู่" : ""));
       slot.querySelector(".bag-symbol").textContent = itemSymbol(item?.itemId);
       slot.querySelector(".bag-quantity").textContent = !item ? "" : worn ? "✓" : item.quantity > 1 ? "×" + item.quantity : "";
@@ -425,8 +417,7 @@
     $("bagItemName").textContent=meta?.name || (chosen?.itemId===SHRINE_SHARD?shardName:chosen?"ยาเลือดเล็ก":inspectingGear?(bodyLabels[inspectingGear]||"อาวุธหลัก")+" · ช่องว่าง":"ช่องว่าง");
     let detail=chosen?"ใช้ฟื้น 30 HP":"ล่ามอนสเตอร์เพื่อหาอุปกรณ์และวัตถุดิบ";
     if(gear){
-      const difference=worn?"กำลังสวม":"เมื่อเปลี่ยน "+gearComparison(chosen,wornGearAt(armor?destination:"mainHand",slots),slots);
-      detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,difference,wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
+      detail=[armor?bodyLabels[destination]:"อาวุธ",meta.bonus,worn?"กำลังสวม":"",wrongClass?"อาวุธของสายอื่น":"",chosen.bound?"ผูกกับตัวละคร":personalItems[chosen.itemId]?"ผูกตัวละครเมื่อสวมครั้งแรก":""].filter(Boolean).join(" · ");
     } else if(meta?.kind==="card")detail=meta.bonus+" เมื่อใส่ในรูของอุปกรณ์ที่สวม · ดรอปจาก"+meta.monster+" ("+meta.chancePct+"%)";
     else if(meta?.kind==="material" && meta.sourceBoss){
       const recipe=Object.values(personalItems).find(i=>i.sourceBoss===meta.sourceBoss && i.forge);
@@ -487,7 +478,7 @@
           }
         }
         if (chosen.forge?.rank > 0) {
-          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="forge">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ตีบวกช่างอาคม</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
+          cards.push('<div class="bag-stat-card"><span class="bag-stat-icon" data-stat-icon="forge">⚒</span><div class="bag-stat-info"><span class="bag-stat-label">ระดับตีบวกปัจจุบัน</span><strong class="bag-stat-val">+' + chosen.forge.rank + ' ขั้น</strong></div></div>');
         }
         if (chosen.socket) {
           const cName = bagMeta(chosen.socket)?.name || chosen.socket;
@@ -519,17 +510,9 @@
       if (price) { $("itemMetaPrice").textContent = "💰 ราคา " + price + " ทอง"; $("itemMetaPrice").hidden = false; }
       else { $("itemMetaPrice").hidden = true; }
     }
-    const diffEl = $("bagPanelDiff");
-    if (diffEl) {
-      if (gear && chosen) {
-        const diff = gearComparison(chosen, wornGearAt(destination, slots), slots);
-        diffEl.textContent = "เมื่อเทียบกับที่สวมอยู่: " + diff;
-        diffEl.hidden = false;
-      } else {
-        diffEl.textContent = "";
-        diffEl.hidden = true;
-      }
-    }
+    const comparison=$("bagQuickDiff");
+    comparison.hidden=!gear || worn;
+    comparison.textContent=comparison.hidden?"":"เมื่อเทียบกับที่สวมอยู่ · "+gearComparison(chosen,wornGearAt(armor?destination:"mainHand",slots),slots);
     const bagGoal=meta?.forge?Math.min(meta.copyLimit??1,itemHuntCount(chosen.itemId)+1):itemHuntCount(chosen?.itemId)+1;
     bindItemHuntButton($("bagTrack"),chosen?.itemId,bagGoal);
     const salvage=$("salvageGear");
@@ -552,7 +535,6 @@
     renderItemPreview("bagReturnItem",!refine.hidden?{itemId:meta.refinesTo,quantity:meta.kind==="catalyst"?2:1}:!salvage.hidden?{itemId:meta.salvage.item,quantity:meta.salvage.quantity}:!kiln.hidden?target:null,!refine.hidden?"ผลลัพธ์แปรรูป":!salvage.hidden?"ผลลัพธ์แยกของ":"สูตรเตาเผา");
     if(!sell.hidden){sell.disabled=economyPending;sell.textContent="ขายวัสดุ 1 ชิ้น · "+meta.sellGold+" ทอง";}
     renderCardSocket(gear?chosen:null,slots);
-    $("bagForge").hidden=!(meta?.kind==="mainHand" || meta?.forge);
     renderGearGuide(slots);
     const use=$("useBagItem");use.disabled=!ready||itemUsePending;
     use.textContent=itemUsePending?"กำลังบันทึก…":!inspectingGear&&chosen && confirmBindKey===selectedBagSlot+":"+gearStamp(chosen)&&gear&&!worn&&!chosen.bound?"ยืนยันผูกและสวม":gear?(worn?"ถอด":"สวม")+(armor?bodyLabels[destination]:"อาวุธ"):heal?(full?(meta?.healMana?"MP เต็ม":"HP เต็ม"):"ใช้ยา"):meta?.kind==="tool"?"ใช้จากกระเป๋าอัตโนมัติ":chosen?"วัตถุดิบ":"ช่องว่าง";
@@ -562,23 +544,11 @@
   function renderBagQuickDetail(chosen,worn){
     if(drawerActive!=="bag" || !$("bagQuickDetail"))return;
     renderItemTile("bagQuickItem",chosen||{}, {equipped:worn});
-    for(const [target,source] of [["Name","bagItemName"],["Sub","bagPanelSub"],["Description","bagItemDescription"],["Diff","bagPanelDiff"],["Level","itemMetaLevel"],["Bound","itemMetaBound"],["Price","itemMetaPrice"]]){
+    for(const [target,source] of [["Name","bagItemName"],["Sub","bagPanelSub"],["Description","bagItemDescription"],["Level","itemMetaLevel"],["Bound","itemMetaBound"],["Price","itemMetaPrice"]]){
       const to=$("bagQuick"+target),from=$(source);if(!to || !from)continue;
       to.textContent=from.textContent;to.hidden=from.hidden;
     }
     $("bagQuickStats").innerHTML=$("bagPanelStats").innerHTML;
-    for(const [target,source] of [["Use","useBagItem"],["Forge","bagForge"],["Craft","bagCraft"],["Track","bagTrack"],["Refine","refineResource"],["Kiln","bagKiln"],["Sell","sellBagMaterial"],["Salvage","salvageGear"]]){
-      const to=$("bagQuick"+target),from=$(source);if(!to || !from)continue;
-      to.textContent=from.textContent;to.hidden=from.hidden;to.disabled=from.disabled;
-      to.onclick=()=>{if(!from.disabled && !from.hidden)from.onclick?.();};
-    }
-    const sides=$("wearSidePicker"),quickSides=$("bagQuickSides");quickSides.hidden=sides.hidden;
-    for(const [i,button] of [...quickSides.children].entries()){
-      const source=sides.children[i];if(!source)continue;
-      button.textContent=source.textContent;button.disabled=source.disabled;
-      button.setAttribute("aria-pressed",source.getAttribute("aria-pressed")||"false");
-      button.onclick=()=>{if(!source.disabled)source.onclick?.();};
-    }
   }
   const gearCoreSkills={
     muay_boran:{pressure:["korat","thasao"],endurance:["chaiya","lopburi"]},

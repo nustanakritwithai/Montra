@@ -85,23 +85,27 @@ function fixture(){
   return {...d,ctx,run,wire,toasts,routes,guidance,player,inventory,items,open,select,modal,snapshot,mutations:()=>wire.filter(e=>e.durable)};
 }
 
-// Static IDs are global once, not recreated in the bag or duplicated in the profile.
-test('global modal owns shared previews, card panel, guide and actions exactly once',()=>{
-  const modal=index.slice(index.indexOf('<div id="itemDetailModal"'),index.indexOf('<div id="equipPopupBackdrop"'));
-  const bag=slice('  function openBag()','  function updateFieldAlerts()');
-  for(const id of ['bagDetailItem','bagItemName','bagItemDescription','bagReturnItem','socketItemPreview','cardSocketPanel','socketCardChoice','cardSocketAction','gearGuide','guideTargetItem','guideCurrentItem','guideCardItem','guideNextItem','bagCraft','bagForge','useBagItem']){
-    assert(modal.includes(`id="${id}"`),id);assert.equal([...(index+source).matchAll(new RegExp(`id="${id}"`,'g'))].length,1,`unique host ${id}`);assert(!bag.includes(`id="${id}"`),id);
+test('item modal contains item information and only two dismiss controls',()=>{
+  const f=fixture();f.open();f.select(0);const modal=f.modal();
+  for(const id of ['itemDetailModal','itemModalBackdrop','skillDetailModal','skillPopupBackdrop','equipPopup','equipPopupBackdrop'])assert.equal(f.$(id).parentNode,f.document.body,`independent body-level overlay ${id}`);
+  assert.equal(modal.getAttribute('role'),'dialog');assert.equal(modal.getAttribute('aria-modal'),'true');
+  assert.deepEqual(modal.querySelectorAll('button, input, select, summary, a[href], [tabindex="0"]').map(control=>control.id),['itemModalClose','itemModalCloseBtn']);
+  for(const id of ['bagDetailItem','bagItemName','bagItemDescription','bagPanelStats','itemMetaLevel','itemMetaBound','itemMetaPrice'])assert(modal.contains(f.$(id)),id);
+  for(const id of ['bagReturnItem','socketItemPreview','cardSocketPanel','socketCardChoice','cardSocketAction','gearGuide','guideTargetItem','bagOpenCraft','wearSidePicker','useBagItem','bagTrack','refineResource','bagKiln','sellBagMaterial','salvageGear','bagQuickDiff']){
+    assert(f.ui.drawer.contains(f.$(id)),id);assert.equal(modal.contains(f.$(id)),false,id);
+    assert.equal([...(index+source).matchAll(new RegExp(`id="${id}"`,'g'))].length,1,`unique host ${id}`);
   }
-  const f=fixture();for(const id of ['itemDetailModal','itemModalBackdrop','skillDetailModal','skillPopupBackdrop','equipPopup','equipPopupBackdrop'])assert.equal(f.$(id).parentNode,f.document.body,`independent body-level overlay ${id}`);
-  assert(bag.includes('id="bagOpenCraft"'));assert.equal([...index.matchAll(/id="itemDetailModal"/g)].length,1);assert.match(modal,/role="dialog" aria-modal="true"/);
-  for(const id of ['forgePanel','forgeStock','personalBench','craftPanel'])assert(!modal.includes(`id="${id}"`),`no legacy ${id} inside item modal`);
+  assert.equal(f.$('bagForge'),null);
+  assert.match(f.$('bagPanelStats').innerHTML,/ระดับตีบวกปัจจุบัน.*\+5 ขั้น/);
+  assert.match(f.$('bagPanelStats').innerHTML,/การ์ดทดสอบ/);
 });
 
 test('actual inventory click opens populated modal, inerts drawer and focuses close without mutation',()=>{
   const f=fixture();f.open();assert.deepEqual(f.guidance,['gear']);const before=f.snapshot(),count=f.wire.length;f.select(1);assert.deepEqual(f.guidance,['gear'],'item selection does not repeat bag-open guidance');
   assert.equal(f.modal().hidden,false);assert.equal(f.modal().inert,false);assert.equal(f.$('itemModalBackdrop').hidden,false);assert.equal(f.ui.drawer.inert,true);assert.equal(f.$('worldInput').inert,true);
   assert.equal(f.document.activeElement,f.$('itemModalClose'));assert.equal(f.ctx.selectedBagSlot,1);assert.equal(f.$('bagItemName').textContent,'แหวนทดสอบ');assert.match(f.$('bagDetailItem').children[0].getAttribute('aria-label'),/แหวนทดสอบ \+5/);
-  assert.equal(f.$('wearSidePicker').hidden,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('bagCraft').getClientRects().length,1);assert.equal(f.$('bagSlot1').getAttribute('aria-pressed'),'true');
+  assert.equal(f.$('wearSidePicker').hidden,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('bagSlot1').getAttribute('aria-pressed'),'true');
+  f.$('useBagItem').click();f.$('cardSocketAction').click();assert.equal(f.routes.length,0,'inert management cannot act while reading details');
   f.$('bagSlot0').click();assert.equal(f.ctx.selectedBagSlot,1,'inert bag cannot change modal selection');assert.equal(f.snapshot(),before);assert.equal(f.wire.length,count);assert.equal(f.mutations().length,0);
 });
 
@@ -110,10 +114,10 @@ test('empty and locked slots do not open modal or mutate selection',()=>{
   f.ctx.drawerActive='forge';f.ctx.openItemDetailModal(0);assert.equal(f.modal().hidden,true,'modal cannot open outside bag');
 });
 
-test('close buttons and backdrop restore exact opener, clear selection and keep world inert',()=>{
+test('close buttons and backdrop restore exact opener, retain selection and keep world inert',()=>{
   for(const id of ['itemModalClose','itemModalCloseBtn','itemModalBackdrop']){
     const f=fixture();f.open();f.select(1);const before=f.snapshot();f.$(id).click();assert.equal(f.modal().hidden,true,id);assert.equal(f.modal().inert,true,id);assert.equal(f.$('itemModalBackdrop').hidden,true,id);assert.equal(f.$('itemModalBackdrop').inert,true,id);assert.equal(f.ui.drawer.inert,false,id);assert.equal(f.$('worldInput').inert,true,id);assert.equal(f.document.activeElement,f.$('bagSlot1'),id);
-    for(let i=0;i<8;i++){assert.equal(f.$('bagSlot'+i).classList.contains('bag-selected'),false,id);assert.equal(f.$('bagSlot'+i).getAttribute('aria-pressed'),'false',id);}
+    for(let i=0;i<8;i++){assert.equal(f.$('bagSlot'+i).classList.contains('bag-selected'),i===1,id);assert.equal(f.$('bagSlot'+i).getAttribute('aria-pressed'),String(i===1),id);}
     assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
   }
 });
@@ -131,27 +135,27 @@ test('actual Escape listener closes item modal before drawer and restores game f
 });
 
 test('Tab traps visible enabled modal controls and recovers focus from outside',()=>{
-  const f=fixture();f.open();f.select(1);const first=f.$('itemModalClose'),last=f.$('bagCraft');
+  const f=fixture();f.open();f.select(1);const first=f.$('itemModalClose'),last=f.$('itemModalCloseBtn');
   const tab=(shiftKey=false)=>{const event={key:'Tab',shiftKey,preventDefault(){this.prevented=true;}};f.listeners.get('keydown')(event);return event;};
   last.focus();assert.equal(tab().prevented,true);assert.equal(f.document.activeElement,first);first.focus();assert.equal(tab(true).prevented,true);assert.equal(f.document.activeElement,last);
   f.document.activeElement=f.document.body;assert.equal(tab().prevented,true);assert.equal(f.document.activeElement,first);f.document.activeElement=f.document.body;assert.equal(tab(true).prevented,true);assert.equal(f.document.activeElement,last);
-  f.$('useBagItem').focus();assert.equal(tab().prevented,undefined);assert.equal(f.ctx.handleItemDetailKey({key:'ArrowDown'}),false);
+  first.focus();f.$('useBagItem').focus();assert.equal(f.document.activeElement,first);assert.equal(tab().prevented,undefined);assert.equal(f.ctx.handleItemDetailKey({key:'ArrowDown'}),false);
   f.ctx.closeItemDetailModal();assert.equal(f.ctx.handleItemDetailKey({key:'Tab'}),false);
 });
 
-test('craft routes from item modal and bag open dedicated page with modal hidden and drawer interactive',()=>{
-  for(const id of ['bagCraft','bagOpenCraft']){
-    const f=fixture();f.open();if(id==='bagCraft')f.select(1);const before=f.snapshot(),modal=f.modal();f.$(id).click();
-    assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.$('itemModalBackdrop').hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('worldInput').inert,true);assert.equal(f.document.activeElement,f.$('drawerMenuBack'));assert(f.$('personalBench'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
-    f.$('craftBag').click();assert.equal(f.ctx.drawerActive,'bag');assert.equal(modal.hidden,true);f.select(1);assert.equal(modal.hidden,false,'modal remains reusable after route changes');
-  }
+test('bag craft shortcut opens the dedicated crafting page',()=>{
+  const f=fixture();f.open();const before=f.snapshot(),modal=f.modal();f.$('bagOpenCraft').click();
+  assert.equal(f.ctx.drawerActive,'crafting');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.$('itemModalBackdrop').hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('worldInput').inert,true);assert.equal(f.document.activeElement,f.$('drawerMenuBack'));assert(f.$('personalBench'));assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+  f.$('craftBag').click();assert.equal(f.ctx.drawerActive,'bag');assert.equal(modal.hidden,true);f.select(1);assert.equal(modal.hidden,false,'modal remains reusable after route changes');
 });
 
-test('forge shortcut and card-help round trip retain exact equipped side in the global modal',()=>{
-  const f=fixture();f.ctx.openForgePage('enhance','leftRing');assert.equal(f.$('forgeCardHelp').hidden,false);const before=f.snapshot(),modal=f.modal();f.$('forgeCardHelp').click();
-  assert.equal(f.ctx.drawerActive,'bag');assert.equal(f.ctx.inspectingGear,'leftRing');assert.equal(f.modal(),modal);assert.equal(modal.hidden,false);assert.equal(f.ui.drawer.inert,true);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('cardSocketPanel').scrolled,true);assert.equal(f.$('cardSocketPanel').getClientRects().length,1);assert.match(f.$('cardSocketAction').textContent,/ถอดการ์ด/);assert.equal(f.$('wearSidePicker').hidden,true);
-  assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);f.$('bagForge').click();assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.$('forgeTargetButton').dataset.target,'worn:leftRing');assert.equal(modal.hidden,true);assert.equal(f.ui.drawer.inert,false);
-  f.$('forgeCardHelp').click();f.$('cardSocketAction').click();const sent=f.mutations();assert.equal(sent.length,1);assert.equal(sent[0].command,'card_socket');assert.deepEqual(sent[0].payload,{requestId:sent[0].payload.requestId,target:'leftRing',gear:'ring',expected:'card',action:'remove',card:null,stamp:'left.3'});
+test('forge bag details and card help retain the exact equipped side',()=>{
+  const f=fixture();f.ctx.openForgePage('enhance','leftRing');assert.equal(f.$('forgeCardHelp').hidden,false);const before=f.snapshot(),modal=f.modal();
+  f.$('forgeBag').click();assert.equal(modal.hidden,false);assert.equal(f.$('bagItemName').textContent,'แหวนทดสอบ');assert.equal(f.ctx.inspectingGear,'leftRing');
+  f.ctx.openForgePage('enhance','leftRing');f.$('forgeCardHelp').click();
+  assert.equal(f.ctx.drawerActive,'bag');assert.equal(f.ctx.inspectingGear,'leftRing');assert.equal(f.modal(),modal);assert.equal(modal.hidden,true);assert.equal(f.ui.drawer.inert,false);assert.equal(f.$('cardSocketPanel').hidden,false);assert.equal(f.$('cardSocketPanel').scrolled,true);assert.equal(f.$('cardSocketPanel').getClientRects().length,1);assert.match(f.$('cardSocketAction').textContent,/ถอดการ์ด/);assert.equal(f.$('wearSidePicker').hidden,true);
+  assert.equal(f.snapshot(),before);assert.equal(f.mutations().length,0);
+  f.$('cardSocketAction').click();const sent=f.mutations();assert.equal(sent.length,1);assert.equal(sent[0].command,'card_socket');assert.deepEqual(sent[0].payload,{requestId:sent[0].payload.requestId,target:'leftRing',gear:'ring',expected:'card',action:'remove',card:null,stamp:'left.3'});
 });
 
 test('drawer navigation, close and reconnect teardown cannot leave modal or inert drawer behind',()=>{
@@ -164,9 +168,9 @@ test('drawer navigation, close and reconnect teardown cannot leave modal or iner
 });
 
 test('live inventory refresh updates open modal without losing focus or creating duplicate controls',()=>{
-  const f=fixture();f.open();f.select(1);const modal=f.modal(),close=f.$('itemModalClose'),card=f.$('cardSocketPanel');f.$('bagCraft').focus();f.inventory.slots[1].forge.rank=6;f.ctx.renderBag();
-  assert.equal(f.modal(),modal);assert.equal(f.$('itemModalClose'),close);assert.equal(f.$('cardSocketPanel'),card);assert.equal(f.document.activeElement,f.$('bagCraft'));assert.match(f.$('bagDetailItem').children[0].getAttribute('aria-label'),/\+6/);
-  f.inventory.slots[1]=null;f.ctx.renderBag();assert.equal(f.$('bagItemName').textContent,'ช่องว่าง');assert.equal(f.$('cardSocketPanel').hidden,true);assert.equal(f.$('bagForge').hidden,true);assert.equal(f.$('useBagItem').disabled,true);assert.equal(f.mutations().length,0);f.$('itemModalClose').click();assert.equal(f.ui.drawer.inert,false);
+  const f=fixture();f.open();f.select(1);const modal=f.modal(),close=f.$('itemModalCloseBtn'),card=f.$('cardSocketPanel');close.focus();f.inventory.slots[1].forge.rank=6;f.ctx.renderBag();
+  assert.equal(f.modal(),modal);assert.equal(f.$('itemModalCloseBtn'),close);assert.equal(f.$('cardSocketPanel'),card);assert.equal(f.document.activeElement,close);assert.match(f.$('bagDetailItem').children[0].getAttribute('aria-label'),/\+6/);
+  f.inventory.slots[1]=null;f.ctx.renderBag();assert.equal(f.$('bagItemName').textContent,'ช่องว่าง');assert.equal(f.$('cardSocketPanel').hidden,true);assert.equal(f.$('useBagItem').disabled,true);assert.equal(f.mutations().length,0);f.$('itemModalClose').click();assert.equal(f.ui.drawer.inert,false);
 });
 test('health potion render produces one healing stat card, including legacy fallback',()=>{
   const f=fixture();f.open();f.select(2);const html=f.$('bagPanelStats').html;
@@ -187,15 +191,16 @@ test('static popups close on completed activation without pointer-down click-thr
   }
 });
 
-test('inline detail mirrors canonical item rendering and delegates existing side/action handlers',()=>{
+test('inline detail mirrors item rendering and the drawer manages the selected item',()=>{
   const f=fixture();f.open();f.select(1);
   assert.equal(f.$('bagQuickName').textContent,f.$('bagItemName').textContent);
   assert.equal(f.$('bagQuickStats').innerHTML,f.$('bagPanelStats').innerHTML);
-  assert.equal(f.$('bagQuickUse').textContent,f.$('useBagItem').textContent);
   assert.equal(f.$('bagQuickItem').children[0].getAttribute('aria-label'),f.$('bagDetailItem').children[0].getAttribute('aria-label'));
-  f.ctx.closeItemDetailModal();f.$('bagQuickUse').click();assert.equal(f.routes.at(-1),'use');
-  f.$('useBagItem').disabled=true;f.$('bagQuickUse').click();assert.equal(f.routes.filter(x=>x==='use').length,1,'checks current canonical disabled state');
-  f.$('bagQuickForge').click();assert.equal(f.ctx.drawerActive,'forge');assert.equal(f.modal().hidden,true);assert.equal(f.mutations().length,0);
+  assert.deepEqual(f.$('bagQuickDetail').querySelectorAll('button, select, summary'),[]);
+  f.ctx.closeItemDetailModal();const sides=f.$('wearSidePicker').children;sides[1].click();assert.equal(sides[1].getAttribute('aria-pressed'),'true');
+  f.$('useBagItem').click();assert.equal(f.routes.at(-1),'use');
+  f.$('useBagItem').disabled=true;f.$('useBagItem').click();assert.equal(f.routes.filter(x=>x==='use').length,1);
+  assert.equal(f.modal().hidden,true);assert.equal(f.mutations().length,0);
 });
 
 console.log(`PASS centered item modal: ${groups} focused regression groups`);

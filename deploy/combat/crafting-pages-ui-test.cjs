@@ -278,10 +278,8 @@ test('stale room events cannot clear pending state, change gold, replace invento
   f.ctx.economyPending=false;f.run('renderBag()');assert.equal(f.$('craftActionStatus').textContent,'');
 });
 
-test('bag shortcut and every existing recipe entry route open the dedicated page directly',()=>{
-  const f=fixture();f.ctx.drawerActive='bag';f.elements.set('bagCraft',node('button'));
-  Object.assign(f.ctx,{BAG_PAGE_SIZE:0,BAG_TOTAL_PAGES:0,ui:{drawerBody:{querySelectorAll:()=>[]}},journeyNotesForPlayer:()=>({})});
-  f.run(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls();');f.$('bagCraft').click();assert.equal(f.ctx.drawerActive,'crafting');
+test('item guide and station recipe entry routes open the dedicated page directly',()=>{
+  const f=fixture();
   // Guide button: preserve the exact paired-body destination in the route.
   Object.assign(f.ctx,{copy:null,dest:'leftRing',item:f.items.ring_25,entry:{id:'ring_25',position:'leftRing'}});f.elements.set('guideOpen',node('button'));
   f.run(slice('    const button=$("guideOpen");','  }\n  const benchTrail=[];'));f.$('guideOpen').click();assert.equal(f.$('benchRecipe').value,'ring_25');assert.equal(f.run('craftPagePosition'),'leftRing');

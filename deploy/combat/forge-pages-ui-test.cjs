@@ -25,7 +25,7 @@ const piece={itemId:id,quantity:1,forge:forged('sword')};
 const inventory={slots:[piece,{itemId:id,quantity:1,forge:forged('donor',0)},null,...Array(9).fill(null)],equippedWeaponSlot:0,equipment:{leftRing:ring,rightRing:ring},equipmentForges:{leftRing:forged('left'),rightRing:forged('right')},equipmentSockets:{leftRing:'card'},forgeCopies:{[id]:8,[ring]:4}};
 const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
 const me={alive:true,level:25,persistent:true};let ready=true,accepted=false;
-const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},triggerBagPanelPop(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
+const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
   // Keep audiovisual feedback observable without a renderer or audio device.
   getLocalAvatar:()=>null,localId:'hero',
   ...Object.fromEntries(['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout'].map(name=>[name,(...args)=>effects.push({name,args})])),
@@ -94,16 +94,13 @@ assert.match(source,/if \(drawerActive === "forge"\) \{ renderForgePage\(\); ret
 assert.match(source,/if\(drawerActive==="forge" && slot>=0 && !forgeAnimationBusy\(\)\)\{cancelForgeAnimation\(false\);forgePresentationResult=null;selectForgeTarget\(slot\)/);
 assert.match(source,/forge\.onclick=\(\)=>openForgePage\("enhance",goal\.slot\)/);
 assert.match(source,/smith:"character",forge:"character"/);
-const bagCode=slice('  function openBag()','  function updateFieldAlerts()');assert(!bagCode.includes('id="forgePanel"'));assert(!bagCode.includes('id="forgeStock"'));assert(index.includes('id="bagForge"'));assert(!bagCode.includes('id="bagForge"'),'forge shortcut lives in the global item modal');
-// Both the paperdoll character tab and the bag use one shared shortcut binder.
+const bagCode=slice('  function openBag()','  function updateFieldAlerts()');assert(!bagCode.includes('id="forgePanel"'));assert(!bagCode.includes('id="forgeStock"'));assert(!(index+bagCode).includes('id="bagForge"'));
+// The paperdoll character tab retains its workshop entry.
 const profileCode=slice('  function openCharacterProfile()','  // Taps on any game button');
 assert(!profileCode.includes('id="forgePanel"'));assert(!profileCode.includes('id="forgeStock"'));assert(profileCode.includes('id="cpForge"'));
 assert.equal([...source.matchAll(/function submitForge\(/g)].length,1);
-const shortcut={},workshop={},opened=[],binder={closeItemDetailModal(){},drawerActive:"bag",BAG_PAGE_SIZE:0,BAG_TOTAL_PAGES:0,ui:{drawerBody:{querySelectorAll:()=>[]}},$:id=>id==='bagForge'?shortcut:id==='cpForge'?workshop:null,INVENTORY_SLOTS:0,bodyLabels:{},inspectingGear:'leftRing',selectedBagSlot:3,
-  currentEquippedWeaponSlot:()=>4,openForgePage:(...args)=>opened.push(args),openSmith:()=>opened.push("smith"),journeyNotesForPlayer:()=>({}),economyReady:()=>false};
-vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);
-shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance','leftRing']);binder.inspectingGear='mainHand';shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',4]);binder.inspectingGear=null;shortcut.onclick();assert.deepEqual(opened.at(-1),['enhance',3]);
-binder.drawerActive="character";vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);workshop.onclick();assert.equal(opened.at(-1),"smith");
+const workshop={},openSmith=()=>{},binder={drawerActive:"character",bodyLabels:{},$:id=>id==='cpForge'?workshop:null,openSmith};
+vm.runInNewContext(slice('  function bindBagControls()','  function renderBag()')+'\nbindBagControls()',binder);assert.equal(workshop.onclick,openSmith);
 assert.match(source,/closeEquipPopup\(\); openForgePage\("enhance", target\)/);
 // Real pending timeout sends only read requests and refreshes the open item view.
 let timeout,refreshes=0;const wire=[];
