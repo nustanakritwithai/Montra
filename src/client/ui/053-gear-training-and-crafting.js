@@ -209,7 +209,7 @@
         return;
       }
       benchTrail.push({group:$("benchGroup").value,level:$("benchLevel").value,id:rootId,
-        position:craftPagePosition,quantity:$("benchQuantity").value,inspectItem:benchInspectItem,
+        position:craftPagePosition,material:craftMaterialId,quantity:$("benchQuantity").value,inspectItem:benchInspectItem,
         inspectTrail:benchInspectTrail,usesPage:benchUsesPage});
       if(benchTrail.length>32)benchTrail.shift();
       $("benchQuantity").value="1";
@@ -225,6 +225,7 @@
   }
   function restoreBenchRecipe(target){
     $("benchQuantity").value=target.quantity;
+    craftMaterialId=target.material??null;
     craftPagePosition=target.position;craftRecipeTarget=target;
     renderCraftingPage();
   }
@@ -330,10 +331,11 @@
     const target="mat_"+(raw[1]==="raw_wood"?"charcoal":"ingot")+"_"+raw[2];
     return personalItems[target]?.station==="kiln"?target:null;
   }
-  let craftPagePosition=null,craftPageRoom=null,craftRecipeTarget=null,craftResultMessage="",craftResultRoom=null;
+  let craftPagePosition=null,craftPageRoom=null,craftMaterialId=null,craftRecipeTarget=null,craftResultMessage="",craftResultRoom=null;
   function selectBenchRecipe(group,level,id,position=null){
     if(drawerActive!=="crafting")openCraftingPage(position);
     craftComingSoon="";craftRecipePage=0;
+    craftMaterialId=null;
     craftPagePosition=position;
     craftRecipeTarget={group,level,id};
     renderCraftingPage();
@@ -364,12 +366,13 @@
       for(const n of levels)lv.appendChild(new Option("Lv."+n+(n>level?" · ยังไม่ถึง":""),String(n)));
       if([...lv.options].some(o=>o.value===previous))lv.value=previous;
     }
-    const key=[version,group.value,lv.value,level,path,position].join("/");
+    const key=[version,group.value,lv.value,level,path,position,craftMaterialId].join("/");
     if(select.dataset.filter!==key){
       const previous=select.value;select.dataset.filter=key;select.replaceChildren();
       const recipes=new Map();
       for(const [id,def] of Object.entries(personalItems)){
         if(!def.recipe || (position && def.kind!==position && !wearPositions(def.kind).includes(position)))continue;
+        if(craftMaterialId && !def.recipe.some(part=>part.item===craftMaterialId))continue;
         if(group.value==="kiln" && def.station!=="kiln")continue;
         if(group.value==="boss" && !def.sourceBoss)continue;
         const supply=["material","catalyst","consumable","tool"].includes(def.kind);
@@ -379,12 +382,21 @@
         if(group.value==="armor" && (def.kind==="mainHand" || !wearPositions(def.kind).length))continue;
         if(group.value==="role" && (def.path!=="all" && def.path!==path || !position && !supply && def.recommended && !def.recommended.includes(path)))continue;
         const n=def.level||1;
-        if(lv.value==="auto"?!bossRecipes && n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
-        const family=(def.family||id)+(["all","weapons","armor"].includes(group.value)?"/"+def.path:""),old=recipes.get(family);
+        if(lv.value==="auto"?!bossRecipes && !craftMaterialId && n>level:n!==(lv.value==="current"?level:Number(lv.value)))continue;
+        const family=craftMaterialId?id:(def.family||id)+(["all","weapons","armor"].includes(group.value)?"/"+def.path:""),old=recipes.get(family);
         if(!old || (old[1].level||1)<n)recipes.set(family,[id,def]);
       }
       for(const [id,def] of recipes.values())select.appendChild(new Option("Lv."+(def.level||1)+" · "+def.name,id));
       if([...select.options].some(o=>o.value===previous))select.value=previous;
+    }
+    const materialStatus=$("craftMaterialStatus");
+    materialStatus.hidden=!craftMaterialId;
+    $("craftClearMaterial").hidden=!craftMaterialId;
+    if(craftMaterialId){
+      const material=bagMeta(craftMaterialId);
+      const refined=material?.refinesTo && bagMeta(material.refinesTo);
+      materialStatus.textContent="สูตรที่ใช้ "+(material?.name||craftMaterialId)+
+        (refined?" · แปรรูปเป็น "+refined.name+" ได้ในกระเป๋า":"");
     }
     renderCraftRecipeGrid(slots);
     renderBenchRecipeExplorer(select.value);
@@ -437,6 +449,8 @@
     panel.hidden = !economyReady() || !catalog;
     if (panel.hidden) return;
     const recipe = JSON.parse(catalog);
+    panel.hidden=!!craftMaterialId && craftMaterialId!==recipe.ingredient;
+    if (panel.hidden) return;
     const supply = (slots || []).reduce((sum, item) => sum + (item?.itemId === recipe.ingredient ? item.quantity : 0), 0);
     const owned = (inventoryState?.forgeCopies?.[recipe.output]??0)>=99;
     renderItemPreview("craftShrineOutput",recipe.output,"ได้ 1 ชิ้น");renderItemPreview("craftShrineInput",{itemId:recipe.ingredient,quantity:recipe.quantity},"วัตถุดิบ");

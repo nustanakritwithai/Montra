@@ -148,11 +148,11 @@ const reviewedReleaseFragments = new Map([
 },
   {
     "path": "ui/053-gear-training-and-crafting.js",
-    "bytes": 46614,
-    "sha256": "8da8f376fe35768d079a5ba64a0875646929dd6b20afcd68024a62c54cec5dc8"
+    "bytes": 47494,
+    "sha256": "4c00d0fcc78f03078bacb0ee7c662db399f5c3928d0eed84bfa39d8dba4dcdfa"
   },
   {
-    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 73412, "sha256": "013c0fbecb2f31b2a7da30d4051193a32efffd1ca3a532fa58c4da89941fa796"
+    "path": "ui/054-forge-feedback-and-pages.js", "bytes": 74053, "sha256": "7b0ce8042abb0d38e0271e1d3c9c4624785184243ab5aedf79e389071e6e76cd"
   },
   {
     "path": "ui/030-item-art-and-comparison.js",
@@ -286,8 +286,8 @@ const reviewedReleaseFragments = new Map([
   },
   {
     "path": "ui/052-help-and-inventory.js",
-    "bytes": 41679,
-    "sha256": "f3ee19fb64a5ee384c396bc913010bacf065f6c5760082accb0d1883d4961e9b"
+    "bytes": 42236,
+    "sha256": "efbc597df9f0d5457d7bf23661aca9bfbb141b7924c9ce32ec2c9e0be2721857"
   }
 ].map(entry => [entry.path, entry]));
 
@@ -296,8 +296,8 @@ test('reviewed combined client preserves unchanged snapshot bytes and determinis
   const bytes = assembleClient();
   assert.equal(baseline.bytes, 1467465);
   assert.equal(baseline.sha256, 'a8e188217ea0824ef3a5faa24e60429be45e23ba3e2c6c96317a5fe6987678b4');
-  assert.equal(bytes.length, 2172231);
-  assert.equal(hash(bytes), '26f4e7fe7d80d58398c38603006354215b3e35a1e0ba4698cd857a9cf18d9250');
+  assert.equal(bytes.length, 2174309);
+  assert.equal(hash(bytes), '84cedb7b404a70bf716ea7b89b9b7ab758a506b3ef0732d6fdc819c57ee5c0c5');
   const manifest = JSON.parse(readFileSync(join(clientRoot, 'src/client/manifest.json')));
   assert.deepEqual(manifest.fragments, baseline.fragments.map(entry => entry.path));
   for (const entry of baseline.fragments) {
