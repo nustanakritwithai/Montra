@@ -14,7 +14,7 @@ function fixture(drawer='crafting'){
   for(const id of ['personalBench','benchRecipe','craftPageResult','craftPageStatus','craftGold','craftActionStatus','benchGroup',
     ...['all','food','medicine','weapons','armor','materials','furniture'].map(c=>'ckCategory-'+c),
     'forgeTargetButton','forgePageStatus','forgeGold','forgeTargetLocation','forgeEmpty',
-    'forgeEnhanceSection','forgeRerollSection','forgeItemName','forgeInfo','forgeCopyItem','forgeSealItem','forgePanel']){
+    'forgeEnhanceSection','forgeRerollSection','forgeItemName','forgeInfo','forgeSocketBadge','forgeSocketState','cardSocketPanel','forgePanel']){
     elements.set(id,{textContent:'',hidden:false,disabled:false,dataset:{},attributes:{},children:[],setAttribute(k,v){this.attributes[k]=String(v);}});
   }
   function makeRoom(name){return {name,state:{economyAvailable:true,forgeCatalog:'{}'},send(command,payload){

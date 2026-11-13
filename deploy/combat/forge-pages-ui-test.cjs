@@ -25,7 +25,7 @@ const piece={itemId:id,quantity:1,forge:forged('sword')};
 const inventory={slots:[piece,{itemId:id,quantity:1,forge:forged('donor',0)},null,...Array(9).fill(null)],equippedWeaponSlot:0,equipment:{leftRing:ring,rightRing:ring},equipmentForges:{leftRing:forged('left'),rightRing:forged('right')},equipmentSockets:{leftRing:'card'},forgeCopies:{[id]:8,[ring]:4}};
 const config={chances:Array(10).fill(100),rerollCost:60,rareAfter:4,claimCopies:true,enhanceSteps:Array.from({length:10},(_,rank)=>({copies:1+Math.floor(rank/3),gold:12*(rank+1),chance:rank>4?78:100,downgradeChance:rank>4?20:0,breakChance:rank>4?2:0,breakOnFailure:rank>4}))};
 const me={alive:true,level:25,persistent:true};let ready=true,accepted=false;
-const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
+const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},cancelAnimationFrame(){},economyPendingRequest:null,refreshArtisanWallet(){},createItemTile:()=>control(),renderItemTile(){},renderItemPreview(){},statLine:()=>"",cardDrill:{itemId:'metal',quantity:1,gold:20},Option:class{constructor(text,value){Object.assign(this,{text,value});}},inventoryState:inventory,room:{state:{forgeCatalog:JSON.stringify(config)}},drawerActive:null,
   // Keep audiovisual feedback observable without a renderer or audio device.
   getLocalAvatar:()=>null,localId:'hero',
   ...Object.fromEntries(['SFX','shakeCamera','sparks','floatAtPlayer','triggerCombatCallout'].map(name=>[name,(...args)=>effects.push({name,args})])),
@@ -34,11 +34,11 @@ const ctx={$,document,Date:{now:()=>10000},setTimeout:()=>1,clearTimeout(){},can
   ownServerCharacter:()=>me,economyPending:false,itemUsePending:false,economyGold:1000,selectedBagSlot:0,inspectingGear:null,benchTrail:[],
   itemHuntCount:(id,stock=false)=>id==='ref_seal_2'?2:inventory.slots.filter(x=>x?.itemId===id).length+Object.values(inventory.equipment).filter(x=>x===id).length+(stock?(inventory.forgeCopies[id]||0):0),
   bindItemHuntButton:(button,id)=>{button.hidden=!id;},economyRequestId:()=>`request_${sent.length}`,window:{matchMedia:()=>({matches:true}),confirm:message=>{prompts.push(message);return accepted;}},
-  economySend:(command,payload,durable)=>{sent.push({command,payload,durable});if(durable){ctx.economyPending=true;ctx.economyPendingRequest={room:ctx.room,command,requestId:payload.requestId};}},
+  economySend:(command,payload,durable)=>{sent.push({command,payload,durable});if(durable){ctx.economyPending=true;ctx.economyPendingRequest={...payload,room:ctx.room,command};}},
   openDrawer:(name,title,html)=>{ctx.drawerActive=name;ctx.title=title;elements.clear();for(const match of html.matchAll(/<([a-z][a-z0-9]*)\b[^>]*id="([^"]+)"/g))elements.set(match[2],control(match[1]));if($("forgePicker"))$("forgePicker").append($("forgePickerClose"),$("forgePickerGrid"));ctx.html=html;},
   openBag:()=>{ctx.drawerActive='bag';routes.push('bag');elements.clear();for(const id of ['cardSocketPanel','craftPanel'])elements.set(id,control());},
   selectBenchRecipe:(...args)=>routes.push(args),renderBag:()=>{if(ctx.drawerActive==='forge')ctx.renderForgePage();}};
-const code=slice('  function wornGearAt(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()');
+const code=slice('  function wornGearAt(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function forgeGearLevel(','  function openBag()');
 vm.createContext(ctx);vm.runInContext(code,ctx);
 const callbacks={};ctx.joined=ctx.room;ctx.joined.onMessage=(name,handler)=>{callbacks[name]=handler;};
 ctx.finishEconomyPending=()=>{ctx.economyPending=false;ctx.economyPendingRequest=null;};ctx.toast=()=>{};
@@ -46,9 +46,9 @@ vm.runInContext(slice('      joined.onMessage("craft_result",','      joined.onM
 const run=code=>vm.runInContext(code,ctx);
 const pick=key=>{$('forgeTargetButton').click();const button=$('forgePickerGrid').children.find(child=>child.dataset.forgeTarget===key);assert(button,`picker choice ${key}`);button.click();};
 run('openSmith()');assert.equal(ctx.drawerActive,'smith');$('smithEnhance').onclick();
-assert.equal(ctx.drawerActive,'forge');assert.equal(ctx.title,'ตีบวกอุปกรณ์');assert.equal($('forgeTargetButton').dataset.target,'bag:0');
+assert.equal(ctx.drawerActive,'forge');assert.equal(ctx.title,'ปรับแต่งอุปกรณ์');assert.equal($('forgeTargetButton').dataset.target,'bag:0');
 assert.equal($('forgeEnhanceSection').hidden,false);assert.equal($('forgeRerollSection').hidden,true);assert.equal(ctx.forgeTargetChoices().length,4);assert.equal($('forgeGear'),null);
-assert.match($('forgeInfo').textContent,/PvE/);assert.match($('forgeEnhance').textContent,/89 ทอง/);
+assert.match($('forgeRankGain').textContent,/PvE/);assert.match($('forgeEnhance').textContent,/89 ทอง/);
 // Selecting an equipped body accessory uses its true side, identity and card.
 pick('worn:leftRing');assert.equal($('forgeEnhance').disabled,true);assert.equal($('forgeCardHelp').hidden,false);
 pick('worn:rightRing');assert.equal($('forgeEnhance').disabled,false);
@@ -63,7 +63,7 @@ assert.equal(effects.at(-1).args[0],'forge_success');
 inventory.equipmentForges.rightRing.revision=3;run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'worn:rightRing');
 inventory.equipmentForges.rightRing=forged('replacement');run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'');assert.equal($('forgePanel').hidden,true);
 run('openForgePage("reroll",0)');assert.equal($('forgeEnhanceSection').hidden,true);assert.equal($('forgeRerollSection').hidden,false);
-assert.match($('forgeAffixInfo').textContent,/แทนที่ของเดิม/);assert.match($('forgeRerollPity').textContent,/2\/4/);
+assert.match($('forgeAffixInfo').textContent,/แทนที่ค่าเดิม/);assert.match($('forgeRerollPity').textContent,/2\/4/);
 $('forgeReroll').onclick();command=sent.at(-1);assert.deepEqual(Object.keys(command.payload).sort(),['action','requestId','slot','stamp']);assert.equal(command.payload.action,'reroll');assert.equal(command.payload.slot,0);
 callbacks.forge_result({requestId:command.payload.requestId,itemId:id,action:'reroll',forge:piece.forge});ctx.economyGold=0;run('renderForgePage()');assert.equal($('forgeReroll').disabled,true);
 ctx.economyGold=1000;const countItems=ctx.itemHuntCount;ctx.itemHuntCount=()=>0;run('renderForgePage()');assert.equal($('forgeReroll').disabled,true);ctx.itemHuntCount=countItems;
@@ -83,7 +83,43 @@ assert.equal(ctx.economyPending,false);assert.equal($('forgeTargetButton').datas
 inventory.slots[0]={itemId:id,quantity:1};run('openForgePage("enhance",0)');inventory.slots[0].forge=forged('new');run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'bag:0');
 inventory.slots[0].forge=forged('other');run('renderForgePage()');assert.equal($('forgeTargetButton').dataset.target,'');
 // Card routes retain the exact body target; recipes now use the dedicated crafting route.
-run('openForgePage("enhance","leftRing")');$('forgeCardHelp').onclick();assert.equal(ctx.drawerActive,'bag');assert.equal(ctx.inspectingGear,'leftRing');assert.equal($('cardSocketPanel').scrolled,true);
+run('openForgePage("enhance","leftRing")');$('forgeCardHelp').onclick();assert.equal(ctx.drawerActive,'forge');assert.equal($('forgeTargetButton').dataset.target,'worn:leftRing');assert.equal($('cardSocketPanel').hidden,false);
+const selectedTarget=$('forgeTargetButton');
+metadata.card={name:'การ์ดผี',kind:'card',stats:{atk:1}};
+metadata.highCard={name:'การ์ดเลเวลสูง',kind:'card',level:99};
+run('renderForgePage()');
+$('cardSocketAction').click();
+const remove=sent.at(-1);
+assert.equal(remove.command,'card_socket');assert.equal(remove.payload.target,'leftRing');
+callbacks.card_socket_result({...remove.payload,requestId:'stale',socket:null});
+assert.equal(ctx.economyPending,true,'a late receipt cannot release a newer request');
+$('forgeTabEnhance').onclick();
+assert.equal($('forgeTabCard').getAttribute('aria-pressed'),'true');
+inventory.equipmentSockets.leftRing=null;
+inventory.slots[4]={itemId:'card',quantity:1};
+inventory.slots[5]={itemId:'highCard',quantity:1};
+callbacks.card_socket_result({...remove.payload,socket:null});
+assert.equal(ctx.economyPending,false);
+assert.equal($('forgeSocketState').textContent,'ช่องว่าง');
+assert.match($('forgeOutcome').textContent,/คืนการ์ด/);
+assert.deepEqual($('socketCardChoice').options.map(option=>option.value),['card']);
+$('forgeTabEnhance').click();assert.equal($('forgeTargetButton'),selectedTarget);
+assert.equal($('forgeTargetButton').dataset.target,'worn:leftRing');
+assert.equal($('forgeEnhance').disabled,false);
+run('openForgePage("drill","rightRing")');assert.equal($('cardSocketAction').disabled,true);
+inventory.slots[6]={itemId:'metal',quantity:1};run('renderForgePage()');
+assert.equal($('cardSocketAction').disabled,false);
+$('cardSocketAction').click();const drilled=sent.at(-1);
+assert.equal(drilled.payload.expected,'sealed');assert.equal(drilled.payload.stamp,'replacement.2');
+inventory.equipmentSockets.rightRing=null;
+callbacks.card_socket_result({...drilled.payload,socket:null});
+assert.match($('forgeOutcome').textContent,/เจาะช่องสำเร็จ/);
+$('cardSocketAction').click();assert.equal($('forgeTargetButton').dataset.target,'worn:rightRing');
+$('cardSocketAction').click();const inserted=sent.at(-1);
+assert.equal(inserted.payload.card,'card');assert.equal(inserted.payload.target,'rightRing');
+inventory.equipmentSockets.rightRing='card';
+callbacks.card_socket_result({...inserted.payload,socket:'card'});
+assert.match($('forgeOutcome').textContent,/ฝังการ์ดผีแล้ว/);
 run('openForgePage("enhance",1)');const recipeRoutes=routes.length;$('forgeCopyRecipe').onclick();assert.equal(routes.length,recipeRoutes+1);assert.deepEqual(routes.at(-1),['all','25',id]);
 // Disconnect, room replacement and unsupported servers cannot retain actionable controls.
 run('openForgePage("enhance",1)');ready=false;run('renderForgePage()');assert.equal($('forgeTargetButton').disabled,true);assert.equal($('forgePanel').hidden,true);assert.equal($('forgeStock').hidden,true);

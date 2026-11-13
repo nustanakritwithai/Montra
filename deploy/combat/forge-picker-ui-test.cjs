@@ -80,7 +80,7 @@ function fixture(){
   };
   ctx.room={state:{economyAvailable:true,forgeCatalog:JSON.stringify(config)}};
   vm.createContext(ctx);const run=code=>vm.runInContext(code,ctx);
-  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function renderForgeStock(','  function openBag()')+slice('  function gateFieldInput(','  const journalOrigins='));
+  run(slice('  const gearSymbols=','  let inspectingGear=')+slice('  function bagMeta(','  function pieceStat(')+slice('  function gearStamp(','  function accessoryStamp(')+slice('  function forgeLabel(','  function salvageSelectedGear(')+slice('  function forgeGearLevel(','  function openBag()')+slice('  function gateFieldInput(','  const journalOrigins='));
   const refresh=()=>ctx.renderForgePage(),open=(action='enhance',target=0)=>ctx.openForgePage(action,target),popup=()=>d.$('forgeTargetButton').click(),key=()=>d.$('forgeTargetButton').dataset.target;
   const buttons=()=>d.$('forgePickerGrid').children,button=target=>buttons().find(b=>b.dataset.forgeTarget===target),pick=target=>{popup();assert(button(target),`missing choice ${target}`);button(target).click();};
   const snapshot=()=>JSON.stringify({inventory:ctx.inventoryState,gold:ctx.economyGold}),mutations=()=>wire.filter(e=>e.durable);
@@ -181,7 +181,7 @@ test('Tab and Shift+Tab wrap visible enabled controls and leave ordinary keys to
 test('real drawer navigation and close destroy the open picker without restoring focus to removed controls',()=>{
   for(const route of ['forgeHome','forgeBag','forgeTabReroll']){
     const f=fixture();f.open();f.popup();const popup=f.$('forgePicker'),target=f.$('forgeTargetButton'),stale=f.button('bag:2');f.$(route).click();
-    assert.equal(popup.open,false,route);assert.equal(popup.closeCount,1,route);assert.equal(target.isConnected,false,route);assert.notEqual(f.document.activeElement,target,route);const before=f.snapshot();stale.onclick();assert.equal(f.mutations().length,0,route);assert.equal(f.snapshot(),before,route);
+    assert.equal(popup.open,false,route);assert.equal(popup.closeCount,1,route);assert.equal(target.isConnected,route==='forgeTabReroll',route);assert.notEqual(f.document.activeElement,target,route);const before=f.snapshot();stale.onclick();assert.equal(f.mutations().length,0,route);assert.equal(f.snapshot(),before,route);
     assert.equal(f.ctx.drawerActive,route==='forgeHome'?'smith':route==='forgeBag'?'bag':'forge',route);
   }
   const f=fixture();f.$('fieldMenuButton').focus();f.open();f.popup();const popup=f.$('forgePicker');f.ctx.closeDrawer();assert.equal(popup.open,false);assert.equal(f.ctx.drawerActive,null);assert.equal(f.ui.drawer.hidden,true);assert.equal(f.document.activeElement,f.$('fieldMenuButton'));assert.equal(f.$('worldInput').inert,false);

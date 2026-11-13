@@ -1,7 +1,19 @@
   // Presentation only: all item mutations still use the existing economy protocol.
   let forgePageAction="enhance",forgePageTarget=null,forgePageIdentity=null,forgePageRoom=null;
   let forgeAnimation=null,forgePresentationResult=null;
+  const forgeTabs=[
+    ["forgeTabEnhance","enhance","ตีบวก","⚒"],
+    ["forgeTabReroll","reroll","สุ่มออปชัน","✦"],
+    ["forgeTabDrill","drill","เจาะช่อง","⟐"],
+    ["forgeTabCard","card","ฝังการ์ด","▣"]
+  ];
   const forgeAnimationRuns=new Map();
+  function forgeAffixLabel(item){
+    const affix=item?.forge?.affix,profile=bagMeta(item?.itemId)?.forge;
+    if(!affix)return "ยังไม่มีออปชัน";
+    const value=profile?profile.affixMax*affix.tier/3:affix.tier;
+    return (forgeNames[affix.stat]||affix.stat)+" +"+Number(value.toFixed(2));
+  }
   function forgeAnimationBusy(){
     return !!(forgeAnimation && forgeAnimation.room===room && !forgeAnimation.revealed && (forgeAnimation.pending || forgeAnimation.visible && forgeAnimation.result));
   }
@@ -47,7 +59,7 @@
     renderForgeAnimation();
     return run;
   }
-  function forgeResultMessage(result){
+  function forgeResultMessage(result,snapshot){
     const meta=bagMeta(result.itemId),name=meta?.name||"อุปกรณ์",rank=result.forge.rank;
     if(result.broken){
       const spare=inventoryState?.forgeCopies?.[result.itemId]??0;
@@ -55,10 +67,13 @@
       return name+" +"+rank+" แตกแล้ว"+source;
     }
     if(result.downgraded)return name+" ลดจาก +"+(rank+1)+" เหลือ +"+rank;
-    if(result.action==="reroll")return name+" · สุ่มออปชันแล้ว";
+    if(result.action==="reroll")return "สุ่มออปชันแล้ว · "+forgeAffixLabel(snapshot)+" → "+forgeAffixLabel(result);
     if(result.success===false)return name+" · ตีบวกไม่สำเร็จ · คงขั้น +"+rank;
-    const score=meta?.forge?.enhanceRatings?.[rank];
-    return "ตีบวกสำเร็จ +"+rank+" · "+name+(score?" · "+forgeNames[meta.forge.primary]+" +"+score+" เมื่อสวม":"");
+    const profile=meta?.forge,previous=snapshot?.forge?.rank??Math.max(0,rank-1);
+    const rating=step=>profile?(profile.enhanceRatings?.[step]??profile.enhanceMax*step/10):step;
+    const gain=Number((rating(rank)-rating(previous)).toFixed(2));
+    const stat=forgeNames[profile?.primary||(result.itemId==="spirit_staff"?"ranged":"melee")];
+    return "ตีบวกสำเร็จ +"+previous+" → +"+rank+(gain?" · "+stat+" +"+gain+" ใน PvE":"");
   }
   function completeForgeAnimation(run){
     if(!run || run.room!==room || run.revealed || forgeAnimationRuns.get(run.requestId)!==run)return;
@@ -70,7 +85,7 @@
     }
     const current=run===forgeAnimation,present=current && !run.dismissed && drawerActive==="forge" && forgePageAction===run.action;
     clearForgeAnimationTimers(run);run.pending=false;run.visible=false;run.revealed=true;
-    const message=forgeResultMessage(run.result);
+    const message=forgeResultMessage(run.result,run.snapshot);
     if(present)forgePresentationResult={room:run.room,action:run.action,requestId:run.requestId,message,
       kind:run.result.broken?"broken":run.result.downgraded?"downgraded":run.result.action==="reroll"?"reroll":run.result.success===false?"failed":"success"};
     toast((current?"":"ผลรายการก่อนหน้า · ")+message);
@@ -129,14 +144,19 @@
   function renderForgeAnimation(){
     if(drawerActive!=="forge")return;
     const run=forgeAnimation,busy=forgeAnimationBusy(),visible=busy && run.visible;
+    const socketBusy=economyPending && (typeof economyPendingRequest!=="undefined" && economyPendingRequest?.command==="card_socket");
     const striking=visible && run.action==="enhance" && !run.reduced && !run.motionDone && run.striking;
     const impact=visible && run.action==="enhance" && !run.reduced && !run.motionDone && !run.striking && run.strikesCompleted>0;
     const motion=$("forgeHammerMotion"),status=$("forgeAnimationStatus"),outcome=$("forgeOutcome");
     if(motion){motion.hidden=!visible || run.action!=="enhance" || run.reduced;motion.classList.toggle("is-striking",!!striking);motion.classList.toggle("is-impact",!!impact);}
-    $("forgeSelection")?.setAttribute("aria-busy",String(!!visible));
-    if(status){status.hidden=!busy;status.textContent=busy?(visible && run.action==="enhance" && !run.motionDone?"กำลังตีบวก…":"รอผลยืนยันจากเซิร์ฟเวอร์…"):"";}
-    if(outcome){const text=forgePresentationResult?.room===room && forgePresentationResult.action===forgePageAction?forgePresentationResult.message:"";outcome.textContent=text;outcome.dataset.kind=text?(forgePresentationResult.kind||"notice"):"notice";outcome.hidden=!text || busy;}
-    for(const id of ["forgeTabEnhance","forgeTabReroll"])if($(id))$(id).disabled=busy;
+    $("forgeSelection")?.setAttribute("aria-busy",String(!!(visible||socketBusy)));
+    if(status){status.hidden=!(busy||socketBusy);status.textContent=busy||socketBusy?(visible && run.action==="enhance" && !run.motionDone?"กำลังตีบวก…":"รอผลยืนยันจากเซิร์ฟเวอร์…"):"";}
+    if(outcome){const text=forgePresentationResult?.room===room && forgePresentationResult.action===forgePageAction?forgePresentationResult.message:"";outcome.textContent=text;outcome.dataset.kind=text?(forgePresentationResult.kind||"notice"):"notice";outcome.hidden=!text || busy || socketBusy;}
+    if($("forgeStage"))$("forgeStage").dataset.outcome=outcome?.hidden?"":outcome?.dataset.kind||"";
+    for(const [id,action] of forgeTabs)if($(id)){
+      $(id).disabled=!!(busy || economyPending || itemUsePending);
+      $(id).setAttribute("aria-pressed",String(action===forgePageAction));
+    }
     if($("forgeStockGear"))$("forgeStockGear").disabled=busy || economyPending || itemUsePending;
     if(busy)for(const id of ["forgeTargetButton","forgeEnhance","forgeReroll","forgeDonor","forgeStockGear","forgeStockClaim"])if($(id))$(id).disabled=true;
   }
@@ -148,6 +168,7 @@
     forgePageTarget=item && (meta?.kind==="mainHand" || meta?.forge)?target:null;
     forgePageIdentity=forgePageTarget===null?null:{itemId:item.itemId,instanceId:item.forge?.instanceId??null};
     if($("forgeDonor"))$("forgeDonor").value="";
+    if($("socketCardChoice"))$("socketCardChoice").value="";
   }
   function forgeTargetChoices(){
     if(!economyReady())return [];
@@ -218,13 +239,12 @@
     popup.showModal();$("forgeTargetButton").setAttribute("aria-expanded","true");renderForgePicker();
     (popup.querySelector('[aria-pressed="true"]')||$("forgePickerClose")).focus({preventScroll:true});
   }
-  function openForgeBag(showDetails=true){
+  function openForgeBag(){
     const target=forgePageTarget;
     openBag();
     if(typeof target==="string")inspectingGear=target;
     else if(Number.isInteger(target)){inspectingGear=null;selectedBagSlot=target;}
-    if(showDetails)openItemDetailModal(selectedBagSlot);
-    else renderBag();
+    openItemDetailModal(selectedBagSlot);
   }
   let craftBatchMax=0, craftQueueMax=0, craftQueueState=null, craftQueueRequestedAt=-Infinity;
   let craftQueueTimer=null, craftRetry=null;
@@ -398,39 +418,48 @@
   }
   function openSmith(){
     openDrawer("smith","ช่างอาคม",
-      '<div class="smith-hero"><span aria-hidden="true">⚒</span><div><strong>โรงช่างอาคม</strong><p class="note">เลือกงานสำหรับอุปกรณ์ของเจ้า</p></div></div>'+
-      '<div class="smith-services"><button id="smithCraft" type="button"><strong>สร้างของ · โต๊ะช่าง</strong><span>เลือกสูตร ตรวจวัตถุดิบและทอง · สร้างอุปกรณ์หรือของใช้</span></button><button id="smithEnhance" type="button"><strong>ตีบวกอุปกรณ์</strong><span>เพิ่มขั้น +1 ถึง +10 · ใช้ของรุ่นเดียวกันและทอง</span></button>'+
-      '<button id="smithReroll" type="button"><strong>แปรรูปคุณภาพ</strong><span>สุ่มออปชันใหม่ · ใช้ตราอาคมและทองตามอุปกรณ์</span></button></div>'+
-      '<p class="note">ตรวจวัตถุดิบ ค่าใช้จ่าย และความเสี่ยงในหน้าของแต่ละงานก่อนทำรายการ</p>'+
-      '<button id="smithBag" class="secondary" type="button">กระเป๋า · จัดการการ์ด</button>');
+      '<div class="smith-services"><button id="smithCraft" type="button"><strong>สร้างของ · โต๊ะช่าง</strong><span>เลือกสูตร ตรวจวัตถุดิบและทอง · สร้างอุปกรณ์หรือของใช้</span></button><button id="smithEnhance" type="button"><strong>ปรับแต่งอุปกรณ์</strong><span>ตีบวก · สุ่มออปชัน · เจาะช่อง · ฝังการ์ด</span></button>'+
+      '</div>');
     $("smithCraft").onclick=()=>openCraftingPage();
     $("smithEnhance").onclick=()=>openForgePage("enhance");
-    $("smithReroll").onclick=()=>openForgePage("reroll");
-    $("smithBag").onclick=openBag;
+  }
+  function switchForgeTab(action){
+    if(drawerActive!=="forge" || forgePageRoom!==room || economyPending || itemUsePending || forgeAnimationBusy() || forgePageAction===action)return;
+    closeForgePicker();
+    forgePageAction=action;
+    forgePresentationResult=null;
+    renderForgePage();
+    const tab=forgeTabs.find(entry=>entry[1]===action);
+    if(tab)$(tab[0]).focus({preventScroll:true});
+  }
+  function setForgeSocketOutcome(ticket,message,kind){
+    const action=ticket.action==="drill"?"drill":"card";
+    if(ticket.room===room && forgePageRoom===room && drawerActive==="forge" && forgePageTarget===ticket.target && forgePageAction===action){
+      forgePresentationResult={room,action,requestId:ticket.requestId,message,kind};
+    }
   }
   function openForgePage(action="enhance",preferred){
     cancelForgeAnimation(true);forgePresentationResult=null;
-    forgePageAction=action==="reroll"?"reroll":"enhance";
+    forgePageAction=forgeTabs.some(tab=>tab[1]===action)?action:"enhance";
     forgePageRoom=room;
     const first=(currentBagSlots()||[]).findIndex(item=>{const meta=bagMeta(item?.itemId);return meta?.kind==="mainHand" || meta?.forge;});
     const body=Object.keys(bodyLabels).find(position=>{const item=forgeTargetItem(position);return bagMeta(item?.itemId)?.forge;});
     selectForgeTarget(preferred!==undefined?preferred:currentEquippedWeaponSlot()??(first>=0?first:body));
-    openDrawer("forge",forgePageAction==="enhance"?"ตีบวกอุปกรณ์":"แปรรูปคุณภาพ",
-      '<div class="forge-page"><div class="forge-nav"><button id="forgeHome" class="secondary" type="button">‹ ช่างอาคม</button><button id="forgeBag" class="secondary" type="button">กระเป๋า / การ์ด</button></div>'+
-      '<div class="forge-tabs" role="group" aria-label="เลือกงานช่าง"><button id="forgeTabEnhance" type="button">ตีบวก</button><button id="forgeTabReroll" type="button">แปรรูปคุณภาพ</button></div>'+
-      '<p class="note" id="forgePageStatus" role="status"></p><div class="status-line"><span>ทองที่มี</span><strong id="forgeGold"></strong></div>'+
-      '<section id="forgeSelection" class="forge-card forge-selection"><h3 id="forgeItemName"></h3><div class="forge-stage"><div class="forge-target"><button id="forgeTargetButton" class="forge-target-button" type="button" aria-haspopup="dialog" aria-controls="forgePicker" aria-expanded="false"><span id="forgeItemSymbol" class="item-slot-host"></span></button><div id="forgeHammerMotion" class="forge-hammer-motion" aria-hidden="true" hidden><span id="forgeHammer" class="forge-hammer"><i></i></span><span class="forge-impact-ring"></span><span class="forge-sparks"></span></div><span>แตะช่องเพื่อเลือกของ</span><small id="forgeTargetLocation"></small></div><span class="forge-plus" aria-hidden="true">+</span><div class="forge-material"><div id="forgeCopyItem" class="item-preview"></div><div id="forgeSealItem" class="item-preview"></div></div></div><p class="note" id="forgeInfo"></p><p class="note" id="forgeEmpty"></p></section><p class="forge-animation-status" id="forgeAnimationStatus" role="status" aria-live="polite" hidden></p><p class="forge-outcome" id="forgeOutcome" role="status" aria-live="polite" hidden></p>'+
+    openDrawer("forge","ปรับแต่งอุปกรณ์",
+      '<div class="forge-page"><div class="forge-nav"><button id="forgeHome" class="secondary" type="button">‹ ช่างอาคม</button><button id="forgeBag" class="secondary" type="button">กระเป๋า</button><strong id="forgeGold" aria-label="ทองที่มี"></strong></div>'+
+      '<p class="note" id="forgePageStatus" role="status"></p>'+
+      '<section id="forgeSelection" class="forge-selection"><div class="forge-stage" id="forgeStage"><div class="forge-target"><button id="forgeTargetButton" class="forge-target-button" type="button" aria-haspopup="dialog" aria-controls="forgePicker" aria-expanded="false"><span id="forgeItemSymbol" class="item-slot-host"></span><span class="forge-choose-label">เลือกอุปกรณ์</span></button><div id="forgeHammerMotion" class="forge-hammer-motion" aria-hidden="true" hidden><span id="forgeHammer" class="forge-hammer"><i></i></span><span class="forge-impact-ring"></span><span class="forge-sparks"></span></div></div><div id="forgeSocketBadge" class="forge-socket-state" hidden><span id="forgeSocketArt" aria-hidden="true" hidden></span><span id="forgeSocketState"></span></div></div><div class="forge-item-heading"><h3 id="forgeItemName"></h3><small id="forgeTargetLocation"></small></div><p class="note" id="forgeInfo"></p><p class="note" id="forgeEmpty"></p></section>'+
+      '<div class="forge-tabs" role="group" aria-label="เลือกงานช่าง">'+forgeTabs.map(([id,,label,icon])=>`<button id="${id}" type="button"><span aria-hidden="true">${icon}</span>${label}</button>`).join("")+'</div>'+
       '<dialog id="forgePicker" class="forge-picker" aria-labelledby="forgePickerTitle" aria-describedby="forgePickerStatus"><div class="forge-picker-header"><h3 id="forgePickerTitle">เลือกอุปกรณ์</h3><button id="forgePickerClose" type="button" aria-label="ปิดหน้าต่างเลือกอุปกรณ์">✕</button></div><p id="forgePickerStatus" class="note" role="status"></p><div id="forgePickerGrid" class="forge-picker-grid"></div></dialog>'+
       '<section id="forgePanel" class="forge-card" hidden>'+
-      '<section id="forgeEnhanceSection"><h3>ขั้นตีบวก</h3><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวก"></progress><p class="note forge-risk" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><div id="forgeDonorItem" class="item-preview"></div><button id="forgeCardHelp" class="secondary" type="button" hidden>เปิดกระเป๋าเพื่อถอดการ์ดก่อน</button><button class="primary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรสร้างของรุ่นนี้</button></section>'+
-      '<section id="forgeRerollSection"><h3>สุ่มออปชัน</h3><p class="note" id="forgeAffixInfo"></p><p class="note" id="forgeRerollSupply"></p><p class="note" id="forgeRerollPity"></p><p class="note">ไม่เปลี่ยนรุ่น ความหายาก หรือขั้นตีบวกของอุปกรณ์</p><button class="primary" type="button" id="forgeReroll"></button></section><p class="note" id="forgeActionStatus" role="status"></p></section>'+
+      '<section id="forgeEnhanceSection"><div class="forge-task-heading"><h3>ตีบวกอุปกรณ์</h3><strong id="forgeNextRank"></strong></div><progress id="forgeProgress" max="10" value="0" aria-label="ความคืบหน้าตีบวก"></progress><p class="note" id="forgeRankGain"></p><p class="forge-odds" id="forgeOdds"></p><div id="forgeCopyItem" class="item-preview"></div><p class="note" id="forgeSupply"></p><select id="forgeDonor" aria-label="เลือกของรุ่นเดียวกันจากกระเป๋า" hidden></select><div id="forgeDonorItem" class="item-preview"></div><div class="forge-actions"><button id="forgeCardHelp" class="secondary" type="button" hidden>ไปถอดการ์ด</button><button class="primary" type="button" id="forgeEnhance"></button><button class="secondary" type="button" id="forgeTrack" hidden></button><button class="secondary" type="button" id="forgeCopyRecipe" hidden>เปิดสูตรของรุ่นนี้</button></div></section>'+
+      '<section id="forgeRerollSection"><h3>สุ่มออปชัน</h3><p class="note" id="forgeAffixInfo"></p><p class="note" id="forgeRerollPity"></p><div id="forgeSealItem" class="item-preview"></div><p class="note" id="forgeRerollSupply"></p><div class="forge-actions"><button class="primary" type="button" id="forgeReroll"></button></div></section><p class="note" id="forgeActionStatus" role="status"></p></section>'+
+      '<section id="cardSocketPanel" class="forge-card" hidden><div class="forge-task-heading"><h3 id="forgeSocketTitle"></h3><strong id="forgeSocketChange"></strong></div><div id="socketItemPreview" class="item-preview"></div><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์" hidden></select><p class="note" id="cardSocketInfo"></p><div class="forge-actions"><button type="button" class="primary" id="cardSocketAction"></button></div></section>'+
+      '<p class="forge-animation-status" id="forgeAnimationStatus" role="status" aria-live="polite" hidden></p><p class="forge-outcome" id="forgeOutcome" role="status" aria-live="polite" hidden></p>'+
       '<details id="forgeStock" class="forge-card" hidden><summary>คลังช่าง · ของรุ่นเดียวกัน</summary><div id="forgeStockItem" class="item-preview"></div><select id="forgeStockGear" aria-label="อุปกรณ์ในคลังช่าง"></select><p class="note" id="forgeStockInfo"></p><button type="button" class="secondary" id="forgeStockClaim">เบิกชิ้นตั้งต้น +0</button></details></div>');
     $("forgeHome").onclick=openSmith;$("forgeBag").onclick=()=>openForgeBag();
-    $("forgeCardHelp").onclick=()=>{openForgeBag(false);$("cardSocketPanel")?.scrollIntoView({block:"center"});};
-    for(const [id,value] of [["forgeTabEnhance","enhance"],["forgeTabReroll","reroll"]]){
-      $(id).setAttribute("aria-pressed",String(forgePageAction===value));
-      $(id).onclick=()=>openForgePage(value,forgePageTarget);
-    }
+    $("forgeCardHelp").onclick=()=>switchForgeTab("card");
+    for(const [id,value] of forgeTabs)$(id).onclick=()=>switchForgeTab(value);
     $("forgeTargetButton").onclick=openForgePicker;
     $("forgePickerClose").onclick=()=>closeForgePicker();
     $("forgePicker").oncancel=event=>{event.preventDefault();closeForgePicker();};
@@ -444,11 +473,14 @@
     if(drawerActive!=="forge" || !$("forgeTargetButton"))return;
     refreshArtisanWallet();
     const ready=economyReady(),slots=currentBagSlots(),button=$("forgeTargetButton");
-    if(forgeAnimation?.room!==room || !ready)cancelForgeAnimation(false,true);
+    if(forgePageRoom!==room || !ready)cancelForgeAnimation(false,true);
     // Inventory and wallet handlers still apply server state immediately. Only this
     // visible presentation stays on the submitted item until the real result reveal.
     if(forgeAnimationBusy() && forgeAnimation.visible){renderForgeAnimation();return;}
-    $("forgePageStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว และเซิร์ฟเวอร์ที่เปิดระบบช่าง":!room?.state?.forgeCatalog?"เซิร์ฟเวอร์ยังไม่ส่งข้อมูลช่าง":!slots?"กำลังโหลดอุปกรณ์จากเซิร์ฟเวอร์…":"ช่างอาคม · บันทึกผลและหักค่าใช้จ่ายบนเซิร์ฟเวอร์";
+    const socketTab=forgePageAction==="drill" || forgePageAction==="card";
+    $("forgePageStatus").textContent=!ready?"เข้า LIVE ด้วยตัวละครที่บันทึกแล้ว และเซิร์ฟเวอร์ที่เปิดระบบช่าง":
+      !slots?"กำลังโหลดอุปกรณ์จากเซิร์ฟเวอร์…":!(socketTab?(typeof cardDrill!=="undefined" && cardDrill):room?.state?.forgeCatalog)?"เซิร์ฟเวอร์ยังไม่ส่งข้อมูลช่าง":"";
+    $("forgePageStatus").hidden=!$("forgePageStatus").textContent;
     $("forgeGold").textContent=ready && economyGold!==null?economyGold.toLocaleString()+" ทอง":"…";
     if(forgePageRoom!==room || !ready){closeForgePicker(false);selectForgeTarget(null);forgePageRoom=room;}
     let item=forgeTargetItem(forgePageTarget);
@@ -458,17 +490,21 @@
     const choices=forgeTargetChoices(),choice=choices.find(c=>c.target===forgePageTarget);
     button.dataset.target=choice?.key||"";button.disabled=!ready || economyPending || itemUsePending;
     button.setAttribute("aria-label",item?"เปลี่ยนอุปกรณ์ · "+bagMeta(item.itemId).name+forgeLabel(item)+" · "+choice?.location:"เลือกอุปกรณ์ที่จะทำรายการ");
-    $("forgeTargetLocation").textContent=choice?.location||"";
+    $("forgeTargetLocation").textContent=item?("Lv."+forgeGearLevel(item)+(choice?.location?" · "+choice.location:"")):"";
     $("forgeEmpty").hidden=!!item;
     $("forgeEmpty").textContent=choices.length?"แตะช่องเพื่อเลือกอุปกรณ์ หากชิ้นเดิมแตก ถูกย้าย หรือเปลี่ยนไปแล้ว":"ยังไม่มีอุปกรณ์ที่ทำรายการได้ · ดูกระเป๋าหรือเบิกชิ้นตั้งต้นจากคลังช่าง";
     $("forgeEnhanceSection").hidden=forgePageAction!=="enhance";
     $("forgeRerollSection").hidden=forgePageAction!=="reroll";
     $("forgeItemName").textContent=bagMeta(item?.itemId)?.name||"เลือกอุปกรณ์ที่จะทำรายการ";
     renderItemTile("forgeItemSymbol",item||{});
-    renderForge(item);renderForgeStock();
-    if($("forgePanel").hidden)$("forgeInfo").textContent="";
-    $("forgeCopyItem").hidden=$("forgePanel").hidden || forgePageAction!=="enhance" || !$("forgeCopyItem").children.length;
-    $("forgeSealItem").hidden=$("forgePanel").hidden || forgePageAction!=="reroll" || !bagMeta(item?.itemId)?.forge;
+    if(!socketTab)renderForge(item);
+    renderForgeStock();
+    $("forgeInfo").textContent=item?forgeAffixLabel(item):"";
+    $("forgeSocketBadge").hidden=!item;
+    $("forgeSocketState").textContent=!item?"":item.socket===undefined?"ยังไม่เจาะ":item.socket===null?"ช่องว่าง":personalItems[item.socket]?.name||"ฝังการ์ดแล้ว";
+    renderItemTile("forgeSocketArt",item?.socket||null);
+    if(socketTab){$("forgePanel").hidden=true;renderCardSocket(item,slots);}
+    else $("cardSocketPanel").hidden=true;
     renderForgePicker();renderForgeAnimation();
   }
   function submitForge(action){
@@ -530,7 +566,7 @@
           '<button class="secondary" type="button" id="salvageGear" hidden></button>'+
         '</div>'+
         '<div id="bagReturnItem" class="item-preview" hidden></div>'+
-        '<section id="cardSocketPanel" hidden><h3>รูใส่การ์ดมอนสเตอร์</h3><div id="socketItemPreview" class="item-preview"></div><select id="socketCardChoice" aria-label="เลือกการ์ดมอนสเตอร์"></select><p class="note" id="cardSocketInfo"></p><button type="button" class="secondary" id="cardSocketAction"></button></section>'+
+        '<section id="bagSocketLink" hidden><p class="note" id="bagSocketInfo"></p><button type="button" class="secondary" id="bagSocketOpen">เปิดโรงช่างอาคม</button></section>'+
       '</section>'+
       '<details id="gearGuide" class="help-topic" hidden><summary>ชุดแนะนำประจำอาชีพ</summary>'+
         '<select id="guideStyle" aria-label="แนวทางเล่น"></select><p class="note" id="guideFocus"></p><p class="note" id="guideTraining" hidden></p>'+
