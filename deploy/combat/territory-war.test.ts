@@ -105,11 +105,14 @@ test("capture progress, contested flags, deadline, independent protection and du
     assert.equal(store.war.inspect(f.site,start+40_000).gateClosed,true);
     assert.throws(()=>store.war.gate(f,"attack",false,start+40_000,null,first),/war_gate_inactive/);
     for(let i=1;i<=29;i++)store.war.advance(f,start+40_000+i*1000,5,0);
-    const won=start+69_000,reopen=won+WAR_PROTECTION;
+    const won=start+69_000,reopen=won+3_600_000;
     assert.equal(store.war.inspect(f.site,won).owner,"Moon");
     assert.equal(store.war.inspect(f.site,won).phaseEndsAt,reopen);
     assert.equal(store.war.inspect(other.site,start+WAR_DURATION).owner,null);
+    store.close();store=new GuildStore(file);
     assert.equal(store.war.inspect(f.site,reopen-1).phase,"protected");
+    assert.throws(()=>store.war.start(f.site,b,reopen-1),/war_unavailable/);
+    assert.equal(store.war.inspect(f.site,reopen).phase,"open");
     assert.equal(store.war.inspect(other.site,reopen).phase,"open");
     assert.throws(()=>store.war.start(f.site,a,reopen),/war_unavailable/);
     const next=store.war.start(f.site,b,reopen);
@@ -162,6 +165,7 @@ test("an incumbent retains ownership after an uncaptured siege times out",()=>{
     assert.equal(store.war.inspect(field.site,deadline).ownerId,a.id);
     // This is a defensive victory, not the no-winner case.
     assert.equal(store.war.inspect(field.site,deadline).phase,"protected");
+    assert.equal(store.war.inspect(field.site,deadline).phaseEndsAt,deadline+3_600_000);
     store.close();store=new GuildStore(file);
     assert.equal(store.war.inspect(field.site,deadline).owner,"Sun");
     assert.equal(store.war.inspect(field.site,deadline).ownerId,a.id);

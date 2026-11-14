@@ -1,9 +1,11 @@
 import type {GuideSelection} from "./TyphoonGuide.js";
+import {WAR_PROTECTION} from "./TerritoryWar.js";
 
 export type GuideWar={id:string;name:string;phase:"battle"|"protected"|"open";owner:string|null;phaseEndsAt:number|null};
 export type GuideContext={mapName:string;level:number;pathName:string;rebirthCount:number;guildName:string|null;
   wars:GuideWar[];event:{name:string;mapName:string;endsAt:number}|null;localTasks:string[];questAdvice?:string};
 const formatTime=(ms:number)=>new Intl.DateTimeFormat("th-TH",{timeZone:"Asia/Bangkok",day:"numeric",month:"short",hour:"2-digit",minute:"2-digit",hour12:false}).format(new Date(ms));
+const warProtectionHours=WAR_PROTECTION/3_600_000;
 const remaining=(ms:number,now:number)=>{
   const seconds=Math.max(0,Math.ceil((ms-now)/1000)),hours=Math.floor(seconds/3600),minutes=Math.floor((seconds%3600)/60);
   return hours?`${hours} ชม. ${minutes} นาที`:`${minutes} นาที ${seconds%60} วินาที`;
@@ -11,7 +13,7 @@ const remaining=(ms:number,now:number)=>{
 function describeWar(w:GuideWar,now:number):string {
   const owner=w.owner?`ผู้ครอง ${w.owner}`:"ยังไม่มีผู้ครอง";
   if(w.phase==="open")return `${w.name}: เปิดให้ท้าชิง · ${owner}`;
-  if(w.phase==="battle")return `${w.name}: กำลังรบ · ${owner}${w.phaseEndsAt?` · กำหนดสิ้นสุดไม่เกิน ${formatTime(w.phaseEndsAt)} น. เวลาไทย`:""} ศึกอาจจบก่อนกำหนด และเริ่มคุ้มครอง 8 ชั่วโมงหลังจบจริง`;
+  if(w.phase==="battle")return `${w.name}: กำลังรบ · ${owner}${w.phaseEndsAt?` · กำหนดสิ้นสุดไม่เกิน ${formatTime(w.phaseEndsAt)} น. เวลาไทย`:""} ศึกอาจจบก่อนกำหนด หากมีผู้ชนะจะคุ้มครอง ${warProtectionHours} ชั่วโมงนับจากเวลาจบจริง`;
   return `${w.name}: คุ้มครอง · ${owner}${w.phaseEndsAt?` · เปิดได้ตั้งแต่ ${formatTime(w.phaseEndsAt)} น. เวลาไทย (เหลือ ${remaining(w.phaseEndsAt,now)})`:""}`;
 }
 
@@ -24,7 +26,7 @@ export function guideAnswer(selection:GuideSelection,context:GuideContext,now=Da
     if(selection.unknownSite)return `ไม่พบข้อมูลสงครามของ ${selection.unknownSite} ในเซิร์ฟเวอร์นี้ ลองเปิดแผนที่ยุทธศาสตร์เพื่อดูจุดที่เปิดอยู่`;
     const open=context.wars.filter(w=>w.phase==="open"),fighting=context.wars.filter(w=>w.phase==="battle");
     const show=(items:GuideWar[])=>items.slice(0,5).map(w=>w.name).join(" · ")+(items.length>5?` และอีก ${items.length-5} จุด`:"");
-    return `ด่านที่เปิดท้าชิง: ${open.length?show(open):"ยังไม่มี"}\nกำลังรบ: ${fighting.length?show(fighting):"ไม่มี"}\nระบุชื่อด่านเพื่อดูเวลา หรือเปิดแผนที่ยุทธศาสตร์เพื่อดูทุกจุด เวลาคุ้มครองนับ 8 ชั่วโมงจากเวลาจบศึกจริง`;
+    return `ด่านที่เปิดท้าชิง: ${open.length?show(open):"ยังไม่มี"}\nกำลังรบ: ${fighting.length?show(fighting):"ไม่มี"}\nระบุชื่อด่านเพื่อดูเวลา หรือเปิดแผนที่ยุทธศาสตร์เพื่อดูทุกจุด หากมีผู้ชนะจะคุ้มครอง ${warProtectionHours} ชั่วโมงนับจากเวลาจบศึกจริง`;
   }
   if(selection.intent==="event"){
     const event=context.event;

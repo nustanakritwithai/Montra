@@ -112,7 +112,7 @@ test("conquest closes the old account once, preserves buildings and credits the 
   assert.equal(view(s,"a",end2).available,0);assert.equal(view(s,"a",end2).market,2);
 }));
 
-test("legacy owners start at migration, idle defence keeps capped income and does not restart the eight-hour clock",()=>fixture((s,file)=>{
+test("legacy owners start at migration and idle defence keeps existing capped income",()=>fixture((s,file)=>{
   const end=take(s,site,"a",origin);const db=new DatabaseSync(file);
   try{db.exec("DROP TABLE guild_treasury_entries; DROP TABLE guild_treasuries; DROP TABLE territory_estates");}finally{db.close();}
   const migrate=Date.now();const upgraded=new GuildStore(file);
@@ -139,7 +139,7 @@ test("a failed treasury write rolls back the battle result and a retry settles i
     assert.equal(s.war.government.balance(s.war.member("a")!.id),0);
     db.exec("DROP TRIGGER fixture_failure");s.war.advance(f,start+30_000,2,0);
     assert.equal(s.war.inspect(site,start+30_000).owner,"River");
-    assert.equal(s.war.government.balance(s.war.member("a")!.id),480);
+    assert.equal(s.war.government.balance(s.war.member("a")!.id),60);
   }finally{db.close();}
 }));
 test("all three buildings stop at level three and full storage never banks time for later",()=>fixture(s=>{

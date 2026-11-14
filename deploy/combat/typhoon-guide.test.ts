@@ -24,11 +24,13 @@ test("Typhoon chooses only a known intent and map, with a local fallback",async(
 });
 test("answers use the server's live war deadline and never predict a fixed end after a battle",()=>{
   const now=Date.UTC(2026,10,4,4,0),context:GuideContext={mapName:"ด่านจันทรา",level:5,pathName:"ผู้ร่ายเวท",rebirthCount:0,guildName:null,
-    wars:[{id:"moon_pass",name:"ด่านจันทรา",phase:"protected",owner:"กิลด์ทดสอบ",phaseEndsAt:now+2*3600_000}],event:null,localTasks:[]};
+    wars:[{id:"moon_pass",name:"ด่านจันทรา",phase:"protected",owner:"กิลด์ทดสอบ",phaseEndsAt:now+2_700_000}],event:null,localTasks:[]};
   const answer=guideAnswer({intent:"war",siteId:"moon_pass",source:"typhoon"},context,now);
-  assert.match(answer,/เหลือ 2 ชม\. 0 นาที/);assert.match(answer,/กิลด์ทดสอบ/);
+  assert.match(answer,/เหลือ 45 นาที 0 วินาที/);assert.match(answer,/กิลด์ทดสอบ/);
   context.wars[0]={...context.wars[0],phase:"battle"};
   assert.match(guideAnswer({intent:"war",siteId:"moon_pass",source:"rules"},context,now),/อาจจบก่อนกำหนด/);
+  assert.match(guideAnswer({intent:"war",siteId:"moon_pass",source:"rules"},context,now),/คุ้มครอง 1 ชั่วโมง/);
+  assert.match(guideAnswer({intent:"war",source:"rules"},context,now),/คุ้มครอง 1 ชั่วโมง/);
 });
 test("concurrent and repeated requests are bounded per character",()=>{
   const gate=new GuideGate(12_000,2);assert.equal(gate.begin("a",0),"ok");assert.equal(gate.begin("a",1),"busy");

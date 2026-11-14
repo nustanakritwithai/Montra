@@ -8,6 +8,7 @@ import {Client} from "@colyseus/sdk";
 const url=process.env.MONTRA_TEST_URL,dir=process.env.MONTRA_CHARACTER_DIR;
 if(!/^http:\/\/127\.0\.0\.1:\d+$/.test(url??"") || !/^montra-castle-test-/.test(path.basename(dir??"")) || process.env.MONTRA_CASTLE_PILOT!=="1" || process.env.MONTRA_CASTLE_IN_PROCESS!=="1" || url!==`http://127.0.0.1:${process.env.PORT}`)throw Error("Requires an owned in-process isolated local castle pilot with matching PORT");
 const {GuildStore}=await import(existsSync("build/rooms/GuildStore.js")?"./build/rooms/GuildStore.js":"./src/rooms/GuildStore.ts");
+const {WAR_PROTECTION}=await import(existsSync("build/rooms/TerritoryWar.js")?"./build/rooms/TerritoryWar.js":"./src/rooms/TerritoryWar.ts");
 const guild=new GuildStore(path.join(dir,"guilds.sqlite")),sdk=new Client(url),rooms=new Set();
 const options={worldVersion:1,atlasVersion:1,templeVersion:1,provinceVersion:1,warVersion:1,atlasReliefVersion:1,originalReliefVersion:1};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -101,7 +102,7 @@ try{
     fixture.prepare("UPDATE territory_battles SET started=? WHERE site=? AND ended IS NULL").run(Date.now()-45*60_000+3000,id);
     await wait(()=>observer.latest?.phase==="protected","score victory");
     assert.equal(observer.latest.owner,"West0 Guild");
-    fixture.prepare("UPDATE territory_battles SET ended=? WHERE site=? AND ended IS NOT NULL").run(Date.now()-8*3600_000,id);
+    fixture.prepare("UPDATE territory_battles SET ended=? WHERE site=? AND ended IS NOT NULL").run(Date.now()-WAR_PROTECTION,id);
   }finally{fixture.close();}
   const newLeader=await seed("Invader",id,0,308);guild.create(newLeader.id,"Invader","Mountain");
   const challenger=await join(newLeader);const guard=sideRooms.attack[10];

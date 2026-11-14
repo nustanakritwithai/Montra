@@ -170,7 +170,7 @@ test("live throne wins even against a score lead at the deadline; protection use
     }finally{store.close();rmSync(dir,{recursive:true,force:true});}
   }
 });
-test("durable castle scores, retry, deadline, eight-hour protection and independent fort ownership",()=>{
+test("durable castle scores, retry, deadline, one-hour protection and independent fort ownership",()=>{
   const dir=mkdtempSync(path.join(tmpdir(),"montra-castle-")),file=path.join(dir,"guilds.sqlite");let store=new GuildStore(file);
   try{
     store.create("a","A","West");store.create("d","D","East");const m=store.war.member("a")!,start=100000;

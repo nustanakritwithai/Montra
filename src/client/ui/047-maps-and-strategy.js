@@ -683,7 +683,7 @@
         <p class="note war-field-report" id="warFlag"></p><p class="war-field-report" id="warCount" hidden></p>
         <p class="note">สมาชิกกิลด์เข้าศึกได้ตั้งแต่ Lv.1 · ช่วยยึดจุด ประตู ฮีลหรือป้องกันเพื่อนที่กำลังรบใกล้จุดยุทธศาสตร์ และส่งเสบียงเพื่อรับผลงาน EXP กับวัสดุสงคราม</p>
         <div id="warLegacyRules" hidden><p class="note">ผู้บัญชาการหรือนายทหารเปิดศึกที่วงธง สมาชิกเข้าร่วมได้จากภายในด่าน ฝั่งละ 5 คน ศึกมีเวลา 5 นาที จำนวนคนที่ยืนวงมากกว่าจะดันเกจได้ เมื่อทั้งสองฝ่ายยืนเท่ากัน เกจจะหยุด</p>
-        <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม หลังจบศึกด่านคุ้มครอง 8 ชั่วโมง</p></div>
+        <p class="note">แตะบันไดหรือกดขึ้นกำแพงที่ตีนบันไดด้านใน เมื่อถึงหัวบันไดกดลงกำแพง วงเขียวคือฝ่ายเดียวกัน สามเหลี่ยมแดงคือฝ่ายตรงข้าม ดูเวลาคุ้มครองของด่านได้บนแผนที่ยุทธศาสตร์หลังจบศึก</p></div>
       </details>
       <section id="estatePanel" class="field-card" hidden><h3 class="gx-with-emblem" data-guild-icon="hall">การปกครองด่าน</h3>
         <dl class="field-stats"><div data-guild-icon="warehouse"><dt>คลังกิลด์ (หน่วย)</dt><dd id="estateBalance"></dd></div><div data-guild-icon="gold"><dt>รายได้รอเก็บ (หน่วย)</dt><dd id="estateAvailable"></dd></div></dl>
